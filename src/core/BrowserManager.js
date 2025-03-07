@@ -1,4 +1,4 @@
-const { chromium, firefox, webkit } = require("playwright");
+const { chromium } = require("playwright");
 
 class BrowserManager {
     constructor() {
@@ -6,9 +6,10 @@ class BrowserManager {
         this.page = null;
     }
 
-    async launch(browserType = "chromium") {
-        console.log(`🚀 Launching ${browserType} browser...`);
-        this.browser = await { chromium, firefox, webkit }[browserType].launch({ headless: true });
+    async launch() {
+        const isCI = process.env.CI === "true"; // Detect CI environment
+        console.log(`🚀 Launching browser... (Headless: ${isCI})`);
+        this.browser = await chromium.launch({ headless: isCI });
         this.page = await this.browser.newPage();
     }
 
