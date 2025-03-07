@@ -1,16 +1,13 @@
-const BrowserManager = require("../core/BrowserManager");
-const APIClient = require("../core/APIClient");
-const DBClient = require("../core/DBClient");
-const ReportManager = require("../core/ReportManager");
 const Logger = require("../../utils/Logger");
+const serviceContainer = require("./ServiceContainer");
 
 class BaseTest {
-    constructor(testName) {
-        this.testName = testName;
-        this.browserManager = new BrowserManager();
-        this.apiClient = new APIClient();
-        this.dbClient = new DBClient();
-        this.reportManager = new ReportManager();
+    constructor(testName = "Unnamed_Test") {
+        this.testName = testName; // Ensure testName is never undefined
+        this.browserManager = serviceContainer.get("browserManager");
+        this.apiClient = serviceContainer.get("apiClient");
+        this.dbClient = serviceContainer.get("dbClient");
+        this.reportManager = serviceContainer.get("reportManager");
     }
 
     async setup() {
