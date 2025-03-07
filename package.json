@@ -1,15 +1,33 @@
 {
   "name": "falcon-automation",
   "version": "1.0.0",
-  "description": "",
+  "description": "AI-powered, OOP-based test automation framework",
   "main": "index.js",
   "directories": {
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test:ui": "node src/tests/ui/LoginTest.js",
+    "test:api": "node src/tests/api/UserApiTest.js",
+    "test:db": "node src/tests/db/UserDBTest.js",
+    "test:all": "npm run test:ui && npm run test:api && npm run test:db",
+    "report": "allure generate allure-results --clean -o allure-report && allure open allure-report"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "author": "Peyman Iravani",
+  "license": "MIT",
+  "dependencies": {
+    "@achannarasappa/locust": "^1.3.0",
+    "allure-playwright": "^3.2.0",
+    "axios": "^1.8.2",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "io": "^1.5.3",
+    "mysql2": "^3.13.0",
+    "openai": "^4.86.2",
+    "playwright": "^1.51.0",
+    "selenium-webdriver": "^4.29.0",
+    "socket.io": "^4.8.1",
+    "zaproxy": "^2.0.0-rc.6"
+  }
 }
