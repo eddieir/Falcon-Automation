@@ -1,0 +1,11 @@
+{
+    "env": "staging",
+    "browser": "chromium",
+    "apiBaseUrl": "https://api.example.com",
+    "db": {
+        "host": "db.example.com",
+        "user": "test_user",
+        "password": "securepassword",
+        "name": "test_db"
+    }
+}

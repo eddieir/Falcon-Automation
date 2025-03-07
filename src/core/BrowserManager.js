@@ -1,20 +1,22 @@
-const { chromium } = require("playwright");
+const { chromium, firefox, webkit } = require("playwright");
+const ConfigManager = require("../core/ConfigManager");
+const Logger = require("../../utils/Logger");
 
 class BrowserManager {
     constructor() {
         this.browser = null;
         this.page = null;
+        this.browserType = ConfigManager.get("browser") || "chromium";
     }
 
     async launch() {
-        const isCI = process.env.CI === "true"; // Detect CI environment
-        console.log(`🚀 Launching browser... (Headless: ${isCI})`);
-        this.browser = await chromium.launch({ headless: isCI });
+        Logger.info(`🚀 Launching ${this.browserType} browser...`);
+        this.browser = await { chromium, firefox, webkit }[this.browserType].launch({ headless: false });
         this.page = await this.browser.newPage();
     }
 
     async close() {
-        console.log("🔹 Closing browser...");
+        Logger.info("🔴 Closing browser...");
         await this.page.close();
         await this.browser.close();
     }

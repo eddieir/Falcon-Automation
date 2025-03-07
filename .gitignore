@@ -1,0 +1,31 @@
+# Node.js Dependencies
+node_modules/
+package-lock.json
+
+# Environment Variables
+.env
+
+# Config Files (User-Specific)
+config/testConfig.json
+
+# Reports & Logs
+reports/
+allure-results/
+allure-report/
+logs/
+execution.log
+
+# Playwright Traces & Screenshots
+trace.zip
+*.png
+*.jpg
+*.jpeg
+
+# IDE & OS-Specific Files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Git & CI/CD Artifacts
+coverage/
+.npm/
