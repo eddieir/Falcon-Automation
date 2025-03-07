@@ -1,32 +1,27 @@
-const fs = require("fs");
-const path = require("path");
+const BrowserManager = require("../core/BrowserManager");
+const APIClient = require("../core/APIClient");
+const DBClient = require("../core/DBClient");
+const ReportManager = require("../core/ReportManager");
+const Logger = require("../../utils/Logger");
 
 class BaseTest {
-    constructor(page, testName) {
-        this.page = page;
+    constructor(testName) {
         this.testName = testName;
-        this.screenshotPath = path.join(__dirname, "..", "reports", `${testName}.png`);
+        this.browserManager = new BrowserManager();
+        this.apiClient = new APIClient();
+        this.dbClient = new DBClient();
+        this.reportManager = new ReportManager();
     }
 
-    async captureScreenshot() {
-        console.log(`📸 Capturing screenshot for failed test: ${this.testName}`);
-        await this.page.screenshot({ path: this.screenshotPath });
+    async setup() {
+        Logger.info(`🟢 Starting test: ${this.testName}`);
+        await this.browserManager.launch();
     }
 
-    async logTestResult(status, errorMessage = "N/A") {
-        const logData = {
-            test: this.testName,
-            status,
-            error: errorMessage,
-            screenshot: this.screenshotPath,
-            timestamp: new Date().toISOString(),
-        };
-
-        fs.writeFileSync(
-            path.join(__dirname, "..", "reports", `${this.testName}.json`),
-            JSON.stringify(logData, null, 2)
-        );
-        console.log(`📝 Test result logged: ${logData.test} - ${logData.status}`);
+    async teardown() {
+        Logger.info(`🟡 Cleaning up after test: ${this.testName}`);
+        await this.browserManager.close();
+        this.reportManager.generateReport(this.testName);
     }
 }
 

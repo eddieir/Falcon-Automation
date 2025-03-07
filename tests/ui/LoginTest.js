@@ -1,28 +1,23 @@
 const BaseTest = require("../../src/core/BaseTest");
-const LoginPage = require("../../src/ui/pages/LoginPage");
-const { chromium } = require("playwright");
+const Logger = require("../../utils/Logger");
+
 class LoginTest extends BaseTest {
     async runTest() {
-        //await this.setup();
-        console.log("🔹 Running UI Login Test with Self-Healing...");
-
-        const browser = await chromium.launch({ headless: false });
-        const page = await browser.newPage();
-        this.page = page;
-
-        const selfHealer = new SelfHealingManager(page, this);
-        const loginPage = new LoginPage(page, selfHealer);
+        await this.setup();
+        Logger.info("Running UI Login Test...");
 
         try {
-            await loginPage.open("https://www.saucedemo.com/");
-            await loginPage.login("standard_user", "secret_sauce");
-            await this.logTestResult("PASSED");
+            await this.browserManager.page.goto("https://www.saucedemo.com/");
+            await this.browserManager.page.fill("#user-name", "standard_user");
+            await this.browserManager.page.fill("#password", "secret_sauce");
+            await this.browserManager.page.click("[data-test='login-button']");
+
+            Logger.info("✅ Login Test Passed!");
         } catch (error) {
-            await this.captureScreenshot();
-            await this.logTestResult("FAILED", error.message);
-        } finally {
-            await browser.close();
+            Logger.error(`❌ Login Test Failed! Error: ${error.message}`);
         }
+
+        await this.teardown();
     }
 }
 
