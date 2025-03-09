@@ -2,7 +2,8 @@ const BrowserManager = require("./BrowserManager");
 const APIClient = require("./APIClient");
 const DBClient = require("./DBClient");
 const ReportManager = require("./ReportManager");
-const Logger = require("../../utils/Logger");
+const Logger = require("../../utils/logger");
+//const DBClient = require("./DBClient");  
 
 class ServiceContainer {
     constructor() {
