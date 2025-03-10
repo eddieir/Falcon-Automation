@@ -1,10 +1,13 @@
 const { Pool } = require("pg");
 require("dotenv").config();
-const Logger = require("../../utils/logger");
+const Logger = require("../../utils/Logger");
 const fs = require("fs");
 
 class DBClient {
     constructor() {
+        if (!process.env.DB_HOST || !process.env.DB_USER) {
+            throw new Error("❌ Database credentials are missing! Check your .env file.");
+        }
         this.pool = new Pool({
             host: process.env.DB_HOST,
             port: process.env.DB_PORT,
