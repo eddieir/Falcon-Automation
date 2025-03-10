@@ -1,5 +1,5 @@
 const { chromium } = require("playwright");
-const TestGenerator = require("./src/core/TestGenerator");
+const PageAI = require("./src/core/PageAI");
 const TestRunner = require("./src/core/TestRunner");
 const Logger = require("./utils/Logger");
 
@@ -24,15 +24,16 @@ const Logger = require("./utils/Logger");
         await page.goto(url, { waitUntil: "load" });
         Logger.info(`✅ Loaded website: ${url}`);
 
-        const testGen = new TestGenerator(page);
-        const testPlan = await testGen.generateTestScenarios();
+        const pageAI = new PageAI(page);
+        const pageData = await pageAI.analyze();
+        const actions = pageAI.generateActions(pageData);
 
-        Logger.info(`📝 Generated Test Plan:\n${JSON.stringify(testPlan, null, 2)}`);
+        Logger.info(`📝 AI-Generated Test Plan:\n${JSON.stringify(actions, null, 2)}`);
 
-        const runner = new TestRunner(page, testPlan, 3); // Run with 3 concurrent tests
+        const runner = new TestRunner(page, actions);
         await runner.executeTest();
     } catch (error) {
-        console.error(`❌ Failed to load ${url}: ${error.message}`);
+        console.error(`❌ Error: ${error.message}`);
     } finally {
         await browser.close();
     }
