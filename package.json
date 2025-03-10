@@ -1,19 +1,20 @@
 {
   "name": "falcon-automation",
   "version": "1.0.0",
-  "description": "AI-powered, OOP-based test automation framework",
-  "main": "index.js",
+  "description": "AI-Powered Autonomous Testing Framework",
+  "main": "falcon.js",
   "directories": {
     "test": "tests"
   },
   "scripts": {
+    "start": "node falcon.js --url=https://example.com",
     "test:ui": "node tests/ui/LoginTest.js",
     "test:api": "node tests/api/UserApiTest.js",
     "test:db": "node tests/db/UserDBTest.js",
     "test:all": "npm run test:ui && npm run test:api && npm run test:db",
     "report": "allure generate allure-results --clean -o allure-report && allure open allure-report"
   },
-  "keywords": [],
+  "keywords": ["AI", "Testing", "Automation", "Playwright", "Self-Healing"],
   "author": "Peyman Iravani",
   "license": "MIT",
   "dependencies": {

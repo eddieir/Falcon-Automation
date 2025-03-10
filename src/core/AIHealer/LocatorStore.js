@@ -3,24 +3,33 @@ const path = require("path");
 
 class LocatorStore {
     constructor() {
-        this.filePath = path.join(__dirname, "..", "..", "reports", "locator_store.json");
-        this.locators = this.loadLocators();
+        this.storePath = path.join(__dirname, "..", "..", "data", "locator_store.json");
+        this.data = this.loadData();
     }
 
-    loadLocators() {
-        if (!fs.existsSync(this.filePath)) return {};
-        return JSON.parse(fs.readFileSync(this.filePath, "utf-8"));
+    loadData() {
+        if (fs.existsSync(this.storePath)) {
+            return JSON.parse(fs.readFileSync(this.storePath, "utf8"));
+        }
+        return {};
     }
 
-    saveLocator(selector) {
-        if (!this.locators[selector]) {
-            this.locators[selector] = { lastUsed: new Date().toISOString() };
-            fs.writeFileSync(this.filePath, JSON.stringify(this.locators, null, 2));
+    saveData() {
+        fs.writeFileSync(this.storePath, JSON.stringify(this.data, null, 2));
+    }
+
+    addLocator(original, alternative) {
+        if (!this.data[original]) {
+            this.data[original] = [];
+        }
+        if (!this.data[original].includes(alternative)) {
+            this.data[original].push(alternative);
+            this.saveData();
         }
     }
 
-    getPreviousLocators() {
-        return Object.keys(this.locators);
+    getAlternatives(original) {
+        return this.data[original] || [];
     }
 }
 
