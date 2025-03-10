@@ -2,8 +2,7 @@ const BrowserManager = require("./BrowserManager");
 const APIClient = require("./APIClient");
 const DBClient = require("./DBClient");
 const ReportManager = require("./ReportManager");
-const Logger = require("../../utils/logger");
-//const DBClient = require("./DBClient");  
+const Logger = require("../../utils/Logger");
 
 class ServiceContainer {
     constructor() {
@@ -24,11 +23,17 @@ class ServiceContainer {
     }
 }
 
-// Singleton Instance
+// Ensure DBClient only loads when required
 const serviceContainer = new ServiceContainer();
 serviceContainer.register("browserManager", new BrowserManager());
 serviceContainer.register("apiClient", new APIClient());
-serviceContainer.register("dbClient", new DBClient());
+
+try {
+    serviceContainer.register("dbClient", new DBClient()); 
+} catch (error) {
+    Logger.error(`❌ Failed to register DBClient: ${error.message}`);
+}
+
 serviceContainer.register("reportManager", new ReportManager());
 
 module.exports = serviceContainer;
