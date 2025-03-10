@@ -1,57 +1,62 @@
-const LocatorStore = require("./LocatorStore");
-const AIAnalyzer = require("../AIHealer/AIAnalyser");
 const Logger = require("../../../utils/Logger");
+const LocatorStore = require("./LocatorStore");
 
 class AIHealer {
     constructor(page) {
         this.page = page;
-        this.retryAttempts = 3; // Max retry attempts
     }
 
     async healAndClick(selector, description = "Element") {
-        for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+        for (let attempt = 1; attempt <= 3; attempt++) {
             try {
-                Logger.info(`🔹 Attempt ${attempt}: Trying to click ${description} (${selector})`);
+                Logger.info(`🔹 Attempt ${attempt}: Trying ${description} (${selector})`);
                 await this.page.waitForSelector(selector, { timeout: 2000 });
                 await this.page.click(selector);
-                LocatorStore.saveLocator(selector);
                 return;
             } catch (error) {
-                Logger.warning(`⚠️ Failed attempt ${attempt} to click ${description} (${selector})`);
-
-                if (attempt === this.retryAttempts) {
-                    Logger.error(`❌ All attempts failed for ${description} (${selector}). Engaging AI-Healer.`);
-                    await this.healSelector(selector, description, error);
+                Logger.warning(`⚠️ Attempt ${attempt} failed for ${description} (${selector})`);
+                
+                if (attempt === 3) {
+                    Logger.error(`❌ All attempts failed for ${description}. Engaging AI-Healer.`);
+                    await this.healSelector(selector, description);
                 }
             }
         }
     }
 
-    async healSelector(selector, description, error) {
-        const alternativeLocators = LocatorStore.getPreviousLocators(selector);
-        if (alternativeLocators.length > 0) {
-            Logger.info(`🔄 Trying stored alternative locators for ${description}`);
-            for (let altSelector of alternativeLocators) {
-                try {
-                    Logger.info(`🔹 Trying alternative: ${altSelector}`);
-                    await this.page.click(altSelector);
-                    LocatorStore.saveLocator(altSelector);
-                    return;
-                } catch (err) {
-                    Logger.warning(`⚠️ Alternative locator ${altSelector} also failed.`);
-                }
+    async healSelector(selector, description) {
+        // Check if alternative locators exist
+        const alternatives = LocatorStore.getAlternatives(selector);
+        for (const altSelector of alternatives) {
+            try {
+                Logger.info(`🔹 Trying stored alternative: ${altSelector}`);
+                await this.page.click(altSelector);
+                return;
+            } catch (err) {
+                Logger.warning(`⚠️ Alternative locator ${altSelector} also failed.`);
             }
         }
 
-        Logger.info(`🤖 Asking AI for a solution for ${description}...`);
-        const aiSuggestedLocator = await AIAnalyzer.getAlternativeLocator(error.message);
+        // AI-Healer predicts a new locator
+        Logger.info(`🤖 Asking AI to fix locator: ${selector}...`);
+        const aiSuggestedLocator = await this.getAlternativeSelector(selector);
+        
         if (aiSuggestedLocator) {
-            Logger.info(`🤖 AI Suggested Locator for ${description}: ${aiSuggestedLocator}`);
+            Logger.info(`🤖 AI Suggested Locator: ${aiSuggestedLocator}`);
+            LocatorStore.addLocator(selector, aiSuggestedLocator);
             await this.page.click(aiSuggestedLocator);
-            LocatorStore.saveLocator(aiSuggestedLocator);
         } else {
             Logger.error(`🔥 AI-Healer could not resolve ${description} (${selector})`);
         }
+    }
+
+    async getAlternativeSelector(originalSelector) {
+        const alternativeSelectors = {
+            "input[name='q']": "textarea[name='q']", // Example: Google search input change
+            "button[name='Search']": "input[type='submit']"
+        };
+
+        return alternativeSelectors[originalSelector] || null;
     }
 }
 
