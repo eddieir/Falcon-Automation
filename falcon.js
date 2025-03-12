@@ -1,5 +1,6 @@
 const { chromium } = require("playwright");
-const PageAI = require("./src/core/PageAI");
+const ExploratoryAI = require("./src/core/ExploratoryAI");
+const ClickExplorer = require("./src/core/ClickExplorer");
 const TestRunner = require("./src/core/TestRunner");
 const Logger = require("./utils/Logger");
 
@@ -17,21 +18,32 @@ const Logger = require("./utils/Logger");
     }
 
     const browser = await chromium.launch({ headless: false });
-    const page = await browser.newPage();
+    const context = await browser.newContext();
+    let page = await context.newPage();
     Logger.info(`🌍 Navigating to ${url}...`);
 
     try {
         await page.goto(url, { waitUntil: "load" });
         Logger.info(`✅ Loaded website: ${url}`);
 
-        const pageAI = new PageAI(page);
-        const pageData = await pageAI.analyze();
-        const actions = pageAI.generateActions(pageData);
+        // Step 1: Detect UI Issues
+        const exploratoryAI = new ExploratoryAI(page);
+        const uiIssues = await exploratoryAI.detectUIIssues();
+        if (!Array.isArray(uiIssues)) {
+            uiIssues = [];  
+        }
 
-        Logger.info(`📝 AI-Generated Test Plan:\n${JSON.stringify(actions, null, 2)}`);
+        // Step 2: Explore Click Paths
+        const clickExplorer = new ClickExplorer(page);
+        await clickExplorer.explore();
+        let visitedPages = clickExplorer.visitedPages;
+        if (!(visitedPages instanceof Set)) {
+            visitedPages = new Set();  // ✅ Ensure it's always a Set
+        }
 
-        const runner = new TestRunner(page, actions);
-        await runner.executeTest();
+        // Step 3: Run the TestRunner to Log Results
+        const runner = new TestRunner(page, uiIssues, clickExplorer.visitedPages);
+        await runner.executeExploratoryTest();
     } catch (error) {
         console.error(`❌ Error: ${error.message}`);
     } finally {
