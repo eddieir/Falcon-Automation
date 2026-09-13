@@ -16,7 +16,7 @@
     "test:db": "node tests/db/UserDBTest.js && node tests/db/OrderDBTest.js",
     "test:all": "npm run test:ui && npm run test:api && npm run test:db",
     "test:e2e": "npx playwright test tests/full_autoamtion.test.js",
-    "report": "allure generate allure-results --clean -o allure-report && allure open allure-report"
+    "report": "allure awesome allure-results -o allure-report && allure open allure-report"
   },
   "keywords": [
     "AI",
