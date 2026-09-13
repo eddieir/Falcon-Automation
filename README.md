@@ -508,6 +508,19 @@ npx allure open allure-report
 
 ---
 
+## Roadmap
+
+Falcon's differentiator is genuine self-healing, not a hardcoded selector list — but "AI healed this selector" is only as trustworthy as the visibility behind it. That's the throughline for what's next:
+
+- **Healing you can audit.** Every retry, cache hit, and LLM-inferred fix is already logged. The next step is surfacing that as a reviewable trend across a run — which selectors heal, how often, and via which tier — and gating any LLM-rewritten selector behind explicit approval before it's trusted for reuse. "Self-healing" should never mean "silently trusted."
+- **Real coverage of the data layer, not just the UI.** Most automation investment in the industry goes to UI end-to-end tests while backend regressions ship silently. Falcon's DB test suite is moving from local-only to a real, disposable database provisioned in CI, so data-layer checks actually gate merges.
+- **A single, consolidated self-healing engine** across every entry point — one three-tier chain (retry → locator cache → LLM), not parallel implementations that can quietly drift from each other.
+- **A dashboard built for teams, not just a laptop.** Real-time visibility into a long-running suite is only useful if it's safe to share — token-gated access is next so the live dashboard can be pointed at from CI or a shared environment.
+
+This roadmap tracks ongoing engineering priorities, not a fixed release schedule.
+
+---
+
 ## Contributing
 
 1. Branch off `New_era_Falcon` — not `main`
