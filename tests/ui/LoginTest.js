@@ -7,32 +7,31 @@ const AIHealer = require("../../src/core/AIHealer/AIHealer");
 /**
  * LoginTest — end-to-end login scenario for saucedemo.com.
  *
- * Phase 1 fix:
- *   The test previously clicked the login button and immediately logged
- *   "✅ Login Test Passed" without verifying that the login actually
- *   succeeded.  A credential rejection, network error, or UI change would
- *   produce a false-positive green result — the worst class of test defect.
+ * Fix (Phase 1 patch):
+ *   `this.browserManager.page` was captured before `await this.setup()` ran.
+ *   `setup()` calls `browserManager.launch()`, which is what creates the page —
+ *   so the captured reference was always null, producing
+ *   "❌ Browser page is not initialized!" on every run.
  *
- *   Fixed by adding two post-login assertions:
- *     1. URL check  — the app redirects to /inventory.html on success.
- *     2. Element check — the product list heading confirms the dashboard
- *        rendered correctly.
- *   If either assertion fails the test throws, triggering ErrorHandler and
- *   marking the run as failed rather than silently passing.
+ *   Fixed by moving the page reference inside the try block, after setup().
  */
 class LoginTest extends BaseTest {
     async runTest() {
         await Middleware.beforeTest(this.testName);
-        const page = this.browserManager.page;
-        const healer = new AIHealer(page);
 
         try {
+            // setup() must run first — it calls browserManager.launch()
+            // which creates this.browserManager.page
             await this.setup();
-            Logger.info("🔹 Running UI Login Test with AI-Healing...");
+
+            const page = this.browserManager.page;
+            const healer = new AIHealer(page);
 
             if (!page) {
                 throw new Error("❌ Browser page is not initialized!");
             }
+
+            Logger.info("🔹 Running UI Login Test with AI-Healing...");
 
             // ── Navigate ──────────────────────────────────────────────────
             await page.goto("https://www.saucedemo.com/", { waitUntil: "domcontentloaded" });
