@@ -11,9 +11,12 @@ class BrowserManager {
     }
 
     async launch() {
-        Logger.info(`🚀 Launching ${this.browserType} browser...`);
+        // Respect the HEADLESS env var (default: true for CI-safe runs).
+        // Set HEADLESS=false in .env to watch the browser during local debugging.
+        const headless = process.env.HEADLESS !== "false";
+        Logger.info(`🚀 Launching ${this.browserType} browser (headless=${headless})...`);
         this.browser = await { chromium, firefox, webkit }[this.browserType].launch({
-            headless: false,
+            headless,
         });
 
         this.page = await this.browser.newPage();
