@@ -60,7 +60,9 @@ class GoogleSearchTest extends BaseTest {
             }
 
             Logger.info(`✅ Google Search Test Passed — results visible on ${page.url()}`);
+            this._results.push({ name: "Google Search", status: "passed" });
         } catch (error) {
+            this._results.push({ name: "Google Search", status: "failed", error: error.message });
             await ErrorHandler.handleError(this.testName, error);
         } finally {
             await this.teardown();

@@ -32,10 +32,12 @@ class UserDBTest extends BaseTest {
 
             if (users.length > 0) {
                 Logger.info(`✅ User found in database: ${JSON.stringify(users[0])}`);
+                this._results.push({ name: "DB User", status: "passed" });
             } else {
                 throw new Error("❌ User 'test_user' not found in the users table.");
             }
         } catch (error) {
+            this._results.push({ name: "DB User", status: "failed", error: error.message });
             await ErrorHandler.handleError(this.testName, error);
         } finally {
             await this.teardown();

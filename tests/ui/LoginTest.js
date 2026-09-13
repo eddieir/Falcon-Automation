@@ -66,7 +66,9 @@ class LoginTest extends BaseTest {
             }
 
             Logger.info(`✅ Login Test Passed — landed on ${page.url()}`);
+            this._results.push({ name: "UI Login", status: "passed" });
         } catch (error) {
+            this._results.push({ name: "UI Login", status: "failed", error: error.message });
             await ErrorHandler.handleError(this.testName, error);
         } finally {
             await this.teardown();
