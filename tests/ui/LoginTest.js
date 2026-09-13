@@ -23,16 +23,16 @@ const AIHealer = require("../../src/core/AIHealer/AIHealer");
 class LoginTest extends BaseTest {
     async runTest() {
         await Middleware.beforeTest(this.testName);
-        const page = this.browserManager.page;
-        const healer = new AIHealer(page);
 
         try {
             await this.setup();
             Logger.info("🔹 Running UI Login Test with AI-Healing...");
 
+            const page = this.browserManager.page;
             if (!page) {
                 throw new Error("❌ Browser page is not initialized!");
             }
+            const healer = new AIHealer(page);
 
             // ── Navigate ──────────────────────────────────────────────────
             await page.goto("https://www.saucedemo.com/", { waitUntil: "domcontentloaded" });
