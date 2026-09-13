@@ -23,7 +23,7 @@ class BaseTest {
         this.testName = testName;
         this.browserManager  = serviceContainer.get("browserManager");
         this.apiClient       = serviceContainer.get("apiClient");
-        this.dbClient        = serviceContainer.get("dbClient");
+        this.dbClient        = serviceContainer.getOptional("dbClient");
         this.reportManager   = serviceContainer.get("reportManager");
         /** Accumulate { name, status, duration?, error? } entries here. */
         this._results = [];
