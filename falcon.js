@@ -22,7 +22,6 @@ const { chromium }    = require("playwright");
 const ExploratoryAI   = require("./src/core/ExploratoryAI");
 const ClickExplorer   = require("./src/core/ClickExplorer");
 const TestRunner      = require("./src/core/TestRunner");
-const PageAnalyser    = require("./src/core/PageAnalyser");
 const TestGenerator   = require("./src/core/TestGenerator");
 const Dashboard       = require("./src/core/Dashboard");
 const Logger          = require("./utils/Logger");
@@ -34,7 +33,11 @@ const DEFAULT_URL = "https://www.saucedemo.com";
     const urlArg      = args.find((a) => a.startsWith("--url="));
     const rawUrl      = urlArg ? urlArg.split("=")[1] : DEFAULT_URL;
     const url         = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
-    const noDashboard = args.includes("--no-dashboard");
+    // Default off in CI (process.env.CI is the conventional signal nearly
+    // every CI system sets) so a headless run never blocks on a dashboard
+    // server nobody can see; --dashboard forces it back on if ever needed.
+    const noDashboard = args.includes("--no-dashboard")
+        || (process.env.CI === "true" && !args.includes("--dashboard"));
 
     if (!urlArg) {
         Logger.info(`ℹ️  No --url supplied — defaulting to ${DEFAULT_URL}`);
@@ -44,12 +47,18 @@ const DEFAULT_URL = "https://www.saucedemo.com";
 
     // ── Dashboard ─────────────────────────────────────────────────────────────
     const dashboard = new Dashboard({ port: Number(process.env.DASHBOARD_PORT) || 3000 });
+    let dashboardUp = false;
     if (!noDashboard) {
-        await dashboard.start(); // prints http://localhost:3000
+        try {
+            await dashboard.start(); // prints http://localhost:3000
+            dashboardUp = true;
+        } catch (error) {
+            Logger.warning(`⚠️  Dashboard failed to start (${error.message}) — continuing without it.`);
+        }
     }
 
     const emit = (name, payload) => {
-        if (!noDashboard) dashboard.emit(name, payload);
+        if (dashboardUp) dashboard.emit(name, payload);
     };
 
     // ── Browser ───────────────────────────────────────────────────────────────
@@ -128,10 +137,11 @@ const DEFAULT_URL = "https://www.saucedemo.com";
         await Logger.flush();
         await browser.close();
 
-        if (!noDashboard) {
-            Logger.info("🖥  Dashboard will stay up for 60 s — open http://localhost:3000 to review results.");
+        if (dashboardUp) {
+            const lingerMs = Number(process.env.DASHBOARD_LINGER_MS) || 60_000;
+            Logger.info(`🖥  Dashboard will stay up for ${(lingerMs / 1000).toFixed(0)} s — open http://localhost:${dashboard.port} to review results.`);
             Logger.info("    Press Ctrl-C to exit early.");
-            await new Promise((r) => setTimeout(r, 60_000));
+            await new Promise((r) => setTimeout(r, lingerMs));
             await dashboard.stop();
         }
     }

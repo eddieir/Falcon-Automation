@@ -91,19 +91,20 @@ class CheckoutTest extends BaseTest {
             }
 
             // ── Visual regression on confirmation page ─────────────────────
-            const vr = this.visualRegression;
-            const baselinePath = require("path").join(process.cwd(), "reports", "baselines", "checkout-complete.png");
-            if (!require("fs").existsSync(baselinePath)) {
-                await vr.captureBaseline("checkout-complete");
-                Logger.info("📸 Visual baseline captured for checkout-complete");
-            } else {
-                const vrResult = await vr.compare("checkout-complete");
-                if (vrResult.status === "failed") {
+            // Own try/catch: an infra/IO failure here shouldn't override a
+            // real checkout success.
+            try {
+                const vrResult = await this.visualRegression.snapshot("checkout-complete");
+                if (vrResult.status === "baseline-captured") {
+                    Logger.info("📸 Visual baseline captured for checkout-complete");
+                } else if (vrResult.status === "failed") {
                     Logger.warning(
                         `⚠️  Visual regression on checkout-complete — ` +
                         `${vrResult.diffPercent}% pixels changed. Check reports/diffs/.`
                     );
                 }
+            } catch (vrError) {
+                Logger.warning(`⚠️  Visual regression check errored (ignored): ${vrError.message}`);
             }
 
             Logger.info(`✅ Checkout Test Passed — order confirmed on ${page.url()}`);

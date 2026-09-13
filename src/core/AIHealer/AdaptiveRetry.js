@@ -121,11 +121,13 @@ class AdaptiveRetry {
      */
     _calcDelay(attempt, errorType) {
         // Multipliers tune the base delay for each error class.
+        // HARD errors throw immediately in execute() and never reach this
+        // method, so no HARD entry is needed — the ?? 1.0 fallback below
+        // covers any type not listed here.
         const multipliers = {
             TIMEOUT:       2.0,  // Elements that never appeared need more time
             STALE_ELEMENT: 1.5,  // Wait for DOM to settle
             NETWORK:       0.75, // Network blips clear quickly
-            HARD:          1.0,  // Unreachable but kept for completeness
         };
 
         const mult  = multipliers[errorType] ?? 1.0;

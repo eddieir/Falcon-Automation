@@ -45,5 +45,8 @@
     "selenium-webdriver": "^4.29.0",
     "socket.io": "^4.8.1",
     "zaproxy": "^2.0.0-rc.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0"
   }
 }

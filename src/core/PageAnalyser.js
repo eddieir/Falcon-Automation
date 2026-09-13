@@ -37,28 +37,34 @@ class PageAnalyser {
                 .map((el) => {
                     // Derive the best stable selector in priority order:
                     // data-testid → id → aria-label → name → type → tag
-                    let selector = el.tagName.toLowerCase();
+                    const tag = el.tagName.toLowerCase();
+                    let selector = tag;
                     if (el.dataset && el.dataset.testid) {
-                        selector = `[data-testid="${el.dataset.testid}"]`;
+                        selector = `[data-testid="${CSS.escape(el.dataset.testid)}"]`;
                     } else if (el.id) {
-                        selector = `#${el.id}`;
+                        selector = `#${CSS.escape(el.id)}`;
                     } else if (el.getAttribute("aria-label")) {
-                        selector = `[aria-label="${el.getAttribute("aria-label")}"]`;
+                        selector = `${tag}[aria-label="${CSS.escape(el.getAttribute("aria-label"))}"]`;
                     } else if (el.name) {
-                        selector = `${el.tagName.toLowerCase()}[name="${el.name}"]`;
+                        selector = `${tag}[name="${CSS.escape(el.name)}"]`;
                     } else if (el.getAttribute("type")) {
-                        selector = `${el.tagName.toLowerCase()}[type="${el.getAttribute("type")}"]`;
+                        selector = `${tag}[type="${CSS.escape(el.getAttribute("type"))}"]`;
                     }
 
+                    // <input type="submit"|"button"|"reset"> behaves like a button,
+                    // not a fillable field — page.fill() throws on these.
+                    const inputType = (el.getAttribute("type") || "").toLowerCase();
+                    const isButtonInput = tag === "input" && ["submit", "button", "reset"].includes(inputType);
+
                     return {
-                        tag:           el.tagName.toLowerCase(),
+                        tag,
                         type:          el.getAttribute("type") || "",
                         name:          el.getAttribute("name") || "",
-                        text:          (el.innerText || "").trim().substring(0, 80),
+                        text:          (el.innerText || el.value || "").trim().substring(0, 80),
                         selector,
                         role:          el.getAttribute("role") || "",
-                        isFormElement: ["input", "textarea", "select"].includes(el.tagName.toLowerCase()),
-                        isClickable:   ["button", "a"].includes(el.tagName.toLowerCase()) || el.getAttribute("role") === "button",
+                        isFormElement: ["input", "textarea", "select"].includes(tag) && !isButtonInput,
+                        isClickable:   ["button", "a"].includes(tag) || el.getAttribute("role") === "button" || isButtonInput,
                     };
                 });
         });
@@ -107,6 +113,15 @@ class PageAnalyser {
                 action:      "click",
                 locator:     link.selector,
                 description: `Navigate: ${link.text || link.selector}`,
+            });
+        }
+
+        for (const select of pageData.selects) {
+            actions.push({
+                action:      "select",
+                locator:     select.selector,
+                value:       "option_1",
+                description: `Select option on ${select.name || "dropdown"}`,
             });
         }
 

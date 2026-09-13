@@ -12,7 +12,9 @@ jobs:
     env:
       HEADLESS: "true"
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      # Disable the live dashboard in CI (no browser to view it)
+      # falcon.js now reads CI=true itself to default the dashboard off (no
+      # browser to view it here) — the --no-dashboard flag below is now
+      # redundant but kept as an explicit belt-and-suspenders default.
       CI: "true"
 
     steps:
@@ -28,6 +30,19 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+
+      # Persist visual-regression baselines across runs on the same branch —
+      # without this, reports/ (gitignored, never checked out) is empty on
+      # every fresh runner, so LoginTest/CheckoutTest always take the
+      # "capture baseline" branch and compare() (the code that actually
+      # detects a regression) never executes in CI.
+      - name: Restore visual regression baselines
+        uses: actions/cache@v4
+        with:
+          path: reports/baselines
+          key: vr-baselines-${{ github.ref_name }}
+          restore-keys: |
+            vr-baselines-
 
       # ── Scenario tests (custom runner) ──────────────────────────────────────
       - name: Run Login test
