@@ -1,5 +1,6 @@
 const fs   = require("fs");
 const path = require("path");
+const Middleware = require("../Middleware");
 
 /**
  * HealingReport — append-only audit log for self-healing events.
@@ -61,6 +62,7 @@ class HealingReport {
 
         this.logs.push(entry);
         this._queue = this._queue.then(() => this._flush());
+        Middleware.emit("healingEvent", entry);
     }
 
     async _flush() {

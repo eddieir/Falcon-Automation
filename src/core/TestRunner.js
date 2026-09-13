@@ -64,16 +64,35 @@ class TestRunner {
 
     async runScenario(scenario) {
         const startTime = Date.now();
-        for (let attempt = 1; attempt <= 3; attempt++) {
+
+        if (scenario.action !== "click" && scenario.action !== "type" && scenario.action !== "select") {
+            Logger.warning(`⚠️ Unknown action "${scenario.action}" for ${scenario.description} — skipping.`);
+            this.results.push({
+                name: scenario.description,
+                status: "skipped",
+                reason: `Unknown action "${scenario.action}"`,
+            });
+            return;
+        }
+
+        // "click" already goes through AIHealer.healAndClick(), which has its
+        // own AdaptiveRetry + Tier 2/3 healing chain internally — wrapping it
+        // in another 3-attempt loop here used to re-trigger the whole chain
+        // (including live OpenAI calls) up to 3x per scenario. Give it one
+        // attempt at this level; "type"/"select" have no internal retry, so
+        // they keep the raw 3-attempt loop.
+        const maxAttempts = scenario.action === "click" ? 1 : 3;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                Logger.info(`▶ Executing [${attempt}/3]: ${scenario.description} (${scenario.action})`);
+                Logger.info(`▶ Executing [${attempt}/${maxAttempts}]: ${scenario.description} (${scenario.action})`);
 
                 if (scenario.action === "click") {
                     await this.healer.healAndClick(scenario.locator, scenario.description);
                 } else if (scenario.action === "type") {
                     await this.page.fill(scenario.locator, scenario.value);
-                } else {
-                    Logger.warning(`⚠️ Unknown action "${scenario.action}" for ${scenario.description}.`);
+                } else if (scenario.action === "select") {
+                    await this.page.selectOption(scenario.locator, scenario.value);
                 }
 
                 const duration = Date.now() - startTime;
@@ -83,7 +102,7 @@ class TestRunner {
             } catch (error) {
                 Logger.warning(`⚠️ Attempt ${attempt} failed for ${scenario.description}: ${error.message}`);
 
-                if (attempt === 3) {
+                if (attempt === maxAttempts) {
                     Logger.error(`❌ Test Failed: ${scenario.description}`);
                     HealingReport.log({
                         original: scenario.locator,

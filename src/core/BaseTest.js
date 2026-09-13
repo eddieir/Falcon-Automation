@@ -1,5 +1,6 @@
 const Logger = require("../../utils/Logger");
 const serviceContainer = require("./ServiceContainer");
+const VisualRegression = require("./VisualRegression");
 
 /**
  * BaseTest — dependency-injection base class for all Falcon test scenarios.
@@ -27,12 +28,20 @@ class BaseTest {
         this.reportManager   = serviceContainer.get("reportManager");
         /** Accumulate { name, status, duration?, error? } entries here. */
         this._results = [];
+        /**
+         * Visual regression helper — available after setup() has launched the
+         * browser.  Initialised lazily in setup() once the page exists.
+         * @type {VisualRegression|null}
+         */
+        this.visualRegression = null;
     }
 
     async setup() {
         Logger.info(`🟢 Starting test: ${this.testName}`);
         this.reportManager.startRun();
         await this.browserManager.launch();
+        // Visual regression is page-scoped — initialise after launch()
+        this.visualRegression = new VisualRegression(this.browserManager.page);
     }
 
     async teardown() {
