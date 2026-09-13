@@ -5,7 +5,7 @@ const { defineConfig, devices } = require("@playwright/test");
  * Playwright configuration for Falcon's native test suite.
  *
  * Phase 3 addition:
- *   - Adds allure-playwright reporter so full_autoamtion.test.js and any
+ *   - Adds allure-playwright reporter so full_automation.test.js and any
  *     future spec files generate a rich Allure HTML report alongside the
  *     built-in JSON reporter.
  *   - Configures screenshot capture on failure and a test retry on CI so
