@@ -1,0 +1,56 @@
+name: Falcon CI
+
+on:
+  push:
+    branches: [New_era_Falcon, main, "feat/**"]
+  pull_request:
+    branches: [New_era_Falcon, main]
+
+jobs:
+  test:
+    name: Run Falcon Test Suite
+    runs-on: ubuntu-latest
+
+    env:
+      HEADLESS: "true"
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      API_BASE_URL: "https://jsonplaceholder.typicode.com"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run UI Login Test
+        run: node tests/ui/LoginTest.js
+
+      - name: Run UI Checkout Test
+        run: node tests/ui/CheckoutTest.js
+
+      - name: Run User API Test
+        run: node tests/api/UserApiTest.js
+
+      - name: Run Product API Test
+        run: node tests/api/ProductApiTest.js
+
+      - name: Run Falcon exploratory pipeline
+        run: node falcon.js --url=https://www.saucedemo.com
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: falcon-reports
+          path: reports/
+          retention-days: 14
