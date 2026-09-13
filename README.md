@@ -1,6 +1,6 @@
 # Falcon-Automation — AI-Powered Test Automation Framework
 
-> **Status:** Active development · Branch `feat/phase-1-ai-core-foundation` contains Phase 1 stabilisation fixes.
+> **Status:** Active development · Phase 3 competitive features on `feat/phase-3-competitive-features`.
 
 ---
 
@@ -11,11 +11,14 @@ Falcon is an open-source test automation framework built on Playwright that inte
 **Core capabilities:**
 
 - **UI automation** via Playwright (Chromium, Firefox, WebKit)
-- **Three-tier self-healing** — direct attempt → LocatorStore → LLM inference
+- **Three-tier self-healing** — direct attempt (AdaptiveRetry) → LocatorStore → LLM inference (gpt-4o-mini)
 - **Autonomous UI exploration** — recursive crawler (ClickExplorer) + DOM-based defect detection (ExploratoryAI)
-- **Accurate reporting** — structured pass/fail/skip tallying with wall-clock duration and healing audit trail
+- **AI test generation** — PageAnalyser maps the DOM; TestGenerator creates scenarios; TestRunner executes them with full healing
+- **Visual regression testing** — pixel-level screenshot comparison with diff images and cumulative summary
+- **Real-time live dashboard** — express + socket.io stream every test event to a browser UI at `localhost:3000`
+- **Accurate reporting** — structured pass/fail/skip tallying + Allure HTML report via `allure-playwright`
 - **Database testing** — PostgreSQL via `pg` Pool with full mTLS support
-- **CI/CD ready** — GitHub Actions workflow included
+- **CI/CD ready** — GitHub Actions pipeline with Allure report upload
 
 ---
 
@@ -354,8 +357,127 @@ jobs:
         if: always()
         with:
           name: falcon-reports
-          path: reports/
+          path: |
+            reports/
+            allure-report/
           retention-days: 14
+```
+
+---
+
+## Phase 3 — Competitive Features
+
+A full audit of the Phase 2 codebase identified 4 remaining bugs and 6 missing competitive features. All are resolved in `feat/phase-3-competitive-features`.
+
+### ErrorHandler — wrong reports path, synchronous write
+
+**Problem:** `path.join(__dirname, '..', 'reports')` resolved to `src/reports/` (never existed). Every test failure silently lost its error report. `fs.writeFileSync` on the error handler blocked the event loop.
+
+**Fix:** Path corrected to two `../` segments from `src/core/` to reach project root. Writes converted to `fs.promises.writeFile`. Lazy `mkdir` before first write. Filename sanitised to remove characters that break some filesystems.
+
+---
+
+### Middleware — console.log bypassed the log file
+
+**Problem:** `beforeTest` / `afterTest` used `console.log`, so lifecycle messages never appeared in `reports/execution.log`, making per-test timing invisible in CI output.
+
+**Fix:** Replaced with `Logger.info`. Added `Middleware.setEmitter(fn)` so the dashboard can subscribe to lifecycle events without modifying call sites.
+
+---
+
+### AdaptiveRetry — empty stub implemented
+
+**Problem:** `AdaptiveRetry.js` was completely empty — no code at all. AIHealer's Tier 1 used a raw `for` loop with no delay between attempts, meaning three rapid-fire retries against a slow page were effectively one attempt.
+
+**Fix:** Full implementation with exponential backoff (base 500ms, capped at 8 s), ±20% jitter to prevent thundering-herd collisions, and four error-type classifiers: `TIMEOUT` (wait longer), `STALE_ELEMENT` (let DOM settle), `NETWORK` (retry quickly), `HARD` (bail immediately — no amount of waiting helps). Integrated into AIHealer Tier 1; Tier 2/3 unchanged.
+
+---
+
+### Visual Regression Testing — new capability
+
+**Feature:** `VisualRegression.js` adds pixel-level screenshot comparison to any test that extends `BaseTest`.
+
+- `captureBaseline(name)` — saves a golden reference to `reports/baselines/`
+- `compare(name)` — diffs the current page against the baseline using `pixelmatch`; writes a red-highlighted diff image to `reports/diffs/`
+- Results appended to `reports/visual-regression.json` (cumulative across runs)
+- Configurable per-pixel tolerance and overall diff-percentage threshold
+- Wired automatically into `BaseTest.setup()` via `this.visualRegression`
+- `LoginTest` and `CheckoutTest` capture a baseline on first run; compare on subsequent runs
+
+---
+
+### Real-time Live Dashboard — new capability
+
+**Feature:** `Dashboard.js` wires the already-installed `express` and `socket.io` dependencies (previously unused) into a WebSocket-backed dashboard at `http://localhost:3000`.
+
+- Every test event (start, pass, fail, skip, healing, explorer page) is emitted in real time
+- Summary tiles, animated progress bar, and a timestamped event feed update live in the browser
+- Late-joining tabs receive a full event replay so the dashboard is always complete
+- Middleware auto-registers as an emitter — no call-site changes needed in existing tests
+- Use `node falcon.js --no-dashboard` to disable in CI environments
+- `DASHBOARD_PORT` env var overrides the default port
+
+---
+
+### AI Test Generation — wired into autonomous pipeline
+
+**Problem:** `PageAnalyser`, `TestGenerator`, and `TestRunner` all existed as standalone classes but nothing connected them. The autonomous pipeline in `falcon.js` skipped test generation entirely.
+
+**Fix:** `falcon.js` now runs a five-step pipeline:
+1. ExploratoryAI detects UI issues
+2. ClickExplorer maps all click paths
+3. PageAnalyser + TestGenerator produce a test plan from the root page's DOM
+4. TestRunner executes the generated plan with AI healing
+5. Exploratory report written to disk
+
+Results from step 4 are emitted to the live dashboard in real time.
+
+`PageAI.js` (exact duplicate of PageAnalyser with minor formatting differences) deleted. `PageAnalyser.js` updated with the combined `analyze()` + `generateActions()` surface.
+
+---
+
+### Dead code removed
+
+Four files that had no call path and contained security-relevant issues were deleted:
+
+| File | Problem |
+|------|---------|
+| `utils/self_healing.js` | Raw `axios` OpenAI call, `gpt-4`, no auth header rotation |
+| `utils/ai_test_generator.js` | Same raw axios pattern, `gpt-4`, never imported |
+| `utils/RetryHandler.js` | Completely empty file |
+| `src/core/PageAI.js` | Exact duplicate of PageAnalyser |
+
+---
+
+### Allure reporting + `playwright.config.js` — new capability
+
+**Problem:** `allure-playwright` was listed as a dependency but `playwright.config.js` did not exist, so the reporter never activated and `npx allure generate` had nothing to process.
+
+**Fix:** `playwright.config.js` added with `allure-playwright` in the reporters array alongside the JSON reporter. Screenshot on failure, video retention on failure, one CI retry. CI workflow updated to run `allure generate` and upload the HTML report alongside the raw `reports/` artefact.
+
+---
+
+## Running Tests
+
+```sh
+# Full autonomous pipeline with live dashboard
+node falcon.js
+
+# Autonomous pipeline without dashboard (CI / headless environments)
+node falcon.js --no-dashboard
+
+# Individual scenario tests
+node tests/ui/LoginTest.js
+node tests/ui/CheckoutTest.js
+node tests/api/UserApiTest.js
+node tests/api/ProductApiTest.js
+
+# Playwright native suite (allure-playwright reporter active)
+npx playwright test
+
+# Generate and open Allure report
+npx allure generate allure-results --clean -o allure-report
+npx allure open allure-report
 ```
 
 ---
