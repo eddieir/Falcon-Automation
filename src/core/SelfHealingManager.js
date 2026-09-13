@@ -1,43 +1,69 @@
-const { expect } = require("@playwright/test");
+const Logger   = require("../../utils/Logger");
 const AIHelper = require("../../utils/AIHelper");
 
+/**
+ * SelfHealingManager — page-level click helper with retry and AI fallback.
+ *
+ * Phase 2 fixes:
+ *
+ * 1. `this.baseTest` was never set in the constructor, but `safeClick()` called
+ *    `this.baseTest.captureScreenshot()` and `this.baseTest.logTestResult()`
+ *    on failure, producing `TypeError: Cannot read properties of undefined`.
+ *    These calls have been removed; screenshot capture belongs in BaseTest /
+ *    ErrorHandler, not in a low-level click helper.
+ *
+ * 2. Replaced `console.log/warn/error` with `Logger.*` so messages flow through
+ *    the async-safe logging pipeline and appear in execution.log.
+ *
+ * Note: for new test code prefer `AIHealer.healAndClick()` which supports the
+ * full three-tier chain.  SelfHealingManager remains for pages in `src/ui/`
+ * that use the POM pattern and have not yet been migrated.
+ */
 class SelfHealingManager {
     constructor(page) {
-        this.page = page;
-        this.retryAttempts = 3; // Number of retries before failing
-        this.fallbackStrategies = [
-            "Use alternative locator", 
-            "Wait and retry", 
-            "Try clicking parent element"
-        ];
+        this.page          = page;
+        this.retryAttempts = 3;
     }
 
+    /**
+     * Attempt to click `selector` with up to `this.retryAttempts` tries.
+     * On each failure, the next selector from `alternativeSelectors` is tried.
+     * If all selectors are exhausted, an AI suggestion is logged and the error
+     * is re-thrown so the calling test can handle it.
+     *
+     * @param {string}   selector              - Primary CSS selector
+     * @param {string[]} alternativeSelectors  - Fallback selectors (shifted on failure)
+     */
     async safeClick(selector, alternativeSelectors = []) {
-        for (let attempt = 0; attempt < this.retryAttempts; attempt++) {
+        let current = selector;
+
+        for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
             try {
-                console.log(`🔹 Attempting to click: ${selector} (Attempt ${attempt + 1})`);
-                await this.page.waitForSelector(selector, { timeout: 2000 });
-                await this.page.click(selector);
-                return; // Exit if success
+                Logger.info(`🔹 Attempting to click: ${current} (Attempt ${attempt}/${this.retryAttempts})`);
+                await this.page.waitForSelector(current, { timeout: 2000 });
+                await this.page.click(current);
+                return;
             } catch (error) {
-                console.warn(`⚠️ Failed to click: ${selector}. Trying alternative locators...`);
+                Logger.warning(`⚠️ Failed to click: ${current} — ${error.message}`);
+
                 if (alternativeSelectors.length > 0) {
-                    selector = alternativeSelectors.shift();
+                    current = alternativeSelectors.shift();
+                    Logger.info(`🔄 Switching to alternative selector: ${current}`);
                 } else {
-                    console.error(`❌ All attempts failed for selector: ${selector}`);
-                    await this.baseTest.captureScreenshot();
-                    await this.baseTest.logTestResult("FAILED", error.message);
+                    Logger.error(`❌ All selectors exhausted for original: ${selector}`);
                     await this.handleFailure(error, selector);
-                    return;
+                    throw error;
                 }
             }
         }
     }
 
     async handleFailure(error, selector) {
-        console.error(`🔥 Test Failed on Selector: ${selector}`);
-        const aiSuggestion = await AIHelper.getFixSuggestion(error.message);
-        console.log(`🤖 AI Suggestion: ${aiSuggestion}`);
+        Logger.error(`🔥 Click failed on: ${selector}`);
+        const suggestion = await AIHelper.getFixSuggestion(error.message);
+        if (suggestion) {
+            Logger.info(`🤖 AI Suggestion: ${suggestion}`);
+        }
     }
 }
 
