@@ -91,7 +91,9 @@ class CheckoutTest extends BaseTest {
             }
 
             Logger.info(`✅ Checkout Test Passed — order confirmed on ${page.url()}`);
+            this._results.push({ name: "UI Checkout", status: "passed" });
         } catch (error) {
+            this._results.push({ name: "UI Checkout", status: "failed", error: error.message });
             await ErrorHandler.handleError(this.testName, error);
         } finally {
             await this.teardown();

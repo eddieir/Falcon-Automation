@@ -5,20 +5,17 @@ require("dotenv").config();
 /**
  * ConfigManager — JSON + env configuration singleton.
  *
- * Phase 2 fix:
- *   `__dirname` is `src/core/`.  The old path
- *   `path.join(__dirname, "..", "config")` resolves to `src/config/` which
- *   does not exist — the config file lives at `<project-root>/config/`.
- *   Fixed to `path.join(__dirname, "..", "..", "config")` (two levels up).
+ * The config file lives at `src/config/testConfig.json`. `__dirname` here is
+ * `src/core/`, so it's one level up, not two.
  *
- *   Additionally, a missing config file now logs a warning and falls back to
- *   an empty object rather than throwing, so tests that rely solely on env
- *   vars (e.g. in CI) do not crash on startup.
+ * A missing config file logs a warning and falls back to an empty object
+ * rather than throwing, so tests that rely solely on env vars (e.g. in CI)
+ * do not crash on startup.
  */
 class ConfigManager {
     constructor() {
-        // __dirname = src/core  →  ../../config = <project-root>/config
-        this.configPath = path.join(__dirname, "..", "..", "config", "testConfig.json");
+        // __dirname = src/core  →  ../config = src/config
+        this.configPath = path.join(__dirname, "..", "config", "testConfig.json");
         this.config     = this._load();
     }
 
