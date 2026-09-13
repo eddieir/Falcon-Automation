@@ -18,7 +18,13 @@
     "test:e2e": "npx playwright test tests/full_autoamtion.test.js",
     "report": "allure generate allure-results --clean -o allure-report && allure open allure-report"
   },
-  "keywords": ["AI", "Testing", "Automation", "Playwright", "Self-Healing"],
+  "keywords": [
+    "AI",
+    "Testing",
+    "Automation",
+    "Playwright",
+    "Self-Healing"
+  ],
   "author": "Peyman Iravani",
   "license": "MIT",
   "dependencies": {
@@ -32,7 +38,9 @@
     "mysql2": "^3.13.0",
     "openai": "^4.86.2",
     "pg": "^8.13.3",
+    "pixelmatch": "^7.2.0",
     "playwright": "^1.51.0",
+    "pngjs": "^7.0.0",
     "postgresql": "^0.0.1",
     "selenium-webdriver": "^4.29.0",
     "socket.io": "^4.8.1",
