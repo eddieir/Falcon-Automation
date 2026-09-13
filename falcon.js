@@ -39,7 +39,7 @@ const Logger = require("./utils/Logger");
         let visitedPages = clickExplorer.visitedPages;
         if (!(visitedPages instanceof Set)) {
             visitedPages = new Set();  // ✅ Ensure it's always a Set
-        }
+        } 
 
         // Step 3: Run the TestRunner to Log Results
         const runner = new TestRunner(page, uiIssues, clickExplorer.visitedPages);

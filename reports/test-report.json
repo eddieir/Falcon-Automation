@@ -1,4 +1,14 @@
 {
-  "result": "Tests Completed Successfully",
-  "timestamp": "2025-03-10T21:51:13.237Z"
+  "runId": "2026-09-13T15:02:14.919Z",
+  "duration": "unknowns",
+  "summary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0
+  },
+  "result": "NO_TESTS_RUN",
+  "tests": [],
+  "uiIssues": [],
+  "healingEvents": []
 }
