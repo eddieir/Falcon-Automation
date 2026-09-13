@@ -21,6 +21,12 @@ class ServiceContainer {
         }
         return this.services.get(name);
     }
+
+    // dbClient registration is best-effort (see below) — callers that can run
+    // without a database (UI/API tests) should use this instead of get().
+    getOptional(name) {
+        return this.services.has(name) ? this.services.get(name) : null;
+    }
 }
 
 // Ensure DBClient only loads when required
