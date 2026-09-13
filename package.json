@@ -15,7 +15,7 @@
     "test:api": "node tests/api/UserApiTest.js && node tests/api/ProductApiTest.js",
     "test:db": "node tests/db/UserDBTest.js && node tests/db/OrderDBTest.js",
     "test:all": "npm run test:ui && npm run test:api && npm run test:db",
-    "test:e2e": "npx playwright test tests/full_autoamtion.test.js",
+    "test:e2e": "npx playwright test tests/full_automation.test.js",
     "report": "allure awesome allure-results -o allure-report && allure open allure-report"
   },
   "keywords": [
@@ -28,23 +28,18 @@
   "author": "Peyman Iravani",
   "license": "MIT",
   "dependencies": {
-    "@achannarasappa/locust": "^1.3.0",
     "allure": "^3.0.0-beta.9",
     "allure-playwright": "^3.2.0",
     "axios": "^1.8.2",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "io": "^1.5.3",
     "mysql2": "^3.13.0",
     "openai": "^4.86.2",
     "pg": "^8.13.3",
     "pixelmatch": "^7.2.0",
     "playwright": "^1.51.0",
     "pngjs": "^7.0.0",
-    "postgresql": "^0.0.1",
-    "selenium-webdriver": "^4.29.0",
-    "socket.io": "^4.8.1",
-    "zaproxy": "^2.0.0-rc.6"
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.0"
