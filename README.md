@@ -229,26 +229,133 @@ Four additional runtime defects were discovered when executing the Phase 1 deliv
 
 ---
 
+## Phase 2 — Stability & Coverage
+
+A full code audit of the Phase 1 codebase identified 14 additional defects.  All are resolved in `feat/phase-2-stability-and-coverage`.
+
+### HealingReport — `log()` method missing, wrong path, blocking I/O
+
+**Problem:** `AIHealer` and `TestRunner` both call `HealingReport.log({…})` but only a three-arg instance method `logHealing()` existed — a `TypeError` on every healing event, precisely when audit data is most needed.  Additionally the file path resolved to `src/reports/` (not `reports/`), and `fs.writeFileSync` on a hot path stalled the event loop.
+
+**Fix:** Static `HealingReport.log()` added, accepting a structured object.  Path corrected to project root.  Writes serialised through an async promise queue.  Directory created lazily before first write.
+
+---
+
+### LocatorStore — wrong path, no directory creation
+
+**Problem:** Store path resolved to `src/data/locator_store.json` — a directory that does not exist.  Every successful Tier 3 healing result that should have been cached for Tier 2 was silently lost on write.
+
+**Fix:** Path corrected to `<project-root>/data/`.  Directory created on first write.  Saves made async (serialised queue).
+
+---
+
+### GoogleSearchTest — AIHealer created before browser launch
+
+**Problem:** `new AIHealer(this.browserManager.page)` was called before `await this.setup()`.  `setup()` is what creates the page — so the healer received `null`.  Every `healAndClick()` call threw on the null reference.
+
+**Fix:** AIHealer construction moved to inside the try block, after `await this.setup()`.  Post-search assertions added (results container + first heading).
+
+---
+
+### SelfHealingManager — `this.baseTest` undefined
+
+**Problem:** `safeClick()` called `this.baseTest.captureScreenshot()` and `this.baseTest.logTestResult()` on failure, but `this.baseTest` was never set in the constructor.  Every handled failure produced `TypeError: Cannot read properties of undefined`.
+
+**Fix:** Removed the two undefined calls.  Screenshot capture belongs in `BaseTest` / `ErrorHandler`.  Replaced `console.*` with `Logger.*`.
+
+---
+
+### ConfigManager — wrong config file path
+
+**Problem:** `path.join(__dirname, "..", "config")` resolved to `src/config/` — a directory that does not exist.  The actual config is at `<project-root>/config/`.  ConfigManager threw on startup whenever the file was absent.
+
+**Fix:** Path corrected to `../../config` from `src/core/`.  Missing file now logs a warning and falls back to env vars rather than throwing, so CI environments that rely solely on env vars do not crash.
+
+---
+
+### AIAnalyser / AIHelper / self_healing.js — raw axios + TLS bypass + stale model
+
+**Problem:** Three separate files called the OpenAI API via raw `axios` HTTP requests instead of the official SDK.  One of them set `rejectUnauthorized: false` on its HTTPS agent — disabling TLS certificate verification for every request.  All three used `gpt-4` (high cost, higher latency).
+
+**Fix:** All three migrated to the official `openai` SDK (lazy-init, consistent with `AIHealer`).  `rejectUnauthorized: false` removed.  Upgraded to `gpt-4o-mini`.  `OPENAI_API_KEY` absence is handled gracefully — returns `null` rather than throwing.
+
+---
+
+### UserDBTest — MySQL placeholder in PostgreSQL query
+
+**Problem:** Query used `?` as the placeholder (`SELECT * FROM users WHERE username = ?`).  The `pg` driver requires `$1`, `$2`, … numbered placeholders.  The query never executed — pg threw a syntax error instead.
+
+**Fix:** Placeholder changed to `$1`.  Added Middleware hooks, ErrorHandler, and Logger for consistency with the rest of the suite.
+
+---
+
+### TestDBConnection — wrong DBClient import path
+
+**Problem:** `require("../../core/DBClient")` resolved to a path that does not exist (the file is at `src/core/DBClient.js`).
+
+**Fix:** Import corrected to `../../src/core/DBClient`.
+
+---
+
+### full_automation.test.js — import with trailing space + missing module
+
+**Problem:** `require('../utils/db ')` contained a trailing space, causing `MODULE_NOT_FOUND` at parse time.  The referenced file (`utils/db.js`) does not exist at all.
+
+**Fix:** Removed the bad import.  DB connectivity test rewritten to use `DBClient` directly, skipped when `DB_HOST` / `DB_USER` env vars are absent so the suite runs cleanly in CI without a database.
+
+---
+
+### CheckoutTest, ProductApiTest, OrderDBTest — empty files
+
+Three test files were completely empty, making `npm run test:all` produce no results for checkout, product API, and order DB scenarios.
+
+**Fix:** All three implemented with full action sequences, schema validation, and post-condition assertions.
+
+---
+
+### Missing config, CI workflow, and `.env.example`
+
+**Problem:** `config/testConfig.json` did not exist; `ConfigManager` crashed on startup.  `.github/workflows/ci.yml` was referenced in the README but absent.  `.env.example` did not exist, making onboarding unnecessarily difficult.
+
+**Fix:** All three files created.
+
+---
+
 ## CI/CD
 
-GitHub Actions workflow runs on every push to `main` and on pull requests:
+GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_era_Falcon`, `main`, and `feat/**` branches, and on pull requests:
 
 ```yaml
 # .github/workflows/ci.yml
-on: [push, pull_request]
+name: Falcon CI
+on:
+  push:
+    branches: [New_era_Falcon, main, "feat/**"]
+  pull_request:
+    branches: [New_era_Falcon, main]
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      HEADLESS: "true"
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '20' }
+        with: { node-version: "20", cache: "npm" }
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - run: node tests/ui/LoginTest.js
+      - run: node tests/ui/CheckoutTest.js
+      - run: node tests/api/UserApiTest.js
+      - run: node tests/api/ProductApiTest.js
       - run: node falcon.js
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          HEADLESS: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: falcon-reports
+          path: reports/
+          retention-days: 14
 ```
 
 ---
