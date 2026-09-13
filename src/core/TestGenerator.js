@@ -1,47 +1,34 @@
 const Logger = require("../../utils/Logger");
+const PageAnalyser = require("./PageAnalyser");
 
+/**
+ * TestGenerator — turns a live page into a test plan for TestRunner.
+ *
+ * Post-merge fix: this used to hand-roll its own DOM scan and selector
+ * logic (bare tag-name fallback, e.g. "button" with no data-testid/id/name
+ * disambiguation), duplicating — and diverging from — PageAnalyser, which
+ * gained a proper data-testid → id → aria-label → name → type priority
+ * chain in the same PR that deleted PageAI.js for being a duplicate of
+ * PageAnalyser. Since falcon.js's live pipeline only ever called
+ * TestGenerator, that improved selector logic never actually reached the
+ * generated test plan. TestGenerator now delegates entirely to
+ * PageAnalyser so there is exactly one DOM-scanning implementation.
+ */
 class TestGenerator {
     constructor(page) {
         this.page = page;
-    }
-
-    async scanPage() {
-        Logger.info("🔍 Scanning website for visible elements...");
-
-        const elements = await this.page.evaluate(() => {
-            return [...document.querySelectorAll("input, button, a, select, textarea, div[role='button']")]
-                .filter(el => el.offsetParent !== null) // Only visible elements
-                .map(el => ({
-                    tag: el.tagName.toLowerCase(),
-                    type: el.getAttribute("type") || "",
-                    name: el.getAttribute("name") || "",
-                    text: el.innerText.trim(),
-                    selector: el.tagName.toLowerCase() + (el.name ? `[name='${el.name}']` : ""),
-                    role: el.getAttribute("role") || "",
-                }));
-        });
-
-        Logger.info(`✅ Found ${elements.length} visible interactive elements.`);
-        return elements;
+        this.analyser = new PageAnalyser(page);
     }
 
     async generateTestScenarios() {
-        const elements = await this.scanPage();
-
-        const scenarios = [];
-        for (const el of elements) {
-            if (el.tag === "button" || el.tag === "a" || el.role === "button") {
-                scenarios.push({ action: "click", locator: el.selector, description: el.text || "Unnamed Button" });
-            } else if (el.tag === "input" || el.tag === "textarea") {
-                scenarios.push({ action: "type", locator: el.selector, value: "test_value", description: el.name || "Unnamed Input" });
-            } else if (el.tag === "select") {
-                scenarios.push({ action: "select", locator: el.selector, value: "option_1", description: "Dropdown Selection" });
-            }
-        }
+        Logger.info("🔍 Scanning website for visible elements...");
+        const pageData = await this.analyser.analyze();
+        const scenarios = this.analyser.generateActions(pageData);
+        Logger.info(`✅ Found ${pageData.allElements.length} visible interactive elements.`);
 
         return {
-            url: await this.page.url(),
-            test_scenarios: scenarios
+            url: this.page.url(),
+            test_scenarios: scenarios,
         };
     }
 }

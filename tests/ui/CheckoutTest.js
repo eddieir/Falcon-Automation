@@ -90,6 +90,23 @@ class CheckoutTest extends BaseTest {
                 throw new Error("Order confirmation header is not visible on /checkout-complete.html");
             }
 
+            // ── Visual regression on confirmation page ─────────────────────
+            // Own try/catch: an infra/IO failure here shouldn't override a
+            // real checkout success.
+            try {
+                const vrResult = await this.visualRegression.snapshot("checkout-complete");
+                if (vrResult.status === "baseline-captured") {
+                    Logger.info("📸 Visual baseline captured for checkout-complete");
+                } else if (vrResult.status === "failed") {
+                    Logger.warning(
+                        `⚠️  Visual regression on checkout-complete — ` +
+                        `${vrResult.diffPercent}% pixels changed. Check reports/diffs/.`
+                    );
+                }
+            } catch (vrError) {
+                Logger.warning(`⚠️  Visual regression check errored (ignored): ${vrError.message}`);
+            }
+
             Logger.info(`✅ Checkout Test Passed — order confirmed on ${page.url()}`);
             this._results.push({ name: "UI Checkout", status: "passed" });
         } catch (error) {

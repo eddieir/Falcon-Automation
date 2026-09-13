@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Falcon Live Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+  :root {
+    --bg:        #0d1117;
+    --surface:   #161b22;
+    --border:    #30363d;
+    --text:      #e6edf3;
+    --muted:     #8b949e;
+    --pass:      #3fb950;
+    --fail:      #f85149;
+    --skip:      #d29922;
+    --heal:      #58a6ff;
+    --info:      #388bfd;
+    --radius:    8px;
+    --font:      'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  #status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+    transition: background .3s;
+  }
+  #status-dot.live { background: var(--pass); box-shadow: 0 0 6px var(--pass); }
+
+  #status-label { color: var(--muted); font-size: 12px; }
+
+  .spacer { flex: 1; }
+
+  #run-time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  /* ── Summary tiles ── */
+  #summary {
+    display: flex;
+    gap: 12px;
+    padding: 20px 24px;
+    flex-wrap: wrap;
+  }
+
+  .tile {
+    flex: 1 1 120px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .tile-value {
+    font-size: 32px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .tile-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+  }
+
+  .tile.pass  .tile-value { color: var(--pass); }
+  .tile.fail  .tile-value { color: var(--fail); }
+  .tile.skip  .tile-value { color: var(--skip); }
+  .tile.heal  .tile-value { color: var(--heal); }
+  .tile.total .tile-value { color: var(--text); }
+
+  /* ── Progress bar ── */
+  #progress-wrap {
+    padding: 0 24px 16px;
+  }
+
+  #progress-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border);
+    overflow: hidden;
+    display: flex;
+  }
+
+  .bar-segment {
+    height: 100%;
+    transition: width .4s ease;
+  }
+
+  .bar-pass { background: var(--pass); }
+  .bar-fail { background: var(--fail); }
+  .bar-skip { background: var(--skip); }
+
+  /* ── Event feed ── */
+  #feed-section {
+    padding: 0 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  #feed-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+  }
+
+  .event-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    border-left-width: 3px;
+    animation: slideIn .2s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .event-row.pass   { border-left-color: var(--pass); }
+  .event-row.fail   { border-left-color: var(--fail); }
+  .event-row.skip   { border-left-color: var(--skip); }
+  .event-row.heal   { border-left-color: var(--heal); }
+  .event-row.info   { border-left-color: var(--info); }
+  .event-row.start  { border-left-color: var(--muted); }
+
+  .event-icon { font-size: 16px; line-height: 1.4; flex-shrink: 0; }
+
+  .event-body { flex: 1; min-width: 0; }
+
+  .event-name {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .event-detail {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 2px;
+    word-break: break-all;
+  }
+
+  .event-time {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  #empty-state {
+    text-align: center;
+    color: var(--muted);
+    padding: 48px 0;
+    font-size: 13px;
+  }
+
+  #empty-state .big { font-size: 32px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div id="status-dot"></div>
+  <h1>🦅 Falcon Live Dashboard</h1>
+  <span id="status-label">Connecting…</span>
+  <div class="spacer"></div>
+  <span id="run-time">–</span>
+</header>
+
+<div id="summary">
+  <div class="tile total"><div class="tile-value" id="t-total">0</div><div class="tile-label">Total</div></div>
+  <div class="tile pass"><div class="tile-value" id="t-pass">0</div><div class="tile-label">Passed</div></div>
+  <div class="tile fail"><div class="tile-value" id="t-fail">0</div><div class="tile-label">Failed</div></div>
+  <div class="tile skip"><div class="tile-value" id="t-skip">0</div><div class="tile-label">Skipped</div></div>
+  <div class="tile heal"><div class="tile-value" id="t-heal">0</div><div class="tile-label">Healed</div></div>
+</div>
+
+<div id="progress-wrap">
+  <div id="progress-bar">
+    <div class="bar-segment bar-pass" id="bar-pass" style="width:0%"></div>
+    <div class="bar-segment bar-fail" id="bar-fail" style="width:0%"></div>
+    <div class="bar-segment bar-skip" id="bar-skip" style="width:0%"></div>
+  </div>
+</div>
+
+<div id="feed-section">
+  <div id="feed-header">
+    <span>Event feed</span>
+  </div>
+  <div id="feed">
+    <div id="empty-state">
+      <div class="big">🕐</div>
+      <div>Waiting for test events…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const state = { pass: 0, fail: 0, skip: 0, heal: 0, startTs: null };
+
+  const $ = (id) => document.getElementById(id);
+
+  function updateTiles() {
+    const total = state.pass + state.fail + state.skip;
+    $("t-total").textContent = total;
+    $("t-pass").textContent  = state.pass;
+    $("t-fail").textContent  = state.fail;
+    $("t-skip").textContent  = state.skip;
+    $("t-heal").textContent  = state.heal;
+
+    if (total > 0) {
+      $("bar-pass").style.width = (state.pass / total * 100) + "%";
+      $("bar-fail").style.width = (state.fail / total * 100) + "%";
+      $("bar-skip").style.width = (state.skip / total * 100) + "%";
+    }
+  }
+
+  function fmt(ts) {
+    const d = new Date(ts);
+    return d.toLocaleTimeString("en-GB", { hour12: false });
+  }
+
+  function updateRunTime() {
+    if (!state.startTs) return;
+    const elapsed = ((Date.now() - state.startTs) / 1000).toFixed(1);
+    $("run-time").textContent = `${elapsed}s elapsed`;
+  }
+
+  setInterval(updateRunTime, 500);
+
+  function addRow(type, icon, name, detail, ts) {
+    const empty = $("empty-state");
+    if (empty) empty.remove();
+
+    const row = document.createElement("div");
+    row.className = `event-row ${type}`;
+    row.innerHTML = `
+      <span class="event-icon">${icon}</span>
+      <div class="event-body">
+        <div class="event-name">${name}</div>
+        ${detail ? `<div class="event-detail">${detail}</div>` : ""}
+      </div>
+      <span class="event-time">${fmt(ts)}</span>
+    `;
+    $("feed").prepend(row);
+  }
+
+  function handleEvent({ name, payload, timestamp }) {
+    switch (name) {
+      case "testStart":
+        if (!state.startTs) state.startTs = timestamp;
+        addRow("start", "▶", payload.testName || "Test started", null, timestamp);
+        break;
+      case "testPass":
+        state.pass++;
+        updateTiles();
+        addRow("pass", "✅", payload.name, payload.duration ? `${payload.duration}ms` : null, timestamp);
+        break;
+      case "testFail":
+        state.fail++;
+        updateTiles();
+        addRow("fail", "❌", payload.name, payload.error, timestamp);
+        break;
+      case "testSkip":
+        state.skip++;
+        updateTiles();
+        addRow("skip", "⏭", payload.name, payload.reason, timestamp);
+        break;
+      case "healingEvent":
+        state.heal++;
+        updateTiles();
+        addRow("heal", "🤖", `Healed: ${payload.original}`, `→ ${payload.resolved} [${payload.tier}]`, timestamp);
+        break;
+      case "explorerPage":
+        addRow("info", "🌍", `Explored: ${payload.url}`, null, timestamp);
+        break;
+      case "testEnd":
+        addRow("info", "🏁", `Completed: ${payload.testName}`, null, timestamp);
+        break;
+      default:
+        addRow("info", "ℹ️", name, JSON.stringify(payload), timestamp);
+    }
+  }
+
+  const socket = io();
+
+  socket.on("connect", () => {
+    $("status-dot").classList.add("live");
+    $("status-label").textContent = "Live";
+  });
+
+  socket.on("disconnect", () => {
+    $("status-dot").classList.remove("live");
+    $("status-label").textContent = "Disconnected";
+  });
+
+  // Replay full history for late-joining tabs
+  socket.on("replay", (events) => {
+    events.forEach(handleEvent);
+  });
+
+  socket.on("event", handleEvent);
+</script>
+</body>
+</html>

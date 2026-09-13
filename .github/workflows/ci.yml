@@ -8,20 +8,19 @@ on:
 
 jobs:
   test:
-    name: Run Falcon Test Suite
     runs-on: ubuntu-latest
-
     env:
       HEADLESS: "true"
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      API_BASE_URL: "https://jsonplaceholder.typicode.com"
+      # falcon.js now reads CI=true itself to default the dashboard off (no
+      # browser to view it here) — the --no-dashboard flag below is now
+      # redundant but kept as an explicit belt-and-suspenders default.
+      CI: "true"
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
@@ -32,25 +31,54 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run UI Login Test
+      # Persist visual-regression baselines across runs on the same branch —
+      # without this, reports/ (gitignored, never checked out) is empty on
+      # every fresh runner, so LoginTest/CheckoutTest always take the
+      # "capture baseline" branch and compare() (the code that actually
+      # detects a regression) never executes in CI.
+      - name: Restore visual regression baselines
+        uses: actions/cache@v4
+        with:
+          path: reports/baselines
+          key: vr-baselines-${{ github.ref_name }}
+          restore-keys: |
+            vr-baselines-
+
+      # ── Scenario tests (custom runner) ──────────────────────────────────────
+      - name: Run Login test
         run: node tests/ui/LoginTest.js
 
-      - name: Run UI Checkout Test
+      - name: Run Checkout test
         run: node tests/ui/CheckoutTest.js
 
-      - name: Run User API Test
+      - name: Run User API test
         run: node tests/api/UserApiTest.js
 
-      - name: Run Product API Test
+      - name: Run Product API test
         run: node tests/api/ProductApiTest.js
 
-      - name: Run Falcon exploratory pipeline
-        run: node falcon.js --url=https://www.saucedemo.com
+      # ── Autonomous exploration (no dashboard in CI) ─────────────────────────
+      - name: Run Falcon autonomous pipeline
+        run: node falcon.js --no-dashboard
 
-      - name: Upload test reports
+      # ── Playwright native suite (with Allure reporter) ──────────────────────
+      - name: Run Playwright native tests
+        run: npx playwright test
+        continue-on-error: true  # Don't block the pipeline if E2E flakes
+
+      # ── Allure report generation ────────────────────────────────────────────
+      - name: Generate Allure report
         if: always()
+        run: |
+          npx allure awesome allure-results -o allure-report || true
+
+      # ── Upload all artefacts ────────────────────────────────────────────────
+      - name: Upload test reports
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: falcon-reports
-          path: reports/
+          path: |
+            reports/
+            allure-report/
           retention-days: 14

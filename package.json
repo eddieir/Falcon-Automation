@@ -16,9 +16,15 @@
     "test:db": "node tests/db/UserDBTest.js && node tests/db/OrderDBTest.js",
     "test:all": "npm run test:ui && npm run test:api && npm run test:db",
     "test:e2e": "npx playwright test tests/full_autoamtion.test.js",
-    "report": "allure generate allure-results --clean -o allure-report && allure open allure-report"
+    "report": "allure awesome allure-results -o allure-report && allure open allure-report"
   },
-  "keywords": ["AI", "Testing", "Automation", "Playwright", "Self-Healing"],
+  "keywords": [
+    "AI",
+    "Testing",
+    "Automation",
+    "Playwright",
+    "Self-Healing"
+  ],
   "author": "Peyman Iravani",
   "license": "MIT",
   "dependencies": {
@@ -32,10 +38,15 @@
     "mysql2": "^3.13.0",
     "openai": "^4.86.2",
     "pg": "^8.13.3",
+    "pixelmatch": "^7.2.0",
     "playwright": "^1.51.0",
+    "pngjs": "^7.0.0",
     "postgresql": "^0.0.1",
     "selenium-webdriver": "^4.29.0",
     "socket.io": "^4.8.1",
     "zaproxy": "^2.0.0-rc.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0"
   }
 }
