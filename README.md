@@ -1,6 +1,6 @@
 # Falcon-Automation — AI-Powered Test Automation Framework
 
-> **Status:** Active development · Phase 3 competitive features on `feat/phase-3-competitive-features`.
+> **Status:** Active development · Phase 3 (competitive features) merged to `main`.
 
 ---
 

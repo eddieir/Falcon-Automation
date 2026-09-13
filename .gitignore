@@ -11,6 +11,7 @@ config/testConfig.json
 reports/
 allure-results/
 allure-report/
+.allure/
 logs/
 execution.log
 
