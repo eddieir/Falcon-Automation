@@ -48,8 +48,8 @@ BROWSER=chromium           # chromium | firefox | webkit
 HEADLESS=true              # true for CI; false to watch the browser locally
 
 # ── OpenAI — optional, enables Tier 3 AI self-healing ──────────────────────
-OPENAI_API_KEY=sk-...      # NOT strictly required: AIHealer/AIAnalyser/AIHelper
-                            # all guard `if (!process.env.OPENAI_API_KEY) return null`
+OPENAI_API_KEY=sk-...      # NOT strictly required: AIHealer/AIAnalyser both
+                            # guard `if (!process.env.OPENAI_API_KEY) return null`
                             # and degrade gracefully — Tier 3 just never fires.
 
 # ── API base URL — optional (defaults to jsonplaceholder) ─────────────────
@@ -84,7 +84,7 @@ SSL_REJECT_UNAUTHORIZED=true
 
 - `src/core/ActionInterpreter.js` — **deleted in Phase 4** (dead code, zero references anywhere).
 - `src/core/PageAnalyser.js` / `src/core/TestGenerator.js` — **consolidated**. `TestGenerator` now delegates its DOM scan and action generation entirely to `PageAnalyser`; there is exactly one scanner, not two. `PageAI.js` (the original duplicate) was deleted in Phase 3.
-- `src/core/SelfHealingManager.js` — **still exists**, still used by `src/ui/pages/LoginPage.js`. This is a second, older, two-tier healing path that has not been consolidated onto `AIHealer` (the three-tier engine used everywhere else). Scheduled for Phase 5.
+- `src/core/SelfHealingManager.js`, `src/ui/pages/LoginPage.js`, `utils/AIHelper.js` — **all deleted in Phase 5**. `SelfHealingManager` was a second, older, two-tier healing path that had never been consolidated onto `AIHealer`; its only consumer, `LoginPage.js`, wasn't itself used by any test in the suite (confirmed via repo-wide grep before deleting); `AIHelper.js`'s only caller was `SelfHealingManager`, so it became orphaned dead code the moment that was removed and was deleted in the same pass. There is now exactly one healing engine (`AIHealer`, three-tier) used everywhere.
 - `src/core/APIClient.js` — **actively used** (registered in `ServiceContainer`, consumed by `tests/api/UserApiTest.js` and `tests/api/ProductApiTest.js` via `this.apiClient`). A previous handoff draft incorrectly listed this as dead code.
 - `src/core/ServiceContainer.js` — a real but partial DI container: `browserManager`, `apiClient`, `dbClient` (optional — see `getOptional()`), and `reportManager` are registered here, but not every shared dependency in the codebase goes through it. Still an open inconsistency (Phase 5).
 - `src/core/AIHealer/LocatorStore.js` — persists Tier 2 alternative selectors to `data/locator_store.json`. `addLocator()` only ever appends; there's no TTL or size cap, so this file grows unbounded over a long project history (Phase 5).
@@ -141,7 +141,7 @@ healAndClick(selector, description)
 
 Every healing event (Tier 2 hit, Tier 3 resolution, or exhausted) is logged via `HealingReport.log()`, which also emits a `healingEvent` to the live dashboard (via `Middleware.emit()`, with an HTTP fallback for standalone test processes — see `DASHBOARD_URL` in §3).
 
-This chain applies to everything that calls `AIHealer.healAndClick()`. **`src/ui/pages/LoginPage.js` does not** — it still goes through the older `SelfHealingManager` (see §4).
+As of Phase 5 this is the *only* healing engine in the codebase — `SelfHealingManager` (an older, parallel two-tier path) was deleted, see §4.
 
 ---
 
@@ -193,13 +193,11 @@ CI persists `reports/baselines/` across runs via `actions/cache@v4` keyed on the
 |---|---|---|---|
 | P1 | `tests/ui/GoogleSearchTest.js` | Uses `AIHealer` correctly, but is not run in CI at all (`ci.yml` never invokes it). | Phase 7 |
 | P1 | `tests/db/*.js` | Never run in CI — no Postgres available there; failures are invisible until someone runs them locally. | Phase 6 |
-| P2 | `src/core/SelfHealingManager.js` | Parallel, older healing path used only by `LoginPage.js` — not consolidated with `AIHealer`. | Phase 5 |
-| P2 | `src/core/ServiceContainer.js` | Partial DI — some shared deps go through it, others are constructed directly. | Phase 5 |
-| P2 | `src/core/AIHealer/LocatorStore.js` | `data/locator_store.json` grows unbounded — no TTL or eviction. | Phase 5 |
+| P2 | `src/core/ServiceContainer.js` | Partial DI — some shared deps go through it, others are constructed directly. | Unscheduled |
 | P3 | Dashboard | No auth — `POST /emit` and the socket connection accept unauthenticated writes/reads; `cors: { origin: "*" }`. Fine for a local dev tool, not for a shared/networked one. | Phase 7 |
 | P3 | Self-healing trust | Every healing event is logged, but nothing surfaces it as a trend, and a Tier-3 (LLM) resolution is trusted and reused with no review step. | Phase 8 |
 
-Resolved since the last draft of this document: the `full_autoamtion.test.js` typo (renamed), the unused-dependency list (`selenium-webdriver`, `zaproxy`, `postgresql`, `io`, `@achannarasappa/locust` removed — `axios` is genuinely used and was kept), `ActionInterpreter.js` (deleted, was dead), visual-regression baselines never persisting in CI (fixed via branch-keyed cache in Phase 3).
+Resolved since the last draft of this document: the `full_autoamtion.test.js` typo (renamed), the unused-dependency list (`selenium-webdriver`, `zaproxy`, `postgresql`, `io`, `@achannarasappa/locust` removed — `axios` is genuinely used and was kept), `ActionInterpreter.js` (deleted, was dead), visual-regression baselines never persisting in CI (fixed via branch-keyed cache in Phase 3), the dual self-healing engines (`SelfHealingManager`/`LoginPage.js`/`AIHelper.js` all deleted in Phase 5 — see §4), and `LocatorStore`'s unbounded growth (capped in Phase 5 — see `src/core/AIHealer/LocatorStore.js`'s doc comment).
 
 ---
 
@@ -208,7 +206,7 @@ Resolved since the last draft of this document: the `full_autoamtion.test.js` ty
 - **Never `console.log`** — always `Logger.info / Logger.warning / Logger.error` so everything lands in `reports/execution.log`.
 - **Never `fs.writeFileSync`/`fs.readFileSync` on a hot path** — prefer `fs.promises.*`; where sync is unavoidable (e.g. one-time startup), say why in a comment.
 - **Path construction**: always use `path.join(__dirname, ...)` with the correct number of `..` segments to reach the intended target from the file's *actual* location — get this wrong and the failure is silent (falls back to a default) more often than it throws, which is how several of these bugs went unnoticed for a while.
-- **No raw axios calls to OpenAI** — always go through the `openai` SDK, lazy-initialised, guarded by `if (!process.env.OPENAI_API_KEY) return null` (see `utils/AIHelper.js`, `src/core/AIHealer/AIHealer.js`, `src/core/AIHealer/AIAnalyser.js`).
+- **No raw axios calls to OpenAI** — always go through the `openai` SDK, lazy-initialised, guarded by `if (!process.env.OPENAI_API_KEY) return null` (see `src/core/AIHealer/AIHealer.js`, `src/core/AIHealer/AIAnalyser.js`).
 - **Error handling**: every test's `runTest()` wraps `Middleware.beforeTest`/`afterTest` in try/catch/finally, and pushes a real `{name, status, error?}` entry into `this._results` on both success and failure paths — a test that doesn't push a result will always report `NO_TESTS_RUN` regardless of what actually happened.
 - **Git author**: Peyman Iravani / peyman.iravani@gmail.com — no Claude attribution in commits or PR descriptions for this repo.
 - **Branching**: one branch per phase/feature off `main`, one PR per phase (not one giant PR) so review stays scoped.

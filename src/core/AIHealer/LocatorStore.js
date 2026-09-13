@@ -19,7 +19,23 @@ const path = require("path");
  * 3. Async save.
  *    `fs.writeFileSync` on every `addLocator()` call stalled the event loop.
  *    Replaced with a serialised async write queue (same pattern as Logger).
+ *
+ * Phase 5 fix — bounded growth.
+ *    `addLocator()` only ever appended, both to a given selector's
+ *    alternatives list and to the overall set of tracked selectors, so
+ *    `data/locator_store.json` grew without limit over a long project
+ *    history (renamed/removed pages leave their old selectors behind
+ *    forever). Each entry now also tracks `lastUsed`; the alternatives list
+ *    per selector is capped at MAX_ALTERNATIVES_PER_SELECTOR (oldest
+ *    dropped first), and once the number of distinct tracked selectors
+ *    exceeds MAX_TRACKED_SELECTORS, the least-recently-used ones are
+ *    evicted. A legacy store (plain `{ original: [alt, ...] }`, no
+ *    `lastUsed`) is migrated in place on load rather than treated as
+ *    corrupt.
  */
+const MAX_ALTERNATIVES_PER_SELECTOR = 5;
+const MAX_TRACKED_SELECTORS         = 500;
+
 class LocatorStore {
     constructor() {
         this.storePath = path.join(__dirname, "..", "..", "..", "data", "locator_store.json");
@@ -30,7 +46,15 @@ class LocatorStore {
     _loadSync() {
         try {
             if (fs.existsSync(this.storePath)) {
-                return JSON.parse(fs.readFileSync(this.storePath, "utf8"));
+                const raw = JSON.parse(fs.readFileSync(this.storePath, "utf8"));
+                const migrated = {};
+                for (const [original, entry] of Object.entries(raw)) {
+                    // Legacy shape: entry is a plain array of alternatives.
+                    migrated[original] = Array.isArray(entry)
+                        ? { alternatives: entry, lastUsed: Date.now() }
+                        : entry;
+                }
+                return migrated;
             }
         } catch {
             // Corrupt store — start fresh
@@ -40,16 +64,35 @@ class LocatorStore {
 
     addLocator(original, alternative) {
         if (!this.data[original]) {
-            this.data[original] = [];
+            this.data[original] = { alternatives: [], lastUsed: Date.now() };
         }
-        if (!this.data[original].includes(alternative)) {
-            this.data[original].push(alternative);
-            this._queue = this._queue.then(() => this._save());
+        const entry = this.data[original];
+        entry.lastUsed = Date.now();
+
+        if (!entry.alternatives.includes(alternative)) {
+            entry.alternatives.push(alternative);
+            if (entry.alternatives.length > MAX_ALTERNATIVES_PER_SELECTOR) {
+                entry.alternatives.splice(0, entry.alternatives.length - MAX_ALTERNATIVES_PER_SELECTOR);
+            }
         }
+
+        this._evictLeastRecentlyUsed();
+        this._queue = this._queue.then(() => this._save());
+    }
+
+    /** Keep at most MAX_TRACKED_SELECTORS entries, dropping the stalest first. */
+    _evictLeastRecentlyUsed() {
+        const keys = Object.keys(this.data);
+        if (keys.length <= MAX_TRACKED_SELECTORS) return;
+
+        keys
+            .sort((a, b) => this.data[a].lastUsed - this.data[b].lastUsed)
+            .slice(0, keys.length - MAX_TRACKED_SELECTORS)
+            .forEach((key) => delete this.data[key]);
     }
 
     getAlternatives(original) {
-        return this.data[original] || [];
+        return this.data[original]?.alternatives || [];
     }
 
     async _save() {
