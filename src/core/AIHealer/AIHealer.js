@@ -1,6 +1,7 @@
 const Logger = require("../../../utils/Logger");
 const LocatorStore = require("./LocatorStore");
 const HealingReport = require("./HealingReport");
+const AdaptiveRetry = require("./AdaptiveRetry");
 
 /**
  * AIHealer — three-tier self-healing locator engine.
@@ -16,28 +17,31 @@ class AIHealer {
     constructor(page) {
         this.page = page;
         this._openai = null; // lazy-init to avoid import cost when not needed
+        this._retry  = new AdaptiveRetry({ maxAttempts: 3, baseDelayMs: 500 });
     }
 
     /**
      * Attempt to click a selector with progressive fallback.
+     *
+     * Tier 1 now uses AdaptiveRetry so the wait between attempts is
+     * proportional to the failure type (timeout → wait longer; stale
+     * element → let DOM settle; network → retry quickly; hard error → bail
+     * immediately rather than wasting two more attempts).
+     *
      * @param {string} selector - CSS selector to target
      * @param {string} description - Human-readable label for logging
      */
     async healAndClick(selector, description = "Element") {
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-                Logger.info(`🔹 Attempt ${attempt}: Trying ${description} (${selector})`);
+        try {
+            await this._retry.execute(async () => {
+                Logger.info(`🔹 Tier 1: Trying ${description} (${selector})`);
                 await this.page.waitForSelector(selector, { timeout: 2000 });
                 await this.page.click(selector);
-                return;
-            } catch (error) {
-                Logger.warning(`⚠️ Attempt ${attempt} failed for ${description} (${selector})`);
-
-                if (attempt === 3) {
-                    Logger.error(`❌ All attempts failed for ${description}. Engaging AI-Healer.`);
-                    await this.healSelector(selector, description);
-                }
-            }
+            }, description);
+            return; // Tier 1 succeeded
+        } catch (error) {
+            Logger.error(`❌ Tier 1 exhausted for ${description}. Engaging Tier 2/3 healing.`);
+            await this.healSelector(selector, description);
         }
     }
 
