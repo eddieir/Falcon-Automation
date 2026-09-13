@@ -90,6 +90,22 @@ class CheckoutTest extends BaseTest {
                 throw new Error("Order confirmation header is not visible on /checkout-complete.html");
             }
 
+            // ── Visual regression on confirmation page ─────────────────────
+            const vr = this.visualRegression;
+            const baselinePath = require("path").join(process.cwd(), "reports", "baselines", "checkout-complete.png");
+            if (!require("fs").existsSync(baselinePath)) {
+                await vr.captureBaseline("checkout-complete");
+                Logger.info("📸 Visual baseline captured for checkout-complete");
+            } else {
+                const vrResult = await vr.compare("checkout-complete");
+                if (vrResult.status === "failed") {
+                    Logger.warning(
+                        `⚠️  Visual regression on checkout-complete — ` +
+                        `${vrResult.diffPercent}% pixels changed. Check reports/diffs/.`
+                    );
+                }
+            }
+
             Logger.info(`✅ Checkout Test Passed — order confirmed on ${page.url()}`);
             this._results.push({ name: "UI Checkout", status: "passed" });
         } catch (error) {

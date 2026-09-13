@@ -65,6 +65,23 @@ class LoginTest extends BaseTest {
                 );
             }
 
+            // ── Visual regression ─────────────────────────────────────────
+            // On first run: capture baseline.  On subsequent runs: compare.
+            const vr = this.visualRegression;
+            const baselinePath = require("path").join(process.cwd(), "reports", "baselines", "login-inventory.png");
+            if (!require("fs").existsSync(baselinePath)) {
+                await vr.captureBaseline("login-inventory");
+                Logger.info("📸 Visual baseline captured for login-inventory");
+            } else {
+                const vrResult = await vr.compare("login-inventory");
+                if (vrResult.status === "failed") {
+                    Logger.warning(
+                        `⚠️  Visual regression detected on login-inventory — ` +
+                        `${vrResult.diffPercent}% pixels changed. Check reports/diffs/.`
+                    );
+                }
+            }
+
             Logger.info(`✅ Login Test Passed — landed on ${page.url()}`);
             this._results.push({ name: "UI Login", status: "passed" });
         } catch (error) {
