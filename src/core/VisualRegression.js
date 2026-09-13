@@ -1,8 +1,18 @@
 const fs = require("fs");
 const path = require("path");
 const { PNG } = require("pngjs");
-const pixelmatch = require("pixelmatch");
 const Logger = require("../../utils/Logger");
+
+// pixelmatch ships ESM-only. A plain require() throws ERR_REQUIRE_ESM on
+// Node <20.19 (it only happens to work on newer Node via unflagged
+// require(esm)), so load it lazily via dynamic import instead.
+let _pixelmatch = null;
+async function getPixelmatch() {
+    if (!_pixelmatch) {
+        _pixelmatch = (await import("pixelmatch")).default;
+    }
+    return _pixelmatch;
+}
 
 /**
  * VisualRegression — pixel-level screenshot comparison engine.
@@ -121,6 +131,7 @@ class VisualRegression {
         const totalPixels = width * height;
         const diff = new PNG({ width, height });
 
+        const pixelmatch = await getPixelmatch();
         const diffPixels = pixelmatch(
             baseline.data,
             actual.data,

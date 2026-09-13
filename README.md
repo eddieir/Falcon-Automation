@@ -403,6 +403,11 @@ A full audit of the Phase 2 codebase identified 4 remaining bugs and 6 missing c
 - Configurable per-pixel tolerance and overall diff-percentage threshold
 - Wired automatically into `BaseTest.setup()` via `this.visualRegression`
 - `LoginTest` and `CheckoutTest` capture a baseline on first run; compare on subsequent runs
+- A visual diff is currently a logged warning, not a hard test failure — `compare()`'s result is inspected but doesn't fail the test on mismatch
+
+**Post-merge fix:** `pixelmatch@7` ships ESM-only. The original `require("pixelmatch")` throws `ERR_REQUIRE_ESM` on Node <20.19 — it only appeared to work because CI happened to resolve a Node 20.20.x patch that added unflagged `require(esm)` support, silently depending on a Node version newer than the workflow's own `node-version: "20"` pin guarantees. Fixed to a lazy `await import("pixelmatch")`, which works on any supported Node version. Verified locally on Node 18.16.0.
+
+**Known gap (CI):** `reports/` is gitignored with no cache step, so every CI run starts with no baseline on disk — `LoginTest`/`CheckoutTest` always take the "capture baseline" branch there, meaning `compare()` (the code that actually detects a regression) never runs in CI today. Visual regression is currently only meaningful for local, repeated runs.
 
 ---
 
@@ -410,12 +415,13 @@ A full audit of the Phase 2 codebase identified 4 remaining bugs and 6 missing c
 
 **Feature:** `Dashboard.js` wires the already-installed `express` and `socket.io` dependencies (previously unused) into a WebSocket-backed dashboard at `http://localhost:3000`.
 
-- Every test event (start, pass, fail, skip, healing, explorer page) is emitted in real time
+- Test start/pass/fail/skip and explorer-page events from the `falcon.js` autonomous pipeline are emitted in real time
 - Summary tiles, animated progress bar, and a timestamped event feed update live in the browser
 - Late-joining tabs receive a full event replay so the dashboard is always complete
-- Middleware auto-registers as an emitter — no call-site changes needed in existing tests
 - Use `node falcon.js --no-dashboard` to disable in CI environments
 - `DASHBOARD_PORT` env var overrides the default port
+
+**Known gap:** the UI has a "Healed" tile and a `healingEvent` handler, and `Middleware.setEmitter()` exists for wiring lifecycle events from `BaseTest`-based tests, but nothing currently calls `dashboard.emit("healingEvent", ...)` or connects `Middleware` to a running `Dashboard` instance — self-healing activity from `AIHealer`/`HealingReport` and `beforeTest`/`afterTest` lifecycle events from the individual `tests/**/*.js` files (which run in separate `node` processes) don't reach the dashboard yet. Only the `falcon.js` pipeline's own events are live today.
 
 ---
 
@@ -426,13 +432,13 @@ A full audit of the Phase 2 codebase identified 4 remaining bugs and 6 missing c
 **Fix:** `falcon.js` now runs a five-step pipeline:
 1. ExploratoryAI detects UI issues
 2. ClickExplorer maps all click paths
-3. PageAnalyser + TestGenerator produce a test plan from the root page's DOM
+3. TestGenerator produces a test plan from the root page's DOM
 4. TestRunner executes the generated plan with AI healing
 5. Exploratory report written to disk
 
 Results from step 4 are emitted to the live dashboard in real time.
 
-`PageAI.js` (exact duplicate of PageAnalyser with minor formatting differences) deleted. `PageAnalyser.js` updated with the combined `analyze()` + `generateActions()` surface.
+`PageAI.js` (exact duplicate of PageAnalyser with minor formatting differences) deleted. `PageAnalyser.js` gained the same selector-priority chain (`data-testid` → `id` → `aria-label` → `name` → `type`) and the combined `analyze()` + `generateActions()` surface — but the live pipeline above still calls `TestGenerator`, which has its own separate, older selector logic. `PageAnalyser` is currently unused by `falcon.js`; the two DOM-scanners have not yet been consolidated into one. (Confirmed locally: a real run against saucedemo.com generated a `type` scenario for the login `<input type="submit">` button, which fails every attempt with "Input of type submit cannot be filled" — a direct symptom of `TestGenerator`'s weaker element/action classification.)
 
 ---
 
@@ -453,7 +459,9 @@ Four files that had no call path and contained security-relevant issues were del
 
 **Problem:** `allure-playwright` was listed as a dependency but `playwright.config.js` did not exist, so the reporter never activated and `npx allure generate` had nothing to process.
 
-**Fix:** `playwright.config.js` added with `allure-playwright` in the reporters array alongside the JSON reporter. Screenshot on failure, video retention on failure, one CI retry. CI workflow updated to run `allure generate` and upload the HTML report alongside the raw `reports/` artefact.
+**Fix:** `playwright.config.js` added with `allure-playwright` in the reporters array alongside the JSON reporter. Screenshot on failure, video retention on failure, one CI retry. CI workflow updated to generate an Allure report and upload it alongside the raw `reports/` artefact.
+
+**Post-merge fix:** the documented/CI command, `allure generate <dir> --clean -o <out>`, doesn't work at all on the installed `allure@3.0.0-beta.9` CLI — `--clean` isn't a recognized flag on this beta's `generate` command, and even without it, `generate` throws `TypeError: The "path" argument must be of type string` before producing any output (a bug in this beta release's positional-argument handling). CI's step had a silent `|| true`, so it always "succeeded" while uploading an empty/missing report. The working command on this CLI version is the `awesome` report plugin instead: `npx allure awesome allure-results -o allure-report`. Both `package.json`'s `report` script and CI have been switched to this; verified locally to produce a real `index.html`.
 
 ---
 
@@ -476,7 +484,7 @@ node tests/api/ProductApiTest.js
 npx playwright test
 
 # Generate and open Allure report
-npx allure generate allure-results --clean -o allure-report
+npx allure awesome allure-results -o allure-report
 npx allure open allure-report
 ```
 
