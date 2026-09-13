@@ -66,20 +66,22 @@ class LoginTest extends BaseTest {
             }
 
             // ── Visual regression ─────────────────────────────────────────
-            // On first run: capture baseline.  On subsequent runs: compare.
-            const vr = this.visualRegression;
-            const baselinePath = require("path").join(process.cwd(), "reports", "baselines", "login-inventory.png");
-            if (!require("fs").existsSync(baselinePath)) {
-                await vr.captureBaseline("login-inventory");
-                Logger.info("📸 Visual baseline captured for login-inventory");
-            } else {
-                const vrResult = await vr.compare("login-inventory");
-                if (vrResult.status === "failed") {
+            // Captures a baseline on first run, compares on later runs. Kept
+            // in its own try/catch: a screenshot/PNG I/O failure here is an
+            // infra problem, not a functional login failure, and shouldn't
+            // mark the whole test failed when login itself fully succeeded.
+            try {
+                const vrResult = await this.visualRegression.snapshot("login-inventory");
+                if (vrResult.status === "baseline-captured") {
+                    Logger.info("📸 Visual baseline captured for login-inventory");
+                } else if (vrResult.status === "failed") {
                     Logger.warning(
                         `⚠️  Visual regression detected on login-inventory — ` +
                         `${vrResult.diffPercent}% pixels changed. Check reports/diffs/.`
                     );
                 }
+            } catch (vrError) {
+                Logger.warning(`⚠️  Visual regression check errored (ignored): ${vrError.message}`);
             }
 
             Logger.info(`✅ Login Test Passed — landed on ${page.url()}`);

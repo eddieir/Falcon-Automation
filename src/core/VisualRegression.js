@@ -172,19 +172,47 @@ class VisualRegression {
 
     /**
      * Append a comparison result to the cumulative JSON summary.
+     *
+     * Serialised through a shared, class-level promise queue: two
+     * compare()/captureBaseline() calls racing on the same summary file
+     * would otherwise each read the same pre-write array and clobber each
+     * other's entry on write.
      * @private
      */
     _appendToSummary(result) {
-        let summary = [];
-        try {
-            if (fs.existsSync(this.summaryPath)) {
-                summary = JSON.parse(fs.readFileSync(this.summaryPath, "utf8"));
-            }
-        } catch { /* ignore corrupt file */ }
+        VisualRegression._writeQueue = VisualRegression._writeQueue.then(async () => {
+            let summary = [];
+            try {
+                if (fs.existsSync(this.summaryPath)) {
+                    summary = JSON.parse(await fs.promises.readFile(this.summaryPath, "utf8"));
+                }
+            } catch { /* ignore corrupt file */ }
 
-        summary.push({ ...result, timestamp: new Date().toISOString() });
-        fs.writeFileSync(this.summaryPath, JSON.stringify(summary, null, 2), "utf8");
+            summary.push({ ...result, timestamp: new Date().toISOString() });
+            await fs.promises.writeFile(this.summaryPath, JSON.stringify(summary, null, 2), "utf8");
+        }).catch(() => {}); // never let a summary-write failure crash the caller
+        return VisualRegression._writeQueue;
+    }
+
+    /**
+     * Capture a baseline on first run, or compare against it on every
+     * subsequent run. Centralises the "does a baseline exist yet" policy
+     * that call sites previously duplicated with their own fs.existsSync
+     * checks and manual path-joining.
+     *
+     * @param {string} name
+     * @returns {Promise<{status: string, [key: string]: any}>}
+     */
+    async snapshot(name) {
+        const baselinePath = path.join(this.baselineDir, `${name}.png`);
+        if (!fs.existsSync(baselinePath)) {
+            await this.captureBaseline(name);
+            return { name, status: "baseline-captured" };
+        }
+        return this.compare(name);
     }
 }
+
+VisualRegression._writeQueue = Promise.resolve();
 
 module.exports = VisualRegression;

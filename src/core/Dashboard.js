@@ -46,10 +46,22 @@ class Dashboard {
         const Middleware = require("./Middleware");
 
         const app = express();
+        app.use(express.json());
         app.use(express.static(path.join(__dirname, "..", "dashboard")));
 
         app.get("/events", (_req, res) => {
             res.json(this._events);
+        });
+
+        // Lets a separate `node` process (e.g. tests/ui/LoginTest.js run on
+        // its own) report into this already-running dashboard by POSTing
+        // here — see Middleware.emit()'s DASHBOARD_URL fallback.
+        app.post("/emit", (req, res) => {
+            const { name, payload } = req.body || {};
+            if (typeof name === "string") {
+                this.emit(name, payload || {});
+            }
+            res.status(204).end();
         });
 
         this._server = http.createServer(app);
@@ -62,7 +74,13 @@ class Dashboard {
             socket.emit("replay", this._events);
         });
 
-        await new Promise((resolve) => this._server.listen(this.port, resolve));
+        await new Promise((resolve, reject) => {
+            this._server.once("error", reject);
+            this._server.listen(this.port, () => {
+                this._server.removeListener("error", reject);
+                resolve();
+            });
+        });
         Logger.info(`🖥  Dashboard → http://localhost:${this.port}`);
 
         // Wire Middleware lifecycle events into the dashboard
