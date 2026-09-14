@@ -16,13 +16,40 @@ jobs:
       # browser to view it here) — the --no-dashboard flag below is now
       # redundant but kept as an explicit belt-and-suspenders default.
       CI: "true"
+      # Phase 6 — real Postgres for tests/db/*.js. This is a disposable CI-only
+      # instance (the `postgres:` service below), not the production database,
+      # so TLS is off and the credentials are throwaway values with no
+      # relation to any real secret.
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: falcon
+      DB_PASS: falcon_ci_password
+      DB_NAME: falcon_test
+      DB_SSL: "false"
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: falcon
+          POSTGRES_PASSWORD: falcon_ci_password
+          POSTGRES_DB: falcon_test
+        ports:
+          - 5432:5432
+        # Block subsequent steps until Postgres is actually accepting
+        # connections, not just until the container has started.
+        options: >-
+          --health-cmd "pg_isready -U falcon"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
 
       - name: Install dependencies
@@ -30,6 +57,29 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+
+      # ── Regression test for the Phase 6 exit-code fix ───────────────────────
+      # No browser, no DB — runs first and fast. Locks in that
+      # ReportManager.generateReport() actually sets process.exitCode, so a
+      # future refactor can't silently reintroduce "CI step is always green
+      # regardless of the actual test result."
+      - name: Run ReportManager exit-code regression test
+        run: node tests/unit/ReportManagerExitCode.check.js
+
+      # A misconfigured database (wrong password, unreachable host) must be a
+      # real failure, never mistaken for "no database configured." Doesn't
+      # need the seeded Postgres below — it only needs the DB test files
+      # themselves, run as child processes with deliberately broken configs.
+      - name: Run DB config skip-vs-fail regression test
+        run: node tests/unit/DBConfigBehavior.check.js
+
+      # ── Database fixture (Phase 6) ──────────────────────────────────────────
+      # Applies the same scripts/db/ci-seed.sql schema verified locally against
+      # a disposable Postgres container. Re-running this against a fresh
+      # service container on every job is intentional — the fixture is meant
+      # to be rebuilt from scratch each run, not reused across CI runs.
+      - name: Seed test database
+        run: psql "postgresql://$DB_USER:$DB_PASS@$DB_HOST:$DB_PORT/$DB_NAME" -f scripts/db/ci-seed.sql
 
       # Persist visual-regression baselines across runs on the same branch —
       # without this, reports/ (gitignored, never checked out) is empty on
@@ -56,6 +106,16 @@ jobs:
 
       - name: Run Product API test
         run: node tests/api/ProductApiTest.js
+
+      # ── Database tests (Phase 6) ────────────────────────────────────────────
+      # Deliberately no continue-on-error: these now run against a real,
+      # seeded Postgres instance (see the `postgres:` service above), so a
+      # failure here is a real signal, not a false positive to shrug off.
+      - name: Run User DB test
+        run: node tests/db/UserDBTest.js
+
+      - name: Run Order DB test
+        run: node tests/db/OrderDBTest.js
 
       # ── Autonomous exploration (no dashboard in CI) ─────────────────────────
       - name: Run Falcon autonomous pipeline

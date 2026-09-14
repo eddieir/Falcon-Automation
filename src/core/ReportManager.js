@@ -8,6 +8,25 @@ const path = require("path");
  * The report is written to ./reports/test-report.json and a human-readable
  * summary is printed to stdout.
  *
+ * Phase 6 fix — CI results were not actually gating anything.
+ *   Every scenario test file (LoginTest, CheckoutTest, UserApiTest,
+ *   ProductApiTest, UserDBTest, OrderDBTest) reports its outcome by calling
+ *   this method and then lets the Node process exit naturally. Node exits
+ *   0 unless something explicitly sets a non-zero code or an exception
+ *   escapes every try/catch — and every one of these files wraps its whole
+ *   run in try/catch, so a real test failure was still reported as
+ *   "FAILED" on screen and in test-report.json, but the process itself
+ *   always exited 0. Since CI steps are plain `run: node tests/...js`
+ *   commands with no separate result check, this meant a genuine failure
+ *   never turned a CI step red — the pipeline was only ever failing on an
+ *   actual crash, not on a failed assertion.
+ *
+ *   Fixed by setting `process.exitCode` here based on the tallied result.
+ *   `process.exitCode` (not `process.exit()`) is used deliberately: it lets
+ *   the event loop drain naturally — any pending async Logger writes or
+ *   file I/O still complete — while still producing the correct exit code
+ *   once Node has nothing left to do.
+ *
  * Report schema:
  * {
  *   "runId":      "<ISO timestamp>",
@@ -98,6 +117,11 @@ class ReportManager {
             console.log(`   Self-healing events: ${healingEvents.length}`);
         }
         console.log(`   Report written to: ${reportPath}\n`);
+
+        // Anything other than a clean PASSED must fail the process — this is
+        // what actually lets CI gate merges on real test outcomes rather
+        // than on "did the script crash."
+        process.exitCode = overallResult === "PASSED" ? 0 : 1;
 
         return report;
     }
