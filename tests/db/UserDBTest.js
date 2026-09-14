@@ -15,12 +15,31 @@ const ErrorHandler = require("../../src/core/ErrorHandler");
  *
  *   Also added Middleware hooks, ErrorHandler, and Logger — consistent with
  *   the other tests in this suite.
+ *
+ * Phase 6 fix — false failure when DB isn't configured, wasted browser launch.
+ *   This test is DB-only but called `await this.setup()`, which is BaseTest's
+ *   browser-launching setup — every run spun up a full headless Chromium
+ *   instance it never used. Worse, when DB_HOST/DB_USER are unset,
+ *   ServiceContainer never registers `dbClient`, so `this.dbClient` is
+ *   `null`; calling `.query()` on it threw `Cannot read properties of null`,
+ *   which was caught and recorded as a *failed* test rather than a *skipped*
+ *   one — indistinguishable from a real data problem in the report.
+ *
+ *   Fixed by dropping the browser-based setup()/teardown() entirely (this
+ *   test never touched a page) and skipping cleanly, with a clear log
+ *   message, when `dbClient` isn't available.
  */
 class UserDBTest extends BaseTest {
     async runTest() {
         await Middleware.beforeTest(this.testName);
         try {
-            await this.setup();
+            this.reportManager.startRun();
+
+            if (!this.dbClient) {
+                Logger.warning("⚠️  Skipping DB User Test — no database configured (DB_HOST/DB_USER not set).");
+                this._results.push({ name: "DB User", status: "skipped" });
+                return;
+            }
 
             Logger.info("🔹 Running DB User Test...");
 
@@ -40,7 +59,8 @@ class UserDBTest extends BaseTest {
             this._results.push({ name: "DB User", status: "failed", error: error.message });
             await ErrorHandler.handleError(this.testName, error);
         } finally {
-            await this.teardown();
+            this.reportManager.generateReport({ tests: this._results });
+            await Logger.flush();
             await Middleware.afterTest(this.testName);
         }
     }

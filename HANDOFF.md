@@ -2,7 +2,7 @@
 
 > **For:** Any engineer or Claude Code session continuing this work
 > **Author:** Peyman Iravani — QA Manager / Tech Lead
-> **Last updated:** Phase 4 (repository hygiene) in progress
+> **Last updated:** Phase 6 (CI database coverage) in progress
 > **Repo:** https://github.com/eddieir/Falcon-Automation
 
 ---
@@ -17,8 +17,8 @@ Falcon is a Node.js test automation framework built on Playwright. Its different
 
 | Item | Value |
 |---|---|
-| `main` | Phases 1–3 merged (PR before Phase 2, PR #5, PR #6) |
-| Open PRs | `docs/public-roadmap` (README roadmap section) · `phase-4/repo-hygiene` (this work) |
+| `main` | Phases 1–5 merged (PR before Phase 2, PR #5, PR #6, PR #8, PR #9) |
+| Open PRs | `phase-6/ci-database-coverage` (this work) |
 | Node version | 20 in CI (`node-version: "20"` in `ci.yml`); code must not assume Node ≥20.19 features — see the `pixelmatch` ESM lesson below |
 | Test target | https://www.saucedemo.com |
 
@@ -89,6 +89,9 @@ SSL_REJECT_UNAUTHORIZED=true
 - `src/core/ServiceContainer.js` — a real but partial DI container: `browserManager`, `apiClient`, `dbClient` (optional — see `getOptional()`), and `reportManager` are registered here, but not every shared dependency in the codebase goes through it. Still an open inconsistency (Phase 5).
 - `src/core/AIHealer/LocatorStore.js` — persists Tier 2 alternative selectors to `data/locator_store.json`. `addLocator()` only ever appends; there's no TTL or size cap, so this file grows unbounded over a long project history (Phase 5).
 - `tests/full_automation.test.js` — **renamed** from `full_autoamtion.test.js` in Phase 4 (typo fix). `package.json`'s `test:e2e` script and `playwright.config.js`'s doc comment were updated to match.
+- `src/core/ReportManager.js` — **`generateReport()` now sets `process.exitCode`** (Phase 6). Previously every scenario test process exited `0` regardless of pass/fail — see §9/§10 for why this mattered and what changed.
+- `tests/db/UserDBTest.js`, `tests/db/OrderDBTest.js` — **Phase 6**: both now skip cleanly (`status: "skipped"`, exit `0`) when `dbClient` isn't registered (no `DB_HOST`/`DB_USER`), instead of throwing `Cannot read properties of null` and being misreported as a failure. `UserDBTest` also no longer calls `this.setup()` — it was launching an entire headless Chromium browser for a test that never touches a page.
+- `scripts/db/ci-seed.sql` — **new in Phase 6**. Idempotent schema + one seed row (`users.username='test_user'`) applied against the CI-only Postgres service container before the DB test steps run. See §11.
 
 ---
 
@@ -105,6 +108,16 @@ node tests/ui/LoginTest.js
 node tests/ui/CheckoutTest.js
 node tests/api/UserApiTest.js
 node tests/api/ProductApiTest.js
+
+# DB tests — skip cleanly (exit 0) if DB_HOST/DB_USER aren't set in .env.
+# To run for real against a disposable local Postgres:
+#   docker run -d --name falcon-db -e POSTGRES_USER=falcon \
+#     -e POSTGRES_PASSWORD=falcon_dev -e POSTGRES_DB=falcon_dev -p 5432:5432 postgres:16-alpine
+#   docker exec -i falcon-db psql -U falcon -d falcon_dev < scripts/db/ci-seed.sql
+#   DB_HOST=localhost DB_PORT=5432 DB_USER=falcon DB_PASS=falcon_dev DB_NAME=falcon_dev DB_SSL=false \
+#     node tests/db/UserDBTest.js
+node tests/db/UserDBTest.js
+node tests/db/OrderDBTest.js
 
 node falcon.js                # autonomous pipeline, live dashboard at :3000
 node falcon.js --no-dashboard # same, no dashboard server (also the default
@@ -192,12 +205,12 @@ CI persists `reports/baselines/` across runs via `actions/cache@v4` keyed on the
 | Priority | Area | Issue | Target |
 |---|---|---|---|
 | P1 | `tests/ui/GoogleSearchTest.js` | Uses `AIHealer` correctly, but is not run in CI at all (`ci.yml` never invokes it). | Phase 7 |
-| P1 | `tests/db/*.js` | Never run in CI — no Postgres available there; failures are invisible until someone runs them locally. | Phase 6 |
 | P2 | `src/core/ServiceContainer.js` | Partial DI — some shared deps go through it, others are constructed directly. | Unscheduled |
 | P3 | Dashboard | No auth — `POST /emit` and the socket connection accept unauthenticated writes/reads; `cors: { origin: "*" }`. Fine for a local dev tool, not for a shared/networked one. | Phase 7 |
 | P3 | Self-healing trust | Every healing event is logged, but nothing surfaces it as a trend, and a Tier-3 (LLM) resolution is trusted and reused with no review step. | Phase 8 |
+| P3 | `ReportManager.generateReport()` | A run where every test is `skipped` (no failures, but nothing actually passed either) reports overall `result: "PASSED"` — technically correct by the current "no failures = passed" rule, but a skip-only run reading as PASSED is a slightly misleading label. Not fixed in Phase 6 because it's pre-existing behavior unrelated to DB wiring, and changing it changes what `npm run test:db` prints for every contributor without a local Postgres. Flagging for a future pass. | Unscheduled |
 
-Resolved since the last draft of this document: the `full_autoamtion.test.js` typo (renamed), the unused-dependency list (`selenium-webdriver`, `zaproxy`, `postgresql`, `io`, `@achannarasappa/locust` removed — `axios` is genuinely used and was kept), `ActionInterpreter.js` (deleted, was dead), visual-regression baselines never persisting in CI (fixed via branch-keyed cache in Phase 3), the dual self-healing engines (`SelfHealingManager`/`LoginPage.js`/`AIHelper.js` all deleted in Phase 5 — see §4), and `LocatorStore`'s unbounded growth (capped in Phase 5 — see `src/core/AIHealer/LocatorStore.js`'s doc comment).
+Resolved since the last draft of this document: the `full_autoamtion.test.js` typo (renamed), the unused-dependency list (`selenium-webdriver`, `zaproxy`, `postgresql`, `io`, `@achannarasappa/locust` removed — `axios` is genuinely used and was kept), `ActionInterpreter.js` (deleted, was dead), visual-regression baselines never persisting in CI (fixed via branch-keyed cache in Phase 3), the dual self-healing engines (`SelfHealingManager`/`LoginPage.js`/`AIHelper.js` all deleted in Phase 5 — see §4), `LocatorStore`'s unbounded growth (capped in Phase 5), and — **Phase 6** — `tests/db/*.js` never running in CI (real Postgres service container added, see §11), plus a repo-wide correctness gap where every scenario test process always exited `0` regardless of pass/fail, meaning CI's `run: node tests/...js` steps could never actually go red on a real failing test (fixed in `ReportManager.generateReport()`, verified with real pass/fail/skip runs against a local Postgres — see the Phase 6 PR description for the exact before/after).
 
 ---
 
@@ -208,6 +221,8 @@ Resolved since the last draft of this document: the `full_autoamtion.test.js` ty
 - **Path construction**: always use `path.join(__dirname, ...)` with the correct number of `..` segments to reach the intended target from the file's *actual* location — get this wrong and the failure is silent (falls back to a default) more often than it throws, which is how several of these bugs went unnoticed for a while.
 - **No raw axios calls to OpenAI** — always go through the `openai` SDK, lazy-initialised, guarded by `if (!process.env.OPENAI_API_KEY) return null` (see `src/core/AIHealer/AIHealer.js`, `src/core/AIHealer/AIAnalyser.js`).
 - **Error handling**: every test's `runTest()` wraps `Middleware.beforeTest`/`afterTest` in try/catch/finally, and pushes a real `{name, status, error?}` entry into `this._results` on both success and failure paths — a test that doesn't push a result will always report `NO_TESTS_RUN` regardless of what actually happened.
+- **Process exit codes matter, not just the printed result** (Phase 6): `ReportManager.generateReport()` sets `process.exitCode` from the tallied outcome. Don't add a new standalone test entry point that calls `generateReport()` and assume a non-`PASSED` result alone will fail a CI step — verify the process's actual exit code, the way the printed summary can look identical while the shell sees `0` either way.
+- **DB-dependent tests must check `this.dbClient` before using it, and skip (not fail) if it's `null`** (Phase 6): `ServiceContainer` only registers `dbClient` when `DB_HOST`/`DB_USER` are present; `BaseTest.dbClient` is `getOptional()`, so it's `null` by design in any environment without a database configured. See `tests/db/UserDBTest.js`/`OrderDBTest.js` for the pattern.
 - **Git author**: Peyman Iravani / peyman.iravani@gmail.com — no Claude attribution in commits or PR descriptions for this repo.
 - **Branching**: one branch per phase/feature off `main`, one PR per phase (not one giant PR) so review stays scoped.
 - **Before merging any PR touching CI-sensitive code, verify on the actual GitHub Actions run, not just locally** — this project has twice shipped code that worked locally and broke in CI's actual Node version/environment (`pixelmatch`'s ESM-only build, `allure generate --clean` not existing on the installed CLI).
@@ -218,17 +233,21 @@ Resolved since the last draft of this document: the `full_autoamtion.test.js` ty
 
 Runs on push/PR to `main`, `New_era_Falcon`, `feat/**`:
 
+0. **`services.postgres`** (Phase 6) — `postgres:16-alpine`, disposable, recreated fresh every job run. Credentials are CI-only throwaway values (`falcon` / `falcon_ci_password`), not related to any real secret. Health-checked with `pg_isready` so later steps block until it's actually accepting connections, not just "container started."
 1. Checkout → `actions/setup-node@v4` (Node 20, npm cache) → `npm ci` → `npx playwright install --with-deps chromium`
-2. **Restore visual regression baselines** — `actions/cache@v4`, keyed on `vr-baselines-${{ github.ref_name }}`
-3. `node tests/ui/LoginTest.js`
-4. `node tests/ui/CheckoutTest.js`
-5. `node tests/api/UserApiTest.js`
-6. `node tests/api/ProductApiTest.js`
-7. `node falcon.js --no-dashboard` (redundant-but-explicit; `CI=true` alone now also disables the dashboard)
-8. `npx playwright test` (`continue-on-error: true`)
-9. `npx allure awesome allure-results -o allure-report || true` (NOT `allure generate ... --clean` — that doesn't work on the installed `allure@3.0.0-beta.9` CLI at all)
-10. Upload `reports/` + `allure-report/` as the `falcon-reports` artifact (14-day retention)
+2. **Seed test database** (Phase 6) — `psql ... -f scripts/db/ci-seed.sql` against the service container above. `psql` is preinstalled on the `ubuntu-latest` runner image; this is a documented GitHub-hosted-runner package, not something the workflow installs itself — worth double-checking on the actual CI run the first time this executes.
+3. **Restore visual regression baselines** — `actions/cache@v4`, keyed on `vr-baselines-${{ github.ref_name }}`
+4. `node tests/ui/LoginTest.js`
+5. `node tests/ui/CheckoutTest.js`
+6. `node tests/api/UserApiTest.js`
+7. `node tests/api/ProductApiTest.js`
+8. `node tests/db/UserDBTest.js` (Phase 6, no `continue-on-error` — a real failure against the seeded Postgres now fails the job)
+9. `node tests/db/OrderDBTest.js` (Phase 6, same)
+10. `node falcon.js --no-dashboard` (redundant-but-explicit; `CI=true` alone now also disables the dashboard)
+11. `npx playwright test` (`continue-on-error: true`)
+12. `npx allure awesome allure-results -o allure-report || true` (NOT `allure generate ... --clean` — that doesn't work on the installed `allure@3.0.0-beta.9` CLI at all)
+13. Upload `reports/` + `allure-report/` as the `falcon-reports` artifact (14-day retention)
 
-No DB test step exists yet (Phase 6). `GoogleSearchTest.js` is not run in CI (Phase 7).
+`GoogleSearchTest.js` is still not run in CI (Phase 7). Dashboard has no auth yet (Phase 7).
 
-Required secret: `OPENAI_API_KEY` (optional at runtime per §3, but wired as a secret so Tier 3 healing is exercised in CI when set).
+Required secret: `OPENAI_API_KEY` (optional at runtime per §3, but wired as a secret so Tier 3 healing is exercised in CI when set). `DB_*` vars for the CI Postgres are plain job-level `env:` values (not GitHub secrets) since the instance is disposable and the credentials have no value outside the job's own lifetime.
