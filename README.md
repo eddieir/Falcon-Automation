@@ -551,6 +551,8 @@ Falcon had two parallel, silently-diverging healing implementations: `AIHealer` 
 
 `UserDBTest.js` was also launching a full headless Chromium browser for a test that only ever queries a database — an artifact of copying the browser-based test pattern without needing it. Removed; it now follows the same lean, browser-free pattern as `OrderDBTest.js`. Both DB tests now skip cleanly (reported as `skipped`, exit code `0`) rather than crash with `Cannot read properties of null` when no database is configured, which is the normal case for a contributor without local Postgres running.
 
+The skip fix above has a sharp edge worth calling out on its own: "no database configured" and "database configured but broken" are different situations, and only the first one should ever produce a `skipped` result. A wrong password or an unreachable host must still fail loudly — treating either as a skip would silently hide the exact kind of regression this phase exists to catch. `tests/unit/DBConfigBehavior.check.js` locks this in permanently: it runs both DB test files as real child processes under three configurations (absent, wrong credentials, unreachable host) and asserts the exit code and reported status for each, so this distinction can't quietly blur in a future change.
+
 ---
 
 ## Running Tests

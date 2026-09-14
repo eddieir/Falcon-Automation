@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node falcon.js",
-    "test:unit": "node tests/unit/ReportManagerExitCode.check.js",
+    "test:unit": "node tests/unit/ReportManagerExitCode.check.js && node tests/unit/DBConfigBehavior.check.js",
     "test:login": "node tests/ui/LoginTest.js",
     "test:checkout": "node tests/ui/CheckoutTest.js",
     "test:search": "node tests/ui/GoogleSearchTest.js",
