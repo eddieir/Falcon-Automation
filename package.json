@@ -8,13 +8,14 @@
   },
   "scripts": {
     "start": "node falcon.js",
+    "test:unit": "node tests/unit/ReportManagerExitCode.check.js",
     "test:login": "node tests/ui/LoginTest.js",
     "test:checkout": "node tests/ui/CheckoutTest.js",
     "test:search": "node tests/ui/GoogleSearchTest.js",
     "test:ui": "npm run test:login && npm run test:checkout",
     "test:api": "node tests/api/UserApiTest.js && node tests/api/ProductApiTest.js",
     "test:db": "node tests/db/UserDBTest.js && node tests/db/OrderDBTest.js",
-    "test:all": "npm run test:ui && npm run test:api && npm run test:db",
+    "test:all": "npm run test:unit && npm run test:ui && npm run test:api && npm run test:db",
     "test:e2e": "npx playwright test tests/full_automation.test.js",
     "report": "allure awesome allure-results -o allure-report && allure open allure-report"
   },
