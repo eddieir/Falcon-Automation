@@ -13,12 +13,26 @@ const ErrorHandler = require("../../src/core/ErrorHandler");
  *   3. Required columns (id, user_id, total, status, created_at) are present
  *
  * No writes are performed — this is a read-only validation run.
+ *
+ * Phase 6 fix — false failure when DB isn't configured.
+ *   Like UserDBTest, this called `this.dbClient.query(...)` without checking
+ *   whether `dbClient` was actually registered. With no DB_HOST/DB_USER set,
+ *   `this.dbClient` is `null` and the first query threw `Cannot read
+ *   properties of null`, recorded as a *failed* test rather than a
+ *   *skipped* one. Fixed with the same explicit skip check as UserDBTest.
  */
 class OrderDBTest extends BaseTest {
     async runTest() {
         await Middleware.beforeTest(this.testName);
         try {
             this.reportManager.startRun();
+
+            if (!this.dbClient) {
+                Logger.warning("⚠️  Skipping Order DB Test — no database configured (DB_HOST/DB_USER not set).");
+                this._results.push({ name: "Order DB", status: "skipped" });
+                return;
+            }
+
             Logger.info("🔹 Running Order DB Test...");
 
             // ── 1. Connectivity smoke test ────────────────────────────────

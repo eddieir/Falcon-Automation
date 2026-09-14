@@ -1,6 +1,6 @@
 # Falcon-Automation — AI-Powered Test Automation Framework
 
-> **Status:** Active development · Phase 5 (self-healing consolidation) merged to `main`.
+> **Status:** Active development · Phase 6 (CI database coverage) in review.
 
 ---
 
@@ -20,7 +20,7 @@ Falcon is an open-source test automation framework built on Playwright that inte
 - **Database testing** — PostgreSQL via `pg` Pool with full mTLS support
 - **CI/CD ready** — GitHub Actions pipeline with Allure report upload
 
-**Delivered so far:** [Phase 1](#phase-1--stabilisation-changelog) (core AI healing + reporting foundation) → [Phase 2](#phase-2--stability--coverage) (stability audit, 14 defects fixed) → [Phase 3](#phase-3--competitive-features) (visual regression, live dashboard, AI test generation, Allure) → [Phase 4](#phase-4--repository-hygiene--documentation-truth) (repo hygiene, docs truth) → [Phase 5](#phase-5--self-healing-consolidation) (single consolidated healing engine, bounded LocatorStore). See [Roadmap](#roadmap) for what's next.
+**Delivered so far:** [Phase 1](#phase-1--stabilisation-changelog) (core AI healing + reporting foundation) → [Phase 2](#phase-2--stability--coverage) (stability audit, 14 defects fixed) → [Phase 3](#phase-3--competitive-features) (visual regression, live dashboard, AI test generation, Allure) → [Phase 4](#phase-4--repository-hygiene--documentation-truth) (repo hygiene, docs truth) → [Phase 5](#phase-5--self-healing-consolidation) (single consolidated healing engine, bounded LocatorStore) → [Phase 6](#phase-6--ci-database-coverage) (real Postgres in CI, CI results that actually gate merges). See [Roadmap](#roadmap) for what's next.
 
 ---
 
@@ -537,6 +537,20 @@ Falcon had two parallel, silently-diverging healing implementations: `AIHealer` 
 
 ---
 
+## Phase 6 — CI Database Coverage
+
+`tests/db/*.js` existed but never ran in CI — there was no Postgres there to run them against, so a real data-layer regression could ship without anyone finding out until someone happened to run the DB tests locally. Resolved in `phase-6/ci-database-coverage`.
+
+- **A real, disposable `postgres:16-alpine` service container** added to `.github/workflows/ci.yml`, health-checked with `pg_isready` so later steps wait for it to actually accept connections. Credentials are throwaway, CI-only values with no relation to any production secret.
+- **`scripts/db/ci-seed.sql`** — a minimal, idempotent schema applied before the DB test steps run: a `users` table with the exact row `UserDBTest.js` queries for (`username = 'test_user'`), and an `orders` table with the columns `OrderDBTest.js` checks for (`id, user_id, total, status, created_at`). No fixture data is seeded beyond what a test actually asserts.
+- **`node tests/db/UserDBTest.js` and `node tests/db/OrderDBTest.js`** added as real CI steps, deliberately without `continue-on-error` — verified locally (see below) that a genuinely broken database (missing row, dropped column) makes these fail loudly, so a green CI check now means something.
+
+**A repo-wide bug found and fixed along the way:** every scenario test file (`LoginTest`, `CheckoutTest`, `UserApiTest`, `ProductApiTest`, `UserDBTest`, `OrderDBTest`) reported an accurate `PASSED`/`FAILED` result on screen, but the Node process always exited `0` regardless — none of them ever called `process.exit()`. Since every CI step is a plain `run: node tests/....js` command with no separate result check, **a real test failure did not fail its CI step.** This has been true since Phase 1; it just had never been load-bearing until now, since Phase 6 is the first phase whose entire point is "these results must actually gate the pipeline." Fixed by setting `process.exitCode` in `ReportManager.generateReport()` based on the tallied outcome — verified with a real pass, a real failure (seed row deleted, schema column dropped), and a real skip (no DB configured) against a local Postgres container, confirming the process exit code matches the reported result in all three cases.
+
+`UserDBTest.js` was also launching a full headless Chromium browser for a test that only ever queries a database — an artifact of copying the browser-based test pattern without needing it. Removed; it now follows the same lean, browser-free pattern as `OrderDBTest.js`. Both DB tests now skip cleanly (reported as `skipped`, exit code `0`) rather than crash with `Cannot read properties of null` when no database is configured, which is the normal case for a contributor without local Postgres running.
+
+---
+
 ## Running Tests
 
 ```sh
@@ -571,10 +585,11 @@ npx allure open allure-report
 Falcon's differentiator is genuine self-healing, not a hardcoded selector list — but "AI healed this selector" is only as trustworthy as the visibility behind it. That's the throughline for what's next:
 
 - **Healing you can audit.** Every retry, cache hit, and LLM-inferred fix is already logged. The next step is surfacing that as a reviewable trend across a run — which selectors heal, how often, and via which tier — and gating any LLM-rewritten selector behind explicit approval before it's trusted for reuse. "Self-healing" should never mean "silently trusted."
-- **Real coverage of the data layer, not just the UI.** Most automation investment in the industry goes to UI end-to-end tests while backend regressions ship silently. Falcon's DB test suite is moving from local-only to a real, disposable database provisioned in CI, so data-layer checks actually gate merges.
 - **A dashboard built for teams, not just a laptop.** Real-time visibility into a long-running suite is only useful if it's safe to share — token-gated access is next so the live dashboard can be pointed at from CI or a shared environment.
 
-✅ Shipped since the last update: a single, consolidated self-healing engine across every entry point — one three-tier chain (retry → locator cache → LLM), with `LocatorStore` now bounded so it can't grow unbounded over a long project history.
+✅ Shipped since the last update:
+- A single, consolidated self-healing engine across every entry point — one three-tier chain (retry → locator cache → LLM), with `LocatorStore` now bounded so it can't grow unbounded over a long project history.
+- **Real coverage of the data layer, not just the UI.** DB tests now run against a real, disposable Postgres in CI instead of being silently absent — and, more fundamentally, every scenario test's process exit code now actually matches its reported pass/fail result, so a green CI check means the tests actually passed, not just that the process didn't crash.
 
 This roadmap tracks ongoing engineering priorities, not a fixed release schedule.
 
