@@ -1,6 +1,6 @@
 # Falcon-Automation — AI-Powered Test Automation Framework
 
-> **Status:** Active development · Phase 3 (competitive features) merged to `main`.
+> **Status:** Active development · Phase 5 (self-healing consolidation) merged to `main`.
 
 ---
 
@@ -19,6 +19,49 @@ Falcon is an open-source test automation framework built on Playwright that inte
 - **Accurate reporting** — structured pass/fail/skip tallying + Allure HTML report via `allure-playwright`
 - **Database testing** — PostgreSQL via `pg` Pool with full mTLS support
 - **CI/CD ready** — GitHub Actions pipeline with Allure report upload
+
+**Delivered so far:** [Phase 1](#phase-1--stabilisation-changelog) (core AI healing + reporting foundation) → [Phase 2](#phase-2--stability--coverage) (stability audit, 14 defects fixed) → [Phase 3](#phase-3--competitive-features) (visual regression, live dashboard, AI test generation, Allure) → [Phase 4](#phase-4--repository-hygiene--documentation-truth) (repo hygiene, docs truth) → [Phase 5](#phase-5--self-healing-consolidation) (single consolidated healing engine, bounded LocatorStore). See [Roadmap](#roadmap) for what's next.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+    CLI["falcon.js — CLI entry point"] --> Explore["ExploratoryAI\nDOM-based defect scan"]
+    CLI --> Crawl["ClickExplorer\nrecursive autonomous crawl"]
+    Crawl --> Analyse["PageAnalyser\nDOM → element map"]
+    Analyse --> Gen["TestGenerator\nscenario plan"]
+    Gen --> Runner["TestRunner\nexecutes generated + hand-written scenarios"]
+
+    Suite["tests/ui, tests/api, tests/db\n(LoginTest, CheckoutTest, UserApiTest, ...)"] --> Runner
+
+    Runner --> Healer["AIHealer — self-healing chain"]
+    subgraph Healing["Three-tier self-healing"]
+        Healer --> T1["Tier 1: AdaptiveRetry\nbackoff + jitter"]
+        T1 -->|still failing| T2["Tier 2: LocatorStore\ncached alternatives"]
+        T2 -->|no cached match| T3["Tier 3: OpenAI gpt-4o-mini\nlive selector inference"]
+        T3 -->|resolved| Store[("data/locator_store.json\nbounded, LRU-evicted")]
+        T2 -.reads.-> Store
+    end
+
+    Runner --> VR["VisualRegression\npixel-diff vs. baseline"]
+    Runner --> RM["ReportManager\nreal pass/fail/skip tally"]
+    Healer --> HR["HealingReport\naudit log"]
+
+    RM --> Dash["Dashboard\nlive WebSocket UI @ :3000"]
+    HR --> Dash
+    Explore --> Dash
+
+    RM --> ReportsJSON[("reports/test-report.json")]
+    HR --> HealLogJSON[("reports/healing_logs.json")]
+    VR --> DiffJSON[("reports/visual-regression.json")]
+    Explore --> ExploreJSON[("reports/exploratory_test_results.json")]
+
+    DB["DBClient\nPostgreSQL + mTLS"] --> Suite
+```
+
+The pipeline has two entry paths that converge on the same healing engine: the **autonomous path** (`falcon.js` — explore, generate, and run scenarios with no hand-written test code) and the **explicit path** (hand-written scenario files under `tests/`). Both go through the identical `AIHealer` three-tier chain, so a selector fix learned by one path benefits the other via the shared `LocatorStore`.
 
 ---
 
@@ -112,18 +155,6 @@ SSL_REJECT_UNAUTHORIZED=true
 
 ---
 
-## Running Tests
-
-```sh
-# Full pipeline: ExploratoryAI → ClickExplorer → TestRunner
-node falcon.js
-
-# Login scenario only
-node tests/ui/LoginTest.js
-```
-
----
-
 ## Self-Healing Architecture
 
 Falcon's healing engine operates in three tiers, in order:
@@ -137,6 +168,8 @@ Falcon's healing engine operates in three tiers, in order:
 Successful Tier 3 results are written back to LocatorStore automatically.  On the next run the same fix is applied via Tier 2 at zero cost.
 
 The healing engine captures a targeted DOM snapshot (interactive elements only, ≤ 6 KB) rather than the full page, keeping inference prompts small and latency predictable.
+
+`AIHealer` is now the single healing implementation used by every entry point (`LoginTest`, `CheckoutTest`, `GoogleSearchTest`, etc.) — the older, parallel `SelfHealingManager` path (and its sole caller, `LoginPage.js`) has been removed. `LocatorStore` also tracks a `lastUsed` timestamp per selector and is bounded: at most 5 alternatives are kept per selector and at most 500 distinct selectors are tracked overall, with the least-recently-used entries evicted first, so `data/locator_store.json` can't grow without limit across a long project history.
 
 ---
 
@@ -479,6 +512,31 @@ Four files that had no call path and contained security-relevant issues were del
 
 ---
 
+## Phase 4 — Repository Hygiene & Documentation Truth
+
+A drift audit found several docs and tracked files out of sync with the actual repo. Resolved in `phase-4/repo-hygiene`.
+
+- **`HANDOFF.md`** rewritten so every claim (branch/PR status, `.env` variable names, CI steps, known issues) is checked directly against the repo rather than re-typed from an earlier draft.
+- **`.allure/history.jsonl`** (Allure's own run-history cache, not source) untracked via `git rm --cached` and `.allure/` added to `.gitignore`.
+- **`tests/full_autoamtion.test.js`** renamed to `tests/full_automation.test.js` (typo fix); `package.json`'s `test:e2e` script and the doc comment in `playwright.config.js` updated to match.
+- **Unused dependencies removed:** `selenium-webdriver`, `zaproxy`, `postgresql`, `io`, `@achannarasappa/locust` — confirmed zero call sites anywhere in `src/`, `tests/`, `utils/`, or `falcon.js`.
+- **`src/core/ActionInterpreter.js`** deleted (confirmed dead — no import anywhere).
+- **`.env.example`** documented `DASHBOARD_PORT`, `DASHBOARD_LINGER_MS`, and `DASHBOARD_URL`, which `falcon.js`/`Middleware.js` already read but were previously undocumented.
+- Added a curated, public-facing **Roadmap** section to this README (see below).
+
+---
+
+## Phase 5 — Self-Healing Consolidation
+
+Falcon had two parallel, silently-diverging healing implementations: `AIHealer` (used by most tests) and an older `SelfHealingManager` (used only by `src/ui/pages/LoginPage.js`). Resolved in `phase-5/healing-consolidation`.
+
+- **`src/ui/pages/LoginPage.js`** and **`src/core/SelfHealingManager.js`** deleted. A repo-wide check confirmed `LoginPage.js` had no callers anywhere in the test suite (it was itself dead code, not just a `SelfHealingManager` consumer worth migrating), so removing both was safe rather than requiring a migration.
+- **`utils/AIHelper.js`** deleted — its only caller was `SelfHealingManager`; once that was removed, `AIHelper.js` became orphaned dead code.
+- **`src/core/AIHealer/LocatorStore.js`** given bounded growth: each selector's alternatives list is capped and a global cap on distinct tracked selectors evicts least-recently-used entries first (see Self-Healing Architecture above). A legacy store (plain `{ original: [alt, ...] }`, no `lastUsed`) is migrated in place on load rather than treated as corrupt.
+- Verified with a real Playwright run: a deliberately broken selector correctly exhausted Tier 1 retries, then resolved via a seeded `LocatorStore` alternative (Tier 2) and clicked the real element; a second selector with no Tier 2 alternative and no `OPENAI_API_KEY` correctly attempted Tier 3 and failed gracefully (clean thrown error, no crash).
+
+---
+
 ## Running Tests
 
 ```sh
@@ -514,8 +572,9 @@ Falcon's differentiator is genuine self-healing, not a hardcoded selector list �
 
 - **Healing you can audit.** Every retry, cache hit, and LLM-inferred fix is already logged. The next step is surfacing that as a reviewable trend across a run — which selectors heal, how often, and via which tier — and gating any LLM-rewritten selector behind explicit approval before it's trusted for reuse. "Self-healing" should never mean "silently trusted."
 - **Real coverage of the data layer, not just the UI.** Most automation investment in the industry goes to UI end-to-end tests while backend regressions ship silently. Falcon's DB test suite is moving from local-only to a real, disposable database provisioned in CI, so data-layer checks actually gate merges.
-- **A single, consolidated self-healing engine** across every entry point — one three-tier chain (retry → locator cache → LLM), not parallel implementations that can quietly drift from each other.
 - **A dashboard built for teams, not just a laptop.** Real-time visibility into a long-running suite is only useful if it's safe to share — token-gated access is next so the live dashboard can be pointed at from CI or a shared environment.
+
+✅ Shipped since the last update: a single, consolidated self-healing engine across every entry point — one three-tier chain (retry → locator cache → LLM), with `LocatorStore` now bounded so it can't grow unbounded over a long project history.
 
 This roadmap tracks ongoing engineering priorities, not a fixed release schedule.
 
