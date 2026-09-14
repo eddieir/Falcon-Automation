@@ -1,6 +1,6 @@
 # Falcon-Automation — AI-Powered Test Automation Framework
 
-> **Status:** Active development · Phase 6 (CI database coverage) in review.
+> **Status:** Active development · Phase 6 (CI database coverage) merged to `main`.
 
 ---
 
@@ -69,38 +69,59 @@ The pipeline has two entry paths that converge on the same healing engine: the *
 
 ```
 Falcon-Automation/
+├── .github/workflows/
+│   └── ci.yml                       # GitHub Actions pipeline (see CI/CD)
 ├── src/
+│   ├── config/
+│   │   └── testConfig.json          # ConfigManager's JSON config source
+│   ├── dashboard/
+│   │   └── index.html               # Live dashboard front-end (socket.io client)
 │   └── core/
 │       ├── AIHealer/
 │       │   ├── AIHealer.js          # Three-tier self-healing engine (Tier 3: OpenAI)
 │       │   ├── HealingReport.js     # Audit log for all healing events
-│       │   ├── LocatorStore.js      # Persisted alternative locators (Tier 2 cache)
-│       │   ├── AdaptiveRetry.js
+│       │   ├── LocatorStore.js      # Persisted alternative locators (Tier 2 cache, bounded)
+│       │   ├── AdaptiveRetry.js     # Tier 1: backoff + jitter retry
 │       │   └── AIAnalyser.js
-│       ├── BaseTest.js              # Dependency injection base class
+│       ├── APIClient.js             # HTTP client used by tests/api/*.js
+│       ├── BaseTest.js              # Dependency-injection base class
 │       ├── BrowserManager.js        # Playwright wrapper (chromium/firefox/webkit)
 │       ├── ClickExplorer.js         # Recursive autonomous crawler
 │       ├── ConfigManager.js         # JSON + env config singleton
+│       ├── Dashboard.js             # express + socket.io live dashboard server
 │       ├── DBClient.js              # PostgreSQL pool with mTLS support
 │       ├── ErrorHandler.js
 │       ├── ExploratoryAI.js         # DOM-based UI defect detector
-│       ├── Middleware.js
-│       ├── ReportManager.js         # Accurate pass/fail/skip reporting
-│       └── TestRunner.js            # Scenario + exploratory test orchestrator
+│       ├── Middleware.js            # Lifecycle hooks + cross-process event emit
+│       ├── PageAnalyser.js          # DOM scanner (single source of truth — see Phase 3)
+│       ├── ReportManager.js         # Accurate pass/fail/skip reporting, sets process.exitCode
+│       ├── ServiceContainer.js      # Partial DI container (browserManager, apiClient, dbClient, reportManager)
+│       ├── TestGenerator.js         # Delegates to PageAnalyser for scenario generation
+│       ├── TestRunner.js            # Scenario + exploratory test orchestrator
+│       └── VisualRegression.js      # Pixel-diff screenshot comparison
 ├── tests/
-│   └── ui/
-│       └── LoginTest.js             # End-to-end login with post-login assertions
+│   ├── ui/                          # LoginTest, CheckoutTest, GoogleSearchTest
+│   ├── api/                         # UserApiTest, ProductApiTest
+│   ├── db/                          # UserDBTest, OrderDBTest, TestDBConnection
+│   ├── unit/                        # Fast regression checks — no browser, no DB
+│   │   ├── ReportManagerExitCode.check.js
+│   │   └── DBConfigBehavior.check.js
+│   └── full_automation.test.js      # Playwright-native suite (allure-playwright reporter)
+├── scripts/db/
+│   └── ci-seed.sql                  # Minimal schema/seed applied to CI's Postgres
 ├── utils/
 │   └── Logger.js                    # Async file logging (non-blocking)
 ├── data/
-│   └── locator_store.json           # Persisted LocatorStore entries
-├── reports/                         # Generated at runtime
+│   └── locator_store.json           # Persisted LocatorStore entries (gitignored)
+├── reports/                         # Generated at runtime (gitignored)
 │   ├── execution.log
 │   ├── test-report.json
 │   ├── exploratory_test_results.json
 │   └── healing_logs.json
-├── falcon.js                        # Main entry point
+├── playwright.config.js             # Playwright native-suite config
+├── falcon.js                        # Main entry point (autonomous pipeline)
 ├── package.json
+├── .env.example                     # Template — copy to .env
 └── .env                             # Local secrets (not committed)
 ```
 
@@ -133,10 +154,21 @@ cp .env.example .env
 ```ini
 # Browser
 BROWSER=chromium           # chromium | firefox | webkit
-HEADLESS=true
+HEADLESS=true               # true for CI; false to watch the browser locally
 
-# OpenAI — required for Tier 3 AI healing
+# OpenAI — optional, enables Tier 3 AI healing. Every call site degrades
+# gracefully when this is unset; Tier 3 just never fires.
 OPENAI_API_KEY=sk-...
+
+# API base URL — optional, defaults to jsonplaceholder
+API_BASE_URL=https://jsonplaceholder.typicode.com
+
+# Live dashboard — optional
+DASHBOARD_PORT=3000         # port for `node falcon.js`'s live dashboard
+DASHBOARD_LINGER_MS=60000   # how long the dashboard stays up after a run finishes
+# DASHBOARD_URL=http://localhost:3000  # set on a standalone test run (e.g.
+                                        # `node tests/ui/LoginTest.js`) to report
+                                        # its events into an already-running dashboard
 
 # PostgreSQL — required only for DB tests
 DB_HOST=your_db_host
@@ -359,42 +391,18 @@ Three test files were completely empty, making `npm run test:all` produce no res
 
 ## CI/CD
 
-GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_era_Falcon`, `main`, and `feat/**` branches, and on pull requests:
+GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_era_Falcon`, `main`, and `feat/**` branches, and on pull requests. Current pipeline, in order:
 
-```yaml
-# .github/workflows/ci.yml
-name: Falcon CI
-on:
-  push:
-    branches: [New_era_Falcon, main, "feat/**"]
-  pull_request:
-    branches: [New_era_Falcon, main]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    env:
-      HEADLESS: "true"
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: "20", cache: "npm" }
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: node tests/ui/LoginTest.js
-      - run: node tests/ui/CheckoutTest.js
-      - run: node tests/api/UserApiTest.js
-      - run: node tests/api/ProductApiTest.js
-      - run: node falcon.js
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: falcon-reports
-          path: |
-            reports/
-            allure-report/
-          retention-days: 14
-```
+1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
+2. Two fast, no-browser/no-DB regression checks: `tests/unit/ReportManagerExitCode.check.js` and `tests/unit/DBConfigBehavior.check.js`
+3. **Postgres service container** (`postgres:16-alpine`, disposable, health-checked) is seeded via `scripts/db/ci-seed.sql`
+4. Visual-regression baselines restored from cache (`actions/cache@v4`, keyed on branch name)
+5. Scenario tests: `LoginTest`, `CheckoutTest`, `UserApiTest`, `ProductApiTest`, then `UserDBTest` and `OrderDBTest` against the real seeded database — none of these use `continue-on-error`, a real failure fails the job
+6. `node falcon.js --no-dashboard` — the autonomous pipeline
+7. `npx playwright test` (`continue-on-error: true`, since this suite still tolerates E2E flake)
+8. Allure report generated (`npx allure awesome`) and uploaded alongside `reports/` as the `falcon-reports` artifact
+
+The full, current file is the source of truth — see `.github/workflows/ci.yml`. The Phase 3 and Phase 6 sections below document why specific pieces of this pipeline exist (Allure's CLI quirks, the visual-regression cache, the Postgres service container, the two regression checks).
 
 ---
 
@@ -569,6 +577,13 @@ node tests/ui/LoginTest.js
 node tests/ui/CheckoutTest.js
 node tests/api/UserApiTest.js
 node tests/api/ProductApiTest.js
+
+# Database tests — skip cleanly (exit 0) if DB_HOST/DB_USER aren't set
+node tests/db/UserDBTest.js
+node tests/db/OrderDBTest.js
+
+# Regression tests (no browser, no DB) — safe to run anywhere, anytime
+npm run test:unit
 
 # Same, but reporting into an already-running `node falcon.js` dashboard
 # (each test file is its own process, so this needs the explicit URL)
