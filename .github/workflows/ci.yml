@@ -66,6 +66,13 @@ jobs:
       - name: Run ReportManager exit-code regression test
         run: node tests/unit/ReportManagerExitCode.check.js
 
+      # A misconfigured database (wrong password, unreachable host) must be a
+      # real failure, never mistaken for "no database configured." Doesn't
+      # need the seeded Postgres below — it only needs the DB test files
+      # themselves, run as child processes with deliberately broken configs.
+      - name: Run DB config skip-vs-fail regression test
+        run: node tests/unit/DBConfigBehavior.check.js
+
       # ── Database fixture (Phase 6) ──────────────────────────────────────────
       # Applies the same scripts/db/ci-seed.sql schema verified locally against
       # a disposable Postgres container. Re-running this against a fresh
