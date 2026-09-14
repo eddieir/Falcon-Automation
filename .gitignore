@@ -29,3 +29,7 @@ Thumbs.db
 # Git & CI/CD Artifacts
 coverage/
 .npm/
+
+# Internal engineering handoff — not for public visibility (this repo is public).
+# Kept locally for continuity between engineers/sessions, never committed.
+HANDOFF.md
