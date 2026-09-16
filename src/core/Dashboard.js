@@ -1,6 +1,7 @@
 const http   = require("http");
 const path   = require("path");
 const fs     = require("fs");
+const crypto = require("crypto");
 const Logger = require("../../utils/Logger");
 
 /**
@@ -23,6 +24,26 @@ const Logger = require("../../utils/Logger");
  *
  * The dashboard also registers itself as the Middleware emitter so lifecycle
  * events (testStart / testEnd) fire automatically without any call-site changes.
+ *
+ * Phase 7 — auth hardening.
+ *   Previously `POST /emit`, `GET /events`, and every socket.io connection
+ *   were wide open with `cors: { origin: "*" }` — anyone who could reach the
+ *   port could read every test result and healing event, or inject fake
+ *   ones. Fine for a single laptop; not fine the moment this is pointed at
+ *   from CI or a shared environment (see the Phase 6 DASHBOARD_URL flow).
+ *
+ *   When `DASHBOARD_TOKEN` is set, `POST /emit` and `GET /events` require it
+ *   via an `X-Dashboard-Token` header or a `?token=` query param, and the
+ *   socket.io handshake requires it via `auth: { token }` — an unauthorized
+ *   socket connection is rejected outright (`connect_error`), not silently
+ *   allowed through with no data. CORS is also restricted from `"*"` to
+ *   `DASHBOARD_ALLOWED_ORIGIN` (default: this dashboard's own localhost
+ *   origin — same-origin requests, which is how the bundled UI talks to it,
+ *   are unaffected either way since CORS only governs cross-origin access).
+ *
+ *   When `DASHBOARD_TOKEN` is unset — the default, unchanged local-dev
+ *   experience — none of this activates, but `start()` logs a loud warning
+ *   so running unauthenticated isn't an accident nobody notices.
  */
 class Dashboard {
     /**
@@ -34,6 +55,53 @@ class Dashboard {
         this._events = []; // full history so late-joining tabs get replay
         this._io     = null;
         this._server = null;
+        this._token  = process.env.DASHBOARD_TOKEN || null;
+        this._socketConnectAttempts = new Map(); // ip → recent connection-attempt timestamps
+    }
+
+    /**
+     * Simple in-memory sliding-window limiter for socket.io connection
+     * attempts, mirroring the HTTP rate limiter below for the same reason:
+     * the auth handshake is just as brute-forceable as POST /emit if it's
+     * not throttled, and express-rate-limit only covers Express routes, not
+     * socket.io's own handshake. No new dependency needed for this — it's a
+     * handful of lines, scoped to exactly one thing.
+     */
+    _isSocketRateLimited(ip) {
+        const WINDOW_MS = 60_000;
+        const MAX_ATTEMPTS = 120;
+        const now = Date.now();
+        const attempts = (this._socketConnectAttempts.get(ip) || []).filter((t) => now - t < WINDOW_MS);
+        attempts.push(now);
+        this._socketConnectAttempts.set(ip, attempts);
+        return attempts.length > MAX_ATTEMPTS;
+    }
+
+    /** Extract a token from either the X-Dashboard-Token header or a ?token= query param. */
+    _tokenFromRequest(req) {
+        return req.headers["x-dashboard-token"] || req.query?.token || null;
+    }
+
+    /**
+     * True if `candidate` matches the configured token. No-op (always true)
+     * when auth is off. Uses a timing-safe comparison — a plain `===` leaks
+     * how many leading characters matched via response-time differences,
+     * which matters for an auth token even if the practical exploit window
+     * over a network is narrow. The length check up front is safe to do in
+     * variable time (length isn't the secret; the token's content is), and
+     * is required anyway since timingSafeEqual throws on mismatched buffer
+     * lengths rather than returning false.
+     */
+    _isAuthorized(candidate) {
+        if (!this._token) return true;
+        if (typeof candidate !== "string" || candidate.length !== this._token.length) return false;
+        return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(this._token));
+    }
+
+    /** The URL to actually open — includes ?token= when auth is enabled. */
+    get url() {
+        const base = `http://localhost:${this.port}`;
+        return this._token ? `${base}/?token=${this._token}` : base;
     }
 
     /**
@@ -43,20 +111,43 @@ class Dashboard {
         // Lazy-require to avoid crashing processes that don't need the dashboard
         const express   = require("express");
         const socketIO  = require("socket.io");
+        const rateLimit = require("express-rate-limit");
         const Middleware = require("./Middleware");
 
         const app = express();
         app.use(express.json());
         app.use(express.static(path.join(__dirname, "..", "dashboard")));
 
-        app.get("/events", (_req, res) => {
+        // Phase 7 follow-up — CodeQL correctly flagged that the two routes
+        // below perform authorization but had no rate limiting: with no cap
+        // on attempts, DASHBOARD_TOKEN could be brute-forced by hammering
+        // either endpoint. Applied before the auth check so it throttles
+        // attempts generally, not just successful ones. 120/min is generous
+        // for real dashboard traffic (a test run's worth of /emit calls is
+        // nowhere near that) while still bounding how fast a token can be
+        // guessed.
+        const authLimiter = rateLimit({
+            windowMs: 60_000,
+            max: 120,
+            standardHeaders: true,
+            legacyHeaders: false,
+            message: { error: "Too many requests — slow down." },
+        });
+
+        app.get("/events", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
             res.json(this._events);
         });
 
         // Lets a separate `node` process (e.g. tests/ui/LoginTest.js run on
         // its own) report into this already-running dashboard by POSTing
         // here — see Middleware.emit()'s DASHBOARD_URL fallback.
-        app.post("/emit", (req, res) => {
+        app.post("/emit", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
             const { name, payload } = req.body || {};
             if (typeof name === "string") {
                 this.emit(name, payload || {});
@@ -64,9 +155,23 @@ class Dashboard {
             res.status(204).end();
         });
 
+        const allowedOrigin = process.env.DASHBOARD_ALLOWED_ORIGIN || `http://localhost:${this.port}`;
+
         this._server = http.createServer(app);
         this._io     = new socketIO.Server(this._server, {
-            cors: { origin: "*" },
+            cors: { origin: allowedOrigin },
+        });
+
+        // Reject unauthorized connections outright (fires `connect_error` on
+        // the client) rather than letting them through with no data — an
+        // unauthenticated socket never even reaches the "connection" handler.
+        this._io.use((socket, next) => {
+            if (this._isSocketRateLimited(socket.handshake.address)) {
+                return next(new Error("Too many connection attempts — slow down."));
+            }
+            const candidate = socket.handshake.auth?.token;
+            if (this._isAuthorized(candidate)) return next();
+            next(new Error("Unauthorized — missing or invalid DASHBOARD_TOKEN."));
         });
 
         this._io.on("connection", (socket) => {
@@ -78,10 +183,23 @@ class Dashboard {
             this._server.once("error", reject);
             this._server.listen(this.port, () => {
                 this._server.removeListener("error", reject);
+                // Reflect the OS-assigned port back onto `this.port` — matters
+                // when the caller passed 0 (ephemeral port), otherwise `url`
+                // below would print the requested port (0) instead of the
+                // real one actually listening.
+                this.port = this._server.address().port;
                 resolve();
             });
         });
-        Logger.info(`🖥  Dashboard → http://localhost:${this.port}`);
+
+        Logger.info(`🖥  Dashboard → ${this.url}`);
+        if (!this._token) {
+            Logger.warning(
+                "⚠️  Dashboard running WITHOUT auth (DASHBOARD_TOKEN not set) — " +
+                "anyone who can reach this port can read and write test events. " +
+                "Fine for a local laptop; set DASHBOARD_TOKEN before exposing this beyond localhost."
+            );
+        }
 
         // Wire Middleware lifecycle events into the dashboard
         Middleware.setEmitter((name, payload) => this.emit(name, payload));

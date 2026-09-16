@@ -76,6 +76,14 @@ jobs:
       - name: Run DB config skip-vs-fail regression test
         run: node tests/unit/DBConfigBehavior.check.js
 
+      # Real Dashboard instance on an ephemeral port, real HTTP requests, real
+      # socket.io-client connections — proves both that auth is enforced when
+      # DASHBOARD_TOKEN is set (unauthenticated POST /emit, GET /events, and
+      # socket connections are all rejected) and that the default no-token
+      # local-dev experience is unchanged.
+      - name: Run Dashboard auth regression test
+        run: node tests/unit/DashboardAuth.check.js
+
       # ── Database fixture (Phase 6) ──────────────────────────────────────────
       # Applies the same scripts/db/ci-seed.sql schema verified locally against
       # a disposable Postgres container. Re-running this against a fresh

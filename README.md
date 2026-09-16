@@ -1,6 +1,6 @@
 # Falcon-Automation — AI-Powered Test Automation Framework
 
-> **Status:** Active development · Phase 6 (CI database coverage) merged to `main`.
+> **Status:** Active development · Phase 7 (dashboard hardening) in review.
 
 ---
 
@@ -20,7 +20,7 @@ Falcon is an open-source test automation framework built on Playwright that inte
 - **Database testing** — PostgreSQL via `pg` Pool with full mTLS support
 - **CI/CD ready** — GitHub Actions pipeline with Allure report upload
 
-**Delivered so far:** [Phase 1](#phase-1--stabilisation-changelog) (core AI healing + reporting foundation) → [Phase 2](#phase-2--stability--coverage) (stability audit, 14 defects fixed) → [Phase 3](#phase-3--competitive-features) (visual regression, live dashboard, AI test generation, Allure) → [Phase 4](#phase-4--repository-hygiene--documentation-truth) (repo hygiene, docs truth) → [Phase 5](#phase-5--self-healing-consolidation) (single consolidated healing engine, bounded LocatorStore) → [Phase 6](#phase-6--ci-database-coverage) (real Postgres in CI, CI results that actually gate merges). See [Roadmap](#roadmap) for what's next.
+**Delivered so far:** [Phase 1](#phase-1--stabilisation-changelog) (core AI healing + reporting foundation) → [Phase 2](#phase-2--stability--coverage) (stability audit, 14 defects fixed) → [Phase 3](#phase-3--competitive-features) (visual regression, live dashboard, AI test generation, Allure) → [Phase 4](#phase-4--repository-hygiene--documentation-truth) (repo hygiene, docs truth) → [Phase 5](#phase-5--self-healing-consolidation) (single consolidated healing engine, bounded LocatorStore) → [Phase 6](#phase-6--ci-database-coverage) (real Postgres in CI, CI results that actually gate merges) → [Phase 7](#phase-7--dashboard-hardening) (token-gated dashboard, no more open read/write access). See [Roadmap](#roadmap) for what's next.
 
 ---
 
@@ -105,7 +105,8 @@ Falcon-Automation/
 │   ├── db/                          # UserDBTest, OrderDBTest, TestDBConnection
 │   ├── unit/                        # Fast regression checks — no browser, no DB
 │   │   ├── ReportManagerExitCode.check.js
-│   │   └── DBConfigBehavior.check.js
+│   │   ├── DBConfigBehavior.check.js
+│   │   └── DashboardAuth.check.js
 │   └── full_automation.test.js      # Playwright-native suite (allure-playwright reporter)
 ├── scripts/db/
 │   └── ci-seed.sql                  # Minimal schema/seed applied to CI's Postgres
@@ -394,7 +395,7 @@ Three test files were completely empty, making `npm run test:all` produce no res
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_era_Falcon`, `main`, and `feat/**` branches, and on pull requests. Current pipeline, in order:
 
 1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
-2. Two fast, no-browser/no-DB regression checks: `tests/unit/ReportManagerExitCode.check.js` and `tests/unit/DBConfigBehavior.check.js`
+2. Three fast, no-browser/no-DB regression checks: `tests/unit/ReportManagerExitCode.check.js`, `tests/unit/DBConfigBehavior.check.js`, and `tests/unit/DashboardAuth.check.js`
 3. **Postgres service container** (`postgres:16-alpine`, disposable, health-checked) is seeded via `scripts/db/ci-seed.sql`
 4. Visual-regression baselines restored from cache (`actions/cache@v4`, keyed on branch name)
 5. Scenario tests: `LoginTest`, `CheckoutTest`, `UserApiTest`, `ProductApiTest`, then `UserDBTest` and `OrderDBTest` against the real seeded database — none of these use `continue-on-error`, a real failure fails the job
@@ -402,7 +403,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 7. `npx playwright test` (`continue-on-error: true`, since this suite still tolerates E2E flake)
 8. Allure report generated (`npx allure awesome`) and uploaded alongside `reports/` as the `falcon-reports` artifact
 
-The full, current file is the source of truth — see `.github/workflows/ci.yml`. The Phase 3 and Phase 6 sections below document why specific pieces of this pipeline exist (Allure's CLI quirks, the visual-regression cache, the Postgres service container, the two regression checks).
+The full, current file is the source of truth — see `.github/workflows/ci.yml`. The Phase 3, Phase 6, and Phase 7 sections below document why specific pieces of this pipeline exist (Allure's CLI quirks, the visual-regression cache, the Postgres service container, the three regression checks).
 
 ---
 
@@ -563,11 +564,31 @@ The skip fix above has a sharp edge worth calling out on its own: "no database c
 
 ---
 
+## Phase 7 — Dashboard Hardening
+
+The live dashboard (`src/core/Dashboard.js`) had no authentication at all — `POST /emit`, `GET /events`, and every socket.io connection were wide open, with CORS set to `origin: "*"`. Fine for a single laptop; not fine the moment `DASHBOARD_URL` points a CI run or a shared environment at it, since that means anyone who can reach the port can read every test result and healing event, or inject fake ones.
+
+- **`DASHBOARD_TOKEN`** (optional env var) now gates `POST /emit`, `GET /events`, and the socket.io handshake. Unset — the default, unchanged local-dev behavior — everything works exactly as before, except `node falcon.js` now logs a loud startup warning so running unauthenticated isn't a silent accident. Set it, and an unauthenticated request or socket connection is rejected outright (`401` on HTTP, `connect_error` on the socket — never silently let through with no data).
+- **CORS restricted** from `origin: "*"` to `DASHBOARD_ALLOWED_ORIGIN` (defaults to the dashboard's own localhost origin). This only affects cross-origin browser access — the bundled dashboard UI talks to its own server same-origin either way, so this doesn't change anything for the normal `node falcon.js` → open the printed URL flow.
+- **The dashboard's own front-end** (`src/dashboard/index.html`) reads a `?token=` from the URL, saves it to `localStorage` so a page refresh doesn't need it re-pasted, and strips it from the visible URL. Verified in a real headless browser across all four cases: correct token → live and connected; reload with no token in the URL → still connects, from `localStorage`; no token at all → clear "Unauthorized" status shown; wrong token → same.
+- **`Middleware.emit()`'s cross-process HTTP fallback** (the `DASHBOARD_URL` flow from Phase 3, used when a standalone test file like `node tests/ui/LoginTest.js` reports into an already-running dashboard) now sends the token automatically when `DASHBOARD_TOKEN` is set in that process's environment too — verified end-to-end against a real token-protected dashboard: a standalone test with the matching token gets its events through, one without the token gets silently rejected (the test itself still passes — dashboard reporting has never been allowed to break a test run, on purpose, and that didn't change here).
+- **`tests/unit/DashboardAuth.check.js`** — new regression test, a real `Dashboard` instance on an ephemeral port with real HTTP requests and a real `socket.io-client` connection (added as a devDependency for exactly this). Covers both the no-token default and every rejection/acceptance path once a token is set. Confirmed it actually catches a regression by removing the socket auth check and watching the exact right two cases fail.
+
+**GitHub's CodeQL scan caught something real on the first push of this PR:** both authenticated routes (`POST /emit`, `GET /events`) had no rate limiting — meaning `DASHBOARD_TOKEN` could be brute-forced by hammering either endpoint with guesses, since nothing capped how many attempts a single client could make. Fixed with `express-rate-limit` on both routes (120 requests/minute — generous for real dashboard traffic, still bounds brute-forcing), applied *before* the auth check so it throttles attempts generally, not just successful ones. CodeQL doesn't analyze socket.io's own handshake as an Express route, so it didn't flag the equivalent gap there, but the same brute-force risk applies — added a small in-memory sliding-window limiter for socket connection attempts too, same 120/minute budget, no new dependency needed for that half. While already in `_isAuthorized()`, also switched the token comparison from a plain `===` to `crypto.timingSafeEqual()` — a plain string comparison leaks how many leading characters matched via response-time differences, which matters for an auth token even when the practical exploit window over a network is narrow. Extended `DashboardAuth.check.js` with two more cases (130 rapid requests/connections, confirming at least one gets rejected specifically for rate limiting) and confirmed both catch a real regression the same way the rest of the suite does — pulled the HTTP limiter back out, reran, watched exactly that one case fail.
+
+**`tests/ui/GoogleSearchTest.js` was also looked at this phase, but deliberately did not get wired into CI.** The original plan was simple — add a CI step for it. Running it locally first (never skip that step) showed it failing every time: Google's cookie-consent dialog covers the search box on a fresh browser profile, and no amount of selector healing fixes that, since the element AIHealer would be "healing" isn't broken, it's just obscured. That part got a real fix — dismissing the dialog via its stable `id` before searching. But running the fixed version a few more times from the same machine got Google's actual bot-detection system to serve a "confirm you're not a robot" block page instead of search results — confirmed directly, not assumed. GitHub Actions runner IPs are well-known to that system. Wiring this into CI would very likely produce a test that's red most of the time for reasons that have nothing to do with Falcon's own code, so it stays as a fixed, working, manual/local demonstration of `AIHealer` against a real third-party site — not a CI gate.
+
+---
+
 ## Running Tests
 
 ```sh
 # Full autonomous pipeline with live dashboard
 node falcon.js
+
+# Same, with the dashboard requiring a token (see Phase 7) — the printed
+# URL includes ?token=... automatically
+DASHBOARD_TOKEN=some-secret node falcon.js --dashboard
 
 # Autonomous pipeline without dashboard (CI / headless environments)
 node falcon.js --no-dashboard
@@ -586,7 +607,8 @@ node tests/db/OrderDBTest.js
 npm run test:unit
 
 # Same, but reporting into an already-running `node falcon.js` dashboard
-# (each test file is its own process, so this needs the explicit URL)
+# (each test file is its own process, so this needs the explicit URL — and,
+# if the dashboard requires a token, DASHBOARD_TOKEN too)
 DASHBOARD_URL=http://localhost:3000 node tests/ui/LoginTest.js
 
 # Playwright native suite (allure-playwright reporter active)
@@ -604,11 +626,11 @@ npx allure open allure-report
 Falcon's differentiator is genuine self-healing, not a hardcoded selector list — but "AI healed this selector" is only as trustworthy as the visibility behind it. That's the throughline for what's next:
 
 - **Healing you can audit.** Every retry, cache hit, and LLM-inferred fix is already logged. The next step is surfacing that as a reviewable trend across a run — which selectors heal, how often, and via which tier — and gating any LLM-rewritten selector behind explicit approval before it's trusted for reuse. "Self-healing" should never mean "silently trusted."
-- **A dashboard built for teams, not just a laptop.** Real-time visibility into a long-running suite is only useful if it's safe to share — token-gated access is next so the live dashboard can be pointed at from CI or a shared environment.
 
 ✅ Shipped since the last update:
 - A single, consolidated self-healing engine across every entry point — one three-tier chain (retry → locator cache → LLM), with `LocatorStore` now bounded so it can't grow unbounded over a long project history.
 - **Real coverage of the data layer, not just the UI.** DB tests now run against a real, disposable Postgres in CI instead of being silently absent — and, more fundamentally, every scenario test's process exit code now actually matches its reported pass/fail result, so a green CI check means the tests actually passed, not just that the process didn't crash.
+- **A dashboard built for teams, not just a laptop.** Token-gated auth means the live dashboard can now be safely pointed at from CI or a shared environment, not just a single trusted laptop — unauthenticated requests and socket connections are rejected outright rather than quietly allowed through.
 
 This roadmap tracks ongoing engineering priorities, not a fixed release schedule.
 
