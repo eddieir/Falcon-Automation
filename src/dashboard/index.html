@@ -331,7 +331,24 @@
     }
   }
 
-  const socket = io();
+  // Phase 7 — auth token. Read from ?token=, persist to localStorage so a
+  // refresh doesn't require re-pasting it, then strip it from the visible
+  // URL so it doesn't linger in browser history / get shared by accident.
+  // localStorage is best-effort — a private window or blocked storage just
+  // means the token has to come from the URL every time, which still works.
+  function resolveToken() {
+    const fromUrl = new URLSearchParams(location.search).get("token");
+    if (fromUrl) {
+      try { localStorage.setItem("falcon_dashboard_token", fromUrl); } catch {}
+      const url = new URL(location.href);
+      url.searchParams.delete("token");
+      history.replaceState(null, "", url);
+      return fromUrl;
+    }
+    try { return localStorage.getItem("falcon_dashboard_token") || undefined; } catch { return undefined; }
+  }
+
+  const socket = io({ auth: { token: resolveToken() } });
 
   socket.on("connect", () => {
     $("status-dot").classList.add("live");
@@ -341,6 +358,13 @@
   socket.on("disconnect", () => {
     $("status-dot").classList.remove("live");
     $("status-label").textContent = "Disconnected";
+  });
+
+  socket.on("connect_error", (err) => {
+    $("status-dot").classList.remove("live");
+    $("status-label").textContent = /unauthorized/i.test(err.message)
+      ? "Unauthorized — check the dashboard URL/token"
+      : `Connection error: ${err.message}`;
   });
 
   // Replay full history for late-joining tabs
