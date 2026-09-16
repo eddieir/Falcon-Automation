@@ -129,9 +129,52 @@ async function testWithToken() {
     delete process.env.DASHBOARD_TOKEN;
 }
 
+/**
+ * Phase 7 follow-up: CodeQL flagged that POST /emit and GET /events perform
+ * authorization but had no rate limiting — meaning DASHBOARD_TOKEN could be
+ * brute-forced by hammering either endpoint with guesses. Fixed with
+ * express-rate-limit on both routes, and a matching in-memory limiter on the
+ * socket.io handshake (which express-rate-limit doesn't cover, since it's
+ * not an Express route). This proves the fix actually throttles, not just
+ * that it doesn't crash — fires well past the configured limit (120/min)
+ * and confirms at least one request/connection gets rejected specifically
+ * for rate limiting, not for auth.
+ */
+async function testRateLimiting() {
+    const dashboard = new Dashboard({ port: 0 });
+    await dashboard.start();
+    const port = dashboard.port;
+
+    const REQUEST_COUNT = 130; // over the 120/min limit
+    const responses = await Promise.all(
+        Array.from({ length: REQUEST_COUNT }, () => httpRequest(port, "POST", "/emit"))
+    );
+    const rateLimited = responses.filter((r) => r.statusCode === 429).length;
+    check(
+        `HTTP: firing ${REQUEST_COUNT} POST /emit requests gets at least one 429 (rate limited)`,
+        rateLimited > 0,
+        `got 0 of ${REQUEST_COUNT} rate-limited (statuses seen: ${[...new Set(responses.map((r) => r.statusCode))].join(", ")})`
+    );
+
+    const socketResults = await Promise.all(
+        Array.from({ length: REQUEST_COUNT }, () => connectSocket(port))
+    );
+    const socketRateLimited = socketResults.filter(
+        (r) => r.connected === false && /too many/i.test(r.message || "")
+    ).length;
+    check(
+        `Socket: firing ${REQUEST_COUNT} connection attempts gets at least one rate-limit rejection`,
+        socketRateLimited > 0,
+        `got 0 of ${REQUEST_COUNT} rate-limited (sample message: ${socketResults.find((r) => !r.connected)?.message})`
+    );
+
+    await dashboard.stop();
+}
+
 (async () => {
     await testWithoutToken();
     await testWithToken();
+    await testRateLimiting();
 
     if (failures > 0) {
         console.error(`\n❌ DashboardAuth: ${failures} case(s) failed`);

@@ -1,6 +1,7 @@
 const http   = require("http");
 const path   = require("path");
 const fs     = require("fs");
+const crypto = require("crypto");
 const Logger = require("../../utils/Logger");
 
 /**
@@ -55,6 +56,25 @@ class Dashboard {
         this._io     = null;
         this._server = null;
         this._token  = process.env.DASHBOARD_TOKEN || null;
+        this._socketConnectAttempts = new Map(); // ip → recent connection-attempt timestamps
+    }
+
+    /**
+     * Simple in-memory sliding-window limiter for socket.io connection
+     * attempts, mirroring the HTTP rate limiter below for the same reason:
+     * the auth handshake is just as brute-forceable as POST /emit if it's
+     * not throttled, and express-rate-limit only covers Express routes, not
+     * socket.io's own handshake. No new dependency needed for this — it's a
+     * handful of lines, scoped to exactly one thing.
+     */
+    _isSocketRateLimited(ip) {
+        const WINDOW_MS = 60_000;
+        const MAX_ATTEMPTS = 120;
+        const now = Date.now();
+        const attempts = (this._socketConnectAttempts.get(ip) || []).filter((t) => now - t < WINDOW_MS);
+        attempts.push(now);
+        this._socketConnectAttempts.set(ip, attempts);
+        return attempts.length > MAX_ATTEMPTS;
     }
 
     /** Extract a token from either the X-Dashboard-Token header or a ?token= query param. */
@@ -62,10 +82,20 @@ class Dashboard {
         return req.headers["x-dashboard-token"] || req.query?.token || null;
     }
 
-    /** True if `candidate` matches the configured token. No-op (always true) when auth is off. */
+    /**
+     * True if `candidate` matches the configured token. No-op (always true)
+     * when auth is off. Uses a timing-safe comparison — a plain `===` leaks
+     * how many leading characters matched via response-time differences,
+     * which matters for an auth token even if the practical exploit window
+     * over a network is narrow. The length check up front is safe to do in
+     * variable time (length isn't the secret; the token's content is), and
+     * is required anyway since timingSafeEqual throws on mismatched buffer
+     * lengths rather than returning false.
+     */
     _isAuthorized(candidate) {
         if (!this._token) return true;
-        return candidate === this._token;
+        if (typeof candidate !== "string" || candidate.length !== this._token.length) return false;
+        return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(this._token));
     }
 
     /** The URL to actually open — includes ?token= when auth is enabled. */
@@ -81,13 +111,30 @@ class Dashboard {
         // Lazy-require to avoid crashing processes that don't need the dashboard
         const express   = require("express");
         const socketIO  = require("socket.io");
+        const rateLimit = require("express-rate-limit");
         const Middleware = require("./Middleware");
 
         const app = express();
         app.use(express.json());
         app.use(express.static(path.join(__dirname, "..", "dashboard")));
 
-        app.get("/events", (req, res) => {
+        // Phase 7 follow-up — CodeQL correctly flagged that the two routes
+        // below perform authorization but had no rate limiting: with no cap
+        // on attempts, DASHBOARD_TOKEN could be brute-forced by hammering
+        // either endpoint. Applied before the auth check so it throttles
+        // attempts generally, not just successful ones. 120/min is generous
+        // for real dashboard traffic (a test run's worth of /emit calls is
+        // nowhere near that) while still bounding how fast a token can be
+        // guessed.
+        const authLimiter = rateLimit({
+            windowMs: 60_000,
+            max: 120,
+            standardHeaders: true,
+            legacyHeaders: false,
+            message: { error: "Too many requests — slow down." },
+        });
+
+        app.get("/events", authLimiter, (req, res) => {
             if (!this._isAuthorized(this._tokenFromRequest(req))) {
                 return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
             }
@@ -97,7 +144,7 @@ class Dashboard {
         // Lets a separate `node` process (e.g. tests/ui/LoginTest.js run on
         // its own) report into this already-running dashboard by POSTing
         // here — see Middleware.emit()'s DASHBOARD_URL fallback.
-        app.post("/emit", (req, res) => {
+        app.post("/emit", authLimiter, (req, res) => {
             if (!this._isAuthorized(this._tokenFromRequest(req))) {
                 return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
             }
@@ -119,6 +166,9 @@ class Dashboard {
         // the client) rather than letting them through with no data — an
         // unauthenticated socket never even reaches the "connection" handler.
         this._io.use((socket, next) => {
+            if (this._isSocketRateLimited(socket.handshake.address)) {
+                return next(new Error("Too many connection attempts — slow down."));
+            }
             const candidate = socket.handshake.auth?.token;
             if (this._isAuthorized(candidate)) return next();
             next(new Error("Unauthorized — missing or invalid DASHBOARD_TOKEN."));
