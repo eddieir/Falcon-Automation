@@ -18,6 +18,10 @@ const Logger = require("../../utils/Logger");
  * test process can report to an already-running `node falcon.js` dashboard
  * by setting DASHBOARD_URL=http://localhost:3000. Best-effort: failures
  * (dashboard not running) are swallowed so tests never depend on it.
+ *
+ * Phase 7: if DASHBOARD_TOKEN is also set, it's sent as an X-Dashboard-Token
+ * header on this POST — a dashboard running with auth enabled rejects the
+ * request otherwise. No effect when the dashboard has no token configured.
  */
 class Middleware {
     static async beforeTest(testName) {
@@ -51,11 +55,15 @@ class Middleware {
             const url    = new URL("/emit", dashboardUrl);
             const client = url.protocol === "https:" ? https : http;
             const body   = JSON.stringify({ name, payload });
+            const headers = { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) };
+            if (process.env.DASHBOARD_TOKEN) {
+                headers["X-Dashboard-Token"] = process.env.DASHBOARD_TOKEN;
+            }
             const req = client.request(
                 url,
                 {
                     method: "POST",
-                    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+                    headers,
                     timeout: 1000,
                 },
                 (res) => res.resume() // drain, don't care about the response body

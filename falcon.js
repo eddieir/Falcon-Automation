@@ -139,7 +139,7 @@ const DEFAULT_URL = "https://www.saucedemo.com";
 
         if (dashboardUp) {
             const lingerMs = Number(process.env.DASHBOARD_LINGER_MS) || 60_000;
-            Logger.info(`🖥  Dashboard will stay up for ${(lingerMs / 1000).toFixed(0)} s — open http://localhost:${dashboard.port} to review results.`);
+            Logger.info(`🖥  Dashboard will stay up for ${(lingerMs / 1000).toFixed(0)} s — open ${dashboard.url} to review results.`);
             Logger.info("    Press Ctrl-C to exit early.");
             await new Promise((r) => setTimeout(r, lingerMs));
             await dashboard.stop();

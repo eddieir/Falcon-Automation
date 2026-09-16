@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node falcon.js",
-    "test:unit": "node tests/unit/ReportManagerExitCode.check.js && node tests/unit/DBConfigBehavior.check.js",
+    "test:unit": "node tests/unit/ReportManagerExitCode.check.js && node tests/unit/DBConfigBehavior.check.js && node tests/unit/DashboardAuth.check.js",
     "test:login": "node tests/ui/LoginTest.js",
     "test:checkout": "node tests/ui/CheckoutTest.js",
     "test:search": "node tests/ui/GoogleSearchTest.js",
@@ -34,6 +34,7 @@
     "axios": "^1.8.2",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.7.0",
     "mysql2": "^3.13.0",
     "openai": "^4.86.2",
     "pg": "^8.13.3",
@@ -43,6 +44,7 @@
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.51.0"
+    "@playwright/test": "^1.51.0",
+    "socket.io-client": "^4.8.3"
   }
 }
