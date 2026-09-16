@@ -616,6 +616,8 @@ This roadmap tracks ongoing engineering priorities, not a fixed release schedule
 
 ## Contributing
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, validation, and pull request guidance. All participants must follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately using the [security policy](SECURITY.md).
+
 1. Branch off `New_era_Falcon` — not `main`
 2. One logical change per commit; write the commit body as a tech-lead-quality explanation of *why*, not just *what*
 3. Update this README for any new capability or changed behaviour
