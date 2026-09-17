@@ -24,6 +24,92 @@ Falcon is an open-source test automation framework built on Playwright that inte
 
 ---
 
+## Demo
+
+One command, no hand-written test code: Falcon loads a page, crawls it, turns what it finds into test scenarios, executes them with self-healing, and streams every step to a live dashboard as it happens.
+
+```sh
+node falcon.js --url=https://www.saucedemo.com
+```
+
+![Falcon live dashboard — connect, explore, generate, run](docs/demo/falcon-dashboard-demo.gif)
+
+*(Recording generated from a real local run against saucedemo.com — see [`docs/demo/`](docs/demo/) for the source frames and regeneration steps below.)*
+
+### Step by step
+
+**1. Dashboard comes up first**, empty and connected, before any exploration or test scenario runs — this is `Dashboard.start()` completing while `falcon.js` is still navigating to the target URL:
+
+![Dashboard connects with zero events](docs/demo/01-dashboard-connects.png)
+
+**2. `ClickExplorer` crawls the page** and streams an `explorerPage` event for every page it visits, in real time, over the same socket the dashboard is already listening on:
+
+![Crawler explores and reports the visited page](docs/demo/02-crawler-explores.png)
+
+**3. `PageAnalyser` scans the live DOM, `TestGenerator` turns it into a scenario plan, and `TestRunner` executes it** through the three-tier self-healing chain. Each scenario's pass/fail/heal event lands on the dashboard the instant it happens:
+
+![Generated scenarios pass with live counters](docs/demo/03-generated-tests-pass.png)
+
+**4. Terminal output for the same run** — no scenario file existed anywhere in the repo for saucedemo.com; everything below was generated from the DOM:
+
+```
+🟢 INFO: 🖥  Dashboard → http://localhost:3000
+🟡 WARNING: ⚠️  Dashboard running WITHOUT auth (DASHBOARD_TOKEN not set) — anyone who can reach this port can read and write test events. Fine for a local laptop; set DASHBOARD_TOKEN before exposing this beyond localhost.
+🟢 INFO: 🌍 Navigating to https://www.saucedemo.com…
+🟢 INFO: ✅ Loaded: https://www.saucedemo.com
+🟢 INFO: 🔍 Step 1: Detecting UI issues with ExploratoryAI…
+🟢 INFO: 🧐 AI detected 0 potential UI issues.
+🟢 INFO: 🔍 Step 2: Mapping site with ClickExplorer…
+🟢 INFO:   → 1 page(s) explored
+🟢 INFO: 🤖 Step 3: Generating test scenarios from DOM analysis…
+🟢 INFO: ✅ [PageAnalyser] Found 4 interactive elements
+🟢 INFO:   → 3 scenario(s) generated for https://www.saucedemo.com/
+🟢 INFO: ▶  Step 4: Executing AI-generated test scenarios…
+🟢 INFO: ▶ Executing [1/3]: Fill user-name (type)
+🟢 INFO: ✅ Passed: Fill user-name (27ms)
+🟢 INFO: ▶ Executing [1/3]: Fill password (type)
+🟢 INFO: ✅ Passed: Fill password (39ms)
+🟢 INFO: ▶ Executing [1/1]: Click Login (click)
+🟢 INFO: 🔁 [AdaptiveRetry] Attempt 1/3: Click Login
+🟢 INFO: 🔹 Tier 1: Trying Click Login (#login-button)
+🟢 INFO: ✅ Passed: Click Login (48ms)
+
+✅ Test Run Complete — PASSED
+   Total: 3  |  Passed: 3  |  Failed: 0  |  Skipped: 0
+   Duration: 1.42s
+   Report written to: reports/test-report.json
+```
+
+**Try it against your own app** — no fixture required, just a URL:
+
+```sh
+node falcon.js --url=https://your-app.example.com
+```
+
+### Regenerating this demo
+
+The recording above isn't hand-drawn — it's real frames captured from a live `node falcon.js` run with Playwright, assembled with `ffmpeg`. To regenerate it:
+
+```sh
+# 1. Start falcon.js and wait for the dashboard to come up
+node falcon.js --url=https://www.saucedemo.com &
+until curl -s -o /dev/null http://localhost:3000; do sleep 0.05; done
+
+# 2. Capture frames with Playwright while the run streams events
+#    (screenshots every 150ms into docs/demo/frames/)
+node docs/demo/capture-dashboard.js 30 150
+
+# 3. Assemble into a GIF
+cd docs/demo
+ffmpeg -y -f concat -safe 0 -i gif-list.txt \
+  -vf "fps=8,scale=700:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer" \
+  falcon-dashboard-demo.gif
+```
+
+`docs/demo/capture-dashboard.js` and `gif-list.txt` are checked in so this is reproducible against any future run, not a one-off screenshot.
+
+---
+
 ## Architecture
 
 ```mermaid

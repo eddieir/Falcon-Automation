@@ -20,6 +20,8 @@ trace.zip
 *.png
 *.jpg
 *.jpeg
+# ...except committed README demo stills (see docs/demo/).
+!docs/demo/*.png
 
 # IDE & OS-Specific Files
 .vscode/
