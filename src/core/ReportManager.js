@@ -63,6 +63,12 @@ class ReportManager {
      * @param {Array}  [opts.healingEvents] - Events from HealingReport (optional)
      */
     generateReport({ tests = [], uiIssues = [], healingEvents = [] } = {}) {
+        if (!Array.isArray(tests) || !Array.isArray(uiIssues) || !Array.isArray(healingEvents)) {
+            throw new TypeError("Report results, issues and healing events must be arrays");
+        }
+        if (tests.some(result => !result || !["passed", "failed", "skipped"].includes(result.status))) {
+            throw new TypeError("Each test result must have a valid status");
+        }
         const endTime = Date.now();
         const durationSeconds = this._startTime
             ? ((endTime - this._startTime) / 1000).toFixed(2)

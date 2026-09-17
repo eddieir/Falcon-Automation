@@ -16,6 +16,19 @@ class PageAnalyser {
         this.page = page;
     }
 
+    /** Type-appropriate placeholder values, keyed by <input type>. */
+    static VALUE_BY_TYPE = {
+        email:            "test@example.test",
+        number:           "1",
+        date:             "2026-01-01",
+        time:             "12:00",
+        "datetime-local": "2026-01-01T12:00",
+        month:            "2026-01",
+        week:             "2026-W01",
+        url:              "https://example.test",
+        tel:              "1234567890",
+    };
+
     /**
      * Analyse the current page and return a structured map of interactive elements.
      *
@@ -32,6 +45,31 @@ class PageAnalyser {
 
         const elements = await this.page.evaluate(() => {
             const TAGS = "input, button, a, select, textarea, div[role='button'], form";
+            const NON_FILLABLE_TYPES = ["file", "range", "color"];
+            const BUTTON_TYPES = ["submit", "button", "reset"];
+            const CHECKABLE_TYPES = ["checkbox", "radio"];
+
+            // Base selector priority (data-testid → id → aria-label → name → type
+            // → tag) can collide when two elements share the same label or have
+            // no distinguishing attribute at all (e.g. two bare <button> tags).
+            // Fall back to a structural nth-of-type path so every selector is
+            // guaranteed to resolve to exactly one element.
+            const uniqueSelectorFor = (el, candidate) => {
+                if (document.querySelectorAll(candidate).length === 1) return candidate;
+                const parts = [];
+                let node = el;
+                while (node && node.nodeType === 1 && node !== document.body) {
+                    const parent = node.parentElement;
+                    const siblings = parent
+                        ? Array.from(parent.children).filter((c) => c.tagName === node.tagName)
+                        : [node];
+                    const index = siblings.indexOf(node) + 1;
+                    parts.unshift(`${node.tagName.toLowerCase()}:nth-of-type(${index})`);
+                    node = parent;
+                }
+                return parts.join(" > ");
+            };
+
             return [...document.querySelectorAll(TAGS)]
                 .filter((el) => {
                     const style = window.getComputedStyle(el);
@@ -53,11 +91,19 @@ class PageAnalyser {
                     } else if (el.getAttribute("type")) {
                         selector = `${tag}[type="${CSS.escape(el.getAttribute("type"))}"]`;
                     }
+                    selector = uniqueSelectorFor(el, selector);
 
                     // <input type="submit"|"button"|"reset"> behaves like a button,
                     // not a fillable field — page.fill() throws on these.
                     const inputType = (el.getAttribute("type") || "").toLowerCase();
-                    const isButtonInput = tag === "input" && ["submit", "button", "reset"].includes(inputType);
+                    const isButtonInput      = tag === "input" && BUTTON_TYPES.includes(inputType);
+                    const isCheckableInput   = tag === "input" && CHECKABLE_TYPES.includes(inputType);
+                    const isNonFillableInput = tag === "input" && NON_FILLABLE_TYPES.includes(inputType);
+                    // .matches(':disabled') (unlike the .disabled IDL property)
+                    // correctly accounts for ancestry — e.g. an input inside a
+                    // <fieldset disabled> that carries no disabled attribute itself.
+                    const isDisabled = el.matches(":disabled");
+                    const isReadOnly = "readOnly" in el && el.readOnly;
 
                     return {
                         tag,
@@ -69,8 +115,10 @@ class PageAnalyser {
                         options: tag === "select"
                             ? Array.from(el.options).filter(o => !o.disabled && !o.parentElement.disabled).map(o => o.value)
                             : [],
-                        isFormElement: ["input", "textarea", "select"].includes(tag) && !isButtonInput,
-                        isClickable:   ["button", "a"].includes(tag) || el.getAttribute("role") === "button" || isButtonInput,
+                        isFormElement: ["input", "textarea", "select"].includes(tag)
+                            && !isButtonInput && !isNonFillableInput && !isDisabled && !isReadOnly,
+                        isCheckable: isCheckableInput,
+                        isClickable: (["button", "a"].includes(tag) || el.getAttribute("role") === "button" || isButtonInput) && !isDisabled,
                     };
                 });
         });
@@ -78,7 +126,8 @@ class PageAnalyser {
         Logger.info(`✅ [PageAnalyser] Found ${elements.length} interactive elements`);
 
         return {
-            inputs:      elements.filter((el) => el.isFormElement && el.tag !== "select"),
+            inputs:      elements.filter((el) => el.isFormElement && el.tag !== "select" && !el.isCheckable),
+            checkables:  elements.filter((el) => el.isFormElement && el.isCheckable),
             buttons:     elements.filter((el) => el.isClickable && el.tag !== "a"),
             links:       elements.filter((el) => el.tag === "a"),
             selects:     elements.filter((el) => el.tag === "select"),
@@ -101,8 +150,26 @@ class PageAnalyser {
             actions.push({
                 action:      "type",
                 locator:     input.selector,
-                value:       "test_value",
+                value:       PageAnalyser.VALUE_BY_TYPE[input.type] ?? "test_value",
                 description: `Fill ${input.name || input.type || "input field"}`,
+            });
+        }
+
+        for (const checkable of pageData.checkables || []) {
+            actions.push({
+                action:      "click",
+                locator:     checkable.selector,
+                description: `Check ${checkable.name || checkable.type || "control"}`,
+            });
+        }
+
+        for (const select of pageData.selects) {
+            if (!select.options?.length) continue;
+            actions.push({
+                action:      "select",
+                locator:     select.selector,
+                value:       select.options.find(value => value !== "") ?? select.options[0],
+                description: `Select option on ${select.name || "dropdown"}`,
             });
         }
 
@@ -119,16 +186,6 @@ class PageAnalyser {
                 action:      "click",
                 locator:     link.selector,
                 description: `Navigate: ${link.text || link.selector}`,
-            });
-        }
-
-        for (const select of pageData.selects) {
-            if (!select.options?.length) continue;
-            actions.push({
-                action:      "select",
-                locator:     select.selector,
-                value:       select.options.find(value => value !== "") ?? select.options[0],
-                description: `Select option on ${select.name || "dropdown"}`,
             });
         }
 

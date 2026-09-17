@@ -42,6 +42,10 @@ class VisualRegression {
      *                                            before the comparison is marked failed
      */
     constructor(page, { threshold = 0.1, diffThreshold = 0.5 } = {}) {
+        if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1 ||
+            !Number.isFinite(diffThreshold) || diffThreshold < 0 || diffThreshold > 100) {
+            throw new TypeError("Visual thresholds must be within 0–1 and 0–100 respectively");
+        }
         this.page           = page;
         this.threshold      = threshold;
         this.diffThreshold  = diffThreshold;
@@ -68,7 +72,14 @@ class VisualRegression {
      * @param {string} name - Unique checkpoint name, e.g. "login-page"
      * @returns {string} Absolute path to the saved baseline image.
      */
+    _validateName(name) {
+        if (typeof name !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(name)) {
+            throw new TypeError("Checkpoint name must be a non-empty filename without path separators");
+        }
+    }
+
     async captureBaseline(name) {
+        this._validateName(name);
         const filePath = path.join(this.baselineDir, `${name}.png`);
         await this.page.screenshot({ path: filePath, fullPage: true });
         Logger.info(`📸 [VisualRegression] Baseline saved: ${filePath}`);
@@ -89,6 +100,7 @@ class VisualRegression {
      * }}
      */
     async compare(name) {
+        this._validateName(name);
         const baselinePath   = path.join(this.baselineDir,   `${name}.png`);
         const screenshotPath = path.join(this.screenshotDir, `${name}.png`);
         const diffPath       = path.join(this.diffDir,       `${name}-diff.png`);
@@ -96,7 +108,7 @@ class VisualRegression {
         if (!fs.existsSync(baselinePath)) {
             Logger.warning(`⚠️  [VisualRegression] No baseline for "${name}" — run captureBaseline() first.`);
             const result = { name, status: "no-baseline", diffPixels: 0, totalPixels: 0, diffPercent: 0, diffPath: null };
-            this._appendToSummary(result);
+            await this._appendToSummary(result);
             return result;
         }
 
@@ -124,7 +136,7 @@ class VisualRegression {
                 diffPath: null,
                 reason: "dimension-mismatch",
             };
-            this._appendToSummary(result);
+            await this._appendToSummary(result);
             return result;
         }
 
@@ -166,7 +178,7 @@ class VisualRegression {
             );
         }
 
-        this._appendToSummary(result);
+        await this._appendToSummary(result);
         return result;
     }
 
@@ -188,6 +200,7 @@ class VisualRegression {
                 }
             } catch { /* ignore corrupt file */ }
 
+            if (!Array.isArray(summary)) summary = [];
             summary.push({ ...result, timestamp: new Date().toISOString() });
             await fs.promises.writeFile(this.summaryPath, JSON.stringify(summary, null, 2), "utf8");
         }).catch(() => {}); // never let a summary-write failure crash the caller
@@ -204,6 +217,7 @@ class VisualRegression {
      * @returns {Promise<{status: string, [key: string]: any}>}
      */
     async snapshot(name) {
+        this._validateName(name);
         const baselinePath = path.join(this.baselineDir, `${name}.png`);
         if (!fs.existsSync(baselinePath)) {
             await this.captureBaseline(name);

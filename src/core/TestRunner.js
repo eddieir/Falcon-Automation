@@ -56,7 +56,12 @@ class TestRunner {
         try {
             return await this.page.evaluate((sel) => {
                 const el = document.querySelector(sel);
-                return el !== null && el.offsetParent !== null;
+                if (!el) return false;
+                // offsetParent is always null for position:fixed elements even
+                // when they're on-screen, so it can't be used as a visibility
+                // check. Match PageAnalyser's own client-rect + computed-style test.
+                const style = window.getComputedStyle(el);
+                return el.getClientRects().length > 0 && style.visibility !== "hidden" && style.display !== "none";
             }, selector);
         } catch {
             return false;
