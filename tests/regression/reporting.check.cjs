@@ -15,9 +15,23 @@ for (const [statuses, result, exit] of [
   test(`report tallies ${statuses.join("/") || "empty"} accurately`, (t) => {
     const cwd = process.cwd(),
       dir = temp(),
-      oldCode = process.exitCode;
+      oldCode = process.exitCode,
+      log = console.log;
     process.chdir(dir);
+    // generateReport() prints a real emoji summary (✅/❌/⚠️) straight to
+    // stdout for humans running `node tests/...js` directly — useful there,
+    // but node:test's own TAP reporter is also reading this process's stdout
+    // while the test runs, and on some Node builds a raw emoji line (in
+    // particular the ⚠️ variation-selector sequence) isn't valid TAP and
+    // corrupts the parser (ERR_TAP_LEXER_ERROR), failing this test for a
+    // reason that has nothing to do with what it's actually checking.
+    // Silencing console.log for the duration of the call under test —
+    // exactly the same "mock the noisy side channel" pattern already used
+    // for Logger further down this file — keeps the assertions the same
+    // while not leaking output into the TAP stream.
+    console.log = () => {};
     t.after(() => {
+      console.log = log;
       process.chdir(cwd);
       process.exitCode = oldCode;
       fs.rmSync(dir, { recursive: true, force: true });

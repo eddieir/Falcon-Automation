@@ -6,6 +6,9 @@
   "directories": {
     "test": "tests"
   },
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "start": "node falcon.js",
     "test:unit": "node tests/unit/ReportManagerExitCode.check.js && node tests/unit/DBConfigBehavior.check.js && node tests/unit/DashboardAuth.check.js",
