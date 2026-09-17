@@ -53,12 +53,16 @@ class PageAnalyser {
             // → tag) can collide when two elements share the same label or have
             // no distinguishing attribute at all (e.g. two bare <button> tags).
             // Fall back to a structural nth-of-type path so every selector is
-            // guaranteed to resolve to exactly one element.
+            // guaranteed to resolve to exactly one element. Must walk all the
+            // way to <html> (not stop at body): a bare "button:nth-of-type(1)"
+            // has no parent combinator, so it matches ANY such button anywhere
+            // in the document — e.g. one inside an unrelated <fieldset> that
+            // also happens to be first-of-type among its own siblings.
             const uniqueSelectorFor = (el, candidate) => {
                 if (document.querySelectorAll(candidate).length === 1) return candidate;
                 const parts = [];
                 let node = el;
-                while (node && node.nodeType === 1 && node !== document.body) {
+                while (node && node.nodeType === 1) {
                     const parent = node.parentElement;
                     const siblings = parent
                         ? Array.from(parent.children).filter((c) => c.tagName === node.tagName)
