@@ -38,6 +38,7 @@ try {
     serviceContainer.register("dbClient", new DBClient()); 
 } catch (error) {
     Logger.error(`❌ Failed to register DBClient: ${error.message}`);
+    if (process.env.DB_HOST && process.env.DB_USER) throw error;
 }
 
 serviceContainer.register("reportManager", new ReportManager());

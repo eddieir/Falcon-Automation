@@ -46,13 +46,19 @@ class BaseTest {
 
     async teardown() {
         Logger.info(`🟡 Cleaning up after test: ${this.testName}`);
-        await this.browserManager.close();
-        this.reportManager.generateReport({
+        try {
+            await this.browserManager.close();
+        } finally {
+            try {
+                this.reportManager.generateReport({
             tests:         this._results,
             uiIssues:      [],
             healingEvents: [],
         });
-        await Logger.flush();
+            } finally {
+                await Logger.flush();
+            }
+        }
     }
 }
 

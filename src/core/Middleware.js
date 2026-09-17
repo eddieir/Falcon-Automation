@@ -44,7 +44,7 @@ class Middleware {
      */
     static emit(name, payload = {}) {
         if (Middleware._emitter) {
-            Middleware._emitter(name, payload);
+            try { Middleware._emitter(name, payload); } catch { /* Telemetry is best-effort. */ }
             return;
         }
 
@@ -83,6 +83,7 @@ class Middleware {
      * @param {Function} emitFn - (eventName, payload) => void
      */
     static setEmitter(emitFn) {
+        if (emitFn !== null && typeof emitFn !== "function") throw new TypeError("Emitter must be a function or null");
         Middleware._emitter = emitFn;
     }
 }

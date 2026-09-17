@@ -54,6 +54,15 @@ class AIHealer {
         const alternatives = LocatorStore.getAlternatives(selector);
         for (const altSelector of alternatives) {
             try {
+                // page.click() clicks the first match without complaint when a
+                // selector resolves to more than one element — verify uniqueness
+                // ourselves before acting on a stored alternative.
+                const count = await this._matchCount(altSelector);
+                if (count !== 1) {
+                    Logger.warning(`⚠️ Stored alternative ${altSelector} is ambiguous (${count} matches) — skipping.`);
+                    continue;
+                }
+
                 Logger.info(`🔹 Trying stored alternative: ${altSelector}`);
                 await this.page.click(altSelector);
                 HealingReport.log({
@@ -75,6 +84,11 @@ class AIHealer {
         if (aiSuggestedLocator) {
             Logger.info(`🤖 AI suggested: ${aiSuggestedLocator}`);
             try {
+                const count = await this._matchCount(aiSuggestedLocator);
+                if (count !== 1) {
+                    throw new Error(`AI-suggested locator "${aiSuggestedLocator}" is ambiguous (${count} matches)`);
+                }
+
                 await this.page.click(aiSuggestedLocator);
                 // Persist so Tier 2 handles this on the next run
                 LocatorStore.addLocator(selector, aiSuggestedLocator);
@@ -104,6 +118,16 @@ class AIHealer {
     }
 
     /**
+     * How many elements a selector currently resolves to. Falls back to
+     * "assume unique" when the page double doesn't implement page.locator()
+     * (e.g. lightweight mocks in unit tests) rather than throwing.
+     */
+    async _matchCount(selector) {
+        if (typeof this.page.locator !== "function") return 1;
+        return this.page.locator(selector).count();
+    }
+
+    /**
      * Tier 3 core: captures a DOM snapshot and asks the LLM to infer a valid
      * CSS selector that targets the same element as the broken one.
      *
@@ -124,7 +148,10 @@ class AIHealer {
                 const nodes = document.querySelectorAll(tags.join(","));
                 const lines = [];
                 nodes.forEach((el) => {
+                    // Never send entered credential values (passwords) to the LLM.
+                    const isPassword = (el.getAttribute("type") || "").toLowerCase() === "password";
                     const attrs = Array.from(el.attributes)
+                        .filter((a) => !(isPassword && a.name === "value"))
                         .map((a) => `${a.name}="${a.value}"`)
                         .join(" ");
                     lines.push(`<${el.tagName.toLowerCase()} ${attrs}>`);

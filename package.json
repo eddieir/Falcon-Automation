@@ -15,9 +15,13 @@
     "test:ui": "npm run test:login && npm run test:checkout",
     "test:api": "node tests/api/UserApiTest.js && node tests/api/ProductApiTest.js",
     "test:db": "node tests/db/UserDBTest.js && node tests/db/OrderDBTest.js",
-    "test:all": "npm run test:unit && npm run test:ui && npm run test:api && npm run test:db",
+    "test:all": "npm test && npm run test:unit && npm run test:ui && npm run test:api && npm run test:db && npm run test:e2e",
     "test:e2e": "npx playwright test tests/full_automation.test.js",
-    "report": "allure awesome allure-results -o allure-report && allure open allure-report"
+    "report": "allure awesome allure-results -o allure-report && allure open allure-report",
+    "test": "npm run test:regression && npm run test:browser",
+    "test:regression": "node --test --test-concurrency=1 tests/regression/*.check.cjs",
+    "test:browser": "playwright test -c playwright.regression.config.js",
+    "test:coverage": "node --experimental-test-coverage --test --test-concurrency=1 tests/regression/*.check.cjs"
   },
   "keywords": [
     "AI",
