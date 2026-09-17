@@ -35,7 +35,8 @@ class TestRunner {
         for (const scenario of this.testPlan.test_scenarios) {
             const isVisible = await this.isElementVisible(scenario.locator);
 
-            if (!isVisible) {
+            // Missing click targets must reach the recovery chain.
+            if (!isVisible && scenario.action !== "click") {
                 Logger.warning(`⏭ Skipping ${scenario.description}: Element is not visible.`);
                 this.results.push({
                     name: scenario.description,

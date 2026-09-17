@@ -94,14 +94,16 @@ class Dashboard {
      */
     _isAuthorized(candidate) {
         if (!this._token) return true;
-        if (typeof candidate !== "string" || candidate.length !== this._token.length) return false;
-        return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(this._token));
+        if (typeof candidate !== "string") return false;
+        const received = Buffer.from(candidate);
+        const expected = Buffer.from(this._token);
+        return received.length === expected.length && crypto.timingSafeEqual(received, expected);
     }
 
     /** The URL to actually open — includes ?token= when auth is enabled. */
     get url() {
         const base = `http://localhost:${this.port}`;
-        return this._token ? `${base}/?token=${this._token}` : base;
+        return this._token ? `${base}/?token=${encodeURIComponent(this._token)}` : base;
     }
 
     /**
@@ -202,7 +204,8 @@ class Dashboard {
         }
 
         // Wire Middleware lifecycle events into the dashboard
-        Middleware.setEmitter((name, payload) => this.emit(name, payload));
+        this._emitter = (name, payload) => this.emit(name, payload);
+        Middleware.setEmitter(this._emitter);
     }
 
     /**
@@ -220,10 +223,17 @@ class Dashboard {
 
     /** Gracefully shut down the HTTP server. */
     async stop() {
-        if (this._server) {
-            await new Promise((resolve) => this._server.close(resolve));
-            Logger.info("🛑 Dashboard stopped.");
+        const Middleware = require("./Middleware");
+        if (Middleware._emitter === this._emitter) Middleware.setEmitter(null);
+        if (this._io) {
+            const io = this._io;
+            this._io = null;
+            await new Promise(resolve => io.close(resolve));
         }
+        if (this._server?.listening) {
+            await new Promise(resolve => this._server.close(resolve));
+        }
+        this._server = null;
     }
 }
 
