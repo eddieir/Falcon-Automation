@@ -22,6 +22,7 @@ class TestDBConnection {
             Logger.info(`✅ Database connection successful. Response: ${JSON.stringify(rows[0])}`);
         } catch (error) {
             Logger.error(`❌ Database connection failed: ${error.message}`);
+            process.exitCode = 1;
         } finally {
             await db.close();
             await Logger.flush();
