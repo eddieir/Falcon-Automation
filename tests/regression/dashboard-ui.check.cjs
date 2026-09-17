@@ -31,7 +31,7 @@ function dashboardUI() {
     path.join(root, "src/dashboard/index.html"),
     "utf8",
   );
-  const source = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
+  const source = html.match(/<script>\s*([\s\S]*?)<\/script>/i)[1];
   vm.runInNewContext(source, {
     document,
     io: () => ({ on: (name, fn) => (handlers[name] = fn) }),
