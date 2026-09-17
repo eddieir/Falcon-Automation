@@ -232,8 +232,16 @@ for (const attributes of ['disabled','readonly','type="file"','type="range"','ty
  });
 }
 test('duplicate labels and bare tags produce unique selectors',async({page})=>{
- await page.setContent('<input aria-label="Same"><input aria-label="Same"><button>First</button><button>Second</button>');
- const data=await new PageAnalyser(page).analyze();expect(new Set(data.allElements.map(e=>e.selector)).size).toBe(4);
+ // The disabled fieldset below reproduces the bug fixed by the <html>-anchoring
+ // commit: its buttons are first/second-of-type among the fieldset's own
+ // children, the same nth-of-type index as the top-level buttons among body's
+ // children. An unanchored selector like `button:nth-of-type(1)` matches both
+ // regardless of nesting depth (:nth-of-type only looks at siblings, not
+ // ancestry), so this fixture fails the toHaveCount(1) check below on the
+ // pre-fix code even though it never generates an action for the disabled
+ // buttons themselves.
+ await page.setContent('<input aria-label="Same"><input aria-label="Same"><button>First</button><button>Second</button><fieldset disabled><button>Nested first</button><button>Nested second</button></fieldset>');
+ const data=await new PageAnalyser(page).analyze();expect(new Set(data.allElements.map(e=>e.selector)).size).toBe(data.allElements.length);
  for(const item of data.allElements)await expect(page.locator(item.selector)).toHaveCount(1);
 });
 test('disabled fieldsets and disabled option groups generate no invalid actions',async({page})=>{
