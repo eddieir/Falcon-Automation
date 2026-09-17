@@ -99,6 +99,7 @@ test("locator cache persists deduplicated bounded alternatives and reloads", asy
     "#new6",
     "#new7",
   ]);
+  await store._queue;
   assert.deepEqual(store._loadSync(), store.data);
   assert.deepEqual(store.getAlternatives("missing"), []);
 });
@@ -259,4 +260,37 @@ test("healing audit writes every queued event and forwards lifecycle events", as
   assert.equal(events.length, 20);
   assert.equal(emitted.length, 20);
   assert.equal(events[19].original, "#19");
+});
+
+test("locator cache ignores malformed entries in otherwise valid JSON", async (t) => {
+  const store = storeAt(
+    t,
+    JSON.stringify({
+      "#null": null,
+      "#bad": { alternatives: 42 },
+      "#good": ["#new"],
+    }),
+  );
+  assert.deepEqual(store.getAlternatives("#null"), []);
+  assert.deepEqual(store.getAlternatives("#bad"), []);
+  store.addLocator("#null", "#repaired");
+  await store._queue;
+  assert.deepEqual(store.getAlternatives("#null"), ["#repaired"]);
+});
+test("locator cache supports selectors matching object prototype keys", async (t) => {
+  const store = storeAt(t);
+  for (const key of ["constructor", "__proto__", "toString"])
+    store.addLocator(key, "#replacement");
+  await store._queue;
+  for (const key of ["constructor", "__proto__", "toString"])
+    assert.deepEqual(store.getAlternatives(key), ["#replacement"]);
+});
+test("locator reads refresh recency for eviction and cannot mutate stored alternatives", async (t) => {
+  const store = storeAt(t);
+  store.data["#active"] = { alternatives: ["#new"], lastUsed: 1 };
+  const alternatives = store.getAlternatives("#active");
+  alternatives.push("#unverified");
+  assert.ok(store.data["#active"].lastUsed > 1);
+  assert.deepEqual(store.getAlternatives("#active"), ["#new"]);
+  await store._queue;
 });
