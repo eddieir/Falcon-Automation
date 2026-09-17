@@ -33,7 +33,10 @@ class PageAnalyser {
         const elements = await this.page.evaluate(() => {
             const TAGS = "input, button, a, select, textarea, div[role='button'], form";
             return [...document.querySelectorAll(TAGS)]
-                .filter((el) => el.offsetParent !== null) // visible only
+                .filter((el) => {
+                    const style = window.getComputedStyle(el);
+                    return el.getClientRects().length > 0 && style.visibility !== "hidden" && style.display !== "none";
+                })
                 .map((el) => {
                     // Derive the best stable selector in priority order:
                     // data-testid → id → aria-label → name → type → tag
@@ -63,6 +66,9 @@ class PageAnalyser {
                         text:          (el.innerText || el.value || "").trim().substring(0, 80),
                         selector,
                         role:          el.getAttribute("role") || "",
+                        options: tag === "select"
+                            ? Array.from(el.options).filter(o => !o.disabled && !o.parentElement.disabled).map(o => o.value)
+                            : [],
                         isFormElement: ["input", "textarea", "select"].includes(tag) && !isButtonInput,
                         isClickable:   ["button", "a"].includes(tag) || el.getAttribute("role") === "button" || isButtonInput,
                     };
@@ -72,8 +78,8 @@ class PageAnalyser {
         Logger.info(`✅ [PageAnalyser] Found ${elements.length} interactive elements`);
 
         return {
-            inputs:      elements.filter((el) => el.isFormElement),
-            buttons:     elements.filter((el) => el.isClickable),
+            inputs:      elements.filter((el) => el.isFormElement && el.tag !== "select"),
+            buttons:     elements.filter((el) => el.isClickable && el.tag !== "a"),
             links:       elements.filter((el) => el.tag === "a"),
             selects:     elements.filter((el) => el.tag === "select"),
             allElements: elements,
@@ -117,10 +123,11 @@ class PageAnalyser {
         }
 
         for (const select of pageData.selects) {
+            if (!select.options?.length) continue;
             actions.push({
                 action:      "select",
                 locator:     select.selector,
-                value:       "option_1",
+                value:       select.options.find(value => value !== "") ?? select.options[0],
                 description: `Select option on ${select.name || "dropdown"}`,
             });
         }

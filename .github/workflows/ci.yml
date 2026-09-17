@@ -2,7 +2,7 @@ name: Falcon CI
 
 on:
   push:
-    branches: [New_era_Falcon, main, "feat/**"]
+    branches: [New_era_Falcon, main, "feat/**", "test/**"]
   pull_request:
     branches: [New_era_Falcon, main]
 
@@ -10,6 +10,26 @@ permissions:
   contents: read
 
 jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:coverage
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-reports
+          path: reports/
+          retention-days: 14
+
   test:
     runs-on: ubuntu-latest
     env:
@@ -135,7 +155,7 @@ jobs:
       # ── Playwright native suite (with Allure reporter) ──────────────────────
       - name: Run Playwright native tests
         run: npx playwright test
-        continue-on-error: true  # Don't block the pipeline if E2E flakes
+
 
       # ── Allure report generation ────────────────────────────────────────────
       - name: Generate Allure report
