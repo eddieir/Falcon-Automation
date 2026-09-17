@@ -125,13 +125,14 @@ class ClickExplorer {
                 if (element.newTab) {
                     Logger.info("🔄 Detected new tab — staying on current page.");
                     // Do not follow new tabs: stay in the same browser context
-                    await this.page.goBack({ waitUntil: "domcontentloaded" }).catch(() => {});
                     continue;
                 }
 
                 await this.page.waitForLoadState("domcontentloaded", { timeout: 8000 }).catch(() => {});
                 await this.explore(depth + 1);
-                await this.page.goBack({ waitUntil: "domcontentloaded" }).catch(() => {});
+                if (this.page.url() !== currentUrl) {
+                    await this.page.goBack({ waitUntil: "domcontentloaded" }).catch(() => {});
+                }
             } catch (error) {
                 Logger.warning(`⚠️ Failed to explore "${element.text}": ${error.message}`);
             }

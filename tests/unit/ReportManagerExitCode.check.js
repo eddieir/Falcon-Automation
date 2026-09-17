@@ -31,11 +31,12 @@ let failures = 0;
 
 function check(label, tests, expectedResult, expectedExitCode) {
     reportManager.startRun();
-    reportManager.generateReport({ tests });
+    const report = reportManager.generateReport({ tests });
     const actualExitCode = process.exitCode;
     process.exitCode = 0; // reset before the next case / before this script exits
 
     try {
+        assert.strictEqual(report.result, expectedResult);
         assert.strictEqual(
             actualExitCode,
             expectedExitCode,

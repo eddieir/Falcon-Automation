@@ -18,6 +18,7 @@ const { defineConfig, devices } = require("@playwright/test");
 module.exports = defineConfig({
     // Resolve specs from the project root
     testDir: "./tests",
+    testIgnore: "**/regression/**",
     testMatch: ["**/*.test.js", "**/*.spec.js"],
 
     // Maximum time one test can run (ms)

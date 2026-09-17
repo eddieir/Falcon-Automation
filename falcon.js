@@ -25,13 +25,15 @@ const TestRunner      = require("./src/core/TestRunner");
 const TestGenerator   = require("./src/core/TestGenerator");
 const Dashboard       = require("./src/core/Dashboard");
 const Logger          = require("./utils/Logger");
+const ReportManager   = require("./src/core/ReportManager");
+const HealingReport   = require("./src/core/AIHealer/HealingReport");
 
 const DEFAULT_URL = "https://www.saucedemo.com";
 
 (async () => {
     const args        = process.argv.slice(2);
     const urlArg      = args.find((a) => a.startsWith("--url="));
-    const rawUrl      = urlArg ? urlArg.split("=")[1] : DEFAULT_URL;
+    const rawUrl      = urlArg ? urlArg.slice("--url=".length) : DEFAULT_URL;
     const url         = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
     // Default off in CI (process.env.CI is the conventional signal nearly
     // every CI system sets) so a headless run never blocks on a dashboard
@@ -62,13 +64,16 @@ const DEFAULT_URL = "https://www.saucedemo.com";
     };
 
     // ── Browser ───────────────────────────────────────────────────────────────
-    const browser = await chromium.launch({ headless });
-    const context = await browser.newContext();
-    const page    = await context.newPage();
+    let browser;
+    const reportManager = new ReportManager();
+    reportManager.startRun();
 
     Logger.info(`🌍 Navigating to ${url}…`);
 
     try {
+        browser = await chromium.launch({ headless });
+        const context = await browser.newContext();
+        const page = await context.newPage();
         await page.goto(url, { waitUntil: "load" });
         Logger.info(`✅ Loaded: ${url}`);
         emit("explorerPage", { url });
@@ -129,13 +134,15 @@ const DEFAULT_URL = "https://www.saucedemo.com";
             exploredPages: Array.from(visitedPages),
         });
 
+        reportManager.generateReport({ tests: results, uiIssues, healingEvents: HealingReport._instance.logs });
     } catch (error) {
+        reportManager.generateReport({ tests: [{ name: "falcon.js", status: "failed", error: error.message }] });
         Logger.error(`❌ Fatal error: ${error.message}`);
         console.error(error);
         emit("testFail", { name: "falcon.js", error: error.message });
     } finally {
         await Logger.flush();
-        await browser.close();
+        if (browser) await browser.close();
 
         if (dashboardUp) {
             const lingerMs = Number(process.env.DASHBOARD_LINGER_MS) || 60_000;
