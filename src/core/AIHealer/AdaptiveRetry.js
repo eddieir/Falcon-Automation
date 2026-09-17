@@ -25,6 +25,10 @@ class AdaptiveRetry {
      * @param {number} [opts.maxDelayMs=8000] - Cap on any single delay (ms)
      */
     constructor({ maxAttempts = 3, baseDelayMs = 500, maxDelayMs = 8000 } = {}) {
+        if (!Number.isInteger(maxAttempts) || maxAttempts < 1) throw new TypeError("maxAttempts must be a positive integer");
+        for (const delay of [baseDelayMs, maxDelayMs]) {
+            if (!Number.isFinite(delay) || delay < 0) throw new TypeError("Retry delay must be finite and non-negative");
+        }
         this.maxAttempts = maxAttempts;
         this.baseDelayMs = baseDelayMs;
         this.maxDelayMs  = maxDelayMs;
@@ -51,7 +55,7 @@ class AdaptiveRetry {
 
                 Logger.warning(
                     `⚠️ [AdaptiveRetry] Attempt ${attempt} failed for "${label}" ` +
-                    `[${errorType}]: ${error.message}`
+                    `[${errorType}]: ${error?.message ?? String(error)}`
                 );
 
                 if (errorType === "HARD") {
@@ -77,8 +81,8 @@ class AdaptiveRetry {
      * @returns {"TIMEOUT"|"STALE_ELEMENT"|"NETWORK"|"HARD"}
      */
     static classify(error) {
-        const msg = (error.message || "").toLowerCase();
-        const name = (error.name || "").toLowerCase();
+        const msg = String(error?.message ?? "").toLowerCase();
+        const name = String(error?.name ?? "").toLowerCase();
 
         // Playwright timeout — element never appeared in the allotted window
         if (name.includes("timeoute") || msg.includes("timeout") || msg.includes("timed out")) {
@@ -133,6 +137,7 @@ class AdaptiveRetry {
         const mult  = multipliers[errorType] ?? 1.0;
         const exp   = Math.pow(2, attempt - 1);
         const raw   = this.baseDelayMs * exp * mult;
+        if (!Number.isFinite(raw)) return this.maxDelayMs;
         const jitter = raw * 0.2 * (Math.random() * 2 - 1); // ±20%
         return Math.min(Math.round(raw + jitter), this.maxDelayMs);
     }

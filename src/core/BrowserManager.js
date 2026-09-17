@@ -15,26 +15,27 @@ class BrowserManager {
         // Set HEADLESS=false in .env to watch the browser during local debugging.
         const headless = process.env.HEADLESS !== "false";
         Logger.info(`🚀 Launching ${this.browserType} browser (headless=${headless})...`);
-        this.browser = await { chromium, firefox, webkit }[this.browserType].launch({
-            headless,
-        });
-
-        this.page = await this.browser.newPage();
+        const engine = { chromium, firefox, webkit }[this.browserType];
+        if (!engine) throw new Error(`Unsupported browser: ${this.browserType}`);
+        if (this.browser) throw new Error("Browser already initialized; close it before launching again");
+        this.browser = await engine.launch({ headless });
+        try {
+            this.page = await this.browser.newPage();
+        } catch (error) {
+            await this.close().catch(() => {});
+            throw error;
+        }
     }
 
     async close() {
-        if (this.page) {
-            Logger.info("🔴 Closing browser page...");
-            await this.page.close();
-        } else {
-            Logger.warning("⚠️ No page to close!");
-        }
-
-        if (this.browser) {
-            Logger.info("🔴 Closing browser instance...");
-            await this.browser.close();
-        } else {
-            Logger.warning("⚠️ No browser to close!");
+        const page = this.page;
+        const browser = this.browser;
+        this.page = null;
+        this.browser = null;
+        try {
+            if (page) await page.close();
+        } finally {
+            if (browser) await browser.close();
         }
     }
 

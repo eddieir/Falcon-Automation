@@ -35,7 +35,11 @@ class ConfigManager {
         }
 
         try {
-            return JSON.parse(raw);
+            const value = JSON.parse(raw);
+            if (!value || typeof value !== "object" || Array.isArray(value)) {
+                throw new TypeError("Configuration must be a JSON object");
+            }
+            return value;
         } catch (error) {
             throw new Error(`❌ [ConfigManager] Invalid JSON in config file: ${error.message}`);
         }

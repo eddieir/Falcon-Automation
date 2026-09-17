@@ -218,3 +218,58 @@ test("crawler respects depth limit without touching the page", async ({
   await explorer.explore(3);
   expect(explorer.visitedPages.size).toBe(0);
 });
+
+for (const type of ['checkbox', 'radio']) {
+ test(`generated ${type} action clicks rather than fills`, async ({page}) => {
+  await page.setContent(`<input id="control" type="${type}">`);
+  const plan=await new Generator(page).generateTestScenarios();expect(plan.test_scenarios[0].action).toBe('click');
+  expect((await new Runner(page,plan).executeTest())[0].status).toBe('passed');await expect(page.locator('#control')).toBeChecked();
+ });
+}
+for (const attributes of ['disabled','readonly','type="file"','type="range"','type="color"']) {
+ test(`generator excludes non-fillable control ${attributes}`,async({page})=>{
+  await page.setContent(`<input id="control" ${attributes}>`);expect((await new Generator(page).generateTestScenarios()).test_scenarios).toHaveLength(0);
+ });
+}
+test('duplicate labels and bare tags produce unique selectors',async({page})=>{
+ await page.setContent('<input aria-label="Same"><input aria-label="Same"><button>First</button><button>Second</button>');
+ const data=await new PageAnalyser(page).analyze();expect(new Set(data.allElements.map(e=>e.selector)).size).toBe(4);
+ for(const item of data.allElements)await expect(page.locator(item.selector)).toHaveCount(1);
+});
+test('disabled fieldsets and disabled option groups generate no invalid actions',async({page})=>{
+ await page.setContent('<fieldset disabled><input id="blocked"><button>Blocked</button></fieldset><select id="choice"><optgroup disabled><option value="bad">Bad</option></optgroup><option value="good">Good</option></select>');
+ const plan=await new Generator(page).generateTestScenarios();expect(plan.test_scenarios).toHaveLength(1);expect(plan.test_scenarios[0].value).toBe('good');
+});
+test('fixed-position inputs are executed rather than skipped',async({page})=>{
+ await page.setContent('<input id="fixed" style="position:fixed;top:10px">');const result=await new Runner(page,{test_scenarios:[{action:'type',locator:'#fixed',value:'value'}]}).executeTest();
+ expect(result[0].status).toBe('passed');await expect(page.locator('#fixed')).toHaveValue('value');
+});
+test('visibility-hidden elements do not produce generated actions',async({page})=>{
+ await page.setContent('<button style="visibility:hidden">Hidden</button>');expect((await new Generator(page).generateTestScenarios()).test_scenarios).toHaveLength(0);
+});
+test('healing refuses ambiguous stored targets and tries the next unique alternative',async({page})=>{
+ await page.setContent('<button class="duplicate" onclick="window.wrong=true">Wrong</button><button class="duplicate">Other</button><button id="right" onclick="window.right=true">Right</button>');
+ Store.addLocator('#ambiguous','.duplicate');Store.addLocator('#ambiguous','#right');await new Healer(page).healSelector('#ambiguous','Right');
+ expect(await page.evaluate(()=>window.wrong)).toBeUndefined();expect(await page.evaluate(()=>window.right)).toBe(true);
+});
+test('healing rejects an ambiguous inferred target without clicking or caching it',async({page})=>{
+ await page.setContent('<button onclick="window.wrong=true">One</button><button>Two</button>');const healer=new Healer(page);healer.getAlternativeSelector=async()=> 'button';
+ await expect(healer.healSelector('#ambiguous-inference','Target')).rejects.toThrow();expect(Store.getAlternatives('#ambiguous-inference')).toEqual([]);expect(await page.evaluate(()=>window.wrong)).toBeUndefined();
+});
+test('provider DOM snapshot excludes entered credential values',async({page})=>{
+ await page.setContent('<input id="password" type="password" value="fixture-sensitive-value"><button id="target">Submit</button>');const healer=new Healer(page);
+ healer._getOpenAIClient=async()=>({chat:{completions:{create:async request=>{expect(request.messages[0].content).not.toContain('fixture-sensitive-value');return{choices:[{message:{content:'#target'}}]};}}}});
+ expect(await healer.getAlternativeSelector('#old-target')).toBe('#target');
+});
+test('late appearing target succeeds through direct waiting',async({page})=>{
+ await page.setContent('<main></main>');await page.evaluate(()=>setTimeout(()=>{const b=document.createElement('button');b.id='late';b.onclick=()=>window.clicked=true;document.body.append(b);},100));
+ await new Healer(page).healAndClick('#late');expect(await page.evaluate(()=>window.clicked)).toBe(true);
+});
+test('crawler preserves current page when a control does not navigate',async({page})=>{
+ await page.route('http://fixture.test/**',r=>r.fulfill({contentType:'text/html',body:'<button id="counter" onclick="window.count=(window.count||0)+1">Count</button>'}));
+ await page.goto('http://fixture.test/previous');await page.goto('http://fixture.test/current');const explorer=new Explorer(page);await explorer.explore();expect(page.url()).toBe('http://fixture.test/current');expect(await page.evaluate(()=>window.count)).toBe(1);
+});
+test('crawler continues when one candidate is unclickable',async({page})=>{
+ await page.setContent('<button id="disabled" disabled>Disabled</button><button id="enabled" onclick="window.clicked=true">Enabled</button>');
+ const explorer=new Explorer(page);await explorer.explore();expect(await page.evaluate(()=>window.clicked)).toBe(true);expect(explorer.exploredElements.map(e=>e.selector)).toContain('#enabled');
+});
