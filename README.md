@@ -1,6 +1,6 @@
 # Falcon-Automation — AI-Powered Test Automation Framework
 
-> **Status:** Active development · Phase 7 (dashboard hardening) in review.
+> **Status:** Active development · Phases 1–7 merged, plus a follow-up hardening pass (comprehensive regression suite, a real selector-anchoring fix, and this doc sync). Phase 8 (healing trust) is next — see [Roadmap](#roadmap).
 
 ---
 
@@ -20,7 +20,7 @@ Falcon is an open-source test automation framework built on Playwright that inte
 - **Database testing** — PostgreSQL via `pg` Pool with full mTLS support
 - **CI/CD ready** — GitHub Actions pipeline with Allure report upload
 
-**Delivered so far:** [Phase 1](#phase-1--stabilisation-changelog) (core AI healing + reporting foundation) → [Phase 2](#phase-2--stability--coverage) (stability audit, 14 defects fixed) → [Phase 3](#phase-3--competitive-features) (visual regression, live dashboard, AI test generation, Allure) → [Phase 4](#phase-4--repository-hygiene--documentation-truth) (repo hygiene, docs truth) → [Phase 5](#phase-5--self-healing-consolidation) (single consolidated healing engine, bounded LocatorStore) → [Phase 6](#phase-6--ci-database-coverage) (real Postgres in CI, CI results that actually gate merges) → [Phase 7](#phase-7--dashboard-hardening) (token-gated dashboard, no more open read/write access). See [Roadmap](#roadmap) for what's next.
+**Delivered so far:** [Phase 1](#phase-1--stabilisation-changelog) (core AI healing + reporting foundation) → [Phase 2](#phase-2--stability--coverage) (stability audit, 14 defects fixed) → [Phase 3](#phase-3--competitive-features) (visual regression, live dashboard, AI test generation, Allure) → [Phase 4](#phase-4--repository-hygiene--documentation-truth) (repo hygiene, docs truth) → [Phase 5](#phase-5--self-healing-consolidation) (single consolidated healing engine, bounded LocatorStore) → [Phase 6](#phase-6--ci-database-coverage) (real Postgres in CI, CI results that actually gate merges) → [Phase 7](#phase-7--dashboard-hardening) (token-gated dashboard, no more open read/write access) → a comprehensive `node:test` + Playwright regression layer (183 + 30 tests, a second CI job) and a real selector-anchoring fix in `PageAnalyser`. See [Roadmap](#roadmap) for what's next.
 
 ---
 
@@ -225,6 +225,8 @@ cd Falcon-Automation
 
 ### 2. Install dependencies
 
+Requires **Node 20.19+** (declared in `package.json`'s `engines` field) — the regression suite's `node:test` scripts (`test:regression`, `test:coverage`) use flags that don't exist on older Node builds.
+
 ```sh
 npm install
 npx playwright install chromium firefox webkit
@@ -245,7 +247,7 @@ HEADLESS=true               # true for CI; false to watch the browser locally
 
 # OpenAI — optional, enables Tier 3 AI healing. Every call site degrades
 # gracefully when this is unset; Tier 3 just never fires.
-OPENAI_API_KEY=sk-...
+OPENAI_API_KEY=
 
 # API base URL — optional, defaults to jsonplaceholder
 API_BASE_URL=https://jsonplaceholder.typicode.com
@@ -257,19 +259,22 @@ DASHBOARD_LINGER_MS=60000   # how long the dashboard stays up after a run finish
                                         # `node tests/ui/LoginTest.js`) to report
                                         # its events into an already-running dashboard
 
-# PostgreSQL — required only for DB tests
-DB_HOST=your_db_host
+# PostgreSQL — required only for DB tests. Leave DB_HOST/DB_USER blank to
+# skip tests/db/*.js cleanly — don't fill these in with placeholder text,
+# DBClient only checks for truthiness, so a non-empty placeholder is treated
+# as "configured" and it'll try to connect instead of skipping.
+DB_HOST=
 DB_PORT=5432
-DB_USER=your_db_user
-DB_PASS=your_db_password
-DB_NAME=your_db_name
-DB_SSL=true                # set to false to disable TLS
+DB_USER=
+DB_PASS=
+DB_NAME=
+DB_SSL=false                # set to true only if your Postgres requires TLS
 
-# SSL/mTLS — required only when DB_SSL=true and using client certs
-SSL_CA_FILE=./certs/ca.pem
-SSL_KEY_FILE=./certs/client.key
-SSL_CERT_FILE=./certs/client.crt
-SSL_REJECT_UNAUTHORIZED=true
+# SSL/mTLS — only needed when DB_SSL=true and using client certs
+# SSL_CA_FILE=./certs/ca.pem
+# SSL_KEY_FILE=./certs/client.key
+# SSL_CERT_FILE=./certs/client.crt
+# SSL_REJECT_UNAUTHORIZED=true
 ```
 
 ---
@@ -478,8 +483,15 @@ Three test files were completely empty, making `npm run test:all` produce no res
 
 ## CI/CD
 
-GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_era_Falcon`, `main`, and `feat/**` branches, and on pull requests. Current pipeline, in order:
+GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_era_Falcon`, `main`, and `feat/**` branches, and on pull requests. It's two independent jobs, not one:
 
+**`regression` job** (~1 minute) — the `node:test` + Playwright layer added alongside the community-health files:
+1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
+2. `npm run test:coverage` — 183 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, CLI, API, boundaries, dashboard, visual regression, plan generation)
+3. `npm run test:browser` — 30 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
+4. Uploads `reports/` as the `regression-reports` artifact
+
+**`test` job** (~1.5 minutes) — the original scenario/E2E pipeline, against a real seeded Postgres:
 1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
 2. Three fast, no-browser/no-DB regression checks: `tests/unit/ReportManagerExitCode.check.js`, `tests/unit/DBConfigBehavior.check.js`, and `tests/unit/DashboardAuth.check.js`
 3. **Postgres service container** (`postgres:16-alpine`, disposable, health-checked) is seeded via `scripts/db/ci-seed.sql`
@@ -489,7 +501,9 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 7. `npx playwright test` (`continue-on-error: true`, since this suite still tolerates E2E flake)
 8. Allure report generated (`npx allure awesome`) and uploaded alongside `reports/` as the `falcon-reports` artifact
 
-The full, current file is the source of truth — see `.github/workflows/ci.yml`. The Phase 3, Phase 6, and Phase 7 sections below document why specific pieces of this pipeline exist (Allure's CLI quirks, the visual-regression cache, the Postgres service container, the three regression checks).
+The full, current file is the source of truth — see `.github/workflows/ci.yml`. The Phase 3, Phase 6, and Phase 7 sections below document why specific pieces of the `test` job exist (Allure's CLI quirks, the visual-regression cache, the Postgres service container, the three regression checks).
+
+Node 20.19+ is required to actually run `test:coverage`/`test:regression` locally (`--test-concurrency` and `--experimental-test-coverage` alongside `--test` both need it — see `engines` in `package.json`); CI is pinned to Node 24 and has always been fine, but an older local Node fails these two scripts with a plain `node: bad option` instead of a useful message.
 
 ---
 
@@ -691,6 +705,12 @@ node tests/db/OrderDBTest.js
 
 # Regression tests (no browser, no DB) — safe to run anywhere, anytime
 npm run test:unit
+
+# The larger node:test + Playwright regression layer (needs Node 20.19+ —
+# see Installation). This is what the "regression" CI job runs.
+npm run test:regression   # 183 node:test cases, tests/regression/*.check.cjs
+npm run test:browser      # 30 Playwright specs, tests/regression/browser.spec.js
+npm run test:coverage     # same as test:regression, with coverage collection
 
 # Same, but reporting into an already-running `node falcon.js` dashboard
 # (each test file is its own process, so this needs the explicit URL — and,
