@@ -47,12 +47,19 @@ class LocatorStore {
         try {
             if (fs.existsSync(this.storePath)) {
                 const raw = JSON.parse(fs.readFileSync(this.storePath, "utf8"));
+                if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
                 const migrated = {};
                 for (const [original, entry] of Object.entries(raw)) {
-                    // Legacy shape: entry is a plain array of alternatives.
-                    migrated[original] = Array.isArray(entry)
-                        ? { alternatives: entry, lastUsed: Date.now() }
-                        : entry;
+                    const alternatives = Array.isArray(entry) ? entry : entry?.alternatives;
+                    if (!Array.isArray(alternatives)) continue;
+                    Object.defineProperty(migrated, original, {
+                        value: {
+                            alternatives: [...new Set(alternatives.filter(value => typeof value === "string" && value.trim()))]
+                                .slice(-MAX_ALTERNATIVES_PER_SELECTOR),
+                            lastUsed: Number.isFinite(entry?.lastUsed) ? entry.lastUsed : Date.now(),
+                        },
+                        enumerable: true, configurable: true, writable: true,
+                    });
                 }
                 return migrated;
             }
@@ -63,8 +70,11 @@ class LocatorStore {
     }
 
     addLocator(original, alternative) {
-        if (!this.data[original]) {
-            this.data[original] = { alternatives: [], lastUsed: Date.now() };
+        if (!Object.hasOwn(this.data, original)) {
+            Object.defineProperty(this.data, original, {
+                value: { alternatives: [], lastUsed: Date.now() },
+                enumerable: true, configurable: true, writable: true,
+            });
         }
         const entry = this.data[original];
         entry.lastUsed = Date.now();
@@ -92,7 +102,11 @@ class LocatorStore {
     }
 
     getAlternatives(original) {
-        return this.data[original]?.alternatives || [];
+        if (!Object.hasOwn(this.data, original)) return [];
+        const entry = this.data[original];
+        entry.lastUsed = Date.now();
+        this._queue = this._queue.then(() => this._save());
+        return [...entry.alternatives];
     }
 
     async _save() {

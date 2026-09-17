@@ -277,6 +277,12 @@
 
   setInterval(updateRunTime, 500);
 
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    })[char]);
+  }
+
   function addRow(type, icon, name, detail, ts) {
     const empty = $("empty-state");
     if (empty) empty.remove();
@@ -286,8 +292,8 @@
     row.innerHTML = `
       <span class="event-icon">${icon}</span>
       <div class="event-body">
-        <div class="event-name">${name}</div>
-        ${detail ? `<div class="event-detail">${detail}</div>` : ""}
+        <div class="event-name">${escapeHtml(name)}</div>
+        ${detail ? `<div class="event-detail">${escapeHtml(detail)}</div>` : ""}
       </div>
       <span class="event-time">${fmt(ts)}</span>
     `;
@@ -369,6 +375,11 @@
 
   // Replay full history for late-joining tabs
   socket.on("replay", (events) => {
+    Object.assign(state, { pass: 0, fail: 0, skip: 0, heal: 0, startTs: null });
+    $("feed").replaceChildren();
+    for (const id of ["bar-pass", "bar-fail", "bar-skip"]) $(id).style.width = "0%";
+    $("run-time").textContent = "–";
+    updateTiles();
     events.forEach(handleEvent);
   });
 
