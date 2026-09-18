@@ -47,7 +47,7 @@ All applicable tests must pass in headless mode before opening a PR. Record the 
 
 ## Pull requests
 
-- Target `main` — it's the default branch GitHub evaluates, and every merged PR to date has gone there directly.
+- Target `main`. It's the default branch GitHub evaluates, and every merged PR to date has gone there directly.
 - Keep each PR focused and each commit a logical change. Explain why the change is needed.
 - Update documentation for new capabilities or changed behavior.
 - Follow the surrounding JavaScript style and avoid unrelated formatting changes.
