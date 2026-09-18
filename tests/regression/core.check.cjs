@@ -3,8 +3,9 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { load, silent, temp } = require("./helpers.cjs");
-function runner(page = {}) {
+function runner(page = {}, { flaky } = {}) {
   const calls = [];
+  const flakyCalls = [];
   const Runner = load("src/core/TestRunner.js", {
     "../../utils/Logger": silent,
     "./AIHealer/AIHealer": class {
@@ -13,8 +14,16 @@ function runner(page = {}) {
       }
     },
     "./AIHealer/HealingReport": { log() {} },
+    "./FlakinessTracker": flaky || {
+      record: (opts) => {
+        flakyCalls.push(opts);
+        return null;
+      },
+      isQuarantined: () => false,
+      keyFor: ({ url, action, locator }) => `${url}::${action}::${locator}`,
+    },
   });
-  return { instance: new Runner(page), calls };
+  return { instance: new Runner(page), calls, flakyCalls };
 }
 test("runner sends missing click locators through healing", async () => {
   const { instance, calls } = runner({ evaluate: async () => false });
@@ -76,6 +85,106 @@ test("unsupported actions are explicitly skipped", async () => {
   const { instance } = runner();
   await instance.runScenario({ action: "unknown" });
   assert.equal(instance.results[0].status, "skipped");
+});
+
+// ── Phase 9: FlakinessTracker integration ──
+
+test("Phase 9: a passed scenario is recorded with url/action/locator/description/duration", async () => {
+  const { instance, flakyCalls } = runner({
+    waitForSelector: async () => {},
+    click: async () => {},
+  });
+  instance.testPlan.url = "https://example.com/page";
+  await instance.runScenario({ action: "click", locator: "#save", description: "Save" });
+  assert.equal(flakyCalls.length, 1);
+  assert.equal(flakyCalls[0].url, "https://example.com/page");
+  assert.equal(flakyCalls[0].action, "click");
+  assert.equal(flakyCalls[0].locator, "#save");
+  assert.equal(flakyCalls[0].description, "Save");
+  assert.equal(flakyCalls[0].status, "passed");
+  assert.equal(typeof flakyCalls[0].duration, "number");
+});
+test("Phase 9: an exhausted failure is recorded with status 'failed' and a classified errorType", async () => {
+  const { instance, flakyCalls } = runner({
+    fill: async () => {
+      throw Error("timeout waiting for element");
+    },
+  });
+  instance.testPlan.url = "https://example.com/page";
+  await instance.runScenario({ action: "type", locator: "#field", value: "x", description: "Field" });
+  assert.equal(flakyCalls.length, 1);
+  assert.equal(flakyCalls[0].status, "failed");
+  assert.equal(flakyCalls[0].errorType, "TIMEOUT");
+});
+test("Phase 9: a quarantined scenario reports status 'quarantined' instead of 'failed', but is still recorded", async () => {
+  const quarantinedKeys = new Set(["https://example.com/page::type::#field"]);
+  const { instance, flakyCalls } = runner(
+    {
+      fill: async () => {
+        throw Error("invalid selector");
+      },
+    },
+    {
+      flaky: {
+        record: (opts) => {
+          flakyCalls.push(opts);
+          return null;
+        },
+        isQuarantined: (key) => quarantinedKeys.has(key),
+        keyFor: ({ url, action, locator }) => `${url}::${action}::${locator}`,
+      },
+    },
+  );
+  instance.testPlan.url = "https://example.com/page";
+  await instance.runScenario({ action: "type", locator: "#field", value: "x", description: "Field" });
+  assert.equal(instance.results[0].status, "quarantined");
+  assert.equal(instance.results[0].error, "invalid selector");
+  assert.equal(instance.results[0].errorType, "HARD");
+  // Quarantining changes how the failure is *reported*, not whether it's tracked.
+  assert.equal(flakyCalls.length, 1);
+  assert.equal(flakyCalls[0].status, "failed");
+});
+test("Phase 9: a non-quarantined scenario with the same error still reports 'failed'", async () => {
+  const { instance } = runner(
+    {
+      fill: async () => {
+        throw Error("invalid selector");
+      },
+    },
+    {
+      flaky: {
+        record: () => null,
+        isQuarantined: () => false,
+        keyFor: ({ url, action, locator }) => `${url}::${action}::${locator}`,
+      },
+    },
+  );
+  await instance.runScenario({ action: "type", locator: "#field", value: "x", description: "Field" });
+  assert.equal(instance.results[0].status, "failed");
+});
+test("Phase 9: a passed scenario is never checked against quarantine (only failures are)", async () => {
+  let checked = false;
+  const { instance } = runner(
+    { waitForSelector: async () => {}, click: async () => {} },
+    {
+      flaky: {
+        record: () => null,
+        isQuarantined: () => {
+          checked = true;
+          return true;
+        },
+        keyFor: ({ url, action, locator }) => `${url}::${action}::${locator}`,
+      },
+    },
+  );
+  await instance.runScenario({ action: "click", locator: "#save", description: "Save" });
+  assert.equal(instance.results[0].status, "passed");
+  assert.equal(checked, false);
+});
+test("Phase 9: unsupported/skipped actions are never fed to FlakinessTracker", async () => {
+  const { instance, flakyCalls } = runner();
+  await instance.runScenario({ action: "unknown" });
+  assert.equal(flakyCalls.length, 0);
 });
 test("visibility errors resolve false", async () => {
   const { instance } = runner({

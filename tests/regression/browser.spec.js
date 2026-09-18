@@ -8,6 +8,7 @@ const Healer = require("../../src/core/AIHealer/AIHealer");
 const Store = require("../../src/core/AIHealer/LocatorStore");
 const Report = require("../../src/core/AIHealer/HealingReport");
 const Trust = require("../../src/core/AIHealer/HealingTrust");
+const Flaky = require("../../src/core/FlakinessTracker");
 const Logger = require("../../utils/Logger");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -21,11 +22,15 @@ test.beforeAll(() => {
   Trust.pendingPath = path.join(scratch, "healing_pending.json");
   Trust.decisionsPath = path.join(scratch, "healing_decisions.json");
   Trust._reload();
+  Flaky.historyPath = path.join(scratch, "scenario_history.json");
+  Flaky.decisionsPath = path.join(scratch, "quarantine_decisions.json");
+  Flaky._reload();
 });
 test.afterAll(async () => {
   await Store._queue;
   await Report._instance._queue;
   await Trust._queue;
+  await Flaky._queue;
   await Logger.flush();
   fs.rmSync(scratch, { recursive: true, force: true });
 });
