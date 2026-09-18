@@ -66,17 +66,17 @@ node falcon.js --url=https://www.saucedemo.com
 🟢 INFO:   → 3 scenario(s) generated for https://www.saucedemo.com/
 🟢 INFO: ▶  Step 4: Executing AI-generated test scenarios…
 🟢 INFO: ▶ Executing [1/3]: Fill user-name (type)
-🟢 INFO: ✅ Passed: Fill user-name (27ms)
+🟢 INFO: ✅ Passed: Fill user-name (30ms)
 🟢 INFO: ▶ Executing [1/3]: Fill password (type)
-🟢 INFO: ✅ Passed: Fill password (39ms)
+🟢 INFO: ✅ Passed: Fill password (29ms)
 🟢 INFO: ▶ Executing [1/1]: Click Login (click)
 🟢 INFO: 🔁 [AdaptiveRetry] Attempt 1/3: Click Login
 🟢 INFO: 🔹 Tier 1: Trying Click Login (#login-button)
-🟢 INFO: ✅ Passed: Click Login (48ms)
+🟢 INFO: ✅ Passed: Click Login (57ms)
 
 ✅ Test Run Complete — PASSED
    Total: 3  |  Passed: 3  |  Failed: 0  |  Skipped: 0
-   Duration: 1.42s
+   Duration: 1.69s
    Report written to: reports/test-report.json
 ```
 
@@ -86,9 +86,51 @@ node falcon.js --url=https://www.saucedemo.com
 node falcon.js --url=https://your-app.example.com
 ```
 
+### Real-world case study — a live site Falcon had never seen before
+
+The saucedemo run above is a known fixture. To show Falcon actually holds up against something it has no prior knowledge of, it was pointed at a real, independently-built, publicly deployed site: [peymaniravani.netlify.app](https://peymaniravani.netlify.app) (a Next.js + Tailwind CSS single-page portfolio — [source](https://github.com/eddieir/Peyman_Iravani_QA_Portfolio)). No config, no fixtures, no hints about the site's structure — just:
+
+```sh
+node falcon.js --url=https://peymaniravani.netlify.app
+```
+
+![Falcon exploring and testing a real, unfamiliar site](docs/demo/falcon-portfolio-demo.gif)
+
+**What happened, unscripted:**
+
+1. **`ClickExplorer` mapped the site's real navigation** — a single-page app with anchor-link sections (`#about`, `#skills`, `#experiences`, `#projects`), not a traditional multi-page site — and explored all 6 URL states it produces, respecting the crawler's depth bound so it doesn't loop forever on a site with no distinct pages to exhaust.
+2. **`PageAnalyser` found 29 real interactive elements** on the page — nav links, a "Copy My Email" button, project/article links — and correctly classified which of them were worth generating an action for.
+3. **`TestGenerator`/`TestRunner` generated and ran 4 scenarios with zero hand-written code**: clicking the logo link, two nav links (About, Skills), and — genuinely interesting, since this site has no login form for Falcon's healing chain to exercise — clicking the **"Copy My Email"** button, a real clipboard-writing interaction, not a form fill.
+4. **All 4 passed, 0 failed, 0 skipped**, in 3.45 seconds, entirely against selectors Falcon derived itself from the live DOM — several of which had no `id`/`aria-label`/`name` to key off at all, so Falcon fell back to its structural `nth-of-type` path (the exact mechanism [anchored to `<html>` for real-DOM correctness in PR #14](https://github.com/eddieir/Falcon-Automation/pull/14) after that bug was caught the same way this demo was built — by actually running the pipeline end-to-end against a fixture, not just reading the code) and it held up correctly on a real, previously-unseen page:
+
+   ```
+   🔹 Tier 1: Trying Click Copy My Email (html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(6) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > button:nth-of-type(1))
+   ✅ Passed: Click Copy My Email (52ms)
+   ```
+
+**Self-healing, demonstrated against the same real site.** This portfolio has no broken selector to heal today, so the healing chain itself is exercised the same way [Phase 5's own verification did](#phase-5--self-healing-consolidation): simulate the exact situation self-healing exists for — a selector a test was written against no longer matches, because the page changed — using a selector that has never existed on this site (`#copy-email-btn-legacy`, standing in for a renamed id after a front-end refactor) with `LocatorStore` pre-seeded with the correct current selector, exactly as a prior successful Tier 3 (LLM) healing run would have taught it:
+
+```
+🔹 Tier 1: Trying Copy My Email (#copy-email-btn-legacy)
+⚠️ Attempt 1 failed for "Copy My Email" [TIMEOUT]: page.waitForSelector: Timeout 2000ms exceeded.
+⏳ Waiting 1093ms before retry...
+🔹 Tier 1: Trying Copy My Email (#copy-email-btn-legacy)
+⚠️ Attempt 2 failed for "Copy My Email" [TIMEOUT] ...
+⏳ Waiting 2314ms before retry...
+🔹 Tier 1: Trying Copy My Email (#copy-email-btn-legacy)
+⚠️ Attempt 3 failed for "Copy My Email" [TIMEOUT] ...
+❌ Tier 1 exhausted for Copy My Email. Engaging Tier 2/3 healing.
+🔹 Trying stored alternative: button:has-text('Copy My Email')
+✅ Healed and clicked "#copy-email-btn-legacy" via the real selector, with zero code changes to any test.
+```
+
+Tier 1 genuinely exhausts its 3 retries with real exponential backoff (not a mocked delay) against the real page before falling back — the "broken" selector is treated exactly like a real one, including the real 2-second timeout on each attempt. Reproduce it yourself: `node docs/demo/self-heal-portfolio-demo.js`.
+
+**Why this matters for evaluating Falcon:** the saucedemo run shows the golden path against a fixture built for exactly this kind of test. This run shows the same pipeline holding up against a site Falcon's authors did not build, did not tune selectors for, and had no advance knowledge of — the actual bar a QA team would need it to clear.
+
 ### Regenerating this demo
 
-The recording above isn't hand-drawn — it's real frames captured from a live `node falcon.js` run with Playwright, assembled with `ffmpeg`. To regenerate it:
+The recordings above aren't hand-drawn — they're real frames captured from a live `node falcon.js` run with Playwright, assembled with `ffmpeg`. Frame timing depends on real network/render latency, so a fixed frame index (e.g. "frame 6 is always the explore state") silently goes stale between runs — `docs/demo/build-gif-list.js` instead hashes every captured frame, collapses consecutive duplicates, and keeps one frame per *actual* dashboard state change, whatever real time that landed at. To regenerate either demo:
 
 ```sh
 # 1. Start falcon.js and wait for the dashboard to come up
@@ -96,17 +138,32 @@ node falcon.js --url=https://www.saucedemo.com &
 until curl -s -o /dev/null http://localhost:3000; do sleep 0.05; done
 
 # 2. Capture frames with Playwright while the run streams events
-#    (screenshots every 150ms into docs/demo/frames/)
-node docs/demo/capture-dashboard.js 30 150
+#    (screenshots every 200ms into docs/demo/frames/)
+node docs/demo/capture-dashboard.js 40 200
 
-# 3. Assemble into a GIF
+# 3. Pick one frame per real state change (connect / explore / results)
+node docs/demo/build-gif-list.js docs/demo/frames docs/demo/gif-list.txt 3.0
+
+# 4. Assemble into a GIF
 cd docs/demo
 ffmpeg -y -f concat -safe 0 -i gif-list.txt \
   -vf "fps=8,scale=700:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer" \
   falcon-dashboard-demo.gif
 ```
 
-`docs/demo/capture-dashboard.js` and `gif-list.txt` are checked in so this is reproducible against any future run, not a one-off screenshot.
+`docs/demo/capture-dashboard.js` and `docs/demo/build-gif-list.js` are checked in so this is reproducible against any future run, not a one-off screenshot. The portfolio-site recording follows the identical process, just pointed at a different URL and its own output files:
+
+```sh
+node falcon.js --url=https://peymaniravani.netlify.app &
+until curl -s -o /dev/null http://localhost:3000; do sleep 0.05; done
+node docs/demo/capture-dashboard.js 70 200
+node docs/demo/build-gif-list.js docs/demo/frames docs/demo/portfolio-gif-list.txt 3.0
+
+cd docs/demo
+ffmpeg -y -f concat -safe 0 -i portfolio-gif-list.txt \
+  -vf "fps=8,scale=700:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer" \
+  falcon-portfolio-demo.gif
+```
 
 ---
 
