@@ -280,9 +280,10 @@ test('healing refuses ambiguous stored targets and tries the next unique alterna
  Store.addLocator('#ambiguous','.duplicate');Store.addLocator('#ambiguous','#right');await new Healer(page).healSelector('#ambiguous','Right');
  expect(await page.evaluate(()=>window.wrong)).toBeUndefined();expect(await page.evaluate(()=>window.right)).toBe(true);
 });
-test('healing rejects an ambiguous inferred target without clicking or caching it',async({page})=>{
+test('healing rejects an ambiguous inferred target without clicking, caching, or queuing it for review',async({page})=>{
  await page.setContent('<button onclick="window.wrong=true">One</button><button>Two</button>');const healer=new Healer(page);healer.getAlternativeSelector=async()=> 'button';
  await expect(healer.healSelector('#ambiguous-inference','Target')).rejects.toThrow();expect(Store.getAlternatives('#ambiguous-inference')).toEqual([]);expect(await page.evaluate(()=>window.wrong)).toBeUndefined();
+ expect(Trust.list().map(e=>e.original)).not.toContain('#ambiguous-inference');
 });
 test('provider DOM snapshot excludes entered credential values',async({page})=>{
  await page.setContent('<input id="password" type="password" value="fixture-sensitive-value"><button id="target">Submit</button>');const healer=new Healer(page);
