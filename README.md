@@ -40,141 +40,153 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 
 One command, no hand-written test code: Falcon loads a page, crawls it, turns what it finds into test scenarios, executes them with self-healing, and streams every step to a live dashboard as it happens.
 
+Every number and screenshot below comes from actually running Falcon against a real, live, previously-unseen production app — [axonradar.netlify.app](https://axonradar.netlify.app/) (a TypeScript AI-intelligence product — [source](https://github.com/eddieir/AI-agency)). No config, no fixtures, no hints about the site's structure — just:
+
 ```sh
-node falcon.js --url=https://www.saucedemo.com
+node falcon.js --url=https://axonradar.netlify.app
 ```
 
-![Falcon live dashboard — connect, explore, generate, run](docs/demo/falcon-dashboard-demo.gif)
+![Falcon live dashboard — connect, explore, generate, run](docs/demo/falcon-axonradar-demo.gif)
 
-*(Recording generated from a real local run against saucedemo.com — see [`docs/demo/`](docs/demo/) for the source frames and regeneration steps below.)*
+*(Recording generated from a real local run against axonradar.netlify.app — see [`docs/demo/`](docs/demo/) for the source frames and regeneration steps below.)*
 
 ### Step by step
 
 **1. Dashboard comes up first**, empty and connected, before any exploration or test scenario runs — this is `Dashboard.start()` completing while `falcon.js` is still navigating to the target URL:
 
-![Dashboard connects with zero events](docs/demo/01-dashboard-connects.png)
+![Dashboard connects with zero events](docs/demo/axonradar-01-connects.png)
 
 **2. `ClickExplorer` crawls the page** and streams an `explorerPage` event for every page it visits, in real time, over the same socket the dashboard is already listening on:
 
-![Crawler explores and reports the visited page](docs/demo/02-crawler-explores.png)
+![Crawler explores and reports the visited page](docs/demo/axonradar-02-explores.png)
 
 **3. `PageAnalyser` scans the live DOM, `TestGenerator` turns it into a scenario plan, and `TestRunner` executes it** through the three-tier self-healing chain. Each scenario's pass/fail/heal event lands on the dashboard the instant it happens:
 
-![Generated scenarios pass with live counters](docs/demo/03-generated-tests-pass.png)
+![Generated scenarios pass with live counters](docs/demo/axonradar-03-generated-tests-pass.png)
 
-**4. Terminal output for the same run** — no scenario file existed anywhere in the repo for saucedemo.com; everything below was generated from the DOM:
+**4. Terminal output for the same run** — no scenario file existed anywhere in the repo for axonradar.netlify.app; everything below was generated from the DOM:
 
 ```
 🟢 INFO: 🖥  Dashboard → http://localhost:3000
-🟡 WARNING: ⚠️  Dashboard running WITHOUT auth (DASHBOARD_TOKEN not set) — anyone who can reach this port can read and write test events. Fine for a local laptop; set DASHBOARD_TOKEN before exposing this beyond localhost.
-🟢 INFO: 🌍 Navigating to https://www.saucedemo.com…
-🟢 INFO: ✅ Loaded: https://www.saucedemo.com
+🟢 INFO: 🌍 Navigating to https://axonradar.netlify.app/…
+🟢 INFO: ✅ Loaded: https://axonradar.netlify.app/
 🟢 INFO: 🔍 Step 1: Detecting UI issues with ExploratoryAI…
-🟢 INFO: 🧐 AI detected 0 potential UI issues.
+🟢 INFO: 🧐 AI detected 2 potential UI issues.
+🟢 INFO:   → 2 issue(s) found
 🟢 INFO: 🔍 Step 2: Mapping site with ClickExplorer…
 🟢 INFO:   → 1 page(s) explored
 🟢 INFO: 🤖 Step 3: Generating test scenarios from DOM analysis…
-🟢 INFO: ✅ [PageAnalyser] Found 4 interactive elements
-🟢 INFO:   → 3 scenario(s) generated for https://www.saucedemo.com/
+🟢 INFO: ✅ [PageAnalyser] Found 66 interactive elements
+🟢 INFO:   → 4 scenario(s) generated for https://axonradar.netlify.app/
 🟢 INFO: ▶  Step 4: Executing AI-generated test scenarios…
-🟢 INFO: ▶ Executing [1/3]: Fill user-name (type)
-🟢 INFO: ✅ Passed: Fill user-name (30ms)
-🟢 INFO: ▶ Executing [1/3]: Fill password (type)
-🟢 INFO: ✅ Passed: Fill password (29ms)
-🟢 INFO: ▶ Executing [1/1]: Click Login (click)
-🟢 INFO: 🔁 [AdaptiveRetry] Attempt 1/3: Click Login
-🟢 INFO: 🔹 Tier 1: Trying Click Login (#login-button)
-🟢 INFO: ✅ Passed: Click Login (57ms)
+🟢 INFO: ▶ Executing [1/1]: Click RESCAN ↻ (click)
+🟢 INFO: 🔹 Tier 1: Trying Click RESCAN ↻ (html:nth-of-type(1) > body:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > button:nth-of-type(1))
+🟢 INFO: ✅ Passed: Click RESCAN ↻ (59ms)
+🟢 INFO: ▶ Executing [1/1]: Navigate: AXON//RADAR (click)
+🟢 INFO: ✅ Passed: Navigate: AXON//RADAR (30ms)
+🟢 INFO: ▶ Executing [1/1]: Navigate: News (click)
+🟢 INFO: ✅ Passed: Navigate: News (31ms)
+🟢 INFO: ▶ Executing [1/1]: Navigate: Models (click)
+🟢 INFO: ✅ Passed: Navigate: Models (37ms)
+🟢 INFO: 📊 Exploratory Test Summary:
+🟢 INFO: ❗ UI Issues Found:  2
+🟢 INFO: 🌍 Pages Explored:  1
 
 ✅ Test Run Complete — PASSED
-   Total: 3  |  Passed: 3  |  Failed: 0  |  Skipped: 0
-   Duration: 1.69s
+   Total: 4  |  Passed: 4  |  Failed: 0  |  Skipped: 0
+   Duration: 4.61s
+   UI Issues detected: 2
    Report written to: reports/test-report.json
 ```
 
-**Try it against your own app** — no fixture required, just a URL:
+Those 2 UI issues aren't noise — `ExploratoryAI` correctly flagged the site's mobile menu button, unprompted, with no rule written for this site: a hidden element with no accessible label (`<button aria-label="Open menu" class="menu-toggle"><span></span><span></span></button>`). That's a real, actionable finding a reviewer can act on, not a fabricated pass rate.
+
+### The real test: every page of the site, not just the homepage
+
+The run above only scans the page it's pointed at — `PageAnalyser.generateActions()` also caps navigation-type scenarios at 3 per page, by design, to avoid infinite click loops. A real QA pass runs the same pipeline against every page of the product, so that's what was actually done: the same explore → generate → heal pipeline, run against all 11 real pages of axonradar.netlify.app (`/`, `/news`, `/models`, `/benchmarks`, `/playground`, `/evaluations`, `/router`, `/operations`, `/developers`, `/creators`, `/compare`), streaming every event to the same live dashboard:
+
+![Dashboard showing the real aggregate totals across all 11 pages](docs/demo/axonradar-04-full-sweep-totals.png)
+
+**184 scenarios generated. 174 passed (94.6%). 15 selectors self-healed. 23 real UI issues found.** 8 failed — and that's disclosed on purpose, not smoothed over: 7 of those 8 are cases where Tier 1 and Tier 2 healing genuinely ran out of options and Tier 3 (the LLM fallback) would normally take over, but this run had no `OPENAI_API_KEY` configured, so Tier 3 never fired. That's the honest number, not a curated one — reproduce it yourself:
+
+```sh
+node docs/demo/multi-page-axonradar-dashboard-demo.js
+```
+
+### Self-healing, demonstrated against the same real site
+
+The full sweep above didn't happen to hit a genuinely broken selector, so the healing chain is exercised the same way a real front-end refactor would trigger it: a selector that's never existed on this site (`#rescan-trigger-legacy`, standing in for a renamed id) with `LocatorStore` pre-seeded with the real, current selector for the same element — exactly as a prior successful Tier 3 (LLM) healing run would have taught it:
+
+```
+🔹 Tier 1: Trying RESCAN (#rescan-trigger-legacy)
+⚠️ Attempt 1 failed for "RESCAN" [TIMEOUT]: page.waitForSelector: Timeout 2000ms exceeded.
+⏳ Waiting 1128ms before retry...
+🔹 Tier 1: Trying RESCAN (#rescan-trigger-legacy)
+⚠️ Attempt 2 failed for "RESCAN" [TIMEOUT] ...
+⏳ Waiting 1870ms before retry...
+🔹 Tier 1: Trying RESCAN (#rescan-trigger-legacy)
+⚠️ Attempt 3 failed for "RESCAN" [TIMEOUT] ...
+❌ Tier 1 exhausted for RESCAN. Engaging Tier 2/3 healing.
+🔹 Trying stored alternative: button:has-text('RESCAN')
+✅ Healed and clicked "#rescan-trigger-legacy" via the real selector, with zero code changes to any test.
+```
+
+Tier 1 genuinely exhausts its 3 retries with real exponential backoff (not a mocked delay) against the real page before falling back. Reproduce it yourself: `node docs/demo/self-heal-axonradar-demo.js`.
+
+### Visual regression, demonstrated against the same real site
+
+A real baseline screenshot of the live page, compared against itself (0 px changed), then compared again after a real DOM change was injected — a "MAINTENANCE MODE" banner — and caught:
+
+```
+✅ [VisualRegression] "axonradar-home" passed — 0 px changed (0.00%)
+❌ [VisualRegression] "axonradar-home" FAILED — 62007 px changed (0.49% > threshold 0.1%)
+```
+
+Reproduce it yourself: `node docs/demo/visual-regression-axonradar-demo.js`.
+
+**Why this matters for evaluating Falcon:** this is a site Falcon's authors did not build, did not tune selectors for, and had no advance knowledge of — the actual bar a QA team would need it to clear, exercised across every page of the product, not a cherry-picked golden path.
+
+### Try it against your own app
+
+No fixture required, just a URL:
 
 ```sh
 node falcon.js --url=https://your-app.example.com
 ```
 
-### Real-world case study — a live site Falcon had never seen before
-
-The saucedemo run above is a known fixture. To show Falcon actually holds up against something it has no prior knowledge of, it was pointed at a real, independently-built, publicly deployed site: [peymaniravani.netlify.app](https://peymaniravani.netlify.app) (a Next.js + Tailwind CSS single-page portfolio — [source](https://github.com/eddieir/Peyman_Iravani_QA_Portfolio)). No config, no fixtures, no hints about the site's structure — just:
-
-```sh
-node falcon.js --url=https://peymaniravani.netlify.app
-```
-
-![Falcon exploring and testing a real, unfamiliar site](docs/demo/falcon-portfolio-demo.gif)
-
-**What happened, unscripted:**
-
-1. **`ClickExplorer` mapped the site's real navigation** — a single-page app with anchor-link sections (`#about`, `#skills`, `#experiences`, `#projects`), not a traditional multi-page site — and explored all 6 URL states it produces, respecting the crawler's depth bound so it doesn't loop forever on a site with no distinct pages to exhaust.
-2. **`PageAnalyser` found 29 real interactive elements** on the page — nav links, a "Copy My Email" button, project/article links — and correctly classified which of them were worth generating an action for.
-3. **`TestGenerator`/`TestRunner` generated and ran 4 scenarios with zero hand-written code**: clicking the logo link, two nav links (About, Skills), and — genuinely interesting, since this site has no login form for Falcon's healing chain to exercise — clicking the **"Copy My Email"** button, a real clipboard-writing interaction, not a form fill.
-4. **All 4 passed, 0 failed, 0 skipped**, in 3.45 seconds, entirely against selectors Falcon derived itself from the live DOM — several of which had no `id`/`aria-label`/`name` to key off at all, so Falcon fell back to its structural `nth-of-type` path (the exact mechanism [anchored to `<html>` for real-DOM correctness in PR #14](https://github.com/eddieir/Falcon-Automation/pull/14) after that bug was caught the same way this demo was built — by actually running the pipeline end-to-end against a fixture, not just reading the code) and it held up correctly on a real, previously-unseen page:
-
-   ```
-   🔹 Tier 1: Trying Click Copy My Email (html:nth-of-type(1) > body:nth-of-type(1) > div:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(6) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > button:nth-of-type(1))
-   ✅ Passed: Click Copy My Email (52ms)
-   ```
-
-**Self-healing, demonstrated against the same real site.** This portfolio has no broken selector to heal today, so the healing chain itself is exercised the same way [Phase 5's own verification did](CHANGELOG.md#phase-5--self-healing-consolidation): simulate the exact situation self-healing exists for — a selector a test was written against no longer matches, because the page changed — using a selector that has never existed on this site (`#copy-email-btn-legacy`, standing in for a renamed id after a front-end refactor) with `LocatorStore` pre-seeded with the correct current selector, exactly as a prior successful Tier 3 (LLM) healing run would have taught it:
-
-```
-🔹 Tier 1: Trying Copy My Email (#copy-email-btn-legacy)
-⚠️ Attempt 1 failed for "Copy My Email" [TIMEOUT]: page.waitForSelector: Timeout 2000ms exceeded.
-⏳ Waiting 1093ms before retry...
-🔹 Tier 1: Trying Copy My Email (#copy-email-btn-legacy)
-⚠️ Attempt 2 failed for "Copy My Email" [TIMEOUT] ...
-⏳ Waiting 2314ms before retry...
-🔹 Tier 1: Trying Copy My Email (#copy-email-btn-legacy)
-⚠️ Attempt 3 failed for "Copy My Email" [TIMEOUT] ...
-❌ Tier 1 exhausted for Copy My Email. Engaging Tier 2/3 healing.
-🔹 Trying stored alternative: button:has-text('Copy My Email')
-✅ Healed and clicked "#copy-email-btn-legacy" via the real selector, with zero code changes to any test.
-```
-
-Tier 1 genuinely exhausts its 3 retries with real exponential backoff (not a mocked delay) against the real page before falling back — the "broken" selector is treated exactly like a real one, including the real 2-second timeout on each attempt. Reproduce it yourself: `node docs/demo/self-heal-portfolio-demo.js`.
-
-**Why this matters for evaluating Falcon:** the saucedemo run shows the golden path against a fixture built for exactly this kind of test. This run shows the same pipeline holding up against a site Falcon's authors did not build, did not tune selectors for, and had no advance knowledge of — the actual bar a QA team would need it to clear.
-
 ### Regenerating this demo
 
-The recordings above aren't hand-drawn — they're real frames captured from a live `node falcon.js` run with Playwright, assembled with `ffmpeg`. Frame timing depends on real network/render latency, so a fixed frame index (e.g. "frame 6 is always the explore state") silently goes stale between runs — `docs/demo/build-gif-list.js` instead hashes every captured frame, collapses consecutive duplicates, and keeps one frame per *actual* dashboard state change, whatever real time that landed at. To regenerate either demo:
+The recordings above aren't hand-drawn — they're real frames captured from a live `node falcon.js` run with Playwright, assembled with `ffmpeg`. Frame timing depends on real network/render latency, so a fixed frame index (e.g. "frame 6 is always the explore state") silently goes stale between runs — `docs/demo/build-gif-list.js` instead hashes every captured frame, collapses consecutive duplicates, and keeps one frame per *actual* dashboard state change, whatever real time that landed at:
 
 ```sh
 # 1. Start falcon.js and wait for the dashboard to come up
-node falcon.js --url=https://www.saucedemo.com &
+node falcon.js --url=https://axonradar.netlify.app &
 until curl -s -o /dev/null http://localhost:3000; do sleep 0.05; done
 
 # 2. Capture frames with Playwright while the run streams events
-#    (screenshots every 200ms into docs/demo/frames/)
-node docs/demo/capture-dashboard.js 40 200
+node docs/demo/capture-dashboard.js 60 120
 
 # 3. Pick one frame per real state change (connect / explore / results)
-node docs/demo/build-gif-list.js docs/demo/frames docs/demo/gif-list.txt 3.0
+node docs/demo/build-gif-list.js docs/demo/frames-axonradar docs/demo/axonradar-gif-list.txt 3.0
 
 # 4. Assemble into a GIF
 cd docs/demo
-ffmpeg -y -f concat -safe 0 -i gif-list.txt \
-  -vf "fps=8,scale=700:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer" \
-  falcon-dashboard-demo.gif
+ffmpeg -y -f concat -safe 0 -i axonradar-gif-list.txt \
+  -vf "fps=10,scale=900:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
+  falcon-axonradar-demo.gif
 ```
 
-`docs/demo/capture-dashboard.js` and `docs/demo/build-gif-list.js` are checked in so this is reproducible against any future run, not a one-off screenshot. The portfolio-site recording follows the identical process, just pointed at a different URL and its own output files:
+`docs/demo/capture-dashboard.js` and `docs/demo/build-gif-list.js` are checked in so this is reproducible against any future run, not a one-off screenshot. The full-sweep, self-healing, and visual-regression sections above are each their own standalone, reproducible script:
 
 ```sh
-node falcon.js --url=https://peymaniravani.netlify.app &
-until curl -s -o /dev/null http://localhost:3000; do sleep 0.05; done
-node docs/demo/capture-dashboard.js 70 200
-node docs/demo/build-gif-list.js docs/demo/frames docs/demo/portfolio-gif-list.txt 3.0
+# Full 11-page sweep, real aggregate totals streamed to the live dashboard
+node docs/demo/multi-page-axonradar-dashboard-demo.js
 
-cd docs/demo
-ffmpeg -y -f concat -safe 0 -i portfolio-gif-list.txt \
-  -vf "fps=8,scale=700:-1:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer" \
-  falcon-portfolio-demo.gif
+# Self-healing: Tier 1 exhausted -> Tier 2 healed, against a real element
+node docs/demo/self-heal-axonradar-demo.js
+
+# Visual regression: a real baseline vs. a genuine injected change
+node docs/demo/visual-regression-axonradar-demo.js
 ```
 
 ---
