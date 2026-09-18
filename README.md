@@ -40,7 +40,9 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 
 One command, no hand-written test code: Falcon loads a page, crawls it, turns what it finds into test scenarios, executes them with self-healing, and streams every step to a live dashboard as it happens.
 
-Every number and screenshot below comes from actually running Falcon against a real, live, previously-unseen production app — [axonradar.netlify.app](https://axonradar.netlify.app/) (a TypeScript AI-intelligence product — [source](https://github.com/eddieir/AI-agency)). No config, no fixtures, no hints about the site's structure — just:
+### Real-world case study — a live site Falcon had never seen before
+
+A demo against a fixture built for exactly this kind of test doesn't prove much. So instead, everything below comes from pointing Falcon at a real, independently-built, publicly deployed product it had no prior knowledge of: [axonradar.netlify.app](https://axonradar.netlify.app/) (a TypeScript AI-intelligence platform — [source](https://github.com/eddieir/AI-agency)). No config, no fixtures, no hints about the site's structure — just a URL:
 
 ```sh
 node falcon.js --url=https://axonradar.netlify.app
