@@ -15,6 +15,10 @@ allure-report/
 logs/
 execution.log
 
+# Persisted LocatorStore entries (runtime state, not source — see README
+# Project Structure, which already documented this as gitignored).
+data/
+
 # Playwright Traces & Screenshots
 trace.zip
 *.png
