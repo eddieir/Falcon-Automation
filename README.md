@@ -262,7 +262,7 @@ Falcon-Automation/
 │       ├── ErrorHandler.js
 │       ├── ExploratoryAI.js         # DOM-based UI defect detector
 │       ├── Middleware.js            # Lifecycle hooks + cross-process event emit
-│       ├── PageAnalyser.js          # DOM scanner (single source of truth — see CHANGELOG.md#phase-3)
+│       ├── PageAnalyser.js          # DOM scanner (single source of truth — see CHANGELOG.md#phase-3--competitive-features)
 │       ├── ReportManager.js         # Accurate pass/fail/skip reporting, sets process.exitCode
 │       ├── ServiceContainer.js      # Partial DI container (browserManager, apiClient, dbClient, reportManager)
 │       ├── TestGenerator.js         # Delegates to PageAnalyser for scenario generation
@@ -382,7 +382,7 @@ The healing engine captures a targeted DOM snapshot (interactive elements only, 
 
 ## CI/CD
 
-GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_era_Falcon`, `main`, and `feat/**` branches, and on pull requests. It's two independent jobs, not one:
+GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_era_Falcon`, `main`, `feat/**`, and `test/**` branches, and on every pull request targeting `New_era_Falcon` or `main`. It's two independent jobs, not one:
 
 **`regression` job** (~1 minute) — the `node:test` + Playwright layer added alongside the community-health files:
 1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
@@ -472,7 +472,7 @@ This roadmap tracks ongoing engineering priorities, not a fixed release schedule
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, validation, and pull request guidance. All participants must follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately using the [security policy](SECURITY.md).
 
-1. Branch off `New_era_Falcon` — not `main`
+1. Branch off `main` — every merged PR to date has targeted it directly
 2. One logical change per commit; write the commit body as a tech-lead-quality explanation of *why*, not just *what*
 3. Update this README for any new capability or changed behaviour
 4. All tests must pass in headless mode before opening a PR

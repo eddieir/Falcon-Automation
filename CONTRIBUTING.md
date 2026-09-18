@@ -10,10 +10,10 @@ Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Nev
 
 ## Development setup
 
-Use Node.js 24, matching CI, and npm. Fork and clone the repository, then create a topic branch from `New_era_Falcon`, the project's development branch:
+Use Node.js 24, matching CI, and npm. Fork and clone the repository, then create a topic branch from `main`:
 
 ```sh
-git checkout New_era_Falcon
+git checkout main
 git pull --ff-only
 git checkout -b fix/describe-your-change
 npm ci
@@ -47,7 +47,7 @@ All applicable tests must pass in headless mode before opening a PR. Record the 
 
 ## Pull requests
 
-- Target `New_era_Falcon` for development changes, following the repository's existing contribution policy. Community-profile maintenance must also reach `main`, the default branch GitHub evaluates.
+- Target `main` — it's the default branch GitHub evaluates, and every merged PR to date has gone there directly.
 - Keep each PR focused and each commit a logical change. Explain why the change is needed.
 - Update documentation for new capabilities or changed behavior.
 - Follow the surrounding JavaScript style and avoid unrelated formatting changes.
