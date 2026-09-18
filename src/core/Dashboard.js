@@ -3,6 +3,8 @@ const path   = require("path");
 const fs     = require("fs");
 const crypto = require("crypto");
 const Logger = require("../../utils/Logger");
+const HealingTrust  = require("./AIHealer/HealingTrust");
+const HealingReport = require("./AIHealer/HealingReport");
 
 /**
  * Dashboard — real-time test execution monitor.
@@ -155,6 +157,44 @@ class Dashboard {
                 this.emit(name, payload || {});
             }
             res.status(204).end();
+        });
+
+        // Phase 8 — healing trust gate. Same token gate and rate limiter as
+        // /emit and /events above: these read and act on the audit trail of
+        // AI-suggested selector fixes, so they get exactly the same
+        // protection as everything else that can read or write run state.
+        app.get("/healing/pending", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            res.json(HealingTrust.list());
+        });
+
+        app.get("/healing/trend", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            res.json(HealingReport.summary());
+        });
+
+        app.post("/healing/approve", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            const { original } = req.body || {};
+            const decision = typeof original === "string" ? HealingTrust.approve(original, { approvedBy: "dashboard" }) : null;
+            if (!decision) return res.status(404).json({ error: "No pending healing entry for that selector." });
+            res.json(decision);
+        });
+
+        app.post("/healing/reject", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            const { original } = req.body || {};
+            const decision = typeof original === "string" ? HealingTrust.reject(original, { rejectedBy: "dashboard" }) : null;
+            if (!decision) return res.status(404).json({ error: "No pending healing entry for that selector." });
+            res.json(decision);
         });
 
         const allowedOrigin = process.env.DASHBOARD_ALLOWED_ORIGIN || `http://localhost:${this.port}`;

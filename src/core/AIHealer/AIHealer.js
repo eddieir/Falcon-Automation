@@ -1,6 +1,7 @@
 const Logger = require("../../../utils/Logger");
 const LocatorStore = require("./LocatorStore");
 const HealingReport = require("./HealingReport");
+const HealingTrust = require("./HealingTrust");
 const AdaptiveRetry = require("./AdaptiveRetry");
 
 /**
@@ -10,8 +11,13 @@ const AdaptiveRetry = require("./AdaptiveRetry");
  * Tier 2: Stored alternative locators from LocatorStore (learned from prior runs).
  * Tier 3: LLM-powered selector inference using live DOM snapshot via OpenAI gpt-4o-mini.
  *
- * Each successful healing is persisted back to LocatorStore so future runs
- * skip the LLM call entirely, keeping execution fast and API costs low.
+ * Phase 8 — healing trust. A successful Tier 2 match was already reviewed
+ * once (it's how it got into LocatorStore in the first place) and is reused
+ * immediately. A successful Tier 3 guess has never been reviewed by anyone —
+ * it goes to HealingTrust as a pending fix instead of straight into
+ * LocatorStore. It only becomes a trusted Tier 2 alternative once a human
+ * approves it (via the dashboard or `scripts/healing/review.js`); until
+ * then, the same broken selector pays the Tier 3 LLM cost again on every run.
  */
 class AIHealer {
     constructor(page) {
@@ -90,13 +96,20 @@ class AIHealer {
                 }
 
                 await this.page.click(aiSuggestedLocator);
-                // Persist so Tier 2 handles this on the next run
-                LocatorStore.addLocator(selector, aiSuggestedLocator);
+                // Phase 8: not persisted to LocatorStore yet — an unreviewed
+                // guess is not trusted for reuse just because it worked once.
+                // It sits in HealingTrust until a human approves it.
+                HealingTrust.recordPending({
+                    original: selector,
+                    suggested: aiSuggestedLocator,
+                    description,
+                });
                 HealingReport.log({
                     original: selector,
                     resolved: aiSuggestedLocator,
                     tier: "LLM",
                     description,
+                    trust: "pending",
                 });
             } catch (clickErr) {
                 Logger.error(`🔥 AI-suggested locator "${aiSuggestedLocator}" also failed: ${clickErr.message}`);
