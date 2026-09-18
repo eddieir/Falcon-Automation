@@ -128,7 +128,8 @@ test("locator cache tolerates write errors", async (t) => {
 });
 function healer(page, alternatives = []) {
   const events = [],
-    saved = [];
+    saved = [],
+    pending = [];
   const Healer = load("src/core/AIHealer/AIHealer.js", {
     "../../../utils/Logger": silent,
     "./LocatorStore": {
@@ -136,11 +137,12 @@ function healer(page, alternatives = []) {
       addLocator: (...args) => saved.push(args),
     },
     "./HealingReport": { log: (e) => events.push(e) },
+    "./HealingTrust": { recordPending: (e) => pending.push(e) },
     "./AdaptiveRetry": Retry,
   });
   const instance = new Healer(page);
   instance._retry = new Retry({ baseDelayMs: 0 });
-  return { instance, events, saved };
+  return { instance, events, saved, pending };
 }
 test("direct healing succeeds without inference or persistence", async () => {
   let clicked;
@@ -176,20 +178,24 @@ test("stored alternatives are attempted in order and logged", async () => {
   assert.equal(events[0].tier, "LocatorStore");
   assert.equal(events[0].resolved, "#good");
 });
-test("inferred locator is clicked then persisted and audited", async () => {
+test("Phase 8: inferred locator is clicked and sent for review, not auto-persisted", async () => {
   const clicked = [];
-  const { instance, events, saved } = healer({
+  const { instance, events, saved, pending } = healer({
     click: async (s) => clicked.push(s),
   });
   instance.getAlternativeSelector = async () => "#new";
   await instance.healSelector("#old", "Save");
   assert.deepEqual(clicked, ["#new"]);
-  assert.deepEqual(saved, [["#old", "#new"]]);
+  // Not written to LocatorStore — an unreviewed Tier 3 guess is not trusted
+  // for reuse just because it worked once.
+  assert.equal(saved.length, 0);
+  assert.deepEqual(pending, [{ original: "#old", suggested: "#new", description: "Save" }]);
   assert.equal(events[0].resolved, "#new");
+  assert.equal(events[0].trust, "pending");
 });
 for (const suggestion of [null, "#bad"]) {
-  test(`failed inference ${suggestion} rejects and never poisons cache`, async () => {
-    const { instance, events, saved } = healer({
+  test(`failed inference ${suggestion} rejects and never poisons cache or pending review`, async () => {
+    const { instance, events, saved, pending } = healer({
       click: async () => {
         throw Error("not clickable");
       },
@@ -197,6 +203,7 @@ for (const suggestion of [null, "#bad"]) {
     instance.getAlternativeSelector = async () => suggestion;
     await assert.rejects(instance.healSelector("#old", "Save"));
     assert.equal(saved.length, 0);
+    assert.equal(pending.length, 0);
     assert.equal(events[0].resolved, null);
   });
 }
@@ -293,4 +300,131 @@ test("locator reads refresh recency for eviction and cannot mutate stored altern
   assert.ok(store.data["#active"].lastUsed > 1);
   assert.deepEqual(store.getAlternatives("#active"), ["#new"]);
   await store._queue;
+});
+
+// ── Phase 8: HealingTrust (approval gate for Tier 3 fixes) ──
+
+function trustAt(t) {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const added = [];
+  const emitted = [];
+  const Trust = load("src/core/AIHealer/HealingTrust.js", {
+    "./LocatorStore": { addLocator: (...args) => added.push(args) },
+    "../Middleware": { emit: (...args) => emitted.push(args) },
+  });
+  Trust.pendingPath = path.join(dir, "healing_pending.json");
+  Trust.decisionsPath = path.join(dir, "healing_decisions.json");
+  Trust._reload();
+  return { trust: Trust, added, emitted };
+}
+
+test("healing trust records a pending fix and lists it, without touching LocatorStore", (t) => {
+  const { trust, added, emitted } = trustAt(t);
+  const entry = trust.recordPending({ original: "#old", suggested: "#new", description: "Save" });
+  assert.equal(entry.occurrences, 1);
+  assert.deepEqual(trust.list(), [entry]);
+  assert.equal(added.length, 0);
+  assert.deepEqual(emitted, [["healingPending", entry]]);
+});
+
+test("healing trust bumps occurrences and lastSeen on repeat sightings, keeping firstSeen", (t) => {
+  const { trust } = trustAt(t);
+  const first = trust.recordPending({ original: "#old", suggested: "#new" });
+  const second = trust.recordPending({ original: "#old", suggested: "#new" });
+  assert.equal(second.occurrences, 2);
+  assert.equal(second.firstSeen, first.firstSeen);
+  assert.equal(trust.list().length, 1);
+});
+
+test("healing trust approve writes to LocatorStore, clears pending, and records the decision", async (t) => {
+  const { trust, added, emitted } = trustAt(t);
+  trust.recordPending({ original: "#old", suggested: "#new", description: "Save" });
+  const decision = trust.approve("#old", { approvedBy: "test" });
+  await trust._queue;
+  assert.deepEqual(added, [["#old", "#new"]]);
+  assert.deepEqual(trust.list(), []);
+  assert.equal(decision.decision, "approved");
+  assert.equal(decision.decidedBy, "test");
+  assert.deepEqual(trust.decisions, [decision]);
+  assert.ok(emitted.some(([name]) => name === "healingApproved"));
+});
+
+test("healing trust reject discards the fix without ever touching LocatorStore", async (t) => {
+  const { trust, added } = trustAt(t);
+  trust.recordPending({ original: "#old", suggested: "#new" });
+  const decision = trust.reject("#old", { rejectedBy: "test" });
+  await trust._queue;
+  assert.equal(added.length, 0);
+  assert.deepEqual(trust.list(), []);
+  assert.equal(decision.decision, "rejected");
+  assert.deepEqual(trust.decisions, [decision]);
+});
+
+test("healing trust approve/reject of an unknown selector is a no-op that returns null", (t) => {
+  const { trust, added } = trustAt(t);
+  assert.equal(trust.approve("#missing"), null);
+  assert.equal(trust.reject("#missing"), null);
+  assert.equal(added.length, 0);
+});
+
+test("healing trust decisions persist across a reload", async (t) => {
+  const { trust } = trustAt(t);
+  trust.recordPending({ original: "#old", suggested: "#new" });
+  trust.approve("#old");
+  await trust._queue;
+
+  const reloaded = load("src/core/AIHealer/HealingTrust.js", {
+    "./LocatorStore": { addLocator: () => {} },
+    "../Middleware": { emit: () => {} },
+  });
+  reloaded.pendingPath = trust.pendingPath;
+  reloaded.decisionsPath = trust.decisionsPath;
+  reloaded._reload();
+  assert.deepEqual(reloaded.list(), []);
+  assert.equal(reloaded.decisions.length, 1);
+  assert.equal(reloaded.decisions[0].decision, "approved");
+});
+
+test("healing trust recovers from corrupt pending/decisions files instead of crashing", (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const Trust = load("src/core/AIHealer/HealingTrust.js", {
+    "./LocatorStore": { addLocator: () => {} },
+    "../Middleware": { emit: () => {} },
+  });
+  Trust.pendingPath = path.join(dir, "pending.json");
+  Trust.decisionsPath = path.join(dir, "decisions.json");
+  fs.writeFileSync(Trust.pendingPath, "{not json");
+  fs.writeFileSync(Trust.decisionsPath, "[not json");
+  Trust._reload();
+  assert.deepEqual(Trust.list(), []);
+  assert.deepEqual(Trust.decisions, []);
+});
+
+// ── Phase 8: HealingReport.summary() (reviewable trend) ──
+
+test("healing report summary aggregates occurrences and tiers per selector", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const Report = load("src/core/AIHealer/HealingReport.js", {
+    "../Middleware": { emit: () => {} },
+  });
+  Report._instance.filePath = path.join(dir, "audit/events.json");
+  Report._instance.logs = [];
+  Report.log({ original: "#a", resolved: "#a2", tier: "LocatorStore" });
+  Report.log({ original: "#a", resolved: "#a3", tier: "LLM", trust: "pending" });
+  Report.log({ original: "#b", resolved: null, tier: "LLM", error: "boom" });
+  await Report._instance._queue;
+
+  const summary = Report.summary();
+  assert.equal(summary.length, 2);
+  const a = summary.find((row) => row.original === "#a");
+  assert.equal(a.occurrences, 2);
+  assert.deepEqual(a.tiers, { LocatorStore: 1, LLM: 1 });
+  assert.equal(a.lastTier, "LLM");
+  assert.equal(a.lastResolved, "#a3");
+  const b = summary.find((row) => row.original === "#b");
+  assert.equal(b.occurrences, 1);
+  assert.equal(b.lastResolved, null);
 });

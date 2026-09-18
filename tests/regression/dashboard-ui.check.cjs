@@ -13,6 +13,7 @@ function dashboardUI() {
     style: {},
     classList: { add() {}, remove() {} },
     remove() {},
+    addEventListener() {},
     prepend(row) {
       rows.unshift(row);
     },
@@ -99,4 +100,24 @@ test("reconnect replay replaces counters and feed instead of duplicating history
   handlers.replay(events);
   assert.equal(Number(nodes.get("t-pass").textContent), 1);
   assert.equal(rows.length, 1);
+});
+test("Phase 8: dashboard handles healing-trust pending/approved/rejected events without crashing", () => {
+  const { handlers } = dashboardUI();
+  assert.doesNotThrow(() => {
+    handlers.event({
+      name: "healingPending",
+      payload: { original: "#old", suggested: "#new", description: "Save", occurrences: 1, lastSeen: new Date().toISOString() },
+      timestamp: Date.now(),
+    });
+    handlers.event({
+      name: "healingApproved",
+      payload: { original: "#old", suggested: "#new" },
+      timestamp: Date.now(),
+    });
+    handlers.event({
+      name: "healingRejected",
+      payload: { original: "#other", suggested: "#x" },
+      timestamp: Date.now(),
+    });
+  });
 });
