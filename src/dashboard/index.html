@@ -16,6 +16,7 @@
     --fail:      #f85149;
     --skip:      #d29922;
     --heal:      #58a6ff;
+    --quarantine: #a371f7;
     --info:      #388bfd;
     --radius:    8px;
     --font:      'Segoe UI', system-ui, sans-serif;
@@ -101,6 +102,7 @@
   .tile.fail  .tile-value { color: var(--fail); }
   .tile.skip  .tile-value { color: var(--skip); }
   .tile.heal  .tile-value { color: var(--heal); }
+  .tile.quarantine .tile-value { color: var(--quarantine); }
   .tile.total .tile-value { color: var(--text); }
 
   /* ── Progress bar ── */
@@ -124,6 +126,7 @@
   .bar-pass { background: var(--pass); }
   .bar-fail { background: var(--fail); }
   .bar-skip { background: var(--skip); }
+  .bar-quarantine { background: var(--quarantine); }
 
   /* ── Event feed ── */
   #feed-section {
@@ -167,6 +170,7 @@
   .event-row.fail   { border-left-color: var(--fail); }
   .event-row.skip   { border-left-color: var(--skip); }
   .event-row.heal   { border-left-color: var(--heal); }
+  .event-row.quarantine { border-left-color: var(--quarantine); }
   .event-row.info   { border-left-color: var(--info); }
   .event-row.start  { border-left-color: var(--muted); }
 
@@ -296,6 +300,72 @@
     font-size: 10px;
     letter-spacing: .6px;
   }
+
+  /* ── Flaky tests panel (Phase 9) ── */
+  #flaky-section {
+    padding: 0 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  #flaky-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+  }
+
+  #flaky-empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 12px 0;
+  }
+
+  .flaky-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--quarantine);
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  .flaky-row.classification-broken { border-left-color: var(--fail); }
+
+  .flaky-body { flex: 1; min-width: 200px; }
+
+  .flaky-selector {
+    font-weight: 600;
+    word-break: break-all;
+  }
+
+  .flaky-detail {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 2px;
+    word-break: break-all;
+  }
+
+  .flaky-history {
+    font-family: monospace;
+    letter-spacing: 2px;
+  }
+
+  .flaky-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+  .btn-quarantine { border-color: var(--quarantine); color: var(--quarantine); }
+  .btn-quarantine:hover { background: var(--quarantine); color: var(--bg); }
 </style>
 </head>
 <body>
@@ -314,6 +384,7 @@
   <div class="tile fail"><div class="tile-value" id="t-fail">0</div><div class="tile-label">Failed</div></div>
   <div class="tile skip"><div class="tile-value" id="t-skip">0</div><div class="tile-label">Skipped</div></div>
   <div class="tile heal"><div class="tile-value" id="t-heal">0</div><div class="tile-label">Healed</div></div>
+  <div class="tile quarantine"><div class="tile-value" id="t-quarantine">0</div><div class="tile-label">Quarantined</div></div>
 </div>
 
 <div id="progress-wrap">
@@ -321,6 +392,7 @@
     <div class="bar-segment bar-pass" id="bar-pass" style="width:0%"></div>
     <div class="bar-segment bar-fail" id="bar-fail" style="width:0%"></div>
     <div class="bar-segment bar-skip" id="bar-skip" style="width:0%"></div>
+    <div class="bar-segment bar-quarantine" id="bar-quarantine" style="width:0%"></div>
   </div>
 </div>
 
@@ -339,6 +411,15 @@
   </table>
 </div>
 
+<div id="flaky-section">
+  <div id="flaky-header">
+    <span>Flaky tests</span>
+  </div>
+  <div id="flaky-list">
+    <div id="flaky-empty">No flaky scenarios detected yet.</div>
+  </div>
+</div>
+
 <div id="feed-section">
   <div id="feed-header">
     <span>Event feed</span>
@@ -352,22 +433,24 @@
 </div>
 
 <script>
-  const state = { pass: 0, fail: 0, skip: 0, heal: 0, startTs: null, pending: new Map() };
+  const state = { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map() };
 
   const $ = (id) => document.getElementById(id);
 
   function updateTiles() {
-    const total = state.pass + state.fail + state.skip;
+    const total = state.pass + state.fail + state.skip + state.quarantine;
     $("t-total").textContent = total;
     $("t-pass").textContent  = state.pass;
     $("t-fail").textContent  = state.fail;
     $("t-skip").textContent  = state.skip;
     $("t-heal").textContent  = state.heal;
+    $("t-quarantine").textContent = state.quarantine;
 
     if (total > 0) {
       $("bar-pass").style.width = (state.pass / total * 100) + "%";
       $("bar-fail").style.width = (state.fail / total * 100) + "%";
       $("bar-skip").style.width = (state.skip / total * 100) + "%";
+      $("bar-quarantine").style.width = (state.quarantine / total * 100) + "%";
     }
   }
 
@@ -453,6 +536,26 @@
         state.pending.delete(payload.original);
         renderPending();
         addRow("fail", "🚫", `Rejected: ${payload.original}`, `→ ${payload.suggested} (discarded)`, timestamp);
+        break;
+      case "testQuarantined":
+        state.quarantine++;
+        updateTiles();
+        addRow("quarantine", "🧯", payload.name, payload.error, timestamp);
+        break;
+      case "flakyDetected":
+        state.flaky.set(payload.key, payload);
+        renderFlaky();
+        addRow("quarantine", "🎲", `Flaky: ${payload.description || payload.locator}`, `${Math.round(payload.flakeRate * 100)}% fail rate over ${payload.sampleSize} runs`, timestamp);
+        break;
+      case "scenarioQuarantined":
+        state.flaky.set(payload.key, payload);
+        renderFlaky();
+        addRow("quarantine", "🧯", `Quarantined: ${payload.description || payload.locator}`, null, timestamp);
+        break;
+      case "scenarioUnquarantined":
+        state.flaky.set(payload.key, payload);
+        renderFlaky();
+        addRow("pass", "✅", `Unquarantined: ${payload.description || payload.locator}`, null, timestamp);
         break;
       default:
         addRow("info", "ℹ️", name, JSON.stringify(payload), timestamp);
@@ -563,6 +666,94 @@
     renderTrend();
   }
 
+  // ── Flaky tests panel (Phase 9) ──
+
+  function historyDots(history) {
+    return (history || []).slice(-10).map((h) => (h.status === "passed" ? "🟢" : "🔴")).join("");
+  }
+
+  function renderFlaky() {
+    const list = $("flaky-list");
+    const empty = $("flaky-empty");
+    // Surfaces anything actionable: currently flaky/broken, or already
+    // quarantined (so the Unquarantine control stays reachable even if the
+    // scenario's live classification has since recovered to "stable").
+    const entries = [...state.flaky.values()].filter(
+      (e) => e.classification === "flaky" || e.classification === "broken" || e.quarantined
+    );
+
+    if (entries.length === 0) {
+      list.replaceChildren(empty || makeFlakyEmpty());
+      return;
+    }
+
+    list.replaceChildren(...entries.map((entry) => {
+      const row = document.createElement("div");
+      row.className = `flaky-row classification-${entry.classification}`;
+      const rateLabel = entry.classification === "broken"
+        ? "always fails"
+        : `${Math.round(entry.flakeRate * 100)}% fail rate`;
+      row.innerHTML = `
+        <div class="flaky-body">
+          <div class="flaky-selector">${escapeHtml(entry.description || entry.locator)}</div>
+          <div class="flaky-detail">${escapeHtml(entry.locator)} on ${escapeHtml(entry.url)}</div>
+          <div class="flaky-detail">${entry.classification} · ${rateLabel} · ${entry.sampleSize} recent run(s) ${entry.quarantined ? "· 🧯 quarantined" : ""}</div>
+          <div class="flaky-detail flaky-history">${historyDots(entry.history)}</div>
+        </div>
+        <div class="flaky-actions">
+          ${entry.quarantined
+            ? `<button class="btn btn-approve" data-action="unquarantine" data-key="${escapeHtml(entry.key)}">Unquarantine</button>`
+            : `<button class="btn btn-quarantine" data-action="quarantine" data-key="${escapeHtml(entry.key)}">Quarantine</button>`}
+        </div>
+      `;
+      return row;
+    }));
+  }
+
+  function makeFlakyEmpty() {
+    const div = document.createElement("div");
+    div.id = "flaky-empty";
+    div.textContent = "No flaky scenarios detected yet.";
+    return div;
+  }
+
+  $("flaky-list").addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-action]");
+    if (!button) return;
+    const { action, key } = button.dataset;
+    button.disabled = true;
+    try {
+      await flakinessDecision(action, key);
+    } catch (err) {
+      button.disabled = false;
+      alert(`Failed to ${action}: ${err.message}`);
+    }
+  });
+
+  async function flakinessDecision(action, key) {
+    const res = await fetch(`/flakiness/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ key }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    // The socket "scenarioQuarantined"/"scenarioUnquarantined" event that
+    // follows updates state.flaky and re-renders — no need to do it here too.
+  }
+
+  async function refreshFlakiness() {
+    try {
+      const res = await fetch("/flakiness/scenarios", { headers: authHeaders() });
+      if (res.ok) {
+        const entries = await res.json();
+        state.flaky = new Map(entries.map((entry) => [entry.key, entry]));
+        renderFlaky();
+      }
+    } catch {
+      // Best-effort — socket events will still keep this in sync going forward
+    }
+  }
+
   // Phase 7 — auth token. Read from ?token=, persist to localStorage so a
   // refresh doesn't require re-pasting it, then strip it from the visible
   // URL so it doesn't linger in browser history / get shared by accident.
@@ -587,6 +778,7 @@
     $("status-dot").classList.add("live");
     $("status-label").textContent = "Live";
     refreshHealing();
+    refreshFlakiness();
   });
 
   socket.on("disconnect", () => {
@@ -603,12 +795,13 @@
 
   // Replay full history for late-joining tabs
   socket.on("replay", (events) => {
-    Object.assign(state, { pass: 0, fail: 0, skip: 0, heal: 0, startTs: null, pending: new Map() });
+    Object.assign(state, { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map() });
     $("feed").replaceChildren();
-    for (const id of ["bar-pass", "bar-fail", "bar-skip"]) $(id).style.width = "0%";
+    for (const id of ["bar-pass", "bar-fail", "bar-skip", "bar-quarantine"]) $(id).style.width = "0%";
     $("run-time").textContent = "–";
     updateTiles();
     renderPending();
+    renderFlaky();
     events.forEach(handleEvent);
   });
 

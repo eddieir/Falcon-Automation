@@ -99,6 +99,39 @@ function pendingEvent(overrides = {}) {
   };
 }
 
+/** Simulates clicking a data-action button inside #flaky-list. */
+function clickFlakyButton(nodes, { action, key }) {
+  const list = nodes.get("flaky-list");
+  const handler = list._listeners.click[0];
+  const button = {
+    dataset: { action, key },
+    disabled: false,
+    closest: (sel) => (sel === "button[data-action]" ? button : null),
+  };
+  return handler({ target: button }).then(() => button);
+}
+
+function flakyScenario(overrides = {}) {
+  return {
+    key: "https://x.com::click::#flaky",
+    url: "https://x.com",
+    action: "click",
+    locator: "#flaky",
+    description: "Flaky button",
+    classification: "flaky",
+    flakeRate: 0.5,
+    sampleSize: 4,
+    quarantined: false,
+    history: [
+      { status: "passed" }, { status: "failed" }, { status: "passed" }, { status: "failed" },
+    ],
+    ...overrides,
+  };
+}
+function flakyDetectedEvent(overrides = {}) {
+  return { name: "flakyDetected", payload: flakyScenario(overrides), timestamp: Date.now() };
+}
+
 test("dashboard renders pass/fail/skip/healing counters and lifecycle rows", () => {
   const { handlers, nodes, rows } = dashboardUI();
   handlers.connect();
@@ -364,4 +397,149 @@ test("Phase 8: an empty trend array hides the trend table instead of rendering a
   await new Promise(setImmediate);
   assert.ok(fetchCalls.some((c) => c.url === "/healing/trend"));
   assert.equal(nodes.get("healing-trend-table").style.display, "none");
+});
+
+// ── Phase 9: flaky tests panel ──
+
+test("Phase 9: a flakyDetected event renders the scenario into the flaky panel", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(flakyDetectedEvent());
+  const list = nodes.get("flaky-list");
+  assert.equal(list.children.length, 1);
+  assert.match(list.children[0].innerHTML, /Flaky button/);
+  assert.match(list.children[0].innerHTML, /50% fail rate/);
+});
+
+test("Phase 9: a 'new' or 'stable' classified scenario is not shown in the panel", async () => {
+  const stable = [{ key: "https://x.com::click::#stable", url: "https://x.com", action: "click", locator: "#stable", description: "Stable", classification: "stable", flakeRate: 0, sampleSize: 5, quarantined: false, history: [] }];
+  const { handlers, nodes } = dashboardUI({
+    fetchImpl: async (url) => (url.includes("trend") ? { ok: true, json: async () => [] } : { ok: true, json: async () => stable }),
+  });
+  handlers.connect();
+  await new Promise(setImmediate);
+  assert.equal(nodes.get("flaky-list").children.length, 1); // just the empty placeholder
+  assert.equal(nodes.get("flaky-list").children[0], nodes.get("flaky-empty"));
+});
+
+test("Phase 9: a 'broken' scenario is shown with a distinct classification but no misleading fail rate label", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(flakyDetectedEvent({ classification: "broken", flakeRate: 1, key: "https://x.com::click::#broken", locator: "#broken", description: "Broken button" }));
+  const list = nodes.get("flaky-list");
+  assert.equal(list.children.length, 1);
+  assert.match(list.children[0].innerHTML, /always fails/);
+  assert.doesNotMatch(list.children[0].innerHTML, /100% fail rate/);
+});
+
+test("Phase 9: quarantining removes a scenario from the actionable list only if it's also no longer flaky/broken", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(flakyDetectedEvent());
+  handlers.event({ name: "scenarioQuarantined", payload: flakyScenario({ quarantined: true, quarantinedBy: "dashboard" }), timestamp: Date.now() });
+  // Still flaky AND quarantined — stays visible (with an Unquarantine control) rather than vanishing.
+  const list = nodes.get("flaky-list");
+  assert.equal(list.children.length, 1);
+  assert.match(list.children[0].innerHTML, /quarantined/);
+  assert.match(list.children[0].innerHTML, /Unquarantine/);
+});
+
+test("Phase 9: unquarantining a scenario whose classification has since recovered to stable removes it from the panel", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(flakyDetectedEvent({ quarantined: true }));
+  handlers.event({ name: "scenarioUnquarantined", payload: flakyScenario({ classification: "stable", flakeRate: 0, quarantined: false }), timestamp: Date.now() });
+  const list = nodes.get("flaky-list");
+  assert.equal(list.children.length, 1);
+  assert.equal(list.children[0], nodes.get("flaky-empty"));
+});
+
+test("Phase 9: scenario fields are HTML-escaped in the flaky panel, not injected raw", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(flakyDetectedEvent({
+    description: '<img src=x onerror=alert(1)>',
+    locator: '<script>alert(2)</script>',
+    url: '"><b>bold</b>',
+  }));
+  const html = nodes.get("flaky-list").children[0].innerHTML;
+  assert.ok(!html.includes("<img"));
+  assert.ok(!html.includes("<script>"));
+  assert.ok(!html.includes("<b>"));
+  assert.match(html, /&lt;img/);
+});
+
+test("Phase 9: quarantine button POSTs the scenario key, with auth header, and disables itself", async () => {
+  const { handlers, nodes, fetchCalls } = dashboardUI({ search: "?token=secret-token" });
+  handlers.event(flakyDetectedEvent());
+
+  const button = await clickFlakyButton(nodes, { action: "quarantine", key: "https://x.com::click::#flaky" });
+
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(fetchCalls[0].url, "/flakiness/quarantine");
+  assert.equal(fetchCalls[0].options.method, "POST");
+  assert.equal(fetchCalls[0].options.headers["X-Dashboard-Token"], "secret-token");
+  assert.deepEqual(JSON.parse(fetchCalls[0].options.body), { key: "https://x.com::click::#flaky" });
+  assert.equal(button.disabled, true);
+});
+
+test("Phase 9: unquarantine button POSTs to /flakiness/unquarantine", async () => {
+  const { handlers, nodes, fetchCalls } = dashboardUI();
+  handlers.event(flakyDetectedEvent({ quarantined: true }));
+  await clickFlakyButton(nodes, { action: "unquarantine", key: "https://x.com::click::#flaky" });
+  assert.equal(fetchCalls[0].url, "/flakiness/unquarantine");
+  assert.deepEqual(JSON.parse(fetchCalls[0].options.body), { key: "https://x.com::click::#flaky" });
+});
+
+test("Phase 9: a failed quarantine request re-enables the button and alerts the user", async () => {
+  const { handlers, nodes, alerts } = dashboardUI({
+    fetchImpl: async () => ({ ok: false, statusText: "Not Found", json: async () => ({ error: "No tracked scenario for that key." }) }),
+  });
+  handlers.event(flakyDetectedEvent());
+  const button = await clickFlakyButton(nodes, { action: "quarantine", key: "https://x.com::click::#flaky" });
+  assert.equal(button.disabled, false);
+  assert.match(alerts[0], /Failed to quarantine/);
+  assert.match(alerts[0], /No tracked scenario/);
+});
+
+test("Phase 9: connecting fetches the current flaky scenario list from the server", async () => {
+  const scenarios = [flakyScenario()];
+  const { handlers, nodes, fetchCalls } = dashboardUI({
+    fetchImpl: async (url) => ({
+      ok: true,
+      json: async () => (url.includes("/flakiness/scenarios") ? scenarios : []),
+    }),
+  });
+  handlers.connect();
+  await new Promise(setImmediate);
+  assert.ok(fetchCalls.some((c) => c.url === "/flakiness/scenarios"));
+  const list = nodes.get("flaky-list");
+  assert.equal(list.children.length, 1);
+  assert.match(list.children[0].innerHTML, /Flaky button/);
+});
+
+test("Phase 9: a failed /flakiness/scenarios fetch on connect never throws and leaves the panel empty", async () => {
+  const { handlers, nodes } = dashboardUI({
+    fetchImpl: async () => {
+      throw new Error("network down");
+    },
+  });
+  assert.doesNotThrow(() => handlers.connect());
+  await new Promise(setImmediate);
+  const list = nodes.get("flaky-list");
+  assert.equal(list.children.length, 0); // renderFlaky() was never called — nothing to show or hide yet
+});
+
+test("Phase 9: replay resets the flaky panel instead of accumulating stale entries", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(flakyDetectedEvent());
+  assert.equal(nodes.get("flaky-list").children.length, 1);
+  handlers.replay([]);
+  const list = nodes.get("flaky-list");
+  assert.equal(list.children.length, 1);
+  assert.equal(list.children[0], nodes.get("flaky-empty"));
+});
+
+test("Phase 9: dashboard handles flaky/quarantine events without crashing, even with minimal payloads", () => {
+  const { handlers } = dashboardUI();
+  assert.doesNotThrow(() => {
+    handlers.event({ name: "flakyDetected", payload: { key: "k", classification: "flaky", flakeRate: 0.5, sampleSize: 3, history: [] }, timestamp: Date.now() });
+    handlers.event({ name: "scenarioQuarantined", payload: { key: "k", classification: "flaky", flakeRate: 0.5, sampleSize: 3, quarantined: true, history: [] }, timestamp: Date.now() });
+    handlers.event({ name: "scenarioUnquarantined", payload: { key: "k", classification: "flaky", flakeRate: 0.5, sampleSize: 3, quarantined: false, history: [] }, timestamp: Date.now() });
+  });
 });

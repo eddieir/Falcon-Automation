@@ -10,6 +10,7 @@ const Dashboard = require("../../src/core/Dashboard");
 const Middleware = require("../../src/core/Middleware");
 const HealingTrust = require("../../src/core/AIHealer/HealingTrust");
 const HealingReport = require("../../src/core/AIHealer/HealingReport");
+const FlakinessTracker = require("../../src/core/FlakinessTracker");
 // Logger.info/.warning write straight to console.log/console.warn (see
 // utils/Logger.js) — useful for a human running a file directly, but
 // node:test's own TAP-like reporter is also reading this process's stdout
@@ -62,6 +63,22 @@ function isolateHealingSingletons(t) {
     HealingTrust._reload();
     HealingReport._instance.filePath = prevReportPath;
     HealingReport._instance.logs = prevLogs;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+}
+/** Same rationale as isolateHealingSingletons(), for the Phase 9 FlakinessTracker singleton. */
+function isolateFlakinessSingleton(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-dashboard-flakiness-"));
+  const prevHistoryPath = FlakinessTracker.historyPath;
+  const prevDecisionsPath = FlakinessTracker.decisionsPath;
+  FlakinessTracker.historyPath = path.join(dir, "history.json");
+  FlakinessTracker.decisionsPath = path.join(dir, "decisions.json");
+  FlakinessTracker._reload();
+  t.after(async () => {
+    await FlakinessTracker._queue;
+    FlakinessTracker.historyPath = prevHistoryPath;
+    FlakinessTracker.decisionsPath = prevDecisionsPath;
+    FlakinessTracker._reload();
     fs.rmSync(dir, { recursive: true, force: true });
   });
 }
@@ -352,4 +369,119 @@ test("healing trust: unauthenticated requests never reach HealingTrust (no side 
   // Still pending — the unauthenticated request must not have been processed.
   assert.equal(HealingTrust.list().length, 1);
   assert.equal(HealingTrust.list()[0].original, "#protected");
+});
+
+// ── Phase 9: flakiness HTTP surface (real Dashboard, real FlakinessTracker) ──
+
+test("flakiness: GET /flakiness/scenarios reflects real tracked scenarios, with classification filtering", async (t) => {
+  isolateFlakinessSingleton(t);
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const auth = { "X-Dashboard-Token": "fixture-token" };
+
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#stable", status: "passed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#stable", status: "passed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#stable", status: "passed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#flaky", status: "passed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#flaky", status: "failed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#flaky", status: "passed" });
+
+  const all = await httpJSON(d.port, "GET", "/flakiness/scenarios", auth);
+  assert.equal(all.statusCode, 200);
+  assert.equal(all.body.length, 2);
+
+  const flakyOnly = await httpJSON(d.port, "GET", "/flakiness/scenarios?classification=flaky", auth);
+  assert.equal(flakyOnly.body.length, 1);
+  assert.equal(flakyOnly.body[0].locator, "#flaky");
+});
+
+test("flakiness: full HTTP round trip — quarantine, then unquarantine, over real HTTP", async (t) => {
+  isolateFlakinessSingleton(t);
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const auth = { "X-Dashboard-Token": "fixture-token" };
+  const key = FlakinessTracker.keyFor({ url: "https://x.com", action: "click", locator: "#flaky" });
+
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#flaky", status: "passed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#flaky", status: "failed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#flaky", status: "passed" });
+
+  const quarantine = await httpJSON(d.port, "POST", "/flakiness/quarantine", auth, { key });
+  assert.equal(quarantine.statusCode, 200);
+  assert.equal(quarantine.body.quarantined, true);
+  assert.equal(FlakinessTracker.isQuarantined(key), true);
+
+  const unquarantine = await httpJSON(d.port, "POST", "/flakiness/unquarantine", auth, { key });
+  assert.equal(unquarantine.statusCode, 200);
+  assert.equal(unquarantine.body.quarantined, false);
+  assert.equal(FlakinessTracker.isQuarantined(key), false);
+});
+
+test("flakiness: quarantining/unquarantining an unknown key returns 404, not a silent success", async (t) => {
+  isolateFlakinessSingleton(t);
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const auth = { "X-Dashboard-Token": "fixture-token" };
+
+  const quarantine = await httpJSON(d.port, "POST", "/flakiness/quarantine", auth, { key: "https://never.example.com::click::#nope" });
+  assert.equal(quarantine.statusCode, 404);
+
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#never-quarantined", status: "passed" });
+  const key = FlakinessTracker.keyFor({ url: "https://x.com", action: "click", locator: "#never-quarantined" });
+  const unquarantine = await httpJSON(d.port, "POST", "/flakiness/unquarantine", auth, { key });
+  assert.equal(unquarantine.statusCode, 404);
+});
+
+test("flakiness: POST with a non-string or missing `key` is rejected, not crashed on", async (t) => {
+  isolateFlakinessSingleton(t);
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const auth = { "X-Dashboard-Token": "fixture-token" };
+
+  for (const body of [{}, { key: 42 }, { key: null }, { key: ["x"] }, { key: { nested: true } }]) {
+    const res = await httpJSON(d.port, "POST", "/flakiness/quarantine", auth, body);
+    assert.equal(res.statusCode, 404, `expected 404 for body ${JSON.stringify(body)}, got ${res.statusCode}`);
+  }
+});
+
+test("flakiness: unauthenticated requests are rejected and never reach FlakinessTracker", async (t) => {
+  isolateFlakinessSingleton(t);
+  const d = setup(t, "fixture-token");
+  await d.start();
+
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#flaky", status: "passed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#flaky", status: "failed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#flaky", status: "passed" });
+  const key = FlakinessTracker.keyFor({ url: "https://x.com", action: "click", locator: "#flaky" });
+
+  const scenarios = await httpJSON(d.port, "GET", "/flakiness/scenarios");
+  assert.equal(scenarios.statusCode, 401);
+  const quarantine = await httpJSON(d.port, "POST", "/flakiness/quarantine", {}, { key });
+  assert.equal(quarantine.statusCode, 401);
+  assert.equal(FlakinessTracker.isQuarantined(key), false);
+});
+
+test("flakiness: a live end-to-end 'flakyDetected' broadcast reaches a connected socket", async (t) => {
+  isolateFlakinessSingleton(t);
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const socket = io(`http://localhost:${d.port}`, {
+    autoConnect: false,
+    auth: { token: "fixture-token" },
+    reconnection: false,
+  });
+  t.after(() => socket.close());
+  const connected = once(socket, "connect");
+  const replayed = once(socket, "replay");
+  socket.connect();
+  await connected;
+  await replayed;
+
+  const flaky = once(socket, "event");
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#flaky", status: "passed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#flaky", status: "failed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#flaky", status: "passed" });
+  const [event] = await flaky;
+  assert.equal(event.name, "flakyDetected");
+  assert.equal(event.payload.locator, "#flaky");
 });

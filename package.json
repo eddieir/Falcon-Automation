@@ -27,7 +27,10 @@
     "test:coverage": "node --experimental-test-coverage --test --test-concurrency=1 tests/regression/*.check.cjs",
     "healing:pending": "node scripts/healing/review.js list",
     "healing:approve": "node scripts/healing/review.js approve",
-    "healing:reject": "node scripts/healing/review.js reject"
+    "healing:reject": "node scripts/healing/review.js reject",
+    "flaky:list": "node scripts/flakiness/review.js list",
+    "flaky:quarantine": "node scripts/flakiness/review.js quarantine",
+    "flaky:unquarantine": "node scripts/flakiness/review.js unquarantine"
   },
   "keywords": [
     "AI",
