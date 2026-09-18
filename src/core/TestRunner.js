@@ -3,6 +3,8 @@ const path = require("path");
 const Logger = require("../../utils/Logger");
 const AIHealer = require("./AIHealer/AIHealer");
 const HealingReport = require("./AIHealer/HealingReport");
+const AdaptiveRetry = require("./AIHealer/AdaptiveRetry");
+const FlakinessTracker = require("./FlakinessTracker");
 
 /**
  * TestRunner — orchestrates scenario-based and exploratory test execution.
@@ -17,6 +19,14 @@ const HealingReport = require("./AIHealer/HealingReport");
  *    producing "Cannot read properties of undefined" at runtime.
  *    The method now accepts these values as arguments, matching the call
  *    signature used in falcon.js.
+ *
+ * Phase 9 — flaky-test detection. Every passed/failed scenario outcome is
+ * fed to FlakinessTracker, keyed by page URL + action + locator (stable
+ * across regenerated descriptions). If a scenario is currently quarantined
+ * (an explicit human decision — see FlakinessTracker), a failure is
+ * reported as "quarantined" rather than "failed": still visible, still
+ * recorded, just no longer blocking the run. Nothing is ever silently
+ * hidden or auto-quarantined.
  */
 class TestRunner {
     constructor(page, testPlan) {
@@ -104,6 +114,14 @@ class TestRunner {
                 const duration = Date.now() - startTime;
                 Logger.info(`✅ Passed: ${scenario.description} (${duration}ms)`);
                 this.results.push({ name: scenario.description, status: "passed", duration });
+                FlakinessTracker.record({
+                    url: this.testPlan.url,
+                    action: scenario.action,
+                    locator: scenario.locator,
+                    description: scenario.description,
+                    status: "passed",
+                    duration,
+                });
                 return;
             } catch (error) {
                 Logger.warning(`⚠️ Attempt ${attempt} failed for ${scenario.description}: ${error.message}`);
@@ -118,12 +136,40 @@ class TestRunner {
                         error: error.message,
                     });
                     const duration = Date.now() - startTime;
-                    this.results.push({
-                        name: scenario.description,
+                    const errorType = AdaptiveRetry.classify(error);
+                    FlakinessTracker.record({
+                        url: this.testPlan.url,
+                        action: scenario.action,
+                        locator: scenario.locator,
+                        description: scenario.description,
                         status: "failed",
                         duration,
-                        error: error.message,
+                        errorType,
                     });
+
+                    const scenarioKey = FlakinessTracker.keyFor({
+                        url: this.testPlan.url,
+                        action: scenario.action,
+                        locator: scenario.locator,
+                    });
+                    if (FlakinessTracker.isQuarantined(scenarioKey)) {
+                        Logger.warning(`🧯 ${scenario.description} failed but is quarantined — not blocking this run.`);
+                        this.results.push({
+                            name: scenario.description,
+                            status: "quarantined",
+                            duration,
+                            error: error.message,
+                            errorType,
+                        });
+                    } else {
+                        this.results.push({
+                            name: scenario.description,
+                            status: "failed",
+                            duration,
+                            error: error.message,
+                            errorType,
+                        });
+                    }
                 }
             }
         }

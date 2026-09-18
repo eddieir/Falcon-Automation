@@ -11,6 +11,16 @@ for (const [statuses, result, exit] of [
   [["skipped"], "PASSED", 0],
   [[], "NO_TESTS_RUN", 1],
   [["passed", "skipped"], "PASSED", 0],
+  // Phase 9 — a quarantined result is a real failure that a human has
+  // explicitly decided must not block the run. It must never be silently
+  // merged into "passed", and it must never be enough on its own to flip
+  // the run to FAILED — but a genuine (non-quarantined) failure alongside
+  // one still must.
+  [["quarantined"], "PASSED", 0],
+  [["passed", "quarantined"], "PASSED", 0],
+  [["quarantined", "quarantined"], "PASSED", 0],
+  [["failed", "quarantined"], "FAILED", 1],
+  [["passed", "failed", "quarantined"], "PARTIAL", 1],
 ]) {
   test(`report tallies ${statuses.join("/") || "empty"} accurately`, (t) => {
     const cwd = process.cwd(),
@@ -48,7 +58,7 @@ for (const [statuses, result, exit] of [
     process.exitCode = oldCode;
     assert.equal(report.result, result);
     assert.equal(report.summary.total, statuses.length);
-    for (const status of ["passed", "failed", "skipped"])
+    for (const status of ["passed", "failed", "skipped", "quarantined"])
       assert.equal(
         report.summary[status],
         statuses.filter((s) => s === status).length,
@@ -60,6 +70,29 @@ for (const [statuses, result, exit] of [
     assert.match(report.duration, /^\d+\.\d{2}s$/);
   });
 }
+test("report rejects a genuinely invalid status, but accepts 'quarantined' as valid", () => {
+  const manager = new Report();
+  assert.throws(
+    () => manager.generateReport({ tests: [{ name: "x", status: "bogus" }] }),
+    TypeError,
+  );
+  assert.doesNotThrow(() => {
+    const cwd = process.cwd();
+    const dir = temp();
+    const oldCode = process.exitCode;
+    const log = console.log;
+    process.chdir(dir);
+    console.log = () => {};
+    try {
+      manager.generateReport({ tests: [{ name: "x", status: "quarantined" }] });
+    } finally {
+      console.log = log;
+      process.chdir(cwd);
+      process.exitCode = oldCode;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
 for (const [content, expected] of [
   [" #new ", "#new"],
   ["null", null],

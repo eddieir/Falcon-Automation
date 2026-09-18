@@ -1,6 +1,6 @@
 # Falcon-Automation: AI-Powered Test Automation Framework
 
-> **Status:** Active development · Phases 1–8 merged, including a follow-up hardening pass (comprehensive regression suite, a real selector-anchoring fix, and this doc sync). See [Roadmap](#roadmap) for what's next. Full per-bug engineering history: [CHANGELOG.md](CHANGELOG.md).
+> **Status:** Active development · Phases 1–9 merged, including a follow-up hardening pass (comprehensive regression suite, a real selector-anchoring fix, and this doc sync). See [Roadmap](#roadmap) for what's next. Full per-bug engineering history: [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -18,7 +18,7 @@ This is the real bottleneck in QA. It was never that testing is hard. It's that 
 
 Falcon was built to remove that tax, not paper over it. Not a bigger locator library, not a smarter list of fallback selectors somebody has to keep updating by hand. Instead, an engine that behaves the way a good manual tester actually does when a button moves: try again, remember what worked before, and if neither of those lands, actually look at the page and figure out where the thing went. Three tiers, in that exact order, and the third one is a real, live call to an LLM, not a hardcoded map dressed up as "AI."
 
-The rest of Falcon follows from that same instinct. If tests shouldn't need constant hand-holding to survive a redesign, they also shouldn't need to be hand-written in the first place for every new page, so Falcon crawls the app itself, reads the live DOM, and generates the test plan. If a report says "passed," that needs to be true, not aspirational, so every result is a real pass/fail/skip tally, not a hopeful default. And if your team is going to trust an AI-healed selector in production, you need to be able to see exactly what it healed and why, not take it on faith. That's exactly what's next on the roadmap.
+The rest of Falcon follows from that same instinct. If tests shouldn't need constant hand-holding to survive a redesign, they also shouldn't need to be hand-written in the first place for every new page, so Falcon crawls the app itself, reads the live DOM, and generates the test plan. If a report says "passed," that needs to be true, not aspirational, so every result is a real pass/fail/skip tally, not a hopeful default. And if your team is going to trust an AI-healed selector in production, you need to be able to see exactly what it healed and why, and approve it yourself, not take it on faith. The same goes for a red build: before you quarantine it, you need to know whether it's actually broken or just unreliable, not guess.
 
 **What that looks like in practice:**
 
@@ -32,7 +32,7 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 - **Database testing:** PostgreSQL via `pg` Pool with full mTLS support
 - **CI/CD ready:** GitHub Actions pipeline with Allure report upload
 
-**Delivered so far:** core AI healing + reporting foundation → a stability audit (14 defects fixed) → visual regression, live dashboard, AI test generation, and Allure reporting → repository hygiene → a single consolidated self-healing engine with a bounded LocatorStore → real Postgres coverage in CI → a token-gated dashboard → a comprehensive `node:test` + Playwright regression layer (240 + 30 tests, a second CI job) and a real selector-anchoring fix in `PageAnalyser` → an approval gate for AI-inferred selector fixes, so a Tier 3 guess is reviewed by a human before it's ever trusted again. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md). See [Roadmap](#roadmap) for what's next.
+**Delivered so far:** core AI healing + reporting foundation → a stability audit (14 defects fixed) → visual regression, live dashboard, AI test generation, and Allure reporting → repository hygiene → a single consolidated self-healing engine with a bounded LocatorStore → real Postgres coverage in CI → a token-gated dashboard → a comprehensive `node:test` + Playwright regression layer (308 + 30 tests, a second CI job) and a real selector-anchoring fix in `PageAnalyser` → an approval gate for AI-inferred selector fixes, so a Tier 3 guess is reviewed by a human before it's ever trusted again → flaky-test detection and quarantine, so a genuinely unreliable interaction stops blocking CI without ever being silently hidden. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md). See [Roadmap](#roadmap) for what's next.
 
 ---
 
@@ -172,6 +172,48 @@ node scripts/healing/review.js reject  "<original-selector>"
 
 Reproduce the demo above yourself: `node docs/demo/healing-trust-axonradar-demo.js`.
 
+### Flaky-test detection, demonstrated against the same real site
+
+The same interaction, run repeatedly against the real page, sometimes passes and sometimes fails, exactly the way a genuinely timing-sensitive element behaves in a real suite. Below, `FlakinessTracker` watches six real `TestRunner` runs of the same scenario, classifies it, and a human quarantines it so it stops blocking CI without the instability ever being hidden:
+
+```
+=== Step 1: run the exact same scenario 6 times against the real page ===
+run 1: element present -> passed
+run 2: element removed -> failed
+run 3: element present -> passed
+run 4: element present -> passed
+run 5: element removed -> failed
+run 6: element present -> passed
+
+=== Step 2: FlakinessTracker classifies "Flaky Target" from that real history ===
+{
+  "classification": "flaky",
+  "flakeRate": 0.33,
+  "sampleSize": 6,
+  "history": ["passed", "failed", "passed", "passed", "failed", "passed"]
+}
+
+=== Step 3: a human reviews it and quarantines it ===
+Quarantined by "demo-script".
+
+=== Step 4: run it again with the element removed. It fails again, but now reports "quarantined", not "failed" ===
+status: quarantined
+
+=== Step 5: ReportManager still reports PASSED: a quarantined failure never blocks the run ===
+✅ Test Run Complete: PASSED
+   Total: 1  |  Passed: 0  |  Failed: 0  |  Skipped: 0  |  Quarantined: 1
+```
+
+Nothing about this is a separate, simplified code path: every run above is a real `TestRunner.executeTest()` call, `ReportManager` is the same one every scenario test file uses, and quarantining changes only how a failure is *reported*, never whether the interaction actually passed or failed. Review flaky scenarios and quarantine/unquarantine them either from the live dashboard's "Flaky tests" panel, or headlessly:
+
+```sh
+node scripts/flakiness/review.js list                       # what's flaky, broken, or already quarantined
+node scripts/flakiness/review.js quarantine "<scenario-key>"
+node scripts/flakiness/review.js unquarantine "<scenario-key>"
+```
+
+Reproduce the demo above yourself: `node docs/demo/flaky-test-detection-demo.js`.
+
 ### Visual regression, demonstrated against the same real site
 
 A real baseline screenshot of the live page, compared against itself (0 px changed), then compared again after a real DOM change was injected (a "MAINTENANCE MODE" banner) and caught:
@@ -215,7 +257,7 @@ ffmpeg -y -f concat -safe 0 -i axonradar-gif-list.txt \
   falcon-axonradar-demo.gif
 ```
 
-`docs/demo/capture-dashboard.js` and `docs/demo/build-gif-list.js` are checked in so this is reproducible against any future run, not a one-off screenshot. The full-sweep, self-healing, healing-trust, and visual-regression sections above are each their own standalone, reproducible script:
+`docs/demo/capture-dashboard.js` and `docs/demo/build-gif-list.js` are checked in so this is reproducible against any future run, not a one-off screenshot. The full-sweep, self-healing, healing-trust, flaky-detection, and visual-regression sections above are each their own standalone, reproducible script:
 
 ```sh
 # Full 11-page sweep, real aggregate totals streamed to the live dashboard
@@ -226,6 +268,9 @@ node docs/demo/self-heal-axonradar-demo.js
 
 # Healing trust: Tier 3 succeeds but isn't trusted until a human approves it
 node docs/demo/healing-trust-axonradar-demo.js
+
+# Flaky-test detection: the same interaction, genuinely nondeterministic, quarantined
+node docs/demo/flaky-test-detection-demo.js
 
 # Visual regression: a real baseline vs. a genuine injected change
 node docs/demo/visual-regression-axonradar-demo.js
@@ -257,14 +302,21 @@ flowchart TD
     end
 
     Runner --> VR["VisualRegression\npixel-diff vs. baseline"]
-    Runner --> RM["ReportManager\nreal pass/fail/skip tally"]
+    Runner --> RM["ReportManager\nreal pass/fail/skip/quarantined tally"]
     Healer --> HR["HealingReport\naudit log + reviewable trend"]
+
+    Runner --> Flaky["FlakinessTracker\nclassify: new/stable/broken/flaky (Phase 9)"]
+    Flaky -->|human quarantines| QDecisions[("data/quarantine_decisions.json\naudit ledger")]
+    Flaky -.reads.-> ScenarioHistory[("data/scenario_history.json\nbounded, LRU-evicted")]
+    Flaky --> RM
 
     RM --> Dash["Dashboard\nlive WebSocket UI @ :3000"]
     HR --> Dash
     Explore --> Dash
     Trust <-->|GET/POST /healing/*| Dash
+    Flaky <-->|GET/POST /flakiness/*| Dash
     CLIReview["scripts/healing/review.js\nheadless approve/reject"] --> Trust
+    FlakyReview["scripts/flakiness/review.js\nheadless quarantine/unquarantine"] --> Flaky
 
     RM --> ReportsJSON[("reports/test-report.json")]
     HR --> HealLogJSON[("reports/healing_logs.json")]
@@ -306,9 +358,10 @@ Falcon-Automation/
 │       ├── DBClient.js              # PostgreSQL pool with mTLS support
 │       ├── ErrorHandler.js
 │       ├── ExploratoryAI.js         # DOM-based UI defect detector
+│       ├── FlakinessTracker.js      # Pass/fail history, classification, quarantine gate (Phase 9)
 │       ├── Middleware.js            # Lifecycle hooks + cross-process event emit
 │       ├── PageAnalyser.js          # DOM scanner (single source of truth; see CHANGELOG.md#phase-3--competitive-features)
-│       ├── ReportManager.js         # Accurate pass/fail/skip reporting, sets process.exitCode
+│       ├── ReportManager.js         # Accurate pass/fail/skip/quarantined reporting, sets process.exitCode
 │       ├── ServiceContainer.js      # Partial DI container (browserManager, apiClient, dbClient, reportManager)
 │       ├── TestGenerator.js         # Delegates to PageAnalyser for scenario generation
 │       ├── TestRunner.js            # Scenario + exploratory test orchestrator
@@ -325,14 +378,18 @@ Falcon-Automation/
 ├── scripts/
 │   ├── db/
 │   │   └── ci-seed.sql              # Minimal schema/seed applied to CI's Postgres
-│   └── healing/
-│       └── review.js                # Headless list/approve/reject CLI for pending healing fixes
+│   ├── healing/
+│   │   └── review.js                # Headless list/approve/reject CLI for pending healing fixes
+│   └── flakiness/
+│       └── review.js                # Headless list/quarantine/unquarantine CLI for flaky scenarios
 ├── utils/
 │   └── Logger.js                    # Async file logging (non-blocking)
 ├── data/                            # Gitignored
 │   ├── locator_store.json           # Persisted LocatorStore entries (Tier 2, bounded)
 │   ├── healing_pending.json         # Tier 3 fixes awaiting human review (Phase 8)
-│   └── healing_decisions.json       # Approved/rejected audit ledger (Phase 8)
+│   ├── healing_decisions.json       # Approved/rejected audit ledger (Phase 8)
+│   ├── scenario_history.json        # Per-scenario pass/fail history, bounded (Phase 9)
+│   └── quarantine_decisions.json    # Quarantine/unquarantine audit ledger (Phase 9)
 ├── reports/                         # Generated at runtime (gitignored)
 │   ├── execution.log
 │   ├── test-report.json
@@ -448,13 +505,40 @@ Approving writes the fix into `LocatorStore` (Tier 2 reuses it from then on) and
 
 ---
 
+## Flaky-Test Detection (Phase 9)
+
+A failing scenario has always been reported as `failed`, full stop, with no way to tell "the app genuinely broke" from "this interaction is just unreliable." That distinction matters: test-maintenance surveys consistently point at flaky tests as one of the fastest-growing sources of wasted QA time, and a team that can't tell the two apart either chases ghosts or, worse, starts ignoring red builds altogether.
+
+`FlakinessTracker` records every scenario's outcome (`passed`/`failed`; `skipped` carries no signal about the interaction itself and isn't recorded), keyed by `<page url>::<action>::<locator>`, independent of the scenario's occasionally-regenerated human-readable description. Each scenario's most recent 10 outcomes are classified:
+
+| Classification | Meaning |
+|---|---|
+| `new` | Fewer than 3 outcomes recorded yet; not enough data to say anything |
+| `stable` | Every recent outcome passed |
+| `broken` | Every recent outcome failed: a real, consistent regression. This stays loud; it is never a quarantine candidate |
+| `flaky` | A mix of passes and failures for the *exact same* interaction |
+
+Classifying a scenario as flaky never changes what happens on its own: nothing is auto-quarantined. A **human** decides, either from the live dashboard's "Flaky tests" panel or headlessly:
+
+```sh
+node scripts/flakiness/review.js list                       # everything flaky, broken, or already quarantined
+node scripts/flakiness/review.js quarantine "<scenario-key>"
+node scripts/flakiness/review.js unquarantine "<scenario-key>"
+```
+
+Quarantining a scenario changes only how a subsequent failure is *reported*: `TestRunner` reports it as `quarantined` instead of `failed`, a status `ReportManager` deliberately excludes from both the "does this run pass" and "is this a real regression" checks, so a quarantined failure never flips a green build red, never merges silently into `passed` either, and always stays visible in the run summary (`Total: 5 | Passed: 3 | Failed: 0 | Skipped: 0 | Quarantined: 2`). The quarantined interaction is still run, still recorded, and still contributes to its own classification going forward. Quarantining is a CI-blocking decision, not a coverage decision.
+
+`GET /flakiness/scenarios`, `GET /flakiness/scenarios?classification=flaky`, `POST /flakiness/quarantine`, and `POST /flakiness/unquarantine` back the dashboard panel, gated by the same `DASHBOARD_TOKEN` and rate limiter as every other dashboard route. `data/scenario_history.json` (bounded to 500 tracked scenarios, LRU-evicted, 20 outcomes kept per scenario) and `data/quarantine_decisions.json` (the audit ledger) are both gitignored, the same as the Phase 8 healing files.
+
+---
+
 ## CI/CD
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_era_Falcon`, `main`, `feat/**`, and `test/**` branches, and on every pull request targeting `New_era_Falcon` or `main`. It's two independent jobs, not one:
 
 **`regression` job** (~1 minute): the `node:test` + Playwright layer added alongside the community-health files:
 1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
-2. `npm run test:coverage`: 240 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, CLI, API, boundaries, dashboard, visual regression, plan generation)
+2. `npm run test:coverage`: 308 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
 3. `npm run test:browser`: 30 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
 4. Uploads `reports/` as the `regression-reports` artifact
 
@@ -502,7 +586,7 @@ npm run test:unit
 
 # The larger node:test + Playwright regression layer (needs Node 20.19+;
 # see Installation). This is what the "regression" CI job runs.
-npm run test:regression   # 240 node:test cases, tests/regression/*.check.cjs
+npm run test:regression   # 308 node:test cases, tests/regression/*.check.cjs
 npm run test:browser      # 30 Playwright specs, tests/regression/browser.spec.js
 npm run test:coverage     # same as test:regression, with coverage collection
 
@@ -523,11 +607,12 @@ npx allure open allure-report
 
 ## Roadmap
 
-Falcon's differentiator is genuine self-healing, not a hardcoded selector list, but "AI healed this selector" is only as trustworthy as the visibility behind it. That's the throughline for what's next:
+Falcon's differentiator is genuine self-healing, not a hardcoded selector list, but "AI healed this selector" is only as trustworthy as the visibility behind it, and a red build is only as trustworthy as the data behind why it's red. That's the throughline for what's next:
 
-- **Pending fixes that nobody ever gets around to reviewing.** `HealingTrust` makes an unreviewed Tier 3 guess visible and gates it behind approval, but a pending entry has no expiry today; if nobody opens the dashboard or runs `scripts/healing/review.js` for a while, it just sits there and Tier 3 keeps paying the LLM cost silently in the background. The next step is a CI-visible signal, at minimum a loud warning, possibly a failed check, when `data/healing_pending.json` has entries older than some threshold, so an unreviewed fix can't be ignored indefinitely by default.
+- **Decisions that nobody ever gets around to making.** `HealingTrust` makes an unreviewed Tier 3 guess visible and gates it behind approval; `FlakinessTracker` does the same for quarantine. Neither one expires today: if nobody opens the dashboard or runs the CLI for a while, a pending healing fix just sits there paying the Tier 3 LLM cost silently, and a flaky scenario nobody's quarantined keeps blocking CI the same way it always did. The next step is a shared staleness signal, at minimum a loud warning, possibly a failed check, when either `data/healing_pending.json` or an unquarantined flaky scenario has been sitting unreviewed past some threshold, so neither kind of decision can be ignored indefinitely by default.
 
 ✅ Shipped since the last update:
+- **Flaky-test detection and quarantine.** `FlakinessTracker` classifies every scenario (`new`/`stable`/`broken`/`flaky`) from its real pass/fail history, so a genuinely unreliable interaction is told apart from a real regression instead of both just being "failed." A human quarantines a flaky scenario, from the dashboard's "Flaky tests" panel or `scripts/flakiness/review.js`; a quarantined failure is reported as `quarantined`, not `failed`, still visible in every report, and never silently merged into a passing result either.
 - **An approval gate for AI-inferred selector fixes.** A Tier 3 (LLM) success used to be written straight into `LocatorStore` and trusted for reuse the moment it worked once. It now goes to `HealingTrust` as a pending fix instead, visible on the live dashboard's "Healing trust" panel or via `scripts/healing/review.js`, and only becomes a trusted Tier 2 alternative once a human explicitly approves it; rejecting it discards the fix while keeping an audit record. `HealingReport.summary()` also aggregates the full healing log into a reviewable trend, selector by selector, tier by tier, instead of a flat event list.
 - A single, consolidated self-healing engine across every entry point: one three-tier chain (retry to locator cache to LLM), with `LocatorStore` now bounded so it can't grow unbounded over a long project history.
 - **Real coverage of the data layer, not just the UI.** DB tests now run against a real, disposable Postgres in CI instead of being silently absent, and, more fundamentally, every scenario test's process exit code now actually matches its reported pass/fail result, so a green CI check means the tests actually passed, not just that the process didn't crash.

@@ -32,16 +32,26 @@ const path = require("path");
  *   "runId":      "<ISO timestamp>",
  *   "duration":   "<seconds>s",
  *   "summary": {
- *     "total":   <n>,
- *     "passed":  <n>,
- *     "failed":  <n>,
- *     "skipped": <n>
+ *     "total":       <n>,
+ *     "passed":      <n>,
+ *     "failed":      <n>,
+ *     "skipped":     <n>,
+ *     "quarantined": <n>
  *   },
- *   "result":  "PASSED" | "FAILED" | "PARTIAL",
+ *   "result":  "PASSED" | "FAILED" | "PARTIAL" | "NO_TESTS_RUN",
  *   "tests":   [ { name, status, duration, error? }, … ],
  *   "uiIssues":        [ … ],
  *   "healingEvents":   [ … ]
  * }
+ *
+ * Phase 9 — "quarantined" is a fourth valid status (FlakinessTracker):
+ * TestRunner reports a scenario this way instead of "failed" when a human
+ * has explicitly quarantined it. It is deliberately excluded from the
+ * `failed` tally and from the pass/fail branches below, so a run with only
+ * quarantined failures (and zero real ones) still reports PASSED and exits
+ * 0 — that's the entire point of quarantining. It is never merged into
+ * `passed` either: a quarantined scenario that is still actually failing
+ * stays visible as its own bucket, not silently counted as green.
  */
 class ReportManager {
     constructor() {
@@ -66,7 +76,7 @@ class ReportManager {
         if (!Array.isArray(tests) || !Array.isArray(uiIssues) || !Array.isArray(healingEvents)) {
             throw new TypeError("Report results, issues and healing events must be arrays");
         }
-        if (tests.some(result => !result || !["passed", "failed", "skipped"].includes(result.status))) {
+        if (tests.some(result => !result || !["passed", "failed", "skipped", "quarantined"].includes(result.status))) {
             throw new TypeError("Each test result must have a valid status");
         }
         const endTime = Date.now();
@@ -75,10 +85,11 @@ class ReportManager {
             : "unknown";
 
         // Tally real outcomes
-        const passed  = tests.filter((t) => t.status === "passed").length;
-        const failed  = tests.filter((t) => t.status === "failed").length;
-        const skipped = tests.filter((t) => t.status === "skipped").length;
-        const total   = tests.length;
+        const passed      = tests.filter((t) => t.status === "passed").length;
+        const failed      = tests.filter((t) => t.status === "failed").length;
+        const skipped     = tests.filter((t) => t.status === "skipped").length;
+        const quarantined = tests.filter((t) => t.status === "quarantined").length;
+        const total        = tests.length;
 
         // Top-level result: PASSED only if every test passed
         let overallResult;
@@ -95,7 +106,7 @@ class ReportManager {
         const report = {
             runId: new Date().toISOString(),
             duration: `${durationSeconds}s`,
-            summary: { total, passed, failed, skipped },
+            summary: { total, passed, failed, skipped, quarantined },
             result: overallResult,
             tests,
             uiIssues,
@@ -114,7 +125,10 @@ class ReportManager {
         // Human-readable summary to stdout
         const icon = overallResult === "PASSED" ? "✅" : overallResult === "FAILED" ? "❌" : "⚠️";
         console.log(`\n${icon} Test Run Complete — ${overallResult}`);
-        console.log(`   Total: ${total}  |  Passed: ${passed}  |  Failed: ${failed}  |  Skipped: ${skipped}`);
+        console.log(
+            `   Total: ${total}  |  Passed: ${passed}  |  Failed: ${failed}  |  Skipped: ${skipped}` +
+            (quarantined > 0 ? `  |  Quarantined: ${quarantined}` : "")
+        );
         console.log(`   Duration: ${durationSeconds}s`);
         if (uiIssues.length > 0) {
             console.log(`   UI Issues detected: ${uiIssues.length}`);
