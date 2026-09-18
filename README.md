@@ -248,7 +248,7 @@ Falcon-Automation/
 │       ├── ErrorHandler.js
 │       ├── ExploratoryAI.js         # DOM-based UI defect detector
 │       ├── Middleware.js            # Lifecycle hooks + cross-process event emit
-│       ├── PageAnalyser.js          # DOM scanner (single source of truth — see Phase 3)
+│       ├── PageAnalyser.js          # DOM scanner (single source of truth — see CHANGELOG.md#phase-3)
 │       ├── ReportManager.js         # Accurate pass/fail/skip reporting, sets process.exitCode
 │       ├── ServiceContainer.js      # Partial DI container (browserManager, apiClient, dbClient, reportManager)
 │       ├── TestGenerator.js         # Delegates to PageAnalyser for scenario generation
@@ -386,7 +386,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 7. `npx playwright test` (`continue-on-error: true`, since this suite still tolerates E2E flake)
 8. Allure report generated (`npx allure awesome`) and uploaded alongside `reports/` as the `falcon-reports` artifact
 
-The full, current file is the source of truth — see `.github/workflows/ci.yml`. The Phase 3, Phase 6, and Phase 7 sections below document why specific pieces of the `test` job exist (Allure's CLI quirks, the visual-regression cache, the Postgres service container, the three regression checks).
+The full, current file is the source of truth — see `.github/workflows/ci.yml`. [CHANGELOG.md](CHANGELOG.md)'s Phase 3, Phase 6, and Phase 7 sections document why specific pieces of the `test` job exist (Allure's CLI quirks, the visual-regression cache, the Postgres service container, the three regression checks).
 
 Node 20.19+ is required to actually run `test:coverage`/`test:regression` locally (`--test-concurrency` and `--experimental-test-coverage` alongside `--test` both need it — see `engines` in `package.json`); CI is pinned to Node 24 and has always been fine, but an older local Node fails these two scripts with a plain `node: bad option` instead of a useful message.
 
@@ -398,7 +398,7 @@ Node 20.19+ is required to actually run `test:coverage`/`test:regression` locall
 # Full autonomous pipeline with live dashboard
 node falcon.js
 
-# Same, with the dashboard requiring a token (see Phase 7) — the printed
+# Same, with the dashboard requiring a token (see CHANGELOG.md#phase-7--dashboard-hardening) — the printed
 # URL includes ?token=... automatically
 DASHBOARD_TOKEN=some-secret node falcon.js --dashboard
 
