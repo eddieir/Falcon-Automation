@@ -49,9 +49,36 @@ class HealingTrust {
     }
 
     /**
+     * True if `key` is an own entry of `this.pending`. Never delegates to the
+     * prototype chain — `"constructor" in this.pending` or a bare
+     * `this.pending[key]` read would silently resolve to `Object.prototype`
+     * members for keys like "constructor"/"toString", masking a real
+     * pending entry (or worse: a bracket *assignment* to "__proto__" would
+     * silently repoint the object's prototype instead of creating a
+     * property, and the entry would vanish, unrecoverable, from `list()`).
+     * A CSS selector can legitimately be any string, including these, so
+     * every access below goes through `_hasPending`/`_getPending`/`_setPending`.
+     */
+    _hasPending(key) {
+        return Object.hasOwn(this.pending, key);
+    }
+
+    _getPending(key) {
+        return this._hasPending(key) ? this.pending[key] : undefined;
+    }
+
+    _setPending(key, value) {
+        Object.defineProperty(this.pending, key, {
+            value, enumerable: true, configurable: true, writable: true,
+        });
+    }
+
+    /**
      * Record a Tier 3 success as awaiting review. Re-recording the same
      * original selector (it broke again before being reviewed) bumps
-     * `occurrences`/`lastSeen` in place instead of creating a duplicate.
+     * `occurrences`/`lastSeen` in place instead of creating a duplicate;
+     * the latest `suggested`/`description` win, since they reflect the most
+     * recent LLM inference for that selector.
      *
      * @param {Object} opts
      * @param {string} opts.original    - The selector that no longer matched
@@ -59,7 +86,7 @@ class HealingTrust {
      * @param {string} [opts.description]
      */
     recordPending({ original, suggested, description = "" }) {
-        const existing = this.pending[original];
+        const existing = this._getPending(original);
         const entry = {
             original,
             suggested,
@@ -68,7 +95,7 @@ class HealingTrust {
             lastSeen:    new Date().toISOString(),
             occurrences: (existing?.occurrences ?? 0) + 1,
         };
-        this.pending[original] = entry;
+        this._setPending(original, entry);
         this._queue = this._queue.then(() => this._save(this.pendingPath, this.pending));
         Middleware.emit("healingPending", entry);
         return entry;
@@ -85,7 +112,7 @@ class HealingTrust {
      * Returns null if there is no pending entry for that selector.
      */
     approve(original, { approvedBy = "dashboard" } = {}) {
-        const entry = this.pending[original];
+        const entry = this._getPending(original);
         if (!entry) return null;
 
         LocatorStore.addLocator(entry.original, entry.suggested);
@@ -107,7 +134,7 @@ class HealingTrust {
      * Returns null if there is no pending entry for that selector.
      */
     reject(original, { rejectedBy = "dashboard" } = {}) {
-        const entry = this.pending[original];
+        const entry = this._getPending(original);
         if (!entry) return null;
 
         delete this.pending[original];

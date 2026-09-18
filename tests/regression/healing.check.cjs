@@ -193,6 +193,31 @@ test("Phase 8: inferred locator is clicked and sent for review, not auto-persist
   assert.equal(events[0].resolved, "#new");
   assert.equal(events[0].trust, "pending");
 });
+test("Phase 8: healAndClick's default description ('Element') flows through to the pending entry", async () => {
+  const { instance, pending } = healer({
+    waitForSelector: async () => {
+      throw Error("gone");
+    },
+    click: async () => {},
+  });
+  instance.getAlternativeSelector = async () => "#new";
+  await instance.healAndClick("#old"); // no description argument
+  assert.equal(pending[0].description, "Element");
+});
+test("Phase 8: Tier 3 successes for different selectors in the same run are tracked as separate pending entries", async () => {
+  const { instance, pending } = healer({
+    click: async () => {},
+  });
+  const suggestions = { "#a": "#a-fix", "#b": "#b-fix", "#c": "#c-fix" };
+  instance.getAlternativeSelector = async (original) => suggestions[original];
+  await instance.healSelector("#a", "A");
+  await instance.healSelector("#b", "B");
+  await instance.healSelector("#c", "C");
+  assert.deepEqual(
+    pending.map((p) => [p.original, p.suggested]),
+    [["#a", "#a-fix"], ["#b", "#b-fix"], ["#c", "#c-fix"]],
+  );
+});
 for (const suggestion of [null, "#bad"]) {
   test(`failed inference ${suggestion} rejects and never poisons cache or pending review`, async () => {
     const { instance, events, saved, pending } = healer({
@@ -402,6 +427,226 @@ test("healing trust recovers from corrupt pending/decisions files instead of cra
   assert.deepEqual(Trust.decisions, []);
 });
 
+test("healing trust recovers when pending/decisions files hold the wrong JSON shape", (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const Trust = load("src/core/AIHealer/HealingTrust.js", {
+    "./LocatorStore": { addLocator: () => {} },
+    "../Middleware": { emit: () => {} },
+  });
+  Trust.pendingPath = path.join(dir, "pending.json");
+  Trust.decisionsPath = path.join(dir, "decisions.json");
+  // pending.json must be an object keyed by selector, decisions.json an
+  // array — swap them and confirm each falls back cleanly instead of
+  // adopting the wrong shape (which would make list()/decisions.push blow up).
+  fs.writeFileSync(Trust.pendingPath, JSON.stringify([1, 2, 3]));
+  fs.writeFileSync(Trust.decisionsPath, JSON.stringify({ not: "an array" }));
+  Trust._reload();
+  assert.deepEqual(Trust.list(), []);
+  assert.deepEqual(Trust.decisions, []);
+  // Both must still be genuinely usable after falling back, not just present.
+  assert.doesNotThrow(() => Trust.recordPending({ original: "#x", suggested: "#y" }));
+  assert.doesNotThrow(() => Trust.approve("#x"));
+});
+
+test("healing trust survives null and non-object JSON at the top level", (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const Trust = load("src/core/AIHealer/HealingTrust.js", {
+    "./LocatorStore": { addLocator: () => {} },
+    "../Middleware": { emit: () => {} },
+  });
+  Trust.pendingPath = path.join(dir, "pending.json");
+  Trust.decisionsPath = path.join(dir, "decisions.json");
+  fs.writeFileSync(Trust.pendingPath, "null");
+  fs.writeFileSync(Trust.decisionsPath, "42");
+  Trust._reload();
+  assert.deepEqual(Trust.list(), []);
+  assert.deepEqual(Trust.decisions, []);
+});
+
+test("healing trust: repeat recordPending overwrites suggested/description with the latest inference", (t) => {
+  const { trust } = trustAt(t);
+  trust.recordPending({ original: "#old", suggested: "#first-guess", description: "first" });
+  const second = trust.recordPending({ original: "#old", suggested: "#second-guess", description: "second" });
+  assert.equal(second.suggested, "#second-guess");
+  assert.equal(second.description, "second");
+  assert.equal(trust.list().length, 1);
+  assert.equal(trust.list()[0].suggested, "#second-guess");
+});
+
+test("healing trust: description defaults to an empty string when omitted", (t) => {
+  const { trust } = trustAt(t);
+  const entry = trust.recordPending({ original: "#old", suggested: "#new" });
+  assert.equal(entry.description, "");
+});
+
+test("healing trust: approve/reject default decidedBy to \"dashboard\" when not specified", async (t) => {
+  const { trust } = trustAt(t);
+  trust.recordPending({ original: "#a", suggested: "#a2" });
+  const approved = trust.approve("#a");
+  trust.recordPending({ original: "#b", suggested: "#b2" });
+  const rejected = trust.reject("#b");
+  await trust._queue;
+  assert.equal(approved.decidedBy, "dashboard");
+  assert.equal(rejected.decidedBy, "dashboard");
+});
+
+test("healing trust: approving twice is a no-op the second time and does not double-write LocatorStore", async (t) => {
+  const { trust, added } = trustAt(t);
+  trust.recordPending({ original: "#old", suggested: "#new" });
+  const first = trust.approve("#old");
+  const second = trust.approve("#old");
+  await trust._queue;
+  assert.equal(first.decision, "approved");
+  assert.equal(second, null);
+  assert.equal(added.length, 1);
+  assert.equal(trust.decisions.length, 1);
+});
+
+test("healing trust: rejecting after approving (and vice versa) is a no-op — the entry is already gone", async (t) => {
+  const { trust, added } = trustAt(t);
+  trust.recordPending({ original: "#a", suggested: "#a2" });
+  trust.approve("#a");
+  assert.equal(trust.reject("#a"), null);
+
+  trust.recordPending({ original: "#b", suggested: "#b2" });
+  trust.reject("#b");
+  assert.equal(trust.approve("#b"), null);
+  await trust._queue;
+  assert.deepEqual(added, [["#a", "#a2"]]); // #b was never approved
+});
+
+test("healing trust: approve/reject of an empty string original is a no-op, not a crash", (t) => {
+  const { trust, added } = trustAt(t);
+  assert.equal(trust.approve(""), null);
+  assert.equal(trust.reject(""), null);
+  assert.equal(added.length, 0);
+});
+
+test("healing trust: recordPending with an empty-string original is tracked like any other selector", (t) => {
+  const { trust } = trustAt(t);
+  const entry = trust.recordPending({ original: "", suggested: "#fallback" });
+  assert.equal(trust.list().length, 1);
+  assert.equal(trust.approve("").decision, "approved");
+  void entry;
+});
+
+test("healing trust: decisions ledger preserves insertion order across multiple selectors", async (t) => {
+  const { trust } = trustAt(t);
+  trust.recordPending({ original: "#1", suggested: "#1x" });
+  trust.recordPending({ original: "#2", suggested: "#2x" });
+  trust.recordPending({ original: "#3", suggested: "#3x" });
+  trust.approve("#2");
+  trust.reject("#1");
+  trust.approve("#3");
+  await trust._queue;
+  assert.deepEqual(
+    trust.decisions.map((d) => [d.original, d.decision]),
+    [["#2", "approved"], ["#1", "rejected"], ["#3", "approved"]],
+  );
+});
+
+test("healing trust: distinct selectors are tracked independently and don't interfere", (t) => {
+  const { trust } = trustAt(t);
+  trust.recordPending({ original: "#a", suggested: "#a2" });
+  trust.recordPending({ original: "#b", suggested: "#b2" });
+  trust.approve("#a");
+  const remaining = trust.list();
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].original, "#b");
+});
+
+// The exact class of bug LocatorStore already guards against (see "locator
+// cache supports selectors matching object prototype keys" above):
+// HealingTrust's `pending` map is a plain object, and a selector literally
+// named "__proto__" through a bare bracket assignment repoints the
+// object's own prototype instead of creating a property — silently
+// swallowing the entry (list() would return [] for it, forever). CSS
+// selectors are arbitrary strings, so this is a real, reachable input.
+test("healing trust: selectors matching Object.prototype keys are tracked safely, not silently dropped", async (t) => {
+  const { trust, added } = trustAt(t);
+  for (const key of ["__proto__", "constructor", "toString", "hasOwnProperty", "valueOf"]) {
+    trust.recordPending({ original: key, suggested: `#fix-${key}` });
+  }
+  assert.equal(trust.list().length, 5);
+  assert.deepEqual(
+    trust.list().map((e) => e.original).sort(),
+    ["__proto__", "constructor", "hasOwnProperty", "toString", "valueOf"].sort(),
+  );
+
+  const decision = trust.approve("__proto__");
+  await trust._queue;
+  assert.equal(decision.decision, "approved");
+  assert.deepEqual(added, [["__proto__", "#fix-__proto__"]]);
+  assert.equal(trust.list().length, 4);
+
+  // The object itself must still behave like a normal object afterward —
+  // no other selector's tracking was corrupted by the __proto__ write.
+  assert.equal(Object.getPrototypeOf(trust.pending), Object.prototype);
+  assert.equal(trust.reject("constructor").decision, "rejected");
+  assert.equal(trust.list().length, 3);
+});
+
+test("healing trust: recordPending for __proto__ persists and reloads correctly from disk", async (t) => {
+  const { trust } = trustAt(t);
+  trust.recordPending({ original: "__proto__", suggested: "#fix" });
+  await trust._queue;
+  const onDisk = JSON.parse(fs.readFileSync(trust.pendingPath, "utf8"));
+  assert.ok(Object.hasOwn(onDisk, "__proto__"));
+  assert.equal(onDisk.__proto__.suggested, "#fix");
+
+  trust._reload();
+  assert.equal(trust.list().length, 1);
+  assert.equal(trust.list()[0].original, "__proto__");
+});
+
+test("healing trust tolerates write errors without losing in-memory state", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const Trust = load("src/core/AIHealer/HealingTrust.js", {
+    "./LocatorStore": { addLocator: () => {} },
+    "../Middleware": { emit: () => {} },
+  });
+  // Point the "file" path at a directory so every write attempt fails.
+  fs.mkdirSync(path.join(dir, "pending.json"));
+  Trust.pendingPath = path.join(dir, "pending.json");
+  Trust.decisionsPath = path.join(dir, "decisions.json");
+  Trust._reload();
+  assert.doesNotThrow(() => Trust.recordPending({ original: "#old", suggested: "#new" }));
+  await Trust._queue;
+  assert.equal(Trust.list().length, 1);
+});
+
+test("healing trust: concurrent recordPending calls for the same selector all land without a lost update", async (t) => {
+  const { trust } = trustAt(t);
+  // Fires several updates before any of the async saves have flushed —
+  // proves the serialized _queue doesn't drop or interleave writes.
+  for (let i = 0; i < 10; i++) {
+    trust.recordPending({ original: "#flaky", suggested: `#fix-${i}` });
+  }
+  await trust._queue;
+  const onDisk = JSON.parse(fs.readFileSync(trust.pendingPath, "utf8"));
+  assert.equal(onDisk["#flaky"].occurrences, 10);
+  assert.equal(onDisk["#flaky"].suggested, "#fix-9");
+});
+
+test("healing trust: concurrent approve calls for different selectors are all persisted", async (t) => {
+  const { trust, added } = trustAt(t);
+  for (let i = 0; i < 20; i++) {
+    trust.recordPending({ original: `#s${i}`, suggested: `#f${i}` });
+  }
+  for (let i = 0; i < 20; i++) {
+    trust.approve(`#s${i}`);
+  }
+  await trust._queue;
+  assert.equal(added.length, 20);
+  assert.equal(trust.list().length, 0);
+  const onDisk = JSON.parse(fs.readFileSync(trust.decisionsPath, "utf8"));
+  assert.equal(onDisk.length, 20);
+  assert.ok(onDisk.every((d) => d.decision === "approved"));
+});
+
 // ── Phase 8: HealingReport.summary() (reviewable trend) ──
 
 test("healing report summary aggregates occurrences and tiers per selector", async (t) => {
@@ -427,4 +672,73 @@ test("healing report summary aggregates occurrences and tiers per selector", asy
   const b = summary.find((row) => row.original === "#b");
   assert.equal(b.occurrences, 1);
   assert.equal(b.lastResolved, null);
+});
+
+test("healing report summary is an empty array when nothing has ever been logged", () => {
+  const Report = load("src/core/AIHealer/HealingReport.js", {
+    "../Middleware": { emit: () => {} },
+  });
+  assert.deepEqual(Report.summary(), []);
+});
+
+test("healing report summary sorts by occurrences descending, most-recurring selector first", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const Report = load("src/core/AIHealer/HealingReport.js", {
+    "../Middleware": { emit: () => {} },
+  });
+  Report._instance.filePath = path.join(dir, "audit/events.json");
+  Report.log({ original: "#rare", resolved: "#x", tier: "LocatorStore" });
+  Report.log({ original: "#frequent", resolved: "#y", tier: "LocatorStore" });
+  Report.log({ original: "#frequent", resolved: "#y", tier: "LocatorStore" });
+  Report.log({ original: "#frequent", resolved: "#y", tier: "LocatorStore" });
+  await Report._instance._queue;
+
+  const summary = Report.summary();
+  assert.equal(summary[0].original, "#frequent");
+  assert.equal(summary[0].occurrences, 3);
+  assert.equal(summary[1].original, "#rare");
+  assert.equal(summary[1].occurrences, 1);
+});
+
+test("healing report summary tracks a selector that later resolved via Tier 3 after failing entirely", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const Report = load("src/core/AIHealer/HealingReport.js", {
+    "../Middleware": { emit: () => {} },
+  });
+  Report._instance.filePath = path.join(dir, "audit/events.json");
+  Report.log({ original: "#flaky", resolved: null, tier: "LLM", error: "ambiguous" });
+  Report.log({ original: "#flaky", resolved: "#fixed", tier: "LLM", trust: "pending" });
+  await Report._instance._queue;
+
+  const [row] = Report.summary();
+  assert.equal(row.occurrences, 2);
+  assert.deepEqual(row.tiers, { LLM: 2 });
+  assert.equal(row.lastResolved, "#fixed");
+});
+
+test("healing report summary handles a large volume of interleaved selectors without losing or misattributing events", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const Report = load("src/core/AIHealer/HealingReport.js", {
+    "../Middleware": { emit: () => {} },
+  });
+  Report._instance.filePath = path.join(dir, "audit/events.json");
+  const SELECTOR_COUNT = 25;
+  const EVENTS_PER_SELECTOR = 12;
+  for (let round = 0; round < EVENTS_PER_SELECTOR; round++) {
+    for (let i = 0; i < SELECTOR_COUNT; i++) {
+      Report.log({ original: `#sel-${i}`, resolved: `#fix-${i}-${round}`, tier: round % 2 === 0 ? "LocatorStore" : "LLM" });
+    }
+  }
+  await Report._instance._queue;
+
+  const summary = Report.summary();
+  assert.equal(summary.length, SELECTOR_COUNT);
+  assert.ok(summary.every((row) => row.occurrences === EVENTS_PER_SELECTOR));
+  assert.ok(summary.every((row) => row.tiers.LocatorStore === EVENTS_PER_SELECTOR / 2));
+  assert.ok(summary.every((row) => row.tiers.LLM === EVENTS_PER_SELECTOR / 2));
+  const sel0 = summary.find((row) => row.original === "#sel-0");
+  assert.equal(sel0.lastResolved, `#fix-0-${EVENTS_PER_SELECTOR - 1}`);
 });
