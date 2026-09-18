@@ -124,6 +124,8 @@ const DEFAULT_URL = "https://www.saucedemo.com";
                 emit("testFail", { name: r.name, error: r.error });
             } else if (r.status === "skipped") {
                 emit("testSkip", { name: r.name, reason: r.reason });
+            } else if (r.status === "quarantined") {
+                emit("testQuarantined", { name: r.name, error: r.error });
             }
         }
 

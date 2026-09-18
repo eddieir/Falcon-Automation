@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const Logger = require("../../utils/Logger");
 const HealingTrust  = require("./AIHealer/HealingTrust");
 const HealingReport = require("./AIHealer/HealingReport");
+const FlakinessTracker = require("./FlakinessTracker");
 
 /**
  * Dashboard — real-time test execution monitor.
@@ -195,6 +196,36 @@ class Dashboard {
             const decision = typeof original === "string" ? HealingTrust.reject(original, { rejectedBy: "dashboard" }) : null;
             if (!decision) return res.status(404).json({ error: "No pending healing entry for that selector." });
             res.json(decision);
+        });
+
+        // Phase 9 — flaky-test detection. Same token gate and rate limiter
+        // as every other read/write-state route above.
+        app.get("/flakiness/scenarios", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            const classification = typeof req.query?.classification === "string" ? req.query.classification : undefined;
+            res.json(FlakinessTracker.list({ classification }));
+        });
+
+        app.post("/flakiness/quarantine", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            const { key } = req.body || {};
+            const entry = typeof key === "string" ? FlakinessTracker.quarantine(key, { by: "dashboard" }) : null;
+            if (!entry) return res.status(404).json({ error: "No tracked scenario for that key." });
+            res.json(entry);
+        });
+
+        app.post("/flakiness/unquarantine", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            const { key } = req.body || {};
+            const entry = typeof key === "string" ? FlakinessTracker.unquarantine(key, { by: "dashboard" }) : null;
+            if (!entry) return res.status(404).json({ error: "That scenario isn't currently quarantined." });
+            res.json(entry);
         });
 
         const allowedOrigin = process.env.DASHBOARD_ALLOWED_ORIGIN || `http://localhost:${this.port}`;

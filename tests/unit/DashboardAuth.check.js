@@ -90,6 +90,9 @@ async function testWithoutToken() {
     const healingTrendRes = await httpRequest(port, "GET", "/healing/trend");
     check("no DASHBOARD_TOKEN set: unauthenticated GET /healing/trend still succeeds (200)", healingTrendRes.statusCode === 200, `got ${healingTrendRes.statusCode}`);
 
+    const flakinessScenariosRes = await httpRequest(port, "GET", "/flakiness/scenarios");
+    check("no DASHBOARD_TOKEN set: unauthenticated GET /flakiness/scenarios still succeeds (200)", flakinessScenariosRes.statusCode === 200, `got ${flakinessScenariosRes.statusCode}`);
+
     const socketRes = await connectSocket(port);
     check("no DASHBOARD_TOKEN set: socket connects with no token", socketRes.connected === true, socketRes.message);
 
@@ -134,6 +137,23 @@ async function testWithToken() {
         "DASHBOARD_TOKEN set: authenticated POST /healing/approve for an unknown selector returns 404, not silently trusted",
         rightAuthApproveUnknown.statusCode === 404,
         `got ${rightAuthApproveUnknown.statusCode}`
+    );
+
+    // Phase 9 — the flaky-test-detection endpoints get exactly the same gate.
+    const noAuthScenarios = await httpRequest(port, "GET", "/flakiness/scenarios");
+    check("DASHBOARD_TOKEN set: unauthenticated GET /flakiness/scenarios rejected (401)", noAuthScenarios.statusCode === 401, `got ${noAuthScenarios.statusCode}`);
+
+    const rightAuthScenarios = await httpRequest(port, "GET", "/flakiness/scenarios", { "X-Dashboard-Token": TOKEN });
+    check("DASHBOARD_TOKEN set: correct token via header accepted for GET /flakiness/scenarios (200)", rightAuthScenarios.statusCode === 200, `got ${rightAuthScenarios.statusCode}`);
+
+    const noAuthQuarantine = await httpRequest(port, "POST", "/flakiness/quarantine", {}, { key: "does-not-exist" });
+    check("DASHBOARD_TOKEN set: unauthenticated POST /flakiness/quarantine rejected (401)", noAuthQuarantine.statusCode === 401, `got ${noAuthQuarantine.statusCode}`);
+
+    const rightAuthQuarantineUnknown = await httpRequest(port, "POST", "/flakiness/quarantine", { "X-Dashboard-Token": TOKEN }, { key: "does-not-exist" });
+    check(
+        "DASHBOARD_TOKEN set: authenticated POST /flakiness/quarantine for an unknown key returns 404, not silently applied",
+        rightAuthQuarantineUnknown.statusCode === 404,
+        `got ${rightAuthQuarantineUnknown.statusCode}`
     );
 
     const noAuthSocket = await connectSocket(port);
