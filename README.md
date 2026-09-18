@@ -1,6 +1,6 @@
 # Falcon-Automation: AI-Powered Test Automation Framework
 
-> **Status:** Active development · Phases 1–7 merged, plus a follow-up hardening pass (comprehensive regression suite, a real selector-anchoring fix, and this doc sync). Phase 8 (healing trust) is next; see [Roadmap](#roadmap). Full per-bug engineering history: [CHANGELOG.md](CHANGELOG.md).
+> **Status:** Active development · Phases 1–8 merged, including a follow-up hardening pass (comprehensive regression suite, a real selector-anchoring fix, and this doc sync). See [Roadmap](#roadmap) for what's next. Full per-bug engineering history: [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -32,7 +32,7 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 - **Database testing:** PostgreSQL via `pg` Pool with full mTLS support
 - **CI/CD ready:** GitHub Actions pipeline with Allure report upload
 
-**Delivered so far:** core AI healing + reporting foundation → a stability audit (14 defects fixed) → visual regression, live dashboard, AI test generation, and Allure reporting → repository hygiene → a single consolidated self-healing engine with a bounded LocatorStore → real Postgres coverage in CI → a token-gated dashboard → a comprehensive `node:test` + Playwright regression layer (183 + 30 tests, a second CI job) and a real selector-anchoring fix in `PageAnalyser`. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md). See [Roadmap](#roadmap) for what's next.
+**Delivered so far:** core AI healing + reporting foundation → a stability audit (14 defects fixed) → visual regression, live dashboard, AI test generation, and Allure reporting → repository hygiene → a single consolidated self-healing engine with a bounded LocatorStore → real Postgres coverage in CI → a token-gated dashboard → a comprehensive `node:test` + Playwright regression layer (192 + 30 tests, a second CI job) and a real selector-anchoring fix in `PageAnalyser` → an approval gate for AI-inferred selector fixes, so a Tier 3 guess is reviewed by a human before it's ever trusted again. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md). See [Roadmap](#roadmap) for what's next.
 
 ---
 
@@ -133,6 +133,45 @@ The full sweep above didn't happen to hit a genuinely broken selector, so the he
 
 Tier 1 genuinely exhausts its 3 retries with real exponential backoff (not a mocked delay) against the real page before falling back. Reproduce it yourself: `node docs/demo/self-heal-axonradar-demo.js`.
 
+### Healing trust, demonstrated against the same real site
+
+A Tier 2 fix (above) was already reviewed once, which is how it got into `LocatorStore` in the first place, so it's reused immediately. A Tier 3 fix is different: an LLM guess that's never been looked at by anyone. Below, the same site is hit with a selector that has no cached fix at all, so Tier 1 and Tier 2 both genuinely fail and Tier 3 is asked. The LLM call itself is stubbed (see [`docs/demo/healing-trust-axonradar-demo.js`](docs/demo/healing-trust-axonradar-demo.js) for why), but everything downstream, the real click, the pending-review entry, the approval gate, and the persisted `LocatorStore` write, is the real code path:
+
+```
+=== Step 1: a selector breaks with no cached fix. Tier 1 and Tier 2 both fail, so Tier 3 is asked ===
+🔹 Tier 1: Trying RESCAN (#rescan-trigger-v2-renamed)
+❌ Tier 1 exhausted for RESCAN. Engaging Tier 2/3 healing.
+🤖 Asking AI to infer locator for: #rescan-trigger-v2-renamed
+🤖 AI suggested: button:has-text('RESCAN')
+Tier 3 clicked the right element via "button:has-text('RESCAN')".
+
+=== Step 2: prove it was NOT silently trusted. LocatorStore has nothing for it yet ===
+LocatorStore.getAlternatives("#rescan-trigger-v2-renamed") -> []
+Empty, as expected: a working guess earns no automatic trust.
+
+=== Step 3: it is sitting in review instead ===
+{
+  "original": "#rescan-trigger-v2-renamed",
+  "suggested": "button:has-text('RESCAN')",
+  "description": "RESCAN",
+  "occurrences": 1
+}
+
+=== Step 4: a human reviews it and approves. Only now does it become a trusted Tier 2 alternative ===
+LocatorStore.getAlternatives("#rescan-trigger-v2-renamed") -> ["button:has-text('RESCAN')"]
+On the next run, Tier 2 handles this selector at zero LLM cost.
+```
+
+Until that approval happens, the exact same broken selector pays the Tier 3 LLM cost again on every subsequent run, on purpose: a guess earns no trust just because it worked once. Review and approve pending fixes either from the live dashboard's "Healing trust" panel, or headlessly:
+
+```sh
+node scripts/healing/review.js list                        # what's awaiting review
+node scripts/healing/review.js approve "<original-selector>"
+node scripts/healing/review.js reject  "<original-selector>"
+```
+
+Reproduce the demo above yourself: `node docs/demo/healing-trust-axonradar-demo.js`.
+
 ### Visual regression, demonstrated against the same real site
 
 A real baseline screenshot of the live page, compared against itself (0 px changed), then compared again after a real DOM change was injected (a "MAINTENANCE MODE" banner) and caught:
@@ -176,7 +215,7 @@ ffmpeg -y -f concat -safe 0 -i axonradar-gif-list.txt \
   falcon-axonradar-demo.gif
 ```
 
-`docs/demo/capture-dashboard.js` and `docs/demo/build-gif-list.js` are checked in so this is reproducible against any future run, not a one-off screenshot. The full-sweep, self-healing, and visual-regression sections above are each their own standalone, reproducible script:
+`docs/demo/capture-dashboard.js` and `docs/demo/build-gif-list.js` are checked in so this is reproducible against any future run, not a one-off screenshot. The full-sweep, self-healing, healing-trust, and visual-regression sections above are each their own standalone, reproducible script:
 
 ```sh
 # Full 11-page sweep, real aggregate totals streamed to the live dashboard
@@ -184,6 +223,9 @@ node docs/demo/multi-page-axonradar-dashboard-demo.js
 
 # Self-healing: Tier 1 exhausted -> Tier 2 healed, against a real element
 node docs/demo/self-heal-axonradar-demo.js
+
+# Healing trust: Tier 3 succeeds but isn't trusted until a human approves it
+node docs/demo/healing-trust-axonradar-demo.js
 
 # Visual regression: a real baseline vs. a genuine injected change
 node docs/demo/visual-regression-axonradar-demo.js
@@ -208,17 +250,21 @@ flowchart TD
         Healer --> T1["Tier 1: AdaptiveRetry\nbackoff + jitter"]
         T1 -->|still failing| T2["Tier 2: LocatorStore\ncached alternatives"]
         T2 -->|no cached match| T3["Tier 3: OpenAI gpt-4o-mini\nlive selector inference"]
-        T3 -->|resolved| Store[("data/locator_store.json\nbounded, LRU-evicted")]
+        T3 -->|resolved, unreviewed| Trust["HealingTrust\npending-approval gate (Phase 8)"]
+        Trust -->|human approves| Store[("data/locator_store.json\nbounded, LRU-evicted")]
+        Trust -->|human rejects| Decisions[("data/healing_decisions.json\naudit ledger")]
         T2 -.reads.-> Store
     end
 
     Runner --> VR["VisualRegression\npixel-diff vs. baseline"]
     Runner --> RM["ReportManager\nreal pass/fail/skip tally"]
-    Healer --> HR["HealingReport\naudit log"]
+    Healer --> HR["HealingReport\naudit log + reviewable trend"]
 
     RM --> Dash["Dashboard\nlive WebSocket UI @ :3000"]
     HR --> Dash
     Explore --> Dash
+    Trust <-->|GET/POST /healing/*| Dash
+    CLIReview["scripts/healing/review.js\nheadless approve/reject"] --> Trust
 
     RM --> ReportsJSON[("reports/test-report.json")]
     HR --> HealLogJSON[("reports/healing_logs.json")]
@@ -228,7 +274,7 @@ flowchart TD
     DB["DBClient\nPostgreSQL + mTLS"] --> Suite
 ```
 
-The pipeline has two entry paths that converge on the same healing engine: the **autonomous path** (`falcon.js`: explore, generate, and run scenarios with no hand-written test code) and the **explicit path** (hand-written scenario files under `tests/`). Both go through the identical `AIHealer` three-tier chain, so a selector fix learned by one path benefits the other via the shared `LocatorStore`.
+The pipeline has two entry paths that converge on the same healing engine: the **autonomous path** (`falcon.js`: explore, generate, and run scenarios with no hand-written test code) and the **explicit path** (hand-written scenario files under `tests/`). Both go through the identical `AIHealer` three-tier chain, so a selector fix learned by one path benefits the other via the shared `LocatorStore`, once it's been through the `HealingTrust` approval gate described below.
 
 ---
 
@@ -246,7 +292,8 @@ Falcon-Automation/
 │   └── core/
 │       ├── AIHealer/
 │       │   ├── AIHealer.js          # Three-tier self-healing engine (Tier 3: OpenAI)
-│       │   ├── HealingReport.js     # Audit log for all healing events
+│       │   ├── HealingReport.js     # Audit log for all healing events + reviewable trend (summary())
+│       │   ├── HealingTrust.js      # Tier 3 approval gate: pending review -> approve/reject (Phase 8)
 │       │   ├── LocatorStore.js      # Persisted alternative locators (Tier 2 cache, bounded)
 │       │   ├── AdaptiveRetry.js     # Tier 1: backoff + jitter retry
 │       │   └── AIAnalyser.js
@@ -275,12 +322,17 @@ Falcon-Automation/
 │   │   ├── DBConfigBehavior.check.js
 │   │   └── DashboardAuth.check.js
 │   └── full_automation.test.js      # Playwright-native suite (allure-playwright reporter)
-├── scripts/db/
-│   └── ci-seed.sql                  # Minimal schema/seed applied to CI's Postgres
+├── scripts/
+│   ├── db/
+│   │   └── ci-seed.sql              # Minimal schema/seed applied to CI's Postgres
+│   └── healing/
+│       └── review.js                # Headless list/approve/reject CLI for pending healing fixes
 ├── utils/
 │   └── Logger.js                    # Async file logging (non-blocking)
-├── data/
-│   └── locator_store.json           # Persisted LocatorStore entries (gitignored)
+├── data/                            # Gitignored
+│   ├── locator_store.json           # Persisted LocatorStore entries (Tier 2, bounded)
+│   ├── healing_pending.json         # Tier 3 fixes awaiting human review (Phase 8)
+│   └── healing_decisions.json       # Approved/rejected audit ledger (Phase 8)
 ├── reports/                         # Generated at runtime (gitignored)
 │   ├── execution.log
 │   ├── test-report.json
@@ -370,11 +422,29 @@ Falcon's healing engine operates in three tiers, in order:
 | 2 | LocatorStore: alternatives learned from prior runs | None | Fast |
 | 3 | LLM inference: live DOM snapshot + OpenAI gpt-4o-mini | ~$0.001/call | ~1-2 s |
 
-Successful Tier 3 results are written back to LocatorStore automatically.  On the next run the same fix is applied via Tier 2 at zero cost.
+A successful Tier 2 match was already reviewed once (it's how it got into `LocatorStore` in the first place) and is reused immediately. A successful Tier 3 result is different: nobody has looked at it yet. It does not get written to `LocatorStore` automatically. Instead it goes to `HealingTrust` as a fix awaiting human review, and the exact same broken selector pays the Tier 3 cost again on every subsequent run until a human approves it. "Self-healing" should never mean "silently trusted": an LLM guess earns reuse rights by being reviewed, not by having worked once.
 
 The healing engine captures a targeted DOM snapshot (interactive elements only, ≤ 6 KB) rather than the full page, keeping inference prompts small and latency predictable.
 
 `AIHealer` is now the single healing implementation used by every entry point (`LoginTest`, `CheckoutTest`, `GoogleSearchTest`, etc.). The older, parallel `SelfHealingManager` path (and its sole caller, `LoginPage.js`) has been removed. `LocatorStore` also tracks a `lastUsed` timestamp per selector and is bounded: at most 5 alternatives are kept per selector and at most 500 distinct selectors are tracked overall, with the least-recently-used entries evicted first, so `data/locator_store.json` can't grow without limit across a long project history.
+
+### Healing trust: reviewing and approving Tier 3 fixes (Phase 8)
+
+Every healing attempt, across all three tiers, is already recorded by `HealingReport`. Beyond the flat event log, `HealingReport.summary()` aggregates it into a reviewable trend, one row per selector, showing how many times it broke, which tiers resolved it and how often, and its most recent outcome, instead of an unreadable list of individual events.
+
+A pending Tier 3 fix can be reviewed and decided on two ways:
+
+- **The live dashboard's "Healing trust" panel** (`localhost:3000`, or wherever `DASHBOARD_PORT` points): lists every fix awaiting review with its suggested replacement, description, and how many times it's recurred, with **Approve**/**Reject** buttons. Backed by `GET /healing/pending`, `GET /healing/trend`, `POST /healing/approve`, and `POST /healing/reject`, gated by the same `DASHBOARD_TOKEN` and rate limiter as `/emit` and `/events`.
+- **`scripts/healing/review.js`**, for headless environments where the dashboard isn't open:
+
+  ```sh
+  node scripts/healing/review.js list                        # what's awaiting review
+  node scripts/healing/review.js approve "<original-selector>"
+  node scripts/healing/review.js reject  "<original-selector>"
+  node scripts/healing/review.js approve-all
+  ```
+
+Approving writes the fix into `LocatorStore` (Tier 2 reuses it from then on) and records the decision in `data/healing_decisions.json`. Rejecting discards it, never touching `LocatorStore`, but keeps the same audit record so a rejected guess doesn't quietly get re-suggested with no memory of having been turned down. Both `data/healing_pending.json` and `data/healing_decisions.json` are gitignored, the same as `locator_store.json`.
 
 ---
 
@@ -384,7 +454,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 
 **`regression` job** (~1 minute): the `node:test` + Playwright layer added alongside the community-health files:
 1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
-2. `npm run test:coverage`: 183 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, CLI, API, boundaries, dashboard, visual regression, plan generation)
+2. `npm run test:coverage`: 192 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, CLI, API, boundaries, dashboard, visual regression, plan generation)
 3. `npm run test:browser`: 30 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
 4. Uploads `reports/` as the `regression-reports` artifact
 
@@ -432,7 +502,7 @@ npm run test:unit
 
 # The larger node:test + Playwright regression layer (needs Node 20.19+;
 # see Installation). This is what the "regression" CI job runs.
-npm run test:regression   # 183 node:test cases, tests/regression/*.check.cjs
+npm run test:regression   # 192 node:test cases, tests/regression/*.check.cjs
 npm run test:browser      # 30 Playwright specs, tests/regression/browser.spec.js
 npm run test:coverage     # same as test:regression, with coverage collection
 
@@ -455,9 +525,10 @@ npx allure open allure-report
 
 Falcon's differentiator is genuine self-healing, not a hardcoded selector list, but "AI healed this selector" is only as trustworthy as the visibility behind it. That's the throughline for what's next:
 
-- **Healing you can audit.** Every retry, cache hit, and LLM-inferred fix is already logged. The next step is surfacing that as a reviewable trend across a run (which selectors heal, how often, and via which tier) and gating any LLM-rewritten selector behind explicit approval before it's trusted for reuse. "Self-healing" should never mean "silently trusted."
+- **Pending fixes that nobody ever gets around to reviewing.** `HealingTrust` makes an unreviewed Tier 3 guess visible and gates it behind approval, but a pending entry has no expiry today; if nobody opens the dashboard or runs `scripts/healing/review.js` for a while, it just sits there and Tier 3 keeps paying the LLM cost silently in the background. The next step is a CI-visible signal, at minimum a loud warning, possibly a failed check, when `data/healing_pending.json` has entries older than some threshold, so an unreviewed fix can't be ignored indefinitely by default.
 
 ✅ Shipped since the last update:
+- **An approval gate for AI-inferred selector fixes.** A Tier 3 (LLM) success used to be written straight into `LocatorStore` and trusted for reuse the moment it worked once. It now goes to `HealingTrust` as a pending fix instead, visible on the live dashboard's "Healing trust" panel or via `scripts/healing/review.js`, and only becomes a trusted Tier 2 alternative once a human explicitly approves it; rejecting it discards the fix while keeping an audit record. `HealingReport.summary()` also aggregates the full healing log into a reviewable trend, selector by selector, tier by tier, instead of a flat event list.
 - A single, consolidated self-healing engine across every entry point: one three-tier chain (retry to locator cache to LLM), with `LocatorStore` now bounded so it can't grow unbounded over a long project history.
 - **Real coverage of the data layer, not just the UI.** DB tests now run against a real, disposable Postgres in CI instead of being silently absent, and, more fundamentally, every scenario test's process exit code now actually matches its reported pass/fail result, so a green CI check means the tests actually passed, not just that the process didn't crash.
 - **A dashboard built for teams, not just a laptop.** Token-gated auth means the live dashboard can now be safely pointed at from CI or a shared environment, not just a single trusted laptop. Unauthenticated requests and socket connections are rejected outright rather than quietly allowed through.

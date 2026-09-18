@@ -24,7 +24,10 @@
     "test": "npm run test:regression && npm run test:browser",
     "test:regression": "node --test --test-concurrency=1 tests/regression/*.check.cjs",
     "test:browser": "playwright test -c playwright.regression.config.js",
-    "test:coverage": "node --experimental-test-coverage --test --test-concurrency=1 tests/regression/*.check.cjs"
+    "test:coverage": "node --experimental-test-coverage --test --test-concurrency=1 tests/regression/*.check.cjs",
+    "healing:pending": "node scripts/healing/review.js list",
+    "healing:approve": "node scripts/healing/review.js approve",
+    "healing:reject": "node scripts/healing/review.js reject"
   },
   "keywords": [
     "AI",

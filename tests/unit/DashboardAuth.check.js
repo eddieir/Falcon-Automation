@@ -22,7 +22,7 @@ const Dashboard = require("../../src/core/Dashboard");
 
 let failures = 0;
 
-function httpRequest(port, method, urlPath, headers = {}) {
+function httpRequest(port, method, urlPath, headers = {}, jsonBody) {
     return new Promise((resolve, reject) => {
         const req = http.request(
             { host: "localhost", port, path: urlPath, method, headers, timeout: 3000 },
@@ -35,7 +35,7 @@ function httpRequest(port, method, urlPath, headers = {}) {
         req.on("error", reject);
         req.on("timeout", () => req.destroy(new Error("request timed out")));
         if (method === "POST") {
-            const payload = JSON.stringify({ name: "testStart", payload: {} });
+            const payload = JSON.stringify(jsonBody ?? { name: "testStart", payload: {} });
             req.setHeader("Content-Type", "application/json");
             req.setHeader("Content-Length", Buffer.byteLength(payload));
             req.end(payload);
@@ -84,6 +84,12 @@ async function testWithoutToken() {
     const eventsRes = await httpRequest(port, "GET", "/events");
     check("no DASHBOARD_TOKEN set: unauthenticated GET /events still succeeds (200)", eventsRes.statusCode === 200, `got ${eventsRes.statusCode}`);
 
+    const healingPendingRes = await httpRequest(port, "GET", "/healing/pending");
+    check("no DASHBOARD_TOKEN set: unauthenticated GET /healing/pending still succeeds (200)", healingPendingRes.statusCode === 200, `got ${healingPendingRes.statusCode}`);
+
+    const healingTrendRes = await httpRequest(port, "GET", "/healing/trend");
+    check("no DASHBOARD_TOKEN set: unauthenticated GET /healing/trend still succeeds (200)", healingTrendRes.statusCode === 200, `got ${healingTrendRes.statusCode}`);
+
     const socketRes = await connectSocket(port);
     check("no DASHBOARD_TOKEN set: socket connects with no token", socketRes.connected === true, socketRes.message);
 
@@ -111,6 +117,24 @@ async function testWithToken() {
 
     const rightQueryEvents = await httpRequest(port, "GET", `/events?token=${TOKEN}`);
     check("DASHBOARD_TOKEN set: correct token via query param accepted (200)", rightQueryEvents.statusCode === 200, `got ${rightQueryEvents.statusCode}`);
+
+    // Phase 8 — the healing trust endpoints get exactly the same gate as
+    // /emit and /events above: same token check, same rate limiter.
+    const noAuthPending = await httpRequest(port, "GET", "/healing/pending");
+    check("DASHBOARD_TOKEN set: unauthenticated GET /healing/pending rejected (401)", noAuthPending.statusCode === 401, `got ${noAuthPending.statusCode}`);
+
+    const rightAuthPending = await httpRequest(port, "GET", "/healing/pending", { "X-Dashboard-Token": TOKEN });
+    check("DASHBOARD_TOKEN set: correct token via header accepted for GET /healing/pending (200)", rightAuthPending.statusCode === 200, `got ${rightAuthPending.statusCode}`);
+
+    const noAuthApprove = await httpRequest(port, "POST", "/healing/approve", {}, { original: "#does-not-exist" });
+    check("DASHBOARD_TOKEN set: unauthenticated POST /healing/approve rejected (401)", noAuthApprove.statusCode === 401, `got ${noAuthApprove.statusCode}`);
+
+    const rightAuthApproveUnknown = await httpRequest(port, "POST", "/healing/approve", { "X-Dashboard-Token": TOKEN }, { original: "#does-not-exist" });
+    check(
+        "DASHBOARD_TOKEN set: authenticated POST /healing/approve for an unknown selector returns 404, not silently trusted",
+        rightAuthApproveUnknown.statusCode === 404,
+        `got ${rightAuthApproveUnknown.statusCode}`
+    );
 
     const noAuthSocket = await connectSocket(port);
     check(

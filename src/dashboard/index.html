@@ -204,6 +204,98 @@
   }
 
   #empty-state .big { font-size: 32px; margin-bottom: 8px; }
+
+  /* ── Healing trust panel (Phase 8) ── */
+  #healing-section {
+    padding: 0 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  #healing-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+  }
+
+  #healing-empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 12px 0;
+  }
+
+  .pending-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--heal);
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  .pending-body { flex: 1; min-width: 200px; }
+
+  .pending-selector {
+    font-weight: 600;
+    word-break: break-all;
+  }
+
+  .pending-detail {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 2px;
+    word-break: break-all;
+  }
+
+  .pending-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+  .btn {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .btn-approve { border-color: var(--pass); color: var(--pass); }
+  .btn-approve:hover { background: var(--pass); color: var(--bg); }
+  .btn-reject { border-color: var(--fail); color: var(--fail); }
+  .btn-reject:hover { background: var(--fail); color: var(--bg); }
+
+  #healing-trend-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 8px;
+  }
+
+  #healing-trend-table th, #healing-trend-table td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  #healing-trend-table th {
+    color: var(--muted);
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: .6px;
+  }
 </style>
 </head>
 <body>
@@ -232,6 +324,21 @@
   </div>
 </div>
 
+<div id="healing-section">
+  <div id="healing-header">
+    <span>Healing trust — awaiting review</span>
+  </div>
+  <div id="healing-pending-list">
+    <div id="healing-empty">No Tier 3 (AI-inferred) fixes awaiting review.</div>
+  </div>
+  <table id="healing-trend-table" style="display:none">
+    <thead>
+      <tr><th>Selector</th><th>Occurrences</th><th>Tiers</th><th>Last outcome</th></tr>
+    </thead>
+    <tbody id="healing-trend-body"></tbody>
+  </table>
+</div>
+
 <div id="feed-section">
   <div id="feed-header">
     <span>Event feed</span>
@@ -245,7 +352,7 @@
 </div>
 
 <script>
-  const state = { pass: 0, fail: 0, skip: 0, heal: 0, startTs: null };
+  const state = { pass: 0, fail: 0, skip: 0, heal: 0, startTs: null, pending: new Map() };
 
   const $ = (id) => document.getElementById(id);
 
@@ -332,9 +439,128 @@
       case "testEnd":
         addRow("info", "🏁", `Completed: ${payload.testName}`, null, timestamp);
         break;
+      case "healingPending":
+        state.pending.set(payload.original, payload);
+        renderPending();
+        addRow("heal", "⏳", `Pending review: ${payload.original}`, `→ ${payload.suggested}`, timestamp);
+        break;
+      case "healingApproved":
+        state.pending.delete(payload.original);
+        renderPending();
+        addRow("pass", "✅", `Approved: ${payload.original}`, `→ ${payload.suggested} (now trusted for Tier 2)`, timestamp);
+        break;
+      case "healingRejected":
+        state.pending.delete(payload.original);
+        renderPending();
+        addRow("fail", "🚫", `Rejected: ${payload.original}`, `→ ${payload.suggested} (discarded)`, timestamp);
+        break;
       default:
         addRow("info", "ℹ️", name, JSON.stringify(payload), timestamp);
     }
+  }
+
+  // ── Healing trust panel (Phase 8) ──
+
+  function renderPending() {
+    const list = $("healing-pending-list");
+    const empty = $("healing-empty");
+    const entries = [...state.pending.values()];
+
+    if (entries.length === 0) {
+      list.replaceChildren(empty || makeHealingEmpty());
+      return;
+    }
+
+    list.replaceChildren(...entries.map((entry) => {
+      const row = document.createElement("div");
+      row.className = "pending-row";
+      row.innerHTML = `
+        <div class="pending-body">
+          <div class="pending-selector">${escapeHtml(entry.original)}</div>
+          <div class="pending-detail">→ ${escapeHtml(entry.suggested)}${entry.description ? ` — ${escapeHtml(entry.description)}` : ""}</div>
+          <div class="pending-detail">seen ${entry.occurrences}× · last ${fmt(new Date(entry.lastSeen).getTime())}</div>
+        </div>
+        <div class="pending-actions">
+          <button class="btn btn-approve" data-action="approve" data-selector="${escapeHtml(entry.original)}">Approve</button>
+          <button class="btn btn-reject" data-action="reject" data-selector="${escapeHtml(entry.original)}">Reject</button>
+        </div>
+      `;
+      return row;
+    }));
+  }
+
+  function makeHealingEmpty() {
+    const div = document.createElement("div");
+    div.id = "healing-empty";
+    div.textContent = "No Tier 3 (AI-inferred) fixes awaiting review.";
+    return div;
+  }
+
+  $("healing-pending-list").addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-action]");
+    if (!button) return;
+    const { action, selector } = button.dataset;
+    button.disabled = true;
+    try {
+      await healingDecision(action, selector);
+    } catch (err) {
+      button.disabled = false;
+      alert(`Failed to ${action}: ${err.message}`);
+    }
+  });
+
+  async function healingDecision(action, original) {
+    const res = await fetch(`/healing/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ original }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    // The socket "healingApproved"/"healingRejected" event that follows
+    // updates state.pending and re-renders — no need to do it here too.
+  }
+
+  function authHeaders() {
+    return dashboardToken ? { "X-Dashboard-Token": dashboardToken } : {};
+  }
+
+  async function renderTrend() {
+    try {
+      const res = await fetch("/healing/trend", { headers: authHeaders() });
+      if (!res.ok) return;
+      const rows = await res.json();
+      const table = $("healing-trend-table");
+      const body = $("healing-trend-body");
+      if (rows.length === 0) { table.style.display = "none"; return; }
+      table.style.display = "table";
+      body.replaceChildren(...rows.map((row) => {
+        const tr = document.createElement("tr");
+        const tiers = Object.entries(row.tiers).map(([tier, count]) => `${tier}: ${count}`).join(", ");
+        tr.innerHTML = `
+          <td>${escapeHtml(row.original)}</td>
+          <td>${row.occurrences}</td>
+          <td>${escapeHtml(tiers)}</td>
+          <td>${row.lastResolved ? `✅ ${escapeHtml(row.lastResolved)}` : "❌ unresolved"}</td>
+        `;
+        return tr;
+      }));
+    } catch {
+      // Trend table is a nice-to-have — never let it break the live feed
+    }
+  }
+
+  async function refreshHealing() {
+    try {
+      const res = await fetch("/healing/pending", { headers: authHeaders() });
+      if (res.ok) {
+        const entries = await res.json();
+        state.pending = new Map(entries.map((entry) => [entry.original, entry]));
+        renderPending();
+      }
+    } catch {
+      // Best-effort — socket events will still keep this in sync going forward
+    }
+    renderTrend();
   }
 
   // Phase 7 — auth token. Read from ?token=, persist to localStorage so a
@@ -354,11 +580,13 @@
     try { return localStorage.getItem("falcon_dashboard_token") || undefined; } catch { return undefined; }
   }
 
-  const socket = io({ auth: { token: resolveToken() } });
+  const dashboardToken = resolveToken();
+  const socket = io({ auth: { token: dashboardToken } });
 
   socket.on("connect", () => {
     $("status-dot").classList.add("live");
     $("status-label").textContent = "Live";
+    refreshHealing();
   });
 
   socket.on("disconnect", () => {
@@ -375,11 +603,12 @@
 
   // Replay full history for late-joining tabs
   socket.on("replay", (events) => {
-    Object.assign(state, { pass: 0, fail: 0, skip: 0, heal: 0, startTs: null });
+    Object.assign(state, { pass: 0, fail: 0, skip: 0, heal: 0, startTs: null, pending: new Map() });
     $("feed").replaceChildren();
     for (const id of ["bar-pass", "bar-fail", "bar-skip"]) $(id).style.width = "0%";
     $("run-time").textContent = "–";
     updateTiles();
+    renderPending();
     events.forEach(handleEvent);
   });
 

@@ -7,6 +7,7 @@ const Inspector = require("../../src/core/ExploratoryAI");
 const Healer = require("../../src/core/AIHealer/AIHealer");
 const Store = require("../../src/core/AIHealer/LocatorStore");
 const Report = require("../../src/core/AIHealer/HealingReport");
+const Trust = require("../../src/core/AIHealer/HealingTrust");
 const Logger = require("../../utils/Logger");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -17,10 +18,14 @@ test.beforeAll(() => {
   Store.storePath = path.join(scratch, "store.json");
   Store.data = {};
   Report._instance.filePath = path.join(scratch, "healing.json");
+  Trust.pendingPath = path.join(scratch, "healing_pending.json");
+  Trust.decisionsPath = path.join(scratch, "healing_decisions.json");
+  Trust._reload();
 });
 test.afterAll(async () => {
   await Store._queue;
   await Report._instance._queue;
+  await Trust._queue;
   await Logger.flush();
   fs.rmSync(scratch, { recursive: true, force: true });
 });
@@ -121,7 +126,7 @@ test("autoheal repairs changed selector through persistent alternatives inside r
   expect(await page.evaluate(() => window.saved)).toBe(true);
   expect(Report._instance.logs.at(-1).resolved).toBe("#new");
 });
-test("autoheal infers from real DOM through a controlled provider and caches only a working selector", async ({
+test("autoheal infers from real DOM through a controlled provider, but does not trust it until approved", async ({
   page,
 }) => {
   await page.setContent(
@@ -144,11 +149,26 @@ test("autoheal infers from real DOM through a controlled provider and caches onl
   });
   await healer.healSelector("#renamed", "Save");
   expect(await page.evaluate(() => window.saved)).toBe(true);
+
+  // Phase 8: a Tier 3 guess is not written to LocatorStore just because it
+  // worked once — it sits in HealingTrust awaiting human review, so the
+  // exact same broken selector pays the LLM cost again until reviewed.
+  expect(Store.getAlternatives("#renamed")).not.toContain(
+    '[data-testid="replacement"]',
+  );
+  expect(Trust.list().map((entry) => entry.original)).toContain("#renamed");
+  await healer.healSelector("#renamed", "Save");
+  expect(requests).toBe(2);
+
+  // Once a human approves it, it becomes a trusted Tier 2 alternative and
+  // the LLM is no longer consulted for this selector.
+  Trust.approve("#renamed", { approvedBy: "test" });
+  await Trust._queue;
   expect(Store.getAlternatives("#renamed")).toContain(
     '[data-testid="replacement"]',
   );
   await healer.healSelector("#renamed", "Save");
-  expect(requests).toBe(1);
+  expect(requests).toBe(2);
 });
 test("unrecoverable selector records failure instead of success or skip", async ({
   page,
