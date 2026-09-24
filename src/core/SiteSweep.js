@@ -87,8 +87,25 @@ class SiteSweep {
      * interactions can never be mistaken for one.
      */
     static signatureOf(scenario) {
-        return `${scenario.action}::${scenario.locator}::${scenario.value ?? ""}`;
+        // `description` is part of the signature, not decoration. PageAnalyser
+        // falls back to `tag[type=…]` and structural nth-of-type paths when an
+        // element has no distinguishing attribute, so on a templated app
+        // /users' "Delete user" and /reports' "Export" can both come back as
+        // `button[type="submit"]`. Signing on locator alone would collapse them
+        // and report Export as covered by a run that never touched it — which
+        // is the one thing a coverage feature must never do. Shared chrome
+        // still dedupes, because a nav link carries the same description on
+        // every page it appears on.
+        return [
+            scenario.action,
+            scenario.locator,
+            scenario.value ?? "",
+            scenario.description ?? "",
+        ].join("::");
     }
+
+    /** Ceiling on anchors read from one page — see _harvestLinks(). */
+    static MAX_HARVESTED_LINKS = 500;
 
     /** A listener that throws must not take the sweep down with it. */
     _emit(name, payload) {
@@ -111,7 +128,7 @@ class SiteSweep {
         if (!entry) throw new Error(`SiteSweep requires an http(s) entry URL, received: ${entryUrl}`);
 
         const discovered = await this._discover(entry);
-        const { pages, queue } = this._plan(entry, discovered);
+        const { pages, queue, outOfScope } = this._plan(entry, discovered);
 
         let budgetExhausted = false;
         for (let i = 0; i < queue.length; i++) {
@@ -132,6 +149,7 @@ class SiteSweep {
 
         const coverage = SiteSweep.summarize(pages);
         coverage.budgetExhausted = budgetExhausted;
+        coverage.linksOutOfScope = outOfScope.length;
 
         Logger.info(
             `🗺  Sweep complete: ${coverage.pagesTested} tested, ${coverage.pagesSkipped} skipped, ` +
@@ -203,7 +221,20 @@ class SiteSweep {
      */
     async _harvestLinks(page) {
         try {
-            return await page.$$eval("a[href]", (anchors) => anchors.map((a) => a.href).filter(Boolean));
+            const hrefs = await page.$$eval("a[href]", (anchors) => anchors.map((a) => a.href).filter(Boolean));
+            // A link-farm or a paginated index can carry tens of thousands of
+            // anchors. Every one of them would become a page record in the
+            // report and a row in the dashboard's replay buffer, so cap what we
+            // take. The cap is far above any real navigation and well above
+            // maxPages, so it only ever bites pathological pages.
+            if (hrefs.length > SiteSweep.MAX_HARVESTED_LINKS) {
+                Logger.warning(
+                    `⚠️  ${hrefs.length} links on the entry page — considering the first ` +
+                    `${SiteSweep.MAX_HARVESTED_LINKS}.`
+                );
+                return hrefs.slice(0, SiteSweep.MAX_HARVESTED_LINKS);
+            }
+            return hrefs;
         } catch (error) {
             Logger.warning(`⚠️  Could not read links from ${await page.url?.() ?? "the entry page"} (${error.message}) — using click-based discovery alone.`);
             return [];
@@ -252,11 +283,15 @@ class SiteSweep {
             pages.push(record);
         });
 
-        for (const { url, reason } of rejected) {
-            pages.push({ ...SiteSweep._blankRecord(url), status: "skipped", reason });
-        }
-
-        return { pages, queue };
+        // `rejected` is deliberately NOT added to `pages`. A mailto: address or
+        // a link to someone else's domain is not a page of the application that
+        // Falcon failed to cover, and counting it as one wrecks the number this
+        // whole phase exists to produce: an entry page with forty external
+        // links and a dozen mailto: links would report "11 of 53 pages tested"
+        // and fill the not-covered list with email addresses. They are returned
+        // as a count instead, so nothing is hidden and the ratio still means
+        // something.
+        return { pages, queue, outOfScope: rejected };
     }
 
     static _blankRecord(url) {
@@ -294,11 +329,29 @@ class SiteSweep {
             record.status = "unreachable";
             record.reason = error.message;
             record.durationMs = Date.now() - startedAt;
+            // A page of the app under test that will not load is a finding, not
+            // a footnote. Page status alone is tallied only into `coverage`,
+            // which nothing gates on, so a sweep where ten of eleven pages
+            // returned 500 and one static page passed would exit 0. Recording
+            // it as a failed scenario puts it in front of whoever reads the
+            // report and lets it fail the build like any other failure.
+            record.results = [
+                { name: `Load ${record.url}`, status: "failed", error: error.message },
+            ];
             Logger.warning(`⚠️  Unreachable: ${record.url} (${error.message})`);
             if (page) await page.close().catch(() => {});
             this._emit("pageComplete", { url: record.url, summary: SiteSweep._summaryOf(record) });
             return;
         }
+
+        // Hoisted so the catch below can salvage whatever was collected before
+        // the throw. TestRunner accumulates into `this.results` as it goes, so a
+        // crash on scenario 13 of 30 must not discard the 12 verdicts already
+        // reached — losing a real failure that way would hand back a green exit
+        // code for a page that genuinely broke.
+        let runner = null;
+        let deduped = [];
+        let kept = [];
 
         try {
             record.uiIssues = await this._detectIssues(page, record.url);
@@ -307,10 +360,12 @@ class SiteSweep {
             const scenarios = Array.isArray(testPlan.test_scenarios) ? testPlan.test_scenarios : [];
             record.scenariosGenerated = scenarios.length;
 
-            const { kept, deduped } = this._applyDedupe(scenarios, record.url);
+            const applied = this._applyDedupe(scenarios, record.url);
+            deduped = applied.deduped;
+            kept = applied.kept;
             record.scenariosDeduplicated = deduped.length;
 
-            const runner = new TestRunner(page, { ...testPlan, test_scenarios: kept });
+            runner = new TestRunner(page, { ...testPlan, test_scenarios: kept });
             const results = await runner.executeTest();
 
             // Deduped scenarios are appended, never executed — that is what keeps
@@ -320,11 +375,33 @@ class SiteSweep {
             record.status = "tested";
             record.reason = undefined;
         } catch (error) {
-            // Generation or execution blew up after a successful navigation. The
-            // page is reachable but unusable; report it rather than losing it.
-            record.status = "unreachable";
+            // The page loaded, so it is not "unreachable" — generation or
+            // execution broke partway through. Keep every verdict already
+            // reached, then record the breakage itself as a failed scenario so
+            // it reaches the report and the exit code instead of being visible
+            // only as a page-level status nothing tallies.
+            const salvaged = Array.isArray(runner?.results) ? runner.results : [];
+
+            // Release the dedupe claims this page made but never honoured, so a
+            // later page runs those scenarios itself instead of reporting them
+            // as already covered here.
+            const reached = new Set(salvaged.map((r) => r.name));
+            for (const scenario of kept) {
+                if (!reached.has(scenario.description)) {
+                    this._seenSignatures.delete(SiteSweep.signatureOf(scenario));
+                }
+            }
+
+            record.results = [
+                ...salvaged,
+                ...deduped,
+                { name: `Sweep of ${record.url}`, status: "failed", error: error.message },
+            ];
+            record.status = "tested";
             record.reason = error.message;
-            Logger.warning(`⚠️  Sweep of ${record.url} failed: ${error.message}`);
+            Logger.warning(
+                `⚠️  Sweep of ${record.url} failed after ${salvaged.length} scenario(s): ${error.message}`
+            );
         } finally {
             record.durationMs = Date.now() - startedAt;
             await page.close().catch(() => {});
@@ -368,6 +445,12 @@ class SiteSweep {
             const signature = SiteSweep.signatureOf(scenario);
             const firstRunOn = this._seenSignatures.get(signature);
             if (firstRunOn === undefined) {
+                // Claimed here, before execution, so the rest of this page's
+                // scenarios dedupe against it. If this page later throws, the
+                // claim is released in _sweepPage's catch — otherwise every
+                // later page would report the scenario as deduped against a
+                // page that never actually ran it, asserting coverage that
+                // does not exist.
                 this._seenSignatures.set(signature, url);
                 kept.push(scenario);
             } else {

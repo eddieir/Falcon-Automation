@@ -22,14 +22,19 @@ for (const [statuses, result, exit] of [
   [["failed", "quarantined"], "FAILED", 1],
   [["passed", "failed", "quarantined"], "PARTIAL", 1],
   // Phase 10 — "deduped" marks a scenario that was never executed on this
-  // page because a byte-identical instruction already ran on an earlier one.
+  // page because an identical instruction already ran on an earlier one.
   // It has no outcome, so it must behave like neither a pass nor a failure:
   // it can never fail a run on its own, and — the part that matters — it can
   // never turn a genuinely failing run green either. The exit code is asserted
   // directly rather than inferred from the printed summary, because Phase 6
   // exists precisely because CI was green regardless of the real results.
-  [["deduped"], "PASSED", 0],
-  [["deduped", "deduped"], "PASSED", 0],
+  //
+  // A run whose rows are *all* deduped executed nothing at all, so it is
+  // NO_TESTS_RUN and exits 1, exactly as a run with no rows does. Reporting
+  // PASSED there would mean a sweep that tested not one scenario handed back
+  // a green build — the same class of false green Phase 6 was created to kill.
+  [["deduped"], "NO_TESTS_RUN", 1],
+  [["deduped", "deduped"], "NO_TESTS_RUN", 1],
   [["passed", "deduped"], "PASSED", 0],
   [["skipped", "deduped"], "PASSED", 0],
   [["quarantined", "deduped"], "PASSED", 0],

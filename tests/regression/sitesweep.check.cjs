@@ -182,14 +182,17 @@ test("frontier: duplicates that differ only by fragment or trailing slash collap
   assert.deepEqual(result.pages.map((p) => p.url), ["https://a.com/", "https://a.com/b"]);
 });
 
-test("frontier: cross-origin URLs are skipped with a reason when sameOriginOnly is on", async () => {
+test("frontier: cross-origin URLs are counted out of scope, not as uncovered pages", async () => {
   const { sweep } = harness({ visited: ["https://other.com/x", "https://a.com/b"] });
   const result = await sweep.run("https://a.com");
-  const foreign = byUrl(result, "https://other.com/x");
-  assert.equal(foreign.status, "skipped");
-  assert.equal(foreign.reason, "cross-origin");
+  // Somebody else's domain is not a page of this app that Falcon failed to
+  // cover. Listing it as one would wreck the coverage ratio the sweep exists
+  // to produce — an entry page with forty outbound links would report "2 of 42
+  // pages tested" — so it is counted separately instead.
+  assert.equal(byUrl(result, "https://other.com/x"), undefined);
+  assert.equal(result.coverage.linksOutOfScope, 1);
   assert.equal(byUrl(result, "https://a.com/b").status, "tested");
-  assert.equal(result.coverage.pagesSkipped, 1);
+  assert.equal(result.coverage.pagesSkipped, 0);
 });
 
 test("frontier: sameOriginOnly false lets a cross-origin page be tested", async () => {
@@ -206,16 +209,17 @@ test("frontier: mailto/tel/javascript are dropped even with cross-origin allowed
   );
   const result = await sweep.run("https://a.com");
   for (const bad of ["mailto:a@b.com", "tel:+123", "javascript:void(0)"]) {
-    assert.equal(byUrl(result, bad).status, "skipped");
-    assert.equal(byUrl(result, bad).reason, "unsupported-scheme");
+    assert.equal(byUrl(result, bad), undefined);
   }
+  assert.equal(result.coverage.linksOutOfScope, 3);
   assert.equal(result.coverage.pagesTested, 1);
 });
 
-test("frontier: a repeated unparseable URL is reported once, not once per sighting", async () => {
+test("frontier: a repeated unparseable URL is counted once, not once per sighting", async () => {
   const { sweep } = harness({ visited: ["mailto:a@b.com", "mailto:a@b.com"] });
   const result = await sweep.run("https://a.com");
-  assert.equal(result.pages.filter((p) => p.url === "mailto:a@b.com").length, 1);
+  assert.equal(result.pages.filter((p) => p.url === "mailto:a@b.com").length, 0);
+  assert.equal(result.coverage.linksOutOfScope, 1);
 });
 
 test("run: a non-HTTP entry URL is rejected outright", async () => {
@@ -302,8 +306,16 @@ test("a page whose generation throws is reported, not fatal", async () => {
     generatorThrows: ["https://a.com/bad"],
   });
   const result = await sweep.run("https://a.com");
-  assert.equal(byUrl(result, "https://a.com/bad").status, "unreachable");
-  assert.match(byUrl(result, "https://a.com/bad").reason, /generator exploded/);
+  const bad = byUrl(result, "https://a.com/bad");
+  // The page loaded fine, so it is not "unreachable" — the breakage happened
+  // afterwards. It stays "tested" and the failure is recorded as a scenario,
+  // so it reaches the report and the exit code instead of living only in a
+  // page-level status that nothing tallies.
+  assert.equal(bad.status, "tested");
+  assert.match(bad.reason, /generator exploded/);
+  const failure = bad.results.find((r) => r.status === "failed");
+  assert.ok(failure, "the breakage should be recorded as a failed scenario");
+  assert.match(failure.error, /generator exploded/);
   assert.equal(byUrl(result, "https://a.com/good").status, "tested");
 });
 
@@ -408,7 +420,7 @@ test("dedupe: a shared nav bar runs once and is recorded as deduped everywhere e
   assert.ok(c.results.every((r) => r.status === "deduped"));
 });
 
-test("dedupe: the signature is action + locator + value, so differing values survive", async () => {
+test("dedupe: only an identical action + locator + value + description collapses", async () => {
   const { sweep, plans } = harness({
     visited: ["https://a.com/b"],
     scenarios: {
@@ -416,20 +428,46 @@ test("dedupe: the signature is action + locator + value, so differing values sur
       "https://a.com/b": [
         { action: "type", locator: "#q", value: "beta", description: "Fill q" },
         { action: "click", locator: "#q", description: "Click q" },
-        { action: "type", locator: "#q", value: "alpha", description: "Fill q again" },
+        { action: "type", locator: "#q", value: "alpha", description: "Fill q" },
       ],
     },
   });
   const result = await sweep.run("https://a.com");
 
-  // Only the identical action+locator+value triple collapses.
   assert.equal(result.coverage.scenariosDeduplicated, 1);
   const b = byUrl(result, "https://a.com/b");
   assert.deepEqual(
     b.results.filter((r) => r.status === "deduped"),
-    [{ name: "Fill q again", status: "deduped", firstRunOn: "https://a.com/" }]
+    [{ name: "Fill q", status: "deduped", firstRunOn: "https://a.com/" }]
   );
   assert.equal(plans.at(-1).test_scenarios.length, 2);
+});
+
+test("dedupe: a shared fallback locator does not collapse two different controls", async () => {
+  // PageAnalyser falls back to `tag[type=…]` when an element has no
+  // distinguishing attribute, so on a templated app two genuinely different
+  // buttons can arrive with the same locator. Collapsing them would leave one
+  // control untested while the report claimed it was covered.
+  const { sweep } = harness({
+    visited: ["https://a.com/reports"],
+    scenarios: {
+      "https://a.com/": [
+        { action: "click", locator: 'button[type="submit"]', description: "Delete user" },
+      ],
+      "https://a.com/reports": [
+        { action: "click", locator: 'button[type="submit"]', description: "Export" },
+      ],
+    },
+  });
+  const result = await sweep.run("https://a.com");
+
+  assert.equal(result.coverage.scenariosDeduplicated, 0);
+  const reports = byUrl(result, "https://a.com/reports");
+  assert.equal(reports.results.filter((r) => r.status === "deduped").length, 0);
+  assert.ok(
+    reports.results.some((r) => r.name === "Export"),
+    "Export must actually run rather than be reported as already covered"
+  );
 });
 
 test("dedupe: a missing value and an empty-string value share one signature", () => {
@@ -556,14 +594,17 @@ test("SweepResult carries entryUrl, per-page records and a complete coverage blo
 
   assert.equal(result.entryUrl, "https://a.com/");
   assert.deepEqual(Object.keys(result).sort(), ["coverage", "entryUrl", "pages"]);
+  // other.com/x is out of scope, so it is counted rather than listed as an
+  // uncovered page: 3 real pages discovered, 1 external link.
   assert.deepEqual(result.coverage, {
-    pagesDiscovered: 4,
+    pagesDiscovered: 3,
     pagesTested: 2,
-    pagesSkipped: 1,
+    pagesSkipped: 0,
     pagesUnreachable: 1,
     scenariosGenerated: 1,
     scenariosDeduplicated: 0,
     budgetExhausted: false,
+    linksOutOfScope: 1,
   });
 
   for (const page of result.pages) {
