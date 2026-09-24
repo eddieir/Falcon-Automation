@@ -535,6 +535,219 @@ test("Phase 9: replay resets the flaky panel instead of accumulating stale entri
   assert.equal(list.children[0], nodes.get("flaky-empty"));
 });
 
+// ── Phase 10: coverage panel ──
+
+function pageStartEvent(overrides = {}) {
+  return { name: "pageStart", payload: { url: "https://x.com/", index: 1, total: 4, ...overrides }, timestamp: Date.now() };
+}
+
+function pageCompleteEvent(url = "https://x.com/", summary = {}) {
+  return {
+    name: "pageComplete",
+    payload: {
+      url,
+      summary: { status: "tested", scenariosGenerated: 6, scenariosDeduplicated: 2, durationMs: 1200, passed: 4, failed: 1, ...summary },
+    },
+    timestamp: Date.now(),
+  };
+}
+
+test("Phase 10: a replay with no sweep events leaves the coverage panel empty, not half-rendered", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.replay([]);
+  const list = nodes.get("coverage-list");
+  assert.equal(list.children.length, 1);
+  assert.equal(list.children[0], nodes.get("coverage-empty"));
+  assert.equal(nodes.get("coverage-uncovered-header").style.display, "none");
+  assert.equal(nodes.get("coverage-summary").textContent, "");
+});
+
+test("Phase 10: pageStart then pageComplete renders one page row with its pass/fail counts", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(pageStartEvent({ url: "https://x.com/login" }));
+  handlers.event(pageCompleteEvent("https://x.com/login"));
+  const list = nodes.get("coverage-list");
+  assert.equal(list.children.length, 1); // updated in place, not duplicated
+  assert.match(list.children[0].innerHTML, /https:\/\/x\.com\/login/);
+  assert.match(list.children[0].innerHTML, /4 passed/);
+  assert.match(list.children[0].innerHTML, /1 failed/);
+  assert.match(list.children[0].innerHTML, /1200ms/);
+});
+
+test("Phase 10: the summary line reports pages tested against pages discovered", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(pageStartEvent({ url: "https://x.com/", index: 1, total: 11 }));
+  handlers.event(pageCompleteEvent("https://x.com/"));
+  handlers.event(pageStartEvent({ url: "https://x.com/two", index: 2, total: 11 }));
+  const summary = nodes.get("coverage-summary").textContent;
+  assert.match(summary, /1 of 11 discovered page\(s\) tested/);
+  assert.match(summary, /1 in progress/);
+  assert.match(summary, /6 scenario\(s\) generated/);
+  assert.match(summary, /2 deduped/);
+});
+
+test("Phase 10: a page in progress is shown as testing until its pageComplete arrives", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(pageStartEvent({ url: "https://x.com/slow" }));
+  const row = nodes.get("coverage-list").children[0];
+  assert.match(row.className, /status-testing/);
+  assert.match(row.innerHTML, /testing/);
+});
+
+test("Phase 10: skipped and unreachable pages get their own section with an explicit reason", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(pageStartEvent({ url: "https://x.com/" }));
+  handlers.event(pageCompleteEvent("https://x.com/"));
+  handlers.event(pageCompleteEvent("https://x.com/dead", { status: "unreachable", reason: "net::ERR_ABORTED" }));
+  handlers.event({
+    name: "sweepComplete",
+    payload: {
+      entryUrl: "https://x.com/",
+      pages: [
+        { url: "https://x.com/deep", status: "skipped", reason: "max-pages" },
+        { url: "https://x.com/later", status: "skipped", reason: "budget-exhausted" },
+      ],
+      coverage: { pagesDiscovered: 9, budgetExhausted: true },
+    },
+    timestamp: Date.now(),
+  });
+
+  // The tested page stays in the covered list; the three uncovered ones are
+  // listed separately so "what we didn't cover" can't be mistaken for coverage.
+  assert.deepEqual(nodes.get("coverage-list").children.length, 1);
+  const uncovered = nodes.get("coverage-uncovered-list").children;
+  assert.equal(uncovered.length, 3);
+  assert.equal(nodes.get("coverage-uncovered-header").style.display, "block");
+  const html = uncovered.map((row) => row.innerHTML).join("");
+  assert.match(html, /excluded by the --max-pages limit/);
+  assert.match(html, /time budget ran out/);
+  assert.match(html, /net::ERR_ABORTED/);
+  assert.match(nodes.get("coverage-summary").textContent, /2 skipped/);
+  assert.match(nodes.get("coverage-summary").textContent, /1 unreachable/);
+  assert.match(nodes.get("coverage-summary").textContent, /1 of 9 discovered page\(s\) tested/);
+});
+
+test("Phase 10: page URLs and skip reasons are HTML-escaped, not injected raw", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(pageCompleteEvent('https://x.com/?q=<img src=x onerror=alert(1)>', {
+    status: "skipped",
+    reason: '"><b>bold</b><script>alert(2)</script>',
+  }));
+  const html = nodes.get("coverage-uncovered-list").children[0].innerHTML;
+  assert.ok(!html.includes("<img"));
+  assert.ok(!html.includes("<b>"));
+  assert.ok(!html.includes("<script>"));
+  assert.match(html, /&lt;img/);
+  assert.match(html, /&lt;b&gt;bold/);
+});
+
+test("Phase 10: a new sweep starting at index 1 clears the previous run's pages", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(pageStartEvent({ url: "https://old.com/", index: 1, total: 1 }));
+  handlers.event(pageCompleteEvent("https://old.com/"));
+  handlers.event(pageStartEvent({ url: "https://new.com/", index: 1, total: 2 }));
+  const urls = nodes.get("coverage-list").children.map((row) => row.innerHTML).join("");
+  assert.ok(!urls.includes("old.com"));
+  assert.match(urls, /new\.com/);
+});
+
+test("Phase 10: connecting fetches the current sweep from /coverage and renders it", async () => {
+  const snapshot = {
+    entryUrl: "https://x.com/",
+    currentUrl: null,
+    pages: [
+      { url: "https://x.com/", status: "tested", passed: 3, failed: 0, scenariosGenerated: 3, durationMs: 900 },
+      { url: "https://x.com/gone", status: "unreachable", reason: "Timeout 20000ms exceeded" },
+    ],
+    coverage: { pagesDiscovered: 7, pagesTested: 1, pagesSkipped: 0, pagesUnreachable: 1, budgetExhausted: false },
+  };
+  const { handlers, nodes, fetchCalls } = dashboardUI({
+    fetchImpl: async (url) => ({ ok: true, json: async () => (url === "/coverage" ? snapshot : []) }),
+  });
+  handlers.connect();
+  await new Promise(setImmediate);
+
+  assert.ok(fetchCalls.some((c) => c.url === "/coverage"), "expected a GET /coverage call on connect");
+  assert.equal(nodes.get("coverage-list").children.length, 1);
+  assert.match(nodes.get("coverage-list").children[0].innerHTML, /3 passed/);
+  assert.equal(nodes.get("coverage-uncovered-list").children.length, 1);
+  assert.match(nodes.get("coverage-uncovered-list").children[0].innerHTML, /Timeout 20000ms exceeded/);
+  assert.match(nodes.get("coverage-summary").textContent, /1 of 7 discovered page\(s\) tested/);
+});
+
+test("Phase 10: /coverage is fetched with the auth header when a token is present", async () => {
+  const { handlers, fetchCalls } = dashboardUI({ search: "?token=secret-token" });
+  handlers.connect();
+  await new Promise(setImmediate);
+  const call = fetchCalls.find((c) => c.url === "/coverage");
+  assert.ok(call);
+  assert.equal(call.options.headers["X-Dashboard-Token"], "secret-token");
+});
+
+test("Phase 10: a failed /coverage fetch on connect never throws, and live events still render afterwards", async () => {
+  const { handlers, nodes } = dashboardUI({
+    fetchImpl: async () => {
+      throw new Error("network down");
+    },
+  });
+  assert.doesNotThrow(() => handlers.connect());
+  await new Promise(setImmediate);
+  // Nothing was rendered — the snapshot never arrived — but the socket stream
+  // still populates the panel, which is the path that matters during a run.
+  handlers.event(pageCompleteEvent("https://x.com/after"));
+  assert.equal(nodes.get("coverage-list").children.length, 1);
+  assert.match(nodes.get("coverage-list").children[0].innerHTML, /x\.com\/after/);
+});
+
+test("Phase 10: replay reconstructs the coverage panel from the sweep events alone", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(pageStartEvent({ url: "https://stale.com/" }));
+  assert.equal(nodes.get("coverage-list").children.length, 1);
+
+  handlers.replay([
+    pageStartEvent({ url: "https://x.com/", index: 1, total: 2 }),
+    pageCompleteEvent("https://x.com/"),
+    pageStartEvent({ url: "https://x.com/two", index: 2, total: 2 }),
+    pageCompleteEvent("https://x.com/two", { status: "skipped", reason: "max-pages" }),
+  ]);
+  const covered = nodes.get("coverage-list").children.map((row) => row.innerHTML).join("");
+  assert.ok(!covered.includes("stale.com"));
+  assert.equal(nodes.get("coverage-uncovered-list").children.length, 1);
+});
+
+test("Phase 10: the coverage panel survives minimal and malformed sweep payloads", () => {
+  const { handlers } = dashboardUI();
+  assert.doesNotThrow(() => {
+    handlers.event({ name: "pageStart", payload: {}, timestamp: Date.now() });
+    handlers.event({ name: "pageComplete", payload: {}, timestamp: Date.now() });
+    handlers.event({ name: "pageComplete", payload: { url: "https://x.com/", summary: { results: "not an array" } }, timestamp: Date.now() });
+    handlers.event({ name: "sweepComplete", payload: {}, timestamp: Date.now() });
+    handlers.event({ name: "sweepComplete", payload: { pages: [null, { status: "skipped" }], coverage: "nope" }, timestamp: Date.now() });
+  });
+});
+
+test("Phase 10: per-page counts fall back to tallying raw results when the summary has no explicit totals", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(pageCompleteEvent("https://x.com/tally", {
+    passed: undefined,
+    failed: undefined,
+    results: [{ status: "passed" }, { status: "failed" }, { status: "failed" }, { status: "deduped" }, { status: "quarantined" }],
+  }));
+  const html = nodes.get("coverage-list").children[0].innerHTML;
+  assert.match(html, /1 passed/);
+  assert.match(html, /2 failed/);
+  assert.match(html, /1 deduped/);
+  assert.match(html, /1 quarantined/);
+});
+
+test("Phase 10: sweep events also appear in the event feed so the run stays narratable", () => {
+  const { handlers, rows } = dashboardUI();
+  handlers.event(pageStartEvent({ url: "https://x.com/", index: 2, total: 5 }));
+  assert.match(rows[0].innerHTML, /Page 2\/5/);
+  handlers.event(pageCompleteEvent("https://x.com/gone", { status: "unreachable", reason: "boom" }));
+  assert.match(rows[0].innerHTML, /Unreachable/);
+});
+
 test("Phase 9: dashboard handles flaky/quarantine events without crashing, even with minimal payloads", () => {
   const { handlers } = dashboardUI();
   assert.doesNotThrow(() => {
