@@ -60,6 +60,156 @@ class Dashboard {
         this._server = null;
         this._token  = process.env.DASHBOARD_TOKEN || null;
         this._socketConnectAttempts = new Map(); // ip → recent connection-attempt timestamps
+        this._sweep  = Dashboard._emptySweep();
+    }
+
+    /**
+     * Phase 10 — whole-app coverage.
+     *
+     * A sweep's coverage state is maintained separately from `_events` for two
+     * reasons. First, a tab that joins halfway through a 20-page sweep needs
+     * the aggregate immediately rather than replaying the feed and re-deriving
+     * it. Second — and this is the point of the feature — the pages Falcon
+     * deliberately did *not* cover have nowhere to live in a flat event feed:
+     * nothing happened on them, so nothing streams. They only exist as state.
+     *
+     * `pages` is keyed by URL so a page that reports twice (a pageStart
+     * followed by its pageComplete) updates in place rather than duplicating.
+     */
+    static _emptySweep() {
+        return {
+            entryUrl: null,
+            currentUrl: null,
+            announcedTotal: 0, // highest `total` any pageStart has claimed
+            budgetExhausted: false,
+            pages: new Map(),
+        };
+    }
+
+    /** Coerce an untrusted numeric field to a finite number, or undefined. */
+    static _num(value) {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : undefined;
+    }
+
+    /**
+     * Fold one page record into the sweep, preserving fields an earlier event
+     * already established — pageStart carries `index` and `total`, pageComplete
+     * carries the results, and neither repeats what the other said.
+     */
+    _upsertPage(url, fields) {
+        if (typeof url !== "string" || !url) return;
+        const existing = this._sweep.pages.get(url) || { url };
+        const merged = { ...existing };
+        for (const [key, value] of Object.entries(fields)) {
+            if (value !== undefined) merged[key] = value;
+        }
+        this._sweep.pages.set(url, merged);
+    }
+
+    /**
+     * Update coverage state from a sweep event. Every field is treated as
+     * untrusted: these payloads can arrive over POST /emit from a separate
+     * process, so a malformed one must degrade the panel, never throw inside
+     * emit() and take the whole event stream down with it.
+     */
+    _recordSweepEvent(name, payload) {
+        if (!payload || typeof payload !== "object") return;
+
+        if (name === "pageStart") {
+            const index = Dashboard._num(payload.index);
+            // The sweep contract numbers pages from 1, so an index of 1 means a
+            // new sweep has started — the previous run's pages must not linger
+            // and inflate the coverage counts.
+            if (index !== undefined && index <= 1 && this._sweep.pages.size > 0) {
+                this._sweep = Dashboard._emptySweep();
+            }
+            const total = Dashboard._num(payload.total);
+            if (total !== undefined) this._sweep.announcedTotal = Math.max(this._sweep.announcedTotal, total);
+            if (!this._sweep.entryUrl && typeof payload.url === "string") this._sweep.entryUrl = payload.url;
+            this._sweep.currentUrl = typeof payload.url === "string" ? payload.url : null;
+            this._upsertPage(payload.url, { index, status: "testing" });
+            return;
+        }
+
+        if (name === "pageComplete") {
+            const summary = payload.summary && typeof payload.summary === "object" ? payload.summary : {};
+            const results = Array.isArray(summary.results) ? summary.results : [];
+            const tally = (status) => results.filter((r) => r && r.status === status).length;
+            // Prefer counts the sweep computed itself; fall back to tallying the
+            // raw results so a summary that only ships `results` still renders.
+            const countOf = (explicit, status) => Dashboard._num(explicit) ?? (results.length ? tally(status) : undefined);
+            if (this._sweep.currentUrl === payload.url) this._sweep.currentUrl = null;
+            if (summary.reason === "budget-exhausted") this._sweep.budgetExhausted = true;
+            this._upsertPage(payload.url, {
+                status: typeof summary.status === "string" ? summary.status : "tested",
+                reason: typeof summary.reason === "string" ? summary.reason : undefined,
+                passed: countOf(summary.passed, "passed"),
+                failed: countOf(summary.failed, "failed"),
+                skipped: countOf(summary.skipped, "skipped"),
+                quarantined: countOf(summary.quarantined, "quarantined"),
+                deduped: countOf(summary.deduped, "deduped"),
+                scenariosGenerated: Dashboard._num(summary.scenariosGenerated),
+                scenariosDeduplicated: Dashboard._num(summary.scenariosDeduplicated),
+                uiIssues: Array.isArray(summary.uiIssues) ? summary.uiIssues.length : Dashboard._num(summary.uiIssues),
+                durationMs: Dashboard._num(summary.durationMs),
+            });
+            return;
+        }
+
+        // Optional reconciliation. Pages the sweep skipped or never reached emit
+        // no per-page events at all — there is nothing to report on a page that
+        // was never opened — so the only way the panel can name them is from the
+        // final SweepResult. Handled defensively: if the run never sends one,
+        // the panel still shows everything the page events established.
+        if (name === "sweepComplete") {
+            if (typeof payload.entryUrl === "string") this._sweep.entryUrl = payload.entryUrl;
+            this._sweep.currentUrl = null;
+            for (const page of Array.isArray(payload.pages) ? payload.pages : []) {
+                if (!page || typeof page.url !== "string") continue;
+                this._upsertPage(page.url, {
+                    status: typeof page.status === "string" ? page.status : undefined,
+                    reason: typeof page.reason === "string" ? page.reason : undefined,
+                    scenariosGenerated: Dashboard._num(page.scenariosGenerated),
+                    scenariosDeduplicated: Dashboard._num(page.scenariosDeduplicated),
+                    durationMs: Dashboard._num(page.durationMs),
+                });
+            }
+            const coverage = payload.coverage && typeof payload.coverage === "object" ? payload.coverage : {};
+            const discovered = Dashboard._num(coverage.pagesDiscovered);
+            if (discovered !== undefined) this._sweep.announcedTotal = Math.max(this._sweep.announcedTotal, discovered);
+            if (coverage.budgetExhausted === true) this._sweep.budgetExhausted = true;
+        }
+    }
+
+    /**
+     * The coverage aggregate served to the panel. Tallies are recomputed from
+     * the page records on every read rather than incremented as events arrive,
+     * so a page whose status changes (testing → tested, or tested → skipped on
+     * reconciliation) can never leave a counter permanently wrong.
+     */
+    coverageSnapshot() {
+        const pages = [...this._sweep.pages.values()];
+        const withStatus = (status) => pages.filter((p) => p.status === status).length;
+        const sum = (field) => pages.reduce((acc, p) => acc + (Dashboard._num(p[field]) ?? 0), 0);
+        return {
+            entryUrl: this._sweep.entryUrl,
+            currentUrl: this._sweep.currentUrl,
+            pages,
+            coverage: {
+                // A sweep can discover more pages than it has records for (the
+                // ones truncated by --max-pages), so the announced total wins
+                // whenever it is larger.
+                pagesDiscovered: Math.max(this._sweep.announcedTotal, pages.length),
+                pagesTested: withStatus("tested"),
+                pagesSkipped: withStatus("skipped"),
+                pagesUnreachable: withStatus("unreachable"),
+                pagesInProgress: withStatus("testing"),
+                scenariosGenerated: sum("scenariosGenerated"),
+                scenariosDeduplicated: sum("scenariosDeduplicated"),
+                budgetExhausted: this._sweep.budgetExhausted,
+            },
+        };
     }
 
     /**
@@ -228,6 +378,18 @@ class Dashboard {
             res.json(entry);
         });
 
+        // Phase 10 — whole-app coverage. Read-only view of the current sweep,
+        // for a tab that joined mid-run. Same token gate and rate limiter as
+        // every other route: this exposes the full list of URLs Falcon found
+        // in the application under test, which is exactly the kind of thing
+        // the token exists to keep off an open port.
+        app.get("/coverage", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            res.json(this.coverageSnapshot());
+        });
+
         const allowedOrigin = process.env.DASHBOARD_ALLOWED_ORIGIN || `http://localhost:${this.port}`;
 
         this._server = http.createServer(app);
@@ -287,6 +449,16 @@ class Dashboard {
     emit(name, payload = {}) {
         const event = { name, payload, timestamp: Date.now() };
         this._events.push(event);
+        if (name === "pageStart" || name === "pageComplete" || name === "sweepComplete") {
+            try {
+                this._recordSweepEvent(name, payload);
+            } catch (error) {
+                // Coverage bookkeeping is a view over the run, not part of it —
+                // a malformed sweep payload must never stop the event from
+                // reaching the feed and the connected tabs.
+                Logger.error(`Dashboard: could not fold ${name} into coverage state — ${error.message}`);
+            }
+        }
         if (this._io) {
             this._io.emit("event", event);
         }

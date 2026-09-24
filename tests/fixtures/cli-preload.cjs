@@ -50,6 +50,68 @@ const mocks = {
     }
     async executeExploratoryTest() {}
   },
+  // Phase 10 — falcon.js now drives the run through SiteSweep, so the CLI's
+  // exit-code contract has to be exercised through a sweep result rather than
+  // through a single TestRunner call. This stands in for SiteSweep at the
+  // documented SweepResult shape; each fixture mode maps to the sweep outcome
+  // that used to be produced by the mocks above, so the assertions in
+  // cli.check.cjs still mean exactly what they meant before.
+  "./src/core/SiteSweep": class {
+    constructor(context, opts = {}) {
+      this.opts = opts;
+    }
+    async run(entryUrl) {
+      // The URL reaches the sweep whole or the run is wrong: "?key=value=tail"
+      // is there to catch a naive split("=") in the flag parser.
+      if (mode === "query" && !entryUrl.endsWith("?key=value=tail"))
+        throw Error(`truncated URL: ${entryUrl}`);
+      // A dead entry page is recorded, not thrown: one unreachable page must
+      // never abort a sweep, and a run that tested nothing still exits 1.
+      const page =
+        mode === "navigation-failure"
+          ? {
+              url: entryUrl,
+              status: "unreachable",
+              reason: "fixture navigation failure",
+              scenariosGenerated: 0,
+              scenariosDeduplicated: 0,
+              results: [],
+              uiIssues: [],
+              durationMs: 0,
+            }
+          : {
+              url: entryUrl,
+              status: "tested",
+              scenariosGenerated: mode === "empty" ? 0 : 1,
+              scenariosDeduplicated: 0,
+              results:
+                mode === "empty"
+                  ? []
+                  : [
+                      {
+                        name: "fixture",
+                        status:
+                          mode === "scenario-failure" ? "failed" : "passed",
+                      },
+                    ],
+              uiIssues: [],
+              durationMs: 1,
+            };
+      return {
+        entryUrl,
+        pages: [page],
+        coverage: {
+          pagesDiscovered: 1,
+          pagesTested: page.status === "tested" ? 1 : 0,
+          pagesSkipped: 0,
+          pagesUnreachable: page.status === "unreachable" ? 1 : 0,
+          scenariosGenerated: page.scenariosGenerated,
+          scenariosDeduplicated: 0,
+          budgetExhausted: false,
+        },
+      };
+    }
+  },
   "./src/core/Dashboard": class {
     async start() {}
     async stop() {}

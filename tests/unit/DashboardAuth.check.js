@@ -84,6 +84,9 @@ async function testWithoutToken() {
     const eventsRes = await httpRequest(port, "GET", "/events");
     check("no DASHBOARD_TOKEN set: unauthenticated GET /events still succeeds (200)", eventsRes.statusCode === 200, `got ${eventsRes.statusCode}`);
 
+    const coverageRes = await httpRequest(port, "GET", "/coverage");
+    check("no DASHBOARD_TOKEN set: unauthenticated GET /coverage still succeeds (200)", coverageRes.statusCode === 200, `got ${coverageRes.statusCode}`);
+
     const healingPendingRes = await httpRequest(port, "GET", "/healing/pending");
     check("no DASHBOARD_TOKEN set: unauthenticated GET /healing/pending still succeeds (200)", healingPendingRes.statusCode === 200, `got ${healingPendingRes.statusCode}`);
 
@@ -120,6 +123,12 @@ async function testWithToken() {
 
     const rightQueryEvents = await httpRequest(port, "GET", `/events?token=${TOKEN}`);
     check("DASHBOARD_TOKEN set: correct token via query param accepted (200)", rightQueryEvents.statusCode === 200, `got ${rightQueryEvents.statusCode}`);
+
+    const noAuthCoverage = await httpRequest(port, "GET", "/coverage");
+    check("DASHBOARD_TOKEN set: unauthenticated GET /coverage rejected (401)", noAuthCoverage.statusCode === 401, `got ${noAuthCoverage.statusCode}`);
+
+    const rightAuthCoverage = await httpRequest(port, "GET", "/coverage", { "X-Dashboard-Token": TOKEN });
+    check("DASHBOARD_TOKEN set: correct token via header accepted for GET /coverage (200)", rightAuthCoverage.statusCode === 200, `got ${rightAuthCoverage.statusCode}`);
 
     // Phase 8 — the healing trust endpoints get exactly the same gate as
     // /emit and /events above: same token check, same rate limiter.

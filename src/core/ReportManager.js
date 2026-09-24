@@ -36,12 +36,15 @@ const path = require("path");
  *     "passed":      <n>,
  *     "failed":      <n>,
  *     "skipped":     <n>,
- *     "quarantined": <n>
+ *     "quarantined": <n>,
+ *     "deduped":     <n>
  *   },
  *   "result":  "PASSED" | "FAILED" | "PARTIAL" | "NO_TESTS_RUN",
  *   "tests":   [ { name, status, duration, error? }, … ],
  *   "uiIssues":        [ … ],
- *   "healingEvents":   [ … ]
+ *   "healingEvents":   [ … ],
+ *   "coverage":        { … } | null,
+ *   "pages":           [ { url, status, reason?, … }, … ]
  * }
  *
  * Phase 9 — "quarantined" is a fourth valid status (FlakinessTracker):
@@ -52,10 +55,54 @@ const path = require("path");
  * 0 — that's the entire point of quarantining. It is never merged into
  * `passed` either: a quarantined scenario that is still actually failing
  * stays visible as its own bucket, not silently counted as green.
+ *
+ * Phase 10 — "deduped" is a fifth valid status, and a reporting-only one.
+ * SiteSweep records it for a scenario whose instruction (action + locator +
+ * value) is byte-identical to one already run on an earlier page — a nav bar
+ * repeated across eleven pages. Such a scenario is never executed a second
+ * time, so it has no outcome to tally: it is excluded from `passed`,
+ * `failed`, `skipped` and `quarantined` alike, it takes no part in the
+ * pass/fail branches, and it can never change the exit code. It is counted
+ * in its own bucket for the same reason quarantined is — the deduplication
+ * is a claim about coverage, and a claim you can't count is not auditable.
+ *
+ * `coverage` and `pages` are persisted verbatim as the sweep reported them
+ * (see the SweepResult shape in docs/PHASE-PLANS.md). Nothing here derives or
+ * second-guesses them: the run's tally comes from `tests`, and a report that
+ * recomputed coverage from a different source could disagree with itself.
  */
 class ReportManager {
     constructor() {
         this._startTime = null;
+    }
+
+    /**
+     * One-line coverage summary, e.g.
+     *   Pages: 11 tested, 2 skipped (max-pages) | Scenarios: 184 generated, 93 deduped
+     *
+     * The skip reasons are named rather than just counted. "2 skipped" invites
+     * the reader to assume a crawl limitation; "(max-pages)" tells them it was
+     * their own bound and that raising it would cover more, which is the whole
+     * difference between a coverage report and a coverage excuse. Exposed as a
+     * static so a test can assert the wording without parsing stdout.
+     *
+     * @param {Object} coverage - SweepResult.coverage
+     * @param {Array}  [pages]  - per-page rows, read only for their skip reasons
+     */
+    static coverageLine(coverage = {}, pages = []) {
+        const reasons = [...new Set(
+            (Array.isArray(pages) ? pages : [])
+                .filter((p) => p && p.status === "skipped" && p.reason)
+                .map((p) => p.reason)
+        )];
+        const skipped = coverage.pagesSkipped || 0;
+        const unreachable = coverage.pagesUnreachable || 0;
+        return `Pages: ${coverage.pagesTested || 0} tested, ${skipped} skipped` +
+            (skipped > 0 && reasons.length > 0 ? ` (${reasons.join(", ")})` : "") +
+            (unreachable > 0 ? `, ${unreachable} unreachable` : "") +
+            (coverage.budgetExhausted ? " [budget exhausted]" : "") +
+            ` | Scenarios: ${coverage.scenariosGenerated || 0} generated, ` +
+            `${coverage.scenariosDeduplicated || 0} deduped`;
     }
 
     /** Call once before the test suite starts to enable duration tracking. */
@@ -68,15 +115,21 @@ class ReportManager {
      *
      * @param {Object} opts
      * @param {Array}  opts.tests        - Array of { name, status, duration?, error? }
-     *                                     status must be one of: "passed" | "failed" | "skipped"
+     *                                     status must be one of: "passed" | "failed" |
+     *                                     "skipped" | "quarantined" | "deduped"
      * @param {Array}  [opts.uiIssues]   - Issues detected by ExploratoryAI (optional)
      * @param {Array}  [opts.healingEvents] - Events from HealingReport (optional)
+     * @param {Object} [opts.coverage]   - SweepResult.coverage from SiteSweep (optional)
+     * @param {Array}  [opts.pages]      - SweepResult per-page breakdown (optional)
      */
-    generateReport({ tests = [], uiIssues = [], healingEvents = [] } = {}) {
-        if (!Array.isArray(tests) || !Array.isArray(uiIssues) || !Array.isArray(healingEvents)) {
-            throw new TypeError("Report results, issues and healing events must be arrays");
+    generateReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [] } = {}) {
+        if (!Array.isArray(tests) || !Array.isArray(uiIssues) || !Array.isArray(healingEvents) || !Array.isArray(pages)) {
+            throw new TypeError("Report results, issues, healing events and pages must be arrays");
         }
-        if (tests.some(result => !result || !["passed", "failed", "skipped", "quarantined"].includes(result.status))) {
+        if (coverage !== null && (typeof coverage !== "object" || Array.isArray(coverage))) {
+            throw new TypeError("Report coverage must be an object or null");
+        }
+        if (tests.some(result => !result || !["passed", "failed", "skipped", "quarantined", "deduped"].includes(result.status))) {
             throw new TypeError("Each test result must have a valid status");
         }
         const endTime = Date.now();
@@ -89,6 +142,7 @@ class ReportManager {
         const failed      = tests.filter((t) => t.status === "failed").length;
         const skipped     = tests.filter((t) => t.status === "skipped").length;
         const quarantined = tests.filter((t) => t.status === "quarantined").length;
+        const deduped     = tests.filter((t) => t.status === "deduped").length;
         const total        = tests.length;
 
         // Top-level result: PASSED only if every test passed
@@ -106,11 +160,13 @@ class ReportManager {
         const report = {
             runId: new Date().toISOString(),
             duration: `${durationSeconds}s`,
-            summary: { total, passed, failed, skipped, quarantined },
+            summary: { total, passed, failed, skipped, quarantined, deduped },
             result: overallResult,
             tests,
             uiIssues,
             healingEvents,
+            coverage,
+            pages,
         };
 
         // Ensure the reports directory exists
@@ -127,8 +183,12 @@ class ReportManager {
         console.log(`\n${icon} Test Run Complete — ${overallResult}`);
         console.log(
             `   Total: ${total}  |  Passed: ${passed}  |  Failed: ${failed}  |  Skipped: ${skipped}` +
-            (quarantined > 0 ? `  |  Quarantined: ${quarantined}` : "")
+            (quarantined > 0 ? `  |  Quarantined: ${quarantined}` : "") +
+            (deduped > 0 ? `  |  Deduped: ${deduped}` : "")
         );
+        if (coverage) {
+            console.log(`   ${ReportManager.coverageLine(coverage, pages)}`);
+        }
         console.log(`   Duration: ${durationSeconds}s`);
         if (uiIssues.length > 0) {
             console.log(`   UI Issues detected: ${uiIssues.length}`);
