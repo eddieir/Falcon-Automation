@@ -469,3 +469,81 @@ Classifying something as flaky changes nothing on its own. A human quarantines a
 **`docs/demo/flaky-test-detection-demo.js`** (new) demonstrates the entire gate end-to-end against a real, external site (axonradar.netlify.app): a real element is injected and removed from the live page across six real `TestRunner.executeTest()` calls, producing genuine, unstubbed pass/fail nondeterminism (only the Tier 3 LLM call is stubbed, the same convention Phase 8's demo already established, so this runs without an `OPENAI_API_KEY`); `FlakinessTracker` classifies the result as flaky from that real history; a quarantine decision is made; a seventh run confirms the scenario now reports `"quarantined"`, not `"failed"`; and a real `ReportManager.generateReport()` call confirms the run still reports `PASSED` with the quarantined count visible in the summary.
 
 Total regression suite after this phase: 308 `node:test` cases (up from 240 after Phase 8's hardening pass) and 30 Playwright specs, all green across repeated runs.
+
+---
+
+## Phase 10 — Whole-App Coverage
+
+Falcon's pitch has always been that you shouldn't have to hand-write a test for every new page. The shipped CLI covered exactly one.
+
+### The defect: the crawler's results were thrown away
+
+`falcon.js` ran `ClickExplorer.explore()`, collected every page it found into `visitedPages`, emitted each one to the dashboard, logged `→ N page(s) explored`, and then did this:
+
+```js
+// Re-navigate to the root to generate scenarios from the main page
+await page.goto(url, { waitUntil: "domcontentloaded" }).catch(() => {});
+```
+
+Every discovered page was discarded at that line. Scenario generation, execution and healing all ran against the entry URL alone. The file's own header comment claimed the opposite — "after ClickExplorer maps the site, PageAnalyser + TestGenerator produce a scenario plan **for each visited page**" — which had never been true of the code beneath it.
+
+The flagship 184-scenario, 11-page demo was not evidence against this. It worked because `docs/demo/multi-page-axonradar-dashboard-demo.js` hardcodes an eleven-entry URL list and loops over it by hand. The mechanism was real; it just lived in a demo script rather than in the product.
+
+### `SiteSweep` — the loop, promoted into the product
+
+`src/core/SiteSweep.js` normalises and filters the discovered frontier, truncates it to a page cap, and walks what remains under a wall-clock budget, running each page through the existing `ExploratoryAI` → `TestGenerator` → `TestRunner` chain. A page that will not load is recorded and stepped over rather than taking the run down with it.
+
+Three things it was given that the hand-rolled demo loop never had:
+
+**Hard bounds.** `--max-pages` (default 20), `--budget-ms` (default 10 minutes), a same-origin restriction by default, and a per-page navigation timeout. Unbounded crawling of someone else's site is not a feature.
+
+**Cross-page deduplication.** A navigation bar present on eleven pages previously generated the same scenario eleven times. Scenarios are signed on `action::locator::value::description`; the first occurrence runs and later ones are recorded as `deduped` with a `firstRunOn` pointer. They are never executed, so they never reach `FlakinessTracker`.
+
+**An explicit account of what was not covered.** Every page Falcon did not test appears in the report with a reason — `max-pages`, `budget-exhausted`, `unreachable`. "What we deliberately didn't look at" is half of what a coverage number means, and a coverage feature that quietly omits it is worse than none.
+
+### Discovery no longer depends on clicking
+
+The first live run of the finished sweep tested one page and generated four scenarios — the phase, as built, was cosmetic. `ClickExplorer` discovers pages by *clicking*: it takes the first five text-bearing `a`/`button` elements, clicks each, recurses, and navigates back. It reads each element's `href` and never uses it. On a real site that routinely returns the entry page and nothing else, and a sweep with an empty frontier is the old single-page behaviour with extra steps.
+
+`SiteSweep._harvestLinks()` reads the `href` attributes already sitting in the page's navigation, capped at 500 anchors, and unions them with whatever the click-based crawl found. `ClickExplorer` itself is untouched, so its exploratory-clicking behaviour and its thirty browser specs are unaffected.
+
+Against `axonradar.netlify.app`, same command, `--max-pages=6`:
+
+| | Pages tested | Scenarios generated |
+|---|---|---|
+| Before | 1 | 4 |
+| After | 6 | 91 (17 deduped) |
+
+### Defects found by review of the merged work
+
+Three engineers implemented this in parallel against a written contract (`docs/PHASE-PLANS.md`) in separate worktrees. Integration and an independent code review caught the following, all fixed before merge.
+
+**A run whose scenarios were all deduped exited 0.** `ReportManager` counted `deduped` rows in `total`, and both result branches gated on `total > 0`. A sweep that executed nothing therefore reported `PASSED` where an empty run would have reported `NO_TESTS_RUN` and exited 1. `quarantined` and `deduped` look similar and are not: a quarantined scenario ran and we agreed not to block on it; a deduped scenario never ran. The branches now count executed rows.
+
+**A crash partway through a page discarded every verdict already reached on it.** `TestRunner` accumulates into `this.results` as it goes, but the runner was scoped inside the `try`, so a page that failed on scenario 13 of 30 lost the twelve before it — real failures included. The runner is hoisted and its results salvaged, and the breakage is recorded as a failed scenario so it reaches the exit code rather than living only in a page status nothing tallies.
+
+**A page that would not load contributed nothing to the exit code.** Page status is tallied only into `coverage`, which nothing gates on, so a sweep where ten of eleven pages returned 500 and one static page passed exited 0. An unreachable page is now a failed scenario too.
+
+**External links were counted as uncovered pages.** `mailto:` addresses and links to other origins were being recorded as pages of the app Falcon had failed to cover. An entry page with forty outbound links would report "11 of 53 pages tested" and fill the not-covered list with email addresses. They are counted separately as out-of-scope links, so nothing is hidden and the ratio still means something.
+
+**The dedupe signature could collapse two genuinely different controls.** `PageAnalyser` falls back to `tag[type="..."]` when an element has no distinguishing attribute, so on a templated app `/users`' "Delete user" and `/reports`' "Export" both arrive as `button[type="submit"]`. Signing on locator alone collapsed them, leaving Export untested while the report claimed it was covered — the one thing a coverage feature must never do. `description` is now part of the signature, which is strictly more conservative; shared chrome still dedupes, because a nav link carries the same description on every page.
+
+**A page could claim a dedupe signature and then never run it.** Signatures are claimed before execution so the rest of the page dedupes against them. If that page then threw, later pages reported the scenario as already covered somewhere it had never run. The claim is released on failure.
+
+**Two seam defects between the parallel workstreams.** The `pageStart` payload carried a 0-based index while the dashboard treated `index <= 1` as "new sweep, reset the panel" — so the second page of every sweep would have wiped the first page's results mid-run. And nothing emitted an event carrying the skipped-page list: pages that are never opened emit no per-page events, so the not-covered list could never populate. Added `sweepComplete`.
+
+### Reporting and the dashboard
+
+`test-report.json` gains a `coverage` block (`pagesDiscovered`, `pagesTested`, `pagesSkipped`, `pagesUnreachable`, `scenariosGenerated`, `scenariosDeduplicated`, `budgetExhausted`, `linksOutOfScope`) and a per-page breakdown carrying each page's tally, UI-issue count and duration. The printed summary gains a coverage line. `--single-page` restores the pre-Phase-10 behaviour for anyone who wants it, and reports the pages that narrowing cost.
+
+The dashboard gains a Coverage panel: pages tested against pages discovered, per-page results, and a separate not-covered list with humanised reasons. `GET /coverage` is token-gated with the same `authLimiter` + `_isAuthorized` treatment as every other route.
+
+### Verification
+
+`tests/regression/sitesweep.check.cjs` (new, 38 cases, no browser): frontier normalisation, cross-origin and scheme filtering, `max-pages` truncation, budget exhaustion mid-sweep, unreachable pages not aborting the sweep, dedupe collapse and its `firstRunOn` pointer, the shared-fallback-locator case above, and confirmation via the real `TestRunner` that deduped scenarios never reach `FlakinessTracker`.
+
+`tests/regression/reporting.check.cjs` covers `deduped` across every status combination with `process.exitCode` asserted directly rather than inferred from the printed summary. `tests/unit/DashboardAuth.check.js` covers `/coverage` authenticated and unauthenticated.
+
+Verified against real sweeps of `axonradar.netlify.app`: exit 1 on real failures, exit 1 against a domain that does not resolve, and a coverage block where `pagesDiscovered` equals tested plus skipped plus unreachable.
+
+Total regression suite after this phase: 383 `node:test` cases (up from 308) and 30 Playwright specs.
