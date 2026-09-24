@@ -145,14 +145,25 @@ class ReportManager {
         const deduped     = tests.filter((t) => t.status === "deduped").length;
         const total        = tests.length;
 
-        // Top-level result: PASSED only if every test passed
+        // `deduped` is the one status describing work that never happened: the
+        // scenario was byte-identical to one already run on an earlier page, so
+        // it was dropped before execution. Every other status, `quarantined`
+        // and `skipped` included, describes a scenario this run actually
+        // reached a verdict on. The branches below therefore count `executed`
+        // rather than `total` — a run whose rows are *all* deduped tested
+        // nothing, and must stay NO_TESTS_RUN (exit 1) exactly as an empty run
+        // does. Gating on `total` would hand back a green exit code for a run
+        // that executed not one scenario.
+        const executed = total - deduped;
+
+        // Top-level result: PASSED only if every executed test passed
         let overallResult;
-        if (failed === 0 && total > 0) {
-            overallResult = "PASSED";
-        } else if (passed === 0 && total > 0) {
-            overallResult = "FAILED";
-        } else if (total === 0) {
+        if (executed === 0) {
             overallResult = "NO_TESTS_RUN";
+        } else if (failed === 0) {
+            overallResult = "PASSED";
+        } else if (passed === 0) {
+            overallResult = "FAILED";
         } else {
             overallResult = "PARTIAL"; // some passed, some failed
         }

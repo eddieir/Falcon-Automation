@@ -213,8 +213,13 @@ const runEntryPageOnly = async (context, url, emit) => {
     // The crawl's own page list is reported as discovered-but-skipped rather
     // than dropped: --single-page is a deliberate narrowing, and the report
     // should say what that narrowing cost.
+    // Compared normalized: the crawl records whatever URL the browser settled
+    // on, so a `--url=https://x.com` entry comes back as `https://x.com/` and a
+    // raw !== comparison would list the entry page as skipped alongside the
+    // tested copy of itself.
+    const entryKey = SiteSweep.normalizeUrl(url) ?? url;
     const skipped = Array.from(visitedPages)
-        .filter((u) => u !== url)
+        .filter((u) => (SiteSweep.normalizeUrl(u) ?? u) !== entryKey)
         .map((u) => ({
             url: u,
             status: "skipped",
