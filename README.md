@@ -41,6 +41,31 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 
 One command, no hand-written test code: Falcon loads a site, crawls it, turns what it finds into test scenarios, executes them with self-healing, and streams every step to a live dashboard as it happens. This is one demo, one site, start to finish.
 
+### Watch it run: a recorded UI test against the live site
+
+![Falcon healing a stale selector against a live site and the feed actually filtering](docs/demo/axonradar-ui-test.gif)
+
+That is a real Chromium, a real third-party site, and no editing. The test hands Falcon `#news-search` — an id that does not exist anywhere on the page, which is exactly what an old test suite is left holding after somebody refactors the markup. Tier 1 spends about ten seconds genuinely exhausting its retries against it (the page sits still because nothing can resolve), Tier 2 supplies the alternative it learned earlier, and the value lands in the real, React-wired search field. The proof is the last two seconds: the feed collapses to the one article that matches. Nothing was stubbed and no `OPENAI_API_KEY` was involved — Tier 2 needs neither, which is why it's the tier on camera.
+
+The full recording of all six tests is [`docs/demo/axonradar-ui-test.mp4`](docs/demo/axonradar-ui-test.mp4) (GitHub won't play it inline; download or open it from the file view).
+
+| # | Test | What has to be true for it to pass | Duration |
+|---|---|---|---|
+| 1 | Every route in the primary navigation loads | All 11 routes read off the live nav return 200 and render a heading. The route list is read from the page, not hardcoded, so a route the site adds is covered automatically | 7.1s |
+| 2 | Searching the feed narrows it to real matches | Every card still on screen contains the query; a query nothing matches produces the empty state and zero cards; clearing it brings the feed back | 1.5s |
+| 3 | A category chip filters to that category only | The headline set changes *and* every remaining card carries the Robotics kicker — a chip that reorders without filtering passes a count check and fails this | 1.8s |
+| 4 | The comparator renders a column per model | A model the table isn't already showing is selected, its column appears, and the comparison rows survive | 0.7s |
+| 5 | **Self-healing a `type`:** a stale selector still fills the real field | Tier 1 exhausts, Tier 2 resolves, the live feed filters, the field holds the value, and `HealingReport` records it as one Tier 2 repair of a `type` | 10.8s |
+| 6 | **Self-healing a `select`:** a stale selector still drives the real dropdown | Same chain, ending in the comparison table growing the column. This is the case that was silently `skipped` before Phase 11 | 9.9s |
+
+```sh
+npm run test:demo                 # headless, records a video per test
+HEADLESS=false npm run test:demo  # watch it happen in a visible browser
+npm run demo:record               # run it, then rebuild the GIF and MP4 above
+```
+
+Last measured run: **6 passed in 32.5s**. The suite is deliberately **not** in CI — it depends on a third-party site staying up and on real network timing, and gating merges on somebody else's deploy is how a pipeline becomes noise. `playwright.config.js` ignores `tests/demo/` for the same reason, so a routine `npx playwright test` never reaches it. The spec is [`tests/demo/axonradar.ui.spec.js`](tests/demo/axonradar.ui.spec.js); its config, including `video: "on"`, is [`playwright.demo.config.js`](playwright.demo.config.js).
+
 ### Real-world case study: a live site Falcon had never seen before
 
 A demo against a fixture built for exactly this kind of test doesn't prove much. So instead, everything below comes from pointing Falcon at a real, independently-built, publicly deployed product it had no prior knowledge of: [axonradar.netlify.app](https://axonradar.netlify.app/) (a TypeScript AI-intelligence platform, [source](https://github.com/eddieir/AI-agency)). No config, no fixtures, no hints about the site's structure. Just its 11 real pages (`/`, `/news`, `/models`, `/benchmarks`, `/playground`, `/evaluations`, `/router`, `/operations`, `/developers`, `/creators`, `/compare`), run through the same explore, generate, heal pipeline and streamed to one live dashboard:
@@ -370,6 +395,14 @@ node docs/demo/phase-11-heal-every-action-demo.js
 node docs/demo/honest-exit-code-demo.js
 ```
 
+The recorded UI test at the top is rebuilt the same way, from the videos Playwright records rather than from a screen capture:
+
+```sh
+npm run demo:record
+```
+
+`docs/demo/build-ui-test-recording.js` finds each video through `reports/ui-demo-results.json` rather than by walking the artefact directory — Playwright names those directories after a truncated, hashed form of the test title, so matching on the directory name silently stops working the first time a title is edited. Reading the reporter's JSON also means the script can see each test's status, and it refuses to write either file if any test failed or any video is missing. A recording is published as evidence the suite works; one built from a red run would be evidence of nothing. Needs `ffmpeg` on `PATH`.
+
 Each one exits non-zero if its own assertions fail, so a demo cannot quietly succeed while the mechanism behind it is broken.
 
 ---
@@ -475,6 +508,8 @@ Falcon-Automation/
 │   │   ├── *.check.cjs              # node:test suites, one per module area
 │   │   ├── browser.spec.js          # Playwright specs against inline HTML fixtures
 │   │   └── helpers.cjs              # Module loader with injectable dependencies
+│   ├── demo/                        # The recorded UI suite: real browser, live
+│   │   └── axonradar.ui.spec.js     # third-party site, not in CI (npm run test:demo)
 │   ├── fixtures/                    # Shared test fixtures (cli-preload.cjs)
 │   └── full_automation.test.js      # Playwright-native suite (allure-playwright reporter)
 ├── scripts/
@@ -644,7 +679,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 
 **`regression` job** (~1 minute): the `node:test` + Playwright layer added alongside the community-health files:
 1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
-2. `npm run test:coverage`: 414 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
+2. `npm run test:coverage`: 417 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
 3. `npm run test:browser`: 38 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
 4. Uploads `reports/` as the `regression-reports` artifact
 
@@ -701,7 +736,7 @@ npm run test:unit
 
 # The larger node:test + Playwright regression layer (needs Node 20.19+;
 # see Installation). This is what the "regression" CI job runs.
-npm run test:regression   # 414 node:test cases, tests/regression/*.check.cjs
+npm run test:regression   # 417 node:test cases, tests/regression/*.check.cjs
 npm run test:browser      # 38 Playwright specs, tests/regression/browser.spec.js
 npm run test:coverage     # same as test:regression, with coverage collection
 
@@ -709,6 +744,13 @@ npm run test:coverage     # same as test:regression, with coverage collection
 # (each test file is its own process, so this needs the explicit URL, and,
 # if the dashboard requires a token, DASHBOARD_TOKEN too)
 DASHBOARD_URL=http://localhost:3000 node tests/ui/LoginTest.js
+
+# The recorded UI suite: a real browser against the live axonradar.netlify.app.
+# Not part of `npx playwright test` and not in CI — it depends on a
+# third-party site being up. Records a video per test into reports/.
+npm run test:demo
+HEADLESS=false npm run test:demo   # watch it in a visible browser
+npm run demo:record                # ...then rebuild the README GIF/MP4 (needs ffmpeg)
 
 # Playwright native suite (allure-playwright reporter active)
 npx playwright test

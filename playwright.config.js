@@ -18,7 +18,10 @@ const { defineConfig, devices } = require("@playwright/test");
 module.exports = defineConfig({
     // Resolve specs from the project root
     testDir: "./tests",
-    testIgnore: "**/regression/**",
+    // tests/demo/ drives a live third-party site and is run by hand with its
+    // own config (playwright.demo.config.js) — never as part of `npx
+    // playwright test` or CI, which must not depend on somebody else's deploy.
+    testIgnore: ["**/regression/**", "**/demo/**"],
     testMatch: ["**/*.test.js", "**/*.spec.js"],
 
     // Maximum time one test can run (ms)
