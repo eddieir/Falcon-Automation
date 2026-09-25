@@ -8,7 +8,12 @@ for (const [statuses, result, exit] of [
   [["passed"], "PASSED", 0],
   [["failed"], "FAILED", 1],
   [["passed", "failed"], "PARTIAL", 1],
-  [["skipped"], "PASSED", 0],
+  // Phase 11 — a run whose scenarios are all `skipped` verified nothing, the
+  // same way an all-deduped run does, so it must be NO_TESTS_RUN/exit 1
+  // rather than PASSED. This corrects the old contract (`["skipped"]` used
+  // to report PASSED because `failed` was zero, regardless of whether
+  // anything was actually verified).
+  [["skipped"], "NO_TESTS_RUN", 1],
   [[], "NO_TESTS_RUN", 1],
   [["passed", "skipped"], "PASSED", 0],
   // Phase 9 — a quarantined result is a real failure that a human has
@@ -36,7 +41,9 @@ for (const [statuses, result, exit] of [
   [["deduped"], "NO_TESTS_RUN", 1],
   [["deduped", "deduped"], "NO_TESTS_RUN", 1],
   [["passed", "deduped"], "PASSED", 0],
-  [["skipped", "deduped"], "PASSED", 0],
+  // Phase 11 — corrected alongside the ["skipped"] case above: skipped and
+  // deduped together still verified nothing.
+  [["skipped", "deduped"], "NO_TESTS_RUN", 1],
   [["quarantined", "deduped"], "PASSED", 0],
   [["failed", "deduped"], "FAILED", 1],
   [["passed", "failed", "deduped"], "PARTIAL", 1],
@@ -273,3 +280,58 @@ for (const status of [401, 429, 500])
     };
     assert.equal(await Analyser.getAlternativeLocator("fixture"), null);
   });
+
+// The summary line used to print `healingEvents.length` as "Self-healing
+// events", counting every attempt — including ones that resolved nothing,
+// which is what a Tier 3 ask looks like with no API key configured. A real
+// 11-page run reported "Self-healing events: 22" having repaired exactly
+// zero selectors. The line has to separate repairs from attempts.
+for (const [label, events, expected] of [
+  [
+    "repairs and failed attempts are counted separately",
+    [
+      { original: "#a", resolved: "#a2", tier: "LocatorStore" },
+      { original: "#b", resolved: null, tier: "LLM" },
+      { original: "#b", resolved: null, tier: "exhausted" },
+    ],
+    /Self-healing: 1 selector\(s\) repaired, 2 attempt\(s\) that resolved nothing/,
+  ],
+  [
+    "a run that repaired nothing says so",
+    [
+      { original: "#a", resolved: null, tier: "LLM" },
+      { original: "#a", resolved: null, tier: "exhausted" },
+    ],
+    /Self-healing: 0 selector\(s\) repaired, 2 attempt\(s\) that resolved nothing/,
+  ],
+  [
+    "a clean run mentions no failed attempts",
+    [{ original: "#a", resolved: "#a2", tier: "LocatorStore" }],
+    /Self-healing: 1 selector\(s\) repaired$/m,
+  ],
+]) {
+  test(`healing summary: ${label}`, (t) => {
+    const dir = temp();
+    const cwd = process.cwd();
+    const oldCode = process.exitCode;
+    process.chdir(dir);
+    const log = console.log;
+    const lines = [];
+    console.log = (line) => lines.push(String(line));
+    t.after(() => {
+      console.log = log;
+      process.chdir(cwd);
+      process.exitCode = oldCode;
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    const Report = load("src/core/ReportManager.js", { "../../utils/Logger": silent });
+    const manager = new Report();
+    manager.startRun();
+    manager.generateReport({
+      tests: [{ name: "a", status: "passed" }],
+      healingEvents: events,
+    });
+    assert.match(lines.join("\n"), expected);
+  });
+}

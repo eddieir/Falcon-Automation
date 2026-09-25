@@ -189,6 +189,116 @@ test("unrecoverable selector records failure instead of success or skip", async 
   const result = await runner.executeTest();
   expect(result[0].status).toBe("failed");
 });
+
+// ── Phase 11: healing for every action, and no silent green ─────────────────
+// A fake page double can't model page.fill()/page.selectOption() against an
+// element that genuinely isn't there — that's the whole reason D13/D14 went
+// undetected. These run against real Chromium.
+
+test("a renamed type target heals through Tier 2 (LocatorStore) and the fill lands in the real field, not a click", async ({
+  page,
+}) => {
+  await page.setContent('<input id="new-field">');
+  Store.addLocator("#old-field", "#new-field");
+  const runner = new Runner(page, {
+    test_scenarios: [
+      { action: "type", locator: "#old-field", value: "hello", description: "Field" },
+    ],
+  });
+  runner.healer._retry.maxAttempts = 1;
+  const results = await runner.executeTest();
+  expect(results[0].status).toBe("passed");
+  await expect(page.locator("#new-field")).toHaveValue("hello");
+  expect(Report._instance.logs.at(-1).resolved).toBe("#new-field");
+  expect(Report._instance.logs.at(-1).tier).toBe("LocatorStore");
+});
+
+test("a renamed select target heals through Tier 3 inference via a controlled provider, selects the real option, and still holds the trust gate", async ({
+  page,
+}) => {
+  await page.setContent(
+    '<select data-testid="country-replacement"><option value="it">Italy</option><option value="fr">France</option></select>',
+  );
+  const healer = new Healer(page);
+  healer._getOpenAIClient = async () => ({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [{ message: { content: '[data-testid="country-replacement"]' } }],
+        }),
+      },
+    },
+  });
+  await healer.healAndSelect("#renamed-country", "fr", "Country");
+  await expect(page.locator('[data-testid="country-replacement"]')).toHaveValue("fr");
+  // Same trust gate as click/type: an unreviewed Tier 3 guess is not written
+  // straight to LocatorStore just because it worked once.
+  expect(Store.getAlternatives("#renamed-country")).not.toContain(
+    '[data-testid="country-replacement"]',
+  );
+  expect(Trust.list().map((entry) => entry.original)).toContain("#renamed-country");
+  Trust.approve("#renamed-country", { approvedBy: "test" });
+  await Trust._queue;
+  expect(Store.getAlternatives("#renamed-country")).toContain(
+    '[data-testid="country-replacement"]',
+  );
+});
+
+test("an unresolvable renamed input fails rather than skips, and FlakinessTracker records it with a classified error type", async ({
+  page,
+}) => {
+  await page.setContent("<p>No matching field here</p>");
+  const runnerUrl = "http://runner.test/form";
+  const runner = new Runner(page, {
+    url: runnerUrl,
+    test_scenarios: [
+      { action: "type", locator: "#absent-field", value: "x", description: "Missing Field" },
+    ],
+  });
+  runner.healer._retry.maxAttempts = 1;
+  runner.healer.getAlternativeSelector = async () => null;
+  const results = await runner.executeTest();
+  expect(results[0].status).toBe("failed");
+  expect(results[0].status).not.toBe("skipped");
+  const key = Flaky.keyFor({ url: runnerUrl, action: "type", locator: "#absent-field" });
+  const entry = Flaky.list().find((e) => e.key === key);
+  expect(entry).toBeTruthy();
+  expect(entry.history.at(-1).status).toBe("failed");
+  expect(entry.history.at(-1).errorType).toBeTruthy();
+});
+
+test("a scenario that navigates away does not break later scenarios in the same plan", async ({
+  page,
+}) => {
+  await page.route("http://runner.test/**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/cart") {
+      return route.fulfill({ contentType: "text/html", body: "<p>Cart</p>" });
+    }
+    return route.fulfill({
+      contentType: "text/html",
+      body:
+        '<a id="to-cart" href="/cart">Cart</a>' +
+        '<button id="account" onclick="window.accountClicked=true">Account</button>',
+    });
+  });
+  await page.goto("http://runner.test/");
+  const runner = new Runner(page, {
+    url: "http://runner.test/",
+    test_scenarios: [
+      { action: "click", locator: "#to-cart", description: "Navigate: Cart" },
+      { action: "click", locator: "#account", description: "Navigate: Account" },
+    ],
+  });
+  runner.healer._retry.maxAttempts = 1;
+  const results = await runner.executeTest();
+  // Reproduces the exact defect: without TestRunner returning to the plan
+  // URL between scenarios, "Navigate: Account" fails because the browser is
+  // already on /cart, which has no #account element.
+  expect(results.map((r) => r.status)).toEqual(["passed", "passed"]);
+  expect(page.url()).toBe("http://runner.test/");
+  expect(await page.evaluate(() => window.accountClicked)).toBe(true);
+});
 test("exploratory inspection reports hidden controls, missing href, and unlabeled buttons", async ({
   page,
 }) => {

@@ -1,6 +1,6 @@
 # Falcon-Automation: AI-Powered Test Automation Framework
 
-> **Status:** Active development · Phases 1–10 merged. Phase 10 makes a single run cover every page of an app instead of just the entry page. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
+> **Status:** Active development · Phases 1–11 merged. Phase 10 makes a single run cover every page of an app instead of just the entry page; Phase 11 extends healing to every action type and stops a run that verified nothing from reporting a pass. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
 
 ---
 
@@ -23,7 +23,7 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 **What that looks like in practice:**
 
 - **UI automation** via Playwright (Chromium, Firefox, WebKit)
-- **Three-tier self-healing:** direct attempt (AdaptiveRetry) → LocatorStore → LLM inference (gpt-4o-mini)
+- **Three-tier self-healing, on every action:** direct attempt (AdaptiveRetry) → LocatorStore → LLM inference (gpt-4o-mini), for clicks, form fills and dropdown selections alike
 - **Whole-app coverage:** one command sweeps every page it discovers, bounded by a page cap and a time budget, deduplicating shared navigation and reporting every page it did *not* cover, with a reason
 - **Autonomous UI exploration:** recursive crawler (ClickExplorer) + DOM-based defect detection (ExploratoryAI)
 - **AI test generation:** PageAnalyser maps the DOM; TestGenerator creates scenarios; TestRunner executes them with full healing
@@ -41,6 +41,31 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 
 One command, no hand-written test code: Falcon loads a site, crawls it, turns what it finds into test scenarios, executes them with self-healing, and streams every step to a live dashboard as it happens. This is one demo, one site, start to finish.
 
+### Watch it run: a recorded UI test against the live site
+
+![Falcon healing a stale selector against a live site and the feed actually filtering](docs/demo/axonradar-ui-test.gif)
+
+That is a real Chromium, a real third-party site, and no editing. The test hands Falcon `#news-search` — an id that does not exist anywhere on the page, which is exactly what an old test suite is left holding after somebody refactors the markup. Tier 1 spends about ten seconds genuinely exhausting its retries against it (the page sits still because nothing can resolve), Tier 2 supplies the alternative it learned earlier, and the value lands in the real, React-wired search field. The proof is the last two seconds: the feed collapses to the one article that matches. Nothing was stubbed and no `OPENAI_API_KEY` was involved — Tier 2 needs neither, which is why it's the tier on camera.
+
+The full recording of all six tests is [`docs/demo/axonradar-ui-test.mp4`](docs/demo/axonradar-ui-test.mp4) (GitHub won't play it inline; download or open it from the file view).
+
+| # | Test | What has to be true for it to pass | Duration |
+|---|---|---|---|
+| 1 | Every route in the primary navigation loads | All 11 routes read off the live nav return 200 and render a heading. The route list is read from the page, not hardcoded, so a route the site adds is covered automatically | 7.1s |
+| 2 | Searching the feed narrows it to real matches | Every card still on screen contains the query; a query nothing matches produces the empty state and zero cards; clearing it brings the feed back | 1.5s |
+| 3 | A category chip filters to that category only | The headline set changes *and* every remaining card carries the Robotics kicker — a chip that reorders without filtering passes a count check and fails this | 1.8s |
+| 4 | The comparator renders a column per model | A model the table isn't already showing is selected, its column appears, and the comparison rows survive | 0.7s |
+| 5 | **Self-healing a `type`:** a stale selector still fills the real field | Tier 1 exhausts, Tier 2 resolves, the live feed filters, the field holds the value, and `HealingReport` records it as one Tier 2 repair of a `type` | 10.8s |
+| 6 | **Self-healing a `select`:** a stale selector still drives the real dropdown | Same chain, ending in the comparison table growing the column. This is the case that was silently `skipped` before Phase 11 | 9.9s |
+
+```sh
+npm run test:demo                 # headless, records a video per test
+HEADLESS=false npm run test:demo  # watch it happen in a visible browser
+npm run demo:record               # run it, then rebuild the GIF and MP4 above
+```
+
+Last measured run: **6 passed in 32.5s**. The suite is deliberately **not** in CI — it depends on a third-party site staying up and on real network timing, and gating merges on somebody else's deploy is how a pipeline becomes noise. `playwright.config.js` ignores `tests/demo/` for the same reason, so a routine `npx playwright test` never reaches it. The spec is [`tests/demo/axonradar.ui.spec.js`](tests/demo/axonradar.ui.spec.js); its config, including `video: "on"`, is [`playwright.demo.config.js`](playwright.demo.config.js).
+
 ### Real-world case study: a live site Falcon had never seen before
 
 A demo against a fixture built for exactly this kind of test doesn't prove much. So instead, everything below comes from pointing Falcon at a real, independently-built, publicly deployed product it had no prior knowledge of: [axonradar.netlify.app](https://axonradar.netlify.app/) (a TypeScript AI-intelligence platform, [source](https://github.com/eddieir/AI-agency)). No config, no fixtures, no hints about the site's structure. Just its 11 real pages (`/`, `/news`, `/models`, `/benchmarks`, `/playground`, `/evaluations`, `/router`, `/operations`, `/developers`, `/creators`, `/compare`), run through the same explore, generate, heal pipeline and streamed to one live dashboard:
@@ -51,7 +76,21 @@ node falcon.js --url=https://axonradar.netlify.app --max-pages=11
 
 ![Dashboard showing the real aggregate totals across all 11 pages](docs/demo/axonradar-04-full-sweep-totals.png)
 
-**184 scenarios generated. 174 passed (94.6%). 15 selectors self-healed. 23 real UI issues found.** 8 failed, and that's disclosed on purpose, not smoothed over: 7 of those 8 are cases where Tier 1 and Tier 2 healing genuinely ran out of options and Tier 3 (the LLM fallback) would normally take over, but this run had no `OPENAI_API_KEY` configured, so Tier 3 never fired. That's the honest number, not a curated one.
+**184 scenarios generated across 11 pages. 133 passed, 11 failed, 40 deduplicated, 0 skipped. 23 real UI issues found. Exit code 1.**
+
+Every one of those numbers is disclosed as measured, including the unflattering ones. The 40 deduplicated scenarios are shared navigation that repeats on every page, counted rather than hidden. The 11 failures are almost all cases where Tier 1 and Tier 2 healing genuinely ran out of options and Tier 3 would take over, but this run had no `OPENAI_API_KEY` configured, so Tier 3 never fired. The healing log for the run records **0 selectors actually repaired against 11 attempts that resolved nothing** — Falcon says exactly that in its summary rather than reporting the attempts as successes.
+
+The `0 skipped` is the part worth pausing on. Running the identical command against the previous release gives:
+
+| | before Phase 11 | after Phase 11 |
+|---|---|---|
+| Total | 184 | 184 |
+| Passed | 132 | 133 |
+| Failed | 10 | 11 |
+| **Skipped** | **2** | **0** |
+| Deduped | 40 | 40 |
+
+Those two skips were real and silent — `⏭ Skipping Fill input field: Element is not visible`, twice, on a live site, never reaching the healing chain. They now reach it and resolve into an actual verdict: one passes, one fails honestly. On this particular site the run was red anyway, so nothing was being hidden behind a green build here; the site where those two skips are the *only* problem is the one Phase 11 exists for.
 
 ### How it works, one page at a time
 
@@ -175,6 +214,59 @@ node scripts/healing/review.js reject  "<original-selector>"
 
 Reproduce the demo above yourself: `node docs/demo/healing-trust-axonradar-demo.js`.
 
+### Healing every action, demonstrated against the same real site
+
+The two sections above heal a *click*. Until Phase 11 that was the only action Falcon could heal: a `type` or `select` whose locator broke was marked `skipped` before the healer was ever consulted, and a skip doesn't fail a run. A renamed input id cost you coverage and left the build green.
+
+Below, two real controls on the live site have their locators broken the way a deploy between analysis and execution breaks them — the `/news` search field, and the second model dropdown on `/compare`. Neither element carries an id, a name, or a `data-testid`, so the plan holds a structural selector, which is exactly what a front-end refactor invalidates. The LLM call itself is stubbed (there is no API key in this environment, and the script says so in its own output); everything downstream is the real code path:
+
+```
+=== Scenario 1: /news — search input's locator breaks between plan and run (type) ===
+✓ PageAnalyser plans "input" for the /news search field (got "input")
+✓ the real search field is uniquely findable by its placeholder (count=1)
+❌ Tier 1 exhausted for News search field. Engaging Tier 2/3 healing.
+🤖 Asking AI to infer locator for: input
+  [stubbed LLM] would infer: input[placeholder="Search headline, body, or source"]
+Read back from the live field: "quantum computing"
+✓ the typed text actually landed in the real /news search field
+✓ Tier 1 genuinely failed and Tier 3 genuinely resolved this — not a disguised Tier 1 pass (tier=LLM)
+
+=== Scenario 2: /compare — second model dropdown's locator breaks between plan and run (select) ===
+✓ the plan selector resolves to exactly one element before the mutation (count=1)
+❌ Tier 1 exhausted for Compare model 2 dropdown. Engaging Tier 2/3 healing.
+Read back from the live dropdown: "kimi-k2-6"
+✓ the option actually changed in the real /compare dropdown
+✓ Tier 1 genuinely failed and Tier 3 genuinely resolved this — not a disguised Tier 1 pass (tier=LLM)
+
+=== Scenario 3: neither fix was silently trusted — Phase 8's gate applies to type/select too ===
+LocatorStore.getAlternatives("input") -> []
+✓ LocatorStore has nothing for the healed input selector (a guess earns no automatic trust)
+✓ the type fix is sitting in HealingTrust as pending review
+✓ the select fix is sitting in HealingTrust as pending review
+```
+
+The value is read back out of the live page in both cases, because a `passed` line proves nothing on its own: a healed fill that reports success without filling anything would be worse than the failure it replaced. The healing record now carries the action it repaired (`"action":"type"`, `"action":"select"`), and the Phase 8 trust gate applies unchanged — an LLM guess for a form field waits for a human exactly as one for a button does.
+
+Reproduce it yourself: `node docs/demo/phase-11-heal-every-action-demo.js`.
+
+### Exit codes that mean what they say
+
+Every guarantee above is worth nothing if the process exits 0 regardless. This demo spawns each case as a real child process and compares the reported result against the exit code the operating system actually saw:
+
+```
+case                              reported      claimed  observed  match
+every scenario passed             PASSED        0        0         yes
+one real failure among passes     PARTIAL       1        1         yes
+a failure a human quarantined     PASSED        0        0         yes
+Phase 11: every scenario skipped  NO_TESTS_RUN  1        1         yes
+Phase 10: every scenario deduped  NO_TESTS_RUN  1        1         yes
+no scenarios at all               NO_TESTS_RUN  1        1         yes
+```
+
+The fourth and fifth rows are the interesting ones. Work that never ran cannot be a pass: a run made entirely of skipped or deduplicated scenarios verified nothing, and now exits 1 exactly as an empty run does. Before Phase 10 and Phase 11 respectively, both of those reported PASSED.
+
+Reproduce it yourself: `node docs/demo/honest-exit-code-demo.js`.
+
 ### Flaky-test detection, demonstrated against the same real site
 
 The same interaction, run repeatedly against the real page, sometimes passes and sometimes fails, exactly the way a genuinely timing-sensitive element behaves in a real suite. Below, `FlakinessTracker` watches six real `TestRunner` runs of the same scenario, classifies it, and a human quarantines it so it stops blocking CI without the instability ever being hidden:
@@ -215,6 +307,17 @@ node scripts/flakiness/review.js list flaky                 # or filter: new | s
 node scripts/flakiness/review.js quarantine "<scenario-key>"
 node scripts/flakiness/review.js unquarantine "<scenario-key>"
 ```
+
+The same demo ends by showing what quarantine will *not* do. A scenario that has failed every time it has ever run is refused outright:
+
+```
+=== Step 6: a scenario that has failed every single time cannot be quarantined at all ===
+Refused: quarantine() threw code "QUARANTINE_REFUSED"
+
+=== Step 7: the same scenario becomes quarantinable the moment it genuinely passes once ===
+```
+
+That is a regression, not flakiness, and quarantining it would turn a genuinely red run green. The rule is "has passed at least once", not "isn't classified `broken`" — a scenario that has only ever failed twice is still classified `new`, because two samples are under the verdict threshold, and hiding that would be just as effective a way to lose a real failure. There is no force flag anywhere.
 
 Reproduce the demo above yourself: `node docs/demo/flaky-test-detection-demo.js`.
 
@@ -277,12 +380,30 @@ node docs/demo/self-heal-axonradar-demo.js
 # Healing trust: Tier 3 succeeds but isn't trusted until a human approves it
 node docs/demo/healing-trust-axonradar-demo.js
 
-# Flaky-test detection: the same interaction, genuinely nondeterministic, quarantined
+# Flaky-test detection: the same interaction, genuinely nondeterministic, quarantined —
+# and a scenario that has never passed being refused quarantine outright
 node docs/demo/flaky-test-detection-demo.js
 
 # Visual regression: a real baseline vs. a genuine injected change
 node docs/demo/visual-regression-axonradar-demo.js
+
+# Healing on every action: a real search field and a real dropdown whose locators
+# break between analysis and execution, healed through the same three tiers
+node docs/demo/phase-11-heal-every-action-demo.js
+
+# Exit-code honesty: every reported result checked against the real process exit code
+node docs/demo/honest-exit-code-demo.js
 ```
+
+The recorded UI test at the top is rebuilt the same way, from the videos Playwright records rather than from a screen capture:
+
+```sh
+npm run demo:record
+```
+
+`docs/demo/build-ui-test-recording.js` finds each video through `reports/ui-demo-results.json` rather than by walking the artefact directory — Playwright names those directories after a truncated, hashed form of the test title, so matching on the directory name silently stops working the first time a title is edited. Reading the reporter's JSON also means the script can see each test's status, and it refuses to write either file if any test failed or any video is missing. A recording is published as evidence the suite works; one built from a red run would be evidence of nothing. Needs `ffmpeg` on `PATH`.
+
+Each one exits non-zero if its own assertions fail, so a demo cannot quietly succeed while the mechanism behind it is broken.
 
 ---
 
@@ -387,6 +508,8 @@ Falcon-Automation/
 │   │   ├── *.check.cjs              # node:test suites, one per module area
 │   │   ├── browser.spec.js          # Playwright specs against inline HTML fixtures
 │   │   └── helpers.cjs              # Module loader with injectable dependencies
+│   ├── demo/                        # The recorded UI suite: real browser, live
+│   │   └── axonradar.ui.spec.js     # third-party site, not in CI (npm run test:demo)
 │   ├── fixtures/                    # Shared test fixtures (cli-preload.cjs)
 │   └── full_automation.test.js      # Playwright-native suite (allure-playwright reporter)
 ├── scripts/
@@ -493,6 +616,8 @@ Falcon's healing engine operates in three tiers, in order:
 | 2 | LocatorStore: alternatives learned from prior runs | None | Fast |
 | 3 | LLM inference: live DOM snapshot + OpenAI gpt-4o-mini | ~$0.001/call | ~1-2 s |
 
+Every supported action goes through that chain, not just clicks. A renamed input or a restructured dropdown is healed exactly as a renamed button is, and Tiers 2 and 3 perform the *real* interaction against the resolved selector — a fill fills, a select selects. Healing a form field by clicking it would report a pass for something that never happened, which is worse than the failure it was hiding. Every healing record notes which action was healed, so the audit trail distinguishes a repaired click from a repaired form fill.
+
 A successful Tier 2 match was already reviewed once (it's how it got into `LocatorStore` in the first place) and is reused immediately. A successful Tier 3 result is different: nobody has looked at it yet. It does not get written to `LocatorStore` automatically. Instead it goes to `HealingTrust` as a fix awaiting human review, and the exact same broken selector pays the Tier 3 cost again on every subsequent run until a human approves it. "Self-healing" should never mean "silently trusted": an LLM guess earns reuse rights by being reviewed, not by having worked once.
 
 The healing engine captures a targeted DOM snapshot (interactive elements only, ≤ 6 KB) rather than the full page, keeping inference prompts small and latency predictable.
@@ -554,8 +679,8 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 
 **`regression` job** (~1 minute): the `node:test` + Playwright layer added alongside the community-health files:
 1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
-2. `npm run test:coverage`: 399 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
-3. `npm run test:browser`: 34 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
+2. `npm run test:coverage`: 417 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
+3. `npm run test:browser`: 38 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
 4. Uploads `reports/` as the `regression-reports` artifact
 
 **`test` job** (~1.5 minutes): the original scenario/E2E pipeline, against a real seeded Postgres:
@@ -611,14 +736,21 @@ npm run test:unit
 
 # The larger node:test + Playwright regression layer (needs Node 20.19+;
 # see Installation). This is what the "regression" CI job runs.
-npm run test:regression   # 399 node:test cases, tests/regression/*.check.cjs
-npm run test:browser      # 34 Playwright specs, tests/regression/browser.spec.js
+npm run test:regression   # 417 node:test cases, tests/regression/*.check.cjs
+npm run test:browser      # 38 Playwright specs, tests/regression/browser.spec.js
 npm run test:coverage     # same as test:regression, with coverage collection
 
 # Same, but reporting into an already-running `node falcon.js` dashboard
 # (each test file is its own process, so this needs the explicit URL, and,
 # if the dashboard requires a token, DASHBOARD_TOKEN too)
 DASHBOARD_URL=http://localhost:3000 node tests/ui/LoginTest.js
+
+# The recorded UI suite: a real browser against the live axonradar.netlify.app.
+# Not part of `npx playwright test` and not in CI — it depends on a
+# third-party site being up. Records a video per test into reports/.
+npm run test:demo
+HEADLESS=false npm run test:demo   # watch it in a visible browser
+npm run demo:record                # ...then rebuild the README GIF/MP4 (needs ffmpeg)
 
 # Playwright native suite (allure-playwright reporter active)
 npx playwright test
@@ -639,6 +771,7 @@ Falcon's differentiator is genuine self-healing, not a hardcoded selector list, 
 Detailed plans for the phases after this one, with implementation specifications and acceptance criteria, are in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md).
 
 ✅ Shipped since the last update:
+- **Healing that covers every action, and a run that can't go green having verified nothing.** Healing used to apply to clicks alone: a renamed input was marked `skipped` before the healer was ever consulted, and because a skip isn't a failure, two skips beside one pass reported PASSED and exited 0. A renamed field quietly cost coverage and the build stayed green over it. `type` and `select` now go through the same three tiers a click does, with the same approval gate; an unresolvable target fails instead of skipping; and `passed`, `failed` and `quarantined` are the only statuses that count as a verdict, so a run without one of them exits 1 like an empty run. A scenario that navigates away also no longer leaves the rest of its plan running against the page it landed on.
 - **Coverage of the whole app, not just the page you pointed at.** Falcon used to crawl a site, discard every page it found, and generate tests for the entry URL alone. A run now sweeps every page it discovers, bounded by a page cap and a wall-clock budget, deduplicating the navigation that repeats on every page, and reporting each page it didn't cover along with why. Against a real 11-page site that's the difference between 1 page and 4 scenarios, and 6 pages and 91 scenarios, from the same command.
 - **Flaky-test detection and quarantine.** `FlakinessTracker` classifies every scenario (`new`/`stable`/`broken`/`flaky`) from its real pass/fail history, so a genuinely unreliable interaction is told apart from a real regression instead of both just being "failed." A human quarantines a flaky scenario, from the dashboard's "Flaky tests" panel or `scripts/flakiness/review.js`; a quarantined failure is reported as `quarantined`, not `failed`, still visible in every report, and never silently merged into a passing result either.
 - **An approval gate for AI-inferred selector fixes.** A Tier 3 (LLM) success used to be written straight into `LocatorStore` and trusted for reuse the moment it worked once. It now goes to `HealingTrust` as a pending fix instead, visible on the live dashboard's "Healing trust" panel or via `scripts/healing/review.js`, and only becomes a trusted Tier 2 alternative once a human explicitly approves it; rejecting it discards the fix while keeping an audit record. `HealingReport.summary()` also aggregates the full healing log into a reviewable trend, selector by selector, tier by tier, instead of a flat event list.

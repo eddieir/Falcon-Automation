@@ -232,6 +232,116 @@ for (const suggestion of [null, "#bad"]) {
     assert.equal(events[0].resolved, null);
   });
 }
+test("Phase 11: no inference at all rejects with a message that says healing was attempted, not a bare selector miss", async () => {
+  const { instance } = healer({ click: async () => {} });
+  instance.getAlternativeSelector = async () => null;
+  await assert.rejects(instance.healSelector("#old-field", "Field"), /after healing/);
+});
+test("Phase 11: a healed attempt that also fails rejects with the healed selector and underlying reason, not a bare Playwright timeout string", async () => {
+  const { instance } = healer({
+    fill: async () => {
+      throw Error("Timeout 2000ms exceeded waiting for selector");
+    },
+  });
+  instance.getAlternativeSelector = async () => "#new-field";
+  const rejection = await instance.healAndType("#old-field", "value", "Field").catch((e) => e);
+  assert.match(rejection.message, /after healing/);
+  assert.match(rejection.message, /#new-field/);
+  // The original error is not discarded: its text is still present (so
+  // AdaptiveRetry.classify() — which matches on substrings like "timeout" —
+  // still classifies it correctly) and available via `cause` for anyone
+  // inspecting the error object directly.
+  assert.match(rejection.message, /Timeout 2000ms exceeded/);
+  assert.equal(rejection.cause?.message, "Timeout 2000ms exceeded waiting for selector");
+});
+
+// ── Phase 11: healing for every action, not just click ──
+
+test("Phase 11: healAndType succeeds directly via fill, no inference", async () => {
+  let filled;
+  const { instance, events } = healer({
+    waitForSelector: async () => {},
+    fill: async (s, v) => {
+      filled = [s, v];
+    },
+  });
+  instance.getAlternativeSelector = () => assert.fail("unexpected inference");
+  await instance.healAndType("#field", "hello", "Field");
+  assert.deepEqual(filled, ["#field", "hello"]);
+  assert.equal(events.length, 0);
+});
+test("Phase 11: healAndSelect succeeds directly via selectOption, no inference", async () => {
+  let selected;
+  const { instance, events } = healer({
+    waitForSelector: async () => {},
+    selectOption: async (s, v) => {
+      selected = [s, v];
+    },
+  });
+  instance.getAlternativeSelector = () => assert.fail("unexpected inference");
+  await instance.healAndSelect("#choice", "it", "Country");
+  assert.deepEqual(selected, ["#choice", "it"]);
+  assert.equal(events.length, 0);
+});
+test("Phase 11: Tier 2 stored alternative for type performs the actual fill, not a click", async () => {
+  const filled = [];
+  const { instance, events } = healer(
+    {
+      waitForSelector: async () => {
+        throw Error("gone");
+      },
+      fill: async (s, v) => {
+        filled.push([s, v]);
+      },
+    },
+    ["#new-field"],
+  );
+  await instance.healAndType("#old-field", "value", "Field");
+  assert.deepEqual(filled, [["#new-field", "value"]]);
+  assert.equal(events[0].tier, "LocatorStore");
+  assert.equal(events[0].action, "type");
+});
+test("Phase 11: Tier 3 inferred locator for select performs the actual selectOption, and goes to trust review, not LocatorStore", async () => {
+  const selected = [];
+  const { instance, events, saved, pending } = healer({
+    selectOption: async (s, v) => selected.push([s, v]),
+  });
+  instance.getAlternativeSelector = async () => "#new-choice";
+  await instance.healAndSelect("#old-choice", "it", "Country");
+  assert.deepEqual(selected, [["#new-choice", "it"]]);
+  // Same trust gate as click: an unreviewed Tier 3 guess is never written
+  // straight to LocatorStore, whichever action it healed.
+  assert.equal(saved.length, 0);
+  assert.deepEqual(pending, [
+    { original: "#old-choice", suggested: "#new-choice", description: "Country" },
+  ]);
+  assert.equal(events[0].tier, "LLM");
+  assert.equal(events[0].trust, "pending");
+  assert.equal(events[0].action, "select");
+});
+test("Phase 11: the uniqueness guard applies to a stored type alternative exactly as it does for click", async () => {
+  const filled = [];
+  const { instance } = healer(
+    {
+      waitForSelector: async () => {
+        throw Error("gone");
+      },
+      fill: async (s, v) => filled.push([s, v]),
+      locator: (sel) => ({ count: async () => (sel === "#ambiguous" ? 2 : 1) }),
+    },
+    ["#ambiguous", "#unique"],
+  );
+  await instance.healAndType("#old", "value", "Field");
+  assert.deepEqual(filled, [["#unique", "value"]]);
+});
+test("Phase 11: healAndClick keeps its existing two-argument signature and still records action:'click'", async () => {
+  const { instance, events } = healer({
+    click: async () => {},
+  });
+  instance.getAlternativeSelector = async () => "#new";
+  await instance.healAndClick("#old", "Save");
+  assert.equal(events[0].action, "click");
+});
 for (const [content, expected] of [
   [" #new ", "#new"],
   ["null", null],
@@ -292,6 +402,33 @@ test("healing audit writes every queued event and forwards lifecycle events", as
   assert.equal(events.length, 20);
   assert.equal(emitted.length, 20);
   assert.equal(events[19].original, "#19");
+});
+test("Phase 11: an entry logged with an action persists it to disk and the emitted event", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const emitted = [];
+  const Report = load("src/core/AIHealer/HealingReport.js", {
+    "../Middleware": { emit: (...e) => emitted.push(e) },
+  });
+  Report._instance.filePath = path.join(dir, "audit/events.json");
+  Report.log({ original: "#old", resolved: "#new", tier: "LocatorStore", action: "type" });
+  await Report._instance._queue;
+  const events = JSON.parse(fs.readFileSync(Report._instance.filePath));
+  assert.equal(events[0].action, "type");
+  assert.equal(emitted[0][1].action, "type");
+});
+test("Phase 11: an entry logged without an action keeps today's exact shape — no action key at all", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const Report = load("src/core/AIHealer/HealingReport.js", {
+    "../Middleware": { emit: () => {} },
+  });
+  Report._instance.filePath = path.join(dir, "audit/events.json");
+  Report.log({ original: "#old", resolved: "#new", tier: "LocatorStore" });
+  await Report._instance._queue;
+  const events = JSON.parse(fs.readFileSync(Report._instance.filePath));
+  assert.deepEqual(Object.keys(events[0]).sort(), ["description", "original", "resolved", "tier", "timestamp"]);
+  assert.equal("action" in events[0], false);
 });
 
 test("locator cache ignores malformed entries in otherwise valid JSON", async (t) => {
