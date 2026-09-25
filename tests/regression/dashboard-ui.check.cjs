@@ -679,7 +679,7 @@ test("Phase 10: a new sweep starting at index 1 clears the previous run's pages"
   handlers.event(pageCompleteEvent("https://old.com/"));
   handlers.event(pageStartEvent({ url: "https://new.com/", index: 1, total: 2 }));
   const urls = nodes.get("coverage-list").children.map((row) => row.innerHTML).join("");
-  assert.ok(!urls.includes("old.com"));
+  assert.doesNotMatch(urls, /old\.com/);
   assert.match(urls, /new\.com/);
 });
 
@@ -743,7 +743,7 @@ test("Phase 10: replay reconstructs the coverage panel from the sweep events alo
     pageCompleteEvent("https://x.com/two", { status: "skipped", reason: "max-pages" }),
   ]);
   const covered = nodes.get("coverage-list").children.map((row) => row.innerHTML).join("");
-  assert.ok(!covered.includes("stale.com"));
+  assert.doesNotMatch(covered, /stale\.com/);
   assert.equal(nodes.get("coverage-uncovered-list").children.length, 1);
 });
 

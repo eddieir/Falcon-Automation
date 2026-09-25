@@ -613,7 +613,7 @@ test("coverage: unauthenticated GET /coverage is rejected and leaks no discovere
   d.emit("pageStart", { url: "https://internal.example.com/admin", index: 1, total: 1 });
   const res = await httpJSON(d.port, "GET", "/coverage");
   assert.equal(res.statusCode, 401);
-  assert.ok(!JSON.stringify(res.body).includes("internal.example.com"));
+  assert.doesNotMatch(JSON.stringify(res.body), /internal\.example\.com/);
 
   const authed = await httpJSON(d.port, "GET", "/coverage", { "X-Dashboard-Token": "fixture-token" });
   assert.equal(authed.statusCode, 200);
