@@ -1,6 +1,6 @@
 # Falcon-Automation: AI-Powered Test Automation Framework
 
-> **Status:** Active development · Phases 1–10 merged. Phase 10 makes a single run cover every page of an app instead of just the entry page. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
+> **Status:** Active development · Phases 1–11 merged. Phase 10 makes a single run cover every page of an app instead of just the entry page; Phase 11 extends healing to every action type and stops a run that verified nothing from reporting a pass. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
 
 ---
 
@@ -23,7 +23,7 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 **What that looks like in practice:**
 
 - **UI automation** via Playwright (Chromium, Firefox, WebKit)
-- **Three-tier self-healing:** direct attempt (AdaptiveRetry) → LocatorStore → LLM inference (gpt-4o-mini)
+- **Three-tier self-healing, on every action:** direct attempt (AdaptiveRetry) → LocatorStore → LLM inference (gpt-4o-mini), for clicks, form fills and dropdown selections alike
 - **Whole-app coverage:** one command sweeps every page it discovers, bounded by a page cap and a time budget, deduplicating shared navigation and reporting every page it did *not* cover, with a reason
 - **Autonomous UI exploration:** recursive crawler (ClickExplorer) + DOM-based defect detection (ExploratoryAI)
 - **AI test generation:** PageAnalyser maps the DOM; TestGenerator creates scenarios; TestRunner executes them with full healing
@@ -493,6 +493,8 @@ Falcon's healing engine operates in three tiers, in order:
 | 2 | LocatorStore: alternatives learned from prior runs | None | Fast |
 | 3 | LLM inference: live DOM snapshot + OpenAI gpt-4o-mini | ~$0.001/call | ~1-2 s |
 
+Every supported action goes through that chain, not just clicks. A renamed input or a restructured dropdown is healed exactly as a renamed button is, and Tiers 2 and 3 perform the *real* interaction against the resolved selector — a fill fills, a select selects. Healing a form field by clicking it would report a pass for something that never happened, which is worse than the failure it was hiding. Every healing record notes which action was healed, so the audit trail distinguishes a repaired click from a repaired form fill.
+
 A successful Tier 2 match was already reviewed once (it's how it got into `LocatorStore` in the first place) and is reused immediately. A successful Tier 3 result is different: nobody has looked at it yet. It does not get written to `LocatorStore` automatically. Instead it goes to `HealingTrust` as a fix awaiting human review, and the exact same broken selector pays the Tier 3 cost again on every subsequent run until a human approves it. "Self-healing" should never mean "silently trusted": an LLM guess earns reuse rights by being reviewed, not by having worked once.
 
 The healing engine captures a targeted DOM snapshot (interactive elements only, ≤ 6 KB) rather than the full page, keeping inference prompts small and latency predictable.
@@ -554,8 +556,8 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 
 **`regression` job** (~1 minute): the `node:test` + Playwright layer added alongside the community-health files:
 1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
-2. `npm run test:coverage`: 399 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
-3. `npm run test:browser`: 34 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
+2. `npm run test:coverage`: 414 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
+3. `npm run test:browser`: 38 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
 4. Uploads `reports/` as the `regression-reports` artifact
 
 **`test` job** (~1.5 minutes): the original scenario/E2E pipeline, against a real seeded Postgres:
@@ -611,8 +613,8 @@ npm run test:unit
 
 # The larger node:test + Playwright regression layer (needs Node 20.19+;
 # see Installation). This is what the "regression" CI job runs.
-npm run test:regression   # 399 node:test cases, tests/regression/*.check.cjs
-npm run test:browser      # 34 Playwright specs, tests/regression/browser.spec.js
+npm run test:regression   # 414 node:test cases, tests/regression/*.check.cjs
+npm run test:browser      # 38 Playwright specs, tests/regression/browser.spec.js
 npm run test:coverage     # same as test:regression, with coverage collection
 
 # Same, but reporting into an already-running `node falcon.js` dashboard
@@ -639,6 +641,7 @@ Falcon's differentiator is genuine self-healing, not a hardcoded selector list, 
 Detailed plans for the phases after this one, with implementation specifications and acceptance criteria, are in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md).
 
 ✅ Shipped since the last update:
+- **Healing that covers every action, and a run that can't go green having verified nothing.** Healing used to apply to clicks alone: a renamed input was marked `skipped` before the healer was ever consulted, and because a skip isn't a failure, two skips beside one pass reported PASSED and exited 0. A renamed field quietly cost coverage and the build stayed green over it. `type` and `select` now go through the same three tiers a click does, with the same approval gate; an unresolvable target fails instead of skipping; and `passed`, `failed` and `quarantined` are the only statuses that count as a verdict, so a run without one of them exits 1 like an empty run. A scenario that navigates away also no longer leaves the rest of its plan running against the page it landed on.
 - **Coverage of the whole app, not just the page you pointed at.** Falcon used to crawl a site, discard every page it found, and generate tests for the entry URL alone. A run now sweeps every page it discovers, bounded by a page cap and a wall-clock budget, deduplicating the navigation that repeats on every page, and reporting each page it didn't cover along with why. Against a real 11-page site that's the difference between 1 page and 4 scenarios, and 6 pages and 91 scenarios, from the same command.
 - **Flaky-test detection and quarantine.** `FlakinessTracker` classifies every scenario (`new`/`stable`/`broken`/`flaky`) from its real pass/fail history, so a genuinely unreliable interaction is told apart from a real regression instead of both just being "failed." A human quarantines a flaky scenario, from the dashboard's "Flaky tests" panel or `scripts/flakiness/review.js`; a quarantined failure is reported as `quarantined`, not `failed`, still visible in every report, and never silently merged into a passing result either.
 - **An approval gate for AI-inferred selector fixes.** A Tier 3 (LLM) success used to be written straight into `LocatorStore` and trusted for reuse the moment it worked once. It now goes to `HealingTrust` as a pending fix instead, visible on the live dashboard's "Healing trust" panel or via `scripts/healing/review.js`, and only becomes a trusted Tier 2 alternative once a human explicitly approves it; rejecting it discards the fix while keeping an audit record. `HealingReport.summary()` also aggregates the full healing log into a reviewable trend, selector by selector, tier by tier, instead of a flat event list.
