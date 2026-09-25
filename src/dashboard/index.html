@@ -362,10 +362,100 @@
     letter-spacing: 2px;
   }
 
-  .flaky-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .flaky-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+
+  .flaky-blocked {
+    font-size: 12px;
+    color: var(--muted);
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: help;
+    white-space: nowrap;
+  }
 
   .btn-quarantine { border-color: var(--quarantine); color: var(--quarantine); }
   .btn-quarantine:hover { background: var(--quarantine); color: var(--bg); }
+
+  /* ── Coverage panel (Phase 10) ── */
+  #coverage-section {
+    padding: 0 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  #coverage-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+  }
+
+  #coverage-summary {
+    color: var(--muted);
+    font-size: 13px;
+    padding-bottom: 4px;
+  }
+
+  #coverage-empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 12px 0;
+  }
+
+  .coverage-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--info);
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* The three "not covered" outcomes read differently at a glance: an
+     in-progress page is neutral, a deliberate skip is a warning, and a page
+     Falcon could not reach is a failure of coverage, not a choice. */
+  .coverage-row.status-tested      { border-left-color: var(--pass); }
+  .coverage-row.status-testing     { border-left-color: var(--info); }
+  .coverage-row.status-skipped     { border-left-color: var(--skip); }
+  .coverage-row.status-unreachable { border-left-color: var(--fail); }
+
+  .coverage-body { flex: 1; min-width: 200px; }
+
+  .coverage-url {
+    font-weight: 600;
+    word-break: break-all;
+  }
+
+  .coverage-detail {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 2px;
+    word-break: break-all;
+  }
+
+  .coverage-count-pass { color: var(--pass); }
+  .coverage-count-fail { color: var(--fail); }
+  .coverage-count-skip { color: var(--skip); }
+
+  #coverage-uncovered-header {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+    margin: 8px 0 8px;
+  }
 </style>
 </head>
 <body>
@@ -394,6 +484,18 @@
     <div class="bar-segment bar-skip" id="bar-skip" style="width:0%"></div>
     <div class="bar-segment bar-quarantine" id="bar-quarantine" style="width:0%"></div>
   </div>
+</div>
+
+<div id="coverage-section">
+  <div id="coverage-header">
+    <span>Coverage</span>
+  </div>
+  <div id="coverage-summary"></div>
+  <div id="coverage-list">
+    <div id="coverage-empty">No site sweep in progress — Falcon is testing a single page.</div>
+  </div>
+  <div id="coverage-uncovered-header" style="display:none">Not covered</div>
+  <div id="coverage-uncovered-list"></div>
 </div>
 
 <div id="healing-section">
@@ -433,7 +535,11 @@
 </div>
 
 <script>
-  const state = { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map() };
+  const state = { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map(), pages: new Map(), sweep: emptySweep() };
+
+  function emptySweep() {
+    return { entryUrl: null, currentUrl: null, discovered: 0, budgetExhausted: false };
+  }
 
   const $ = (id) => document.getElementById(id);
 
@@ -557,6 +663,23 @@
         renderFlaky();
         addRow("pass", "✅", `Unquarantined: ${payload.description || payload.locator}`, null, timestamp);
         break;
+      case "pageStart":
+        applyPageStart(payload);
+        renderCoverage();
+        addRow("info", "📄", `Page ${payload.index ?? "?"}/${payload.total ?? "?"}: ${payload.url}`, null, timestamp);
+        break;
+      case "pageComplete": {
+        const page = applyPageComplete(payload);
+        renderCoverage();
+        addRow(page.status === "unreachable" ? "fail" : "info", page.status === "unreachable" ? "🚫" : "✅",
+          `${page.status === "unreachable" ? "Unreachable" : "Completed"}: ${payload.url}`, pageCountsLabel(page), timestamp);
+        break;
+      }
+      case "sweepComplete":
+        applySweepComplete(payload);
+        renderCoverage();
+        addRow("info", "🗺", `Sweep complete: ${state.sweep.entryUrl || ""}`, coverageSummaryLabel(), timestamp);
+        break;
       default:
         addRow("info", "ℹ️", name, JSON.stringify(payload), timestamp);
     }
@@ -672,6 +795,14 @@
     return (history || []).slice(-10).map((h) => (h.status === "passed" ? "🟢" : "🔴")).join("");
   }
 
+  // Mirrors FlakinessTracker.quarantineEligibility(): a scenario with no pass
+  // anywhere in its retained history can't be quarantined, so the control for
+  // it isn't offered. The server refuses it too (409) — this only keeps the UI
+  // from presenting a button that exists to be rejected.
+  function canQuarantine(entry) {
+    return (entry.history || []).some((h) => h && h.status === "passed");
+  }
+
   function renderFlaky() {
     const list = $("flaky-list");
     const empty = $("flaky-empty");
@@ -703,7 +834,9 @@
         <div class="flaky-actions">
           ${entry.quarantined
             ? `<button class="btn btn-approve" data-action="unquarantine" data-key="${escapeHtml(entry.key)}">Unquarantine</button>`
-            : `<button class="btn btn-quarantine" data-action="quarantine" data-key="${escapeHtml(entry.key)}">Quarantine</button>`}
+            : canQuarantine(entry)
+              ? `<button class="btn btn-quarantine" data-action="quarantine" data-key="${escapeHtml(entry.key)}">Quarantine</button>`
+              : `<span class="flaky-blocked" title="A scenario that has never passed is a regression, not a flake — quarantining it would turn a genuinely red run green.">Not quarantinable</span>`}
         </div>
       `;
       return row;
@@ -754,6 +887,205 @@
     }
   }
 
+  // ── Coverage panel (Phase 10) ──
+  //
+  // Mirrors the fold Dashboard.js does server-side: a sweep streams pageStart
+  // then pageComplete per page, and neither event repeats what the other said,
+  // so page records are merged by URL rather than replaced.
+
+  const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : undefined);
+
+  function upsertPage(url, fields) {
+    if (typeof url !== "string" || !url) return { url: "", status: "tested" };
+    const merged = { url, ...(state.pages.get(url) || {}) };
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined) merged[key] = value;
+    }
+    state.pages.set(url, merged);
+    return merged;
+  }
+
+  function applyPageStart(payload = {}) {
+    const index = num(payload.index);
+    // Pages are numbered from 1, so an index of 1 starts a new sweep — the
+    // previous run's pages must not linger and overstate coverage.
+    if (index !== undefined && index <= 1 && state.pages.size > 0) {
+      state.pages.clear();
+      state.sweep = emptySweep();
+    }
+    const total = num(payload.total);
+    if (total !== undefined) state.sweep.discovered = Math.max(state.sweep.discovered, total);
+    if (!state.sweep.entryUrl && typeof payload.url === "string") state.sweep.entryUrl = payload.url;
+    state.sweep.currentUrl = typeof payload.url === "string" ? payload.url : null;
+    return upsertPage(payload.url, { index, status: "testing" });
+  }
+
+  function applyPageComplete(payload = {}) {
+    const summary = payload.summary && typeof payload.summary === "object" ? payload.summary : {};
+    const results = Array.isArray(summary.results) ? summary.results : [];
+    const tally = (status) => results.filter((r) => r && r.status === status).length;
+    // Prefer counts the sweep computed itself, falling back to tallying the raw
+    // results so a summary carrying only `results` still renders its numbers.
+    const countOf = (explicit, status) => num(explicit) ?? (results.length ? tally(status) : undefined);
+    if (state.sweep.currentUrl === payload.url) state.sweep.currentUrl = null;
+    if (summary.reason === "budget-exhausted") state.sweep.budgetExhausted = true;
+    return upsertPage(payload.url, {
+      status: typeof summary.status === "string" ? summary.status : "tested",
+      reason: typeof summary.reason === "string" ? summary.reason : undefined,
+      passed: countOf(summary.passed, "passed"),
+      failed: countOf(summary.failed, "failed"),
+      skipped: countOf(summary.skipped, "skipped"),
+      quarantined: countOf(summary.quarantined, "quarantined"),
+      deduped: countOf(summary.deduped, "deduped"),
+      scenariosGenerated: num(summary.scenariosGenerated),
+      scenariosDeduplicated: num(summary.scenariosDeduplicated),
+      uiIssues: Array.isArray(summary.uiIssues) ? summary.uiIssues.length : num(summary.uiIssues),
+      durationMs: num(summary.durationMs),
+    });
+  }
+
+  // Pages the sweep skipped or never opened emit no per-page events — nothing
+  // happens on a page nobody visited — so the final SweepResult is the only
+  // thing that can name them. Everything here is optional: without it the
+  // panel still shows what the page events established.
+  function applySweepComplete(payload = {}) {
+    if (typeof payload.entryUrl === "string") state.sweep.entryUrl = payload.entryUrl;
+    state.sweep.currentUrl = null;
+    for (const page of Array.isArray(payload.pages) ? payload.pages : []) {
+      if (!page || typeof page.url !== "string") continue;
+      upsertPage(page.url, {
+        status: typeof page.status === "string" ? page.status : undefined,
+        reason: typeof page.reason === "string" ? page.reason : undefined,
+        scenariosGenerated: num(page.scenariosGenerated),
+        scenariosDeduplicated: num(page.scenariosDeduplicated),
+        durationMs: num(page.durationMs),
+      });
+    }
+    const coverage = payload.coverage && typeof payload.coverage === "object" ? payload.coverage : {};
+    const discovered = num(coverage.pagesDiscovered);
+    if (discovered !== undefined) state.sweep.discovered = Math.max(state.sweep.discovered, discovered);
+    if (coverage.budgetExhausted === true) state.sweep.budgetExhausted = true;
+  }
+
+  /** Human wording for why a page was not covered. */
+  function reasonLabel(page) {
+    if (page.reason === "max-pages") return "excluded by the --max-pages limit";
+    if (page.reason === "budget-exhausted") return "the sweep's time budget ran out first";
+    if (page.reason) return page.reason;
+    return page.status === "unreachable" ? "could not be loaded" : "no reason recorded";
+  }
+
+  function pageCountsLabel(page) {
+    const parts = [];
+    if (num(page.passed) !== undefined) parts.push(`${page.passed} passed`);
+    if (num(page.failed) !== undefined) parts.push(`${page.failed} failed`);
+    if (num(page.skipped)) parts.push(`${page.skipped} skipped`);
+    if (num(page.quarantined)) parts.push(`${page.quarantined} quarantined`);
+    if (num(page.deduped)) parts.push(`${page.deduped} deduped`);
+    return parts.join(" · ") || null;
+  }
+
+  function coverageTotals() {
+    const pages = [...state.pages.values()];
+    const withStatus = (status) => pages.filter((p) => p.status === status).length;
+    const sum = (field) => pages.reduce((acc, p) => acc + (num(p[field]) ?? 0), 0);
+    return {
+      // A sweep can discover more pages than it has records for — the ones
+      // truncated by --max-pages — so the announced total wins when larger.
+      discovered: Math.max(state.sweep.discovered, pages.length),
+      tested: withStatus("tested"),
+      testing: withStatus("testing"),
+      skipped: withStatus("skipped"),
+      unreachable: withStatus("unreachable"),
+      generated: sum("scenariosGenerated"),
+      deduplicated: sum("scenariosDeduplicated"),
+    };
+  }
+
+  function coverageSummaryLabel() {
+    const t = coverageTotals();
+    const parts = [`${t.tested} of ${t.discovered} discovered page(s) tested`];
+    if (t.testing) parts.push(`${t.testing} in progress`);
+    if (t.skipped) parts.push(`${t.skipped} skipped`);
+    if (t.unreachable) parts.push(`${t.unreachable} unreachable`);
+    if (t.generated) parts.push(`${t.generated} scenario(s) generated`);
+    if (t.deduplicated) parts.push(`${t.deduplicated} deduped`);
+    if (state.sweep.budgetExhausted) parts.push("time budget exhausted");
+    return parts.join(" · ");
+  }
+
+  function coverageRow(page) {
+    const row = document.createElement("div");
+    row.className = `coverage-row status-${page.status || "tested"}`;
+    const counts = pageCountsLabel(page);
+    const uncovered = page.status === "skipped" || page.status === "unreachable";
+    const detail = uncovered
+      ? `${page.status === "skipped" ? "Skipped" : "Unreachable"} — ${reasonLabel(page)}`
+      : counts || (page.status === "testing" ? "testing…" : "no scenarios generated");
+    row.innerHTML = `
+      <div class="coverage-body">
+        <div class="coverage-url">${escapeHtml(page.url)}</div>
+        <div class="coverage-detail">${escapeHtml(detail)}</div>
+        ${!uncovered && num(page.durationMs) !== undefined ? `<div class="coverage-detail">${Math.round(page.durationMs)}ms</div>` : ""}
+      </div>
+    `;
+    return row;
+  }
+
+  function renderCoverage() {
+    const list = $("coverage-list");
+    const uncoveredList = $("coverage-uncovered-list");
+    const uncoveredHeader = $("coverage-uncovered-header");
+    const pages = [...state.pages.values()];
+
+    if (pages.length === 0) {
+      $("coverage-summary").textContent = "";
+      list.replaceChildren($("coverage-empty") || makeCoverageEmpty());
+      uncoveredList.replaceChildren();
+      uncoveredHeader.style.display = "none";
+      return;
+    }
+
+    $("coverage-summary").textContent = coverageSummaryLabel();
+
+    const covered = pages.filter((p) => p.status !== "skipped" && p.status !== "unreachable");
+    const uncovered = pages.filter((p) => p.status === "skipped" || p.status === "unreachable");
+
+    list.replaceChildren(...covered.map(coverageRow));
+    // "What Falcon didn't cover" is half the coverage story — it gets its own
+    // labelled section rather than being mixed in or quietly omitted.
+    uncoveredList.replaceChildren(...uncovered.map(coverageRow));
+    uncoveredHeader.style.display = uncovered.length ? "block" : "none";
+  }
+
+  function makeCoverageEmpty() {
+    const div = document.createElement("div");
+    div.id = "coverage-empty";
+    div.textContent = "No site sweep in progress — Falcon is testing a single page.";
+    return div;
+  }
+
+  async function refreshCoverage() {
+    try {
+      const res = await fetch("/coverage", { headers: authHeaders() });
+      if (res.ok) {
+        const snapshot = await res.json();
+        // The server's snapshot is authoritative for a tab joining mid-sweep;
+        // socket events keep it current from here on.
+        state.pages = new Map((snapshot.pages || []).map((page) => [page.url, page]));
+        state.sweep = {
+          entryUrl: snapshot.entryUrl || null,
+          currentUrl: snapshot.currentUrl || null,
+          discovered: num(snapshot.coverage?.pagesDiscovered) ?? 0,
+          budgetExhausted: snapshot.coverage?.budgetExhausted === true,
+        };
+        renderCoverage();
+      }
+    } catch {
+      // Best-effort — socket events will still keep this in sync going forward
+    }
+  }
+
   // Phase 7 — auth token. Read from ?token=, persist to localStorage so a
   // refresh doesn't require re-pasting it, then strip it from the visible
   // URL so it doesn't linger in browser history / get shared by accident.
@@ -779,6 +1111,7 @@
     $("status-label").textContent = "Live";
     refreshHealing();
     refreshFlakiness();
+    refreshCoverage();
   });
 
   socket.on("disconnect", () => {
@@ -795,13 +1128,14 @@
 
   // Replay full history for late-joining tabs
   socket.on("replay", (events) => {
-    Object.assign(state, { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map() });
+    Object.assign(state, { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map(), pages: new Map(), sweep: emptySweep() });
     $("feed").replaceChildren();
     for (const id of ["bar-pass", "bar-fail", "bar-skip", "bar-quarantine"]) $(id).style.width = "0%";
     $("run-time").textContent = "–";
     updateTiles();
     renderPending();
     renderFlaky();
+    renderCoverage();
     events.forEach(handleEvent);
   });
 

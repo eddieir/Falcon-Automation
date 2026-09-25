@@ -432,6 +432,24 @@ test("flakiness: quarantining/unquarantining an unknown key returns 404, not a s
   assert.equal(unquarantine.statusCode, 404);
 });
 
+test("flakiness: quarantining a scenario that has never passed is refused with 409, and it stays red", async (t) => {
+  isolateFlakinessSingleton(t);
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const auth = { "X-Dashboard-Token": "fixture-token" };
+  const key = FlakinessTracker.keyFor({ url: "https://x.com", action: "click", locator: "#broken" });
+
+  for (let i = 0; i < 3; i++) {
+    FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#broken", status: "failed" });
+  }
+
+  const res = await httpJSON(d.port, "POST", "/flakiness/quarantine", auth, { key });
+  assert.equal(res.statusCode, 409);
+  assert.match(res.body.error, /never passed/);
+  assert.equal(res.body.classification, "broken");
+  assert.equal(FlakinessTracker.isQuarantined(key), false);
+});
+
 test("flakiness: POST with a non-string or missing `key` is rejected, not crashed on", async (t) => {
   isolateFlakinessSingleton(t);
   const d = setup(t, "fixture-token");
@@ -484,4 +502,164 @@ test("flakiness: a live end-to-end 'flakyDetected' broadcast reaches a connected
   const [event] = await flaky;
   assert.equal(event.name, "flakyDetected");
   assert.equal(event.payload.locator, "#flaky");
+});
+
+// ── Phase 10: whole-app coverage HTTP surface (real Dashboard, real sweep events) ──
+
+/** The pageComplete payload SiteSweep emits, as specified in docs/PHASE-PLANS.md. */
+function pageComplete(url, summary = {}) {
+  return { url, summary: { status: "tested", scenariosGenerated: 3, scenariosDeduplicated: 1, durationMs: 120, ...summary } };
+}
+
+test("coverage: GET /coverage folds pageStart/pageComplete into a real aggregate over HTTP", async (t) => {
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const auth = { "X-Dashboard-Token": "fixture-token" };
+
+  d.emit("pageStart", { url: "https://x.com/", index: 1, total: 4 });
+  d.emit("pageComplete", pageComplete("https://x.com/", {
+    results: [{ status: "passed" }, { status: "passed" }, { status: "failed" }, { status: "deduped" }],
+  }));
+  d.emit("pageStart", { url: "https://x.com/about", index: 2, total: 4 });
+
+  const res = await httpJSON(d.port, "GET", "/coverage", auth);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.entryUrl, "https://x.com/");
+  assert.equal(res.body.currentUrl, "https://x.com/about");
+  // pagesDiscovered comes from the sweep's announced total, not from how many
+  // pages happen to have reported yet.
+  assert.equal(res.body.coverage.pagesDiscovered, 4);
+  assert.equal(res.body.coverage.pagesTested, 1);
+  assert.equal(res.body.coverage.pagesInProgress, 1);
+  assert.equal(res.body.coverage.scenariosGenerated, 3);
+  assert.equal(res.body.coverage.scenariosDeduplicated, 1);
+
+  const entry = res.body.pages.find((p) => p.url === "https://x.com/");
+  assert.equal(entry.passed, 2);
+  assert.equal(entry.failed, 1);
+  assert.equal(entry.deduped, 1);
+});
+
+test("coverage: a page reporting start then complete updates in place rather than duplicating", async (t) => {
+  const d = setup(t, "fixture-token");
+  await d.start();
+
+  d.emit("pageStart", { url: "https://x.com/dup", index: 1, total: 1 });
+  d.emit("pageComplete", pageComplete("https://x.com/dup", { passed: 1, failed: 0 }));
+
+  const res = await httpJSON(d.port, "GET", "/coverage", { "X-Dashboard-Token": "fixture-token" });
+  assert.equal(res.body.pages.length, 1);
+  assert.equal(res.body.pages[0].status, "tested");
+  assert.equal(res.body.pages[0].index, 1); // the pageStart field survived the merge
+});
+
+test("coverage: skipped and unreachable pages are reported with their reasons, not silently dropped", async (t) => {
+  const d = setup(t, "fixture-token");
+  await d.start();
+
+  d.emit("pageStart", { url: "https://x.com/", index: 1, total: 3 });
+  d.emit("pageComplete", pageComplete("https://x.com/", { passed: 2 }));
+  d.emit("pageComplete", { url: "https://x.com/dead", summary: { status: "unreachable", reason: "net::ERR_ABORTED" } });
+  d.emit("sweepComplete", {
+    entryUrl: "https://x.com/",
+    pages: [{ url: "https://x.com/deep", status: "skipped", reason: "max-pages" }],
+    coverage: { pagesDiscovered: 12, budgetExhausted: true },
+  });
+
+  const res = await httpJSON(d.port, "GET", "/coverage", { "X-Dashboard-Token": "fixture-token" });
+  assert.equal(res.body.coverage.pagesDiscovered, 12);
+  assert.equal(res.body.coverage.pagesTested, 1);
+  assert.equal(res.body.coverage.pagesSkipped, 1);
+  assert.equal(res.body.coverage.pagesUnreachable, 1);
+  assert.equal(res.body.coverage.budgetExhausted, true);
+  assert.equal(res.body.pages.find((p) => p.url === "https://x.com/deep").reason, "max-pages");
+  assert.equal(res.body.pages.find((p) => p.url === "https://x.com/dead").reason, "net::ERR_ABORTED");
+});
+
+test("coverage: a second sweep starting at index 1 replaces the previous run's pages", async (t) => {
+  const d = setup(t, "fixture-token");
+  await d.start();
+
+  d.emit("pageStart", { url: "https://old.com/", index: 1, total: 1 });
+  d.emit("pageComplete", pageComplete("https://old.com/", { passed: 1 }));
+  d.emit("pageStart", { url: "https://new.com/", index: 1, total: 2 });
+
+  const res = await httpJSON(d.port, "GET", "/coverage", { "X-Dashboard-Token": "fixture-token" });
+  assert.deepEqual(res.body.pages.map((p) => p.url), ["https://new.com/"]);
+  assert.equal(res.body.entryUrl, "https://new.com/");
+  assert.equal(res.body.coverage.pagesTested, 0);
+});
+
+test("coverage: malformed sweep payloads never break the event stream they arrive on", async (t) => {
+  const d = setup(t, "fixture-token");
+  await d.start();
+
+  for (const payload of [undefined, null, "nope", 42, { url: 7 }, { url: "https://x.com/", summary: "nope" }, { url: "https://x.com/", summary: { results: "nope" } }]) {
+    assert.doesNotThrow(() => d.emit("pageComplete", payload));
+    assert.doesNotThrow(() => d.emit("pageStart", payload));
+    assert.doesNotThrow(() => d.emit("sweepComplete", payload));
+  }
+  // Every one of those still landed in the feed, and a normal event after them works.
+  d.emit("testPass", { name: "after" });
+  assert.equal(d._events.at(-1).payload.name, "after");
+  const res = await httpJSON(d.port, "GET", "/coverage", { "X-Dashboard-Token": "fixture-token" });
+  assert.equal(res.statusCode, 200);
+});
+
+test("coverage: unauthenticated GET /coverage is rejected and leaks no discovered URLs", async (t) => {
+  const d = setup(t, "fixture-token");
+  await d.start();
+
+  d.emit("pageStart", { url: "https://internal.example.com/admin", index: 1, total: 1 });
+  const res = await httpJSON(d.port, "GET", "/coverage");
+  assert.equal(res.statusCode, 401);
+  assert.doesNotMatch(JSON.stringify(res.body), /internal\.example\.com/);
+
+  const authed = await httpJSON(d.port, "GET", "/coverage", { "X-Dashboard-Token": "fixture-token" });
+  assert.equal(authed.statusCode, 200);
+  assert.equal(authed.body.pages.length, 1);
+});
+
+test("coverage: POST /emit from a separate process feeds the coverage aggregate too", async (t) => {
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const auth = { "X-Dashboard-Token": "fixture-token" };
+
+  const emitted = await httpJSON(d.port, "POST", "/emit", auth, {
+    name: "pageStart",
+    payload: { url: "https://remote.example.com/", index: 1, total: 2 },
+  });
+  assert.equal(emitted.statusCode, 204);
+
+  const res = await httpJSON(d.port, "GET", "/coverage", auth);
+  assert.equal(res.body.coverage.pagesDiscovered, 2);
+  assert.equal(res.body.currentUrl, "https://remote.example.com/");
+});
+
+test("coverage: pageStart/pageComplete are broadcast live to a connected socket", async (t) => {
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const socket = io(`http://localhost:${d.port}`, {
+    autoConnect: false,
+    auth: { token: "fixture-token" },
+    reconnection: false,
+  });
+  t.after(() => socket.close());
+  const connected = once(socket, "connect");
+  const replayed = once(socket, "replay");
+  socket.connect();
+  await connected;
+  await replayed;
+
+  const started = once(socket, "event");
+  d.emit("pageStart", { url: "https://x.com/live", index: 1, total: 3 });
+  const [startEvt] = await started;
+  assert.equal(startEvt.name, "pageStart");
+  assert.equal(startEvt.payload.total, 3);
+
+  const completed = once(socket, "event");
+  d.emit("pageComplete", pageComplete("https://x.com/live", { passed: 1 }));
+  const [completeEvt] = await completed;
+  assert.equal(completeEvt.name, "pageComplete");
+  assert.equal(completeEvt.payload.summary.status, "tested");
 });

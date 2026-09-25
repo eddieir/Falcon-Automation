@@ -1,6 +1,6 @@
 # Falcon-Automation: AI-Powered Test Automation Framework
 
-> **Status:** Active development · Phases 1–9 merged, including a follow-up hardening pass (comprehensive regression suite, a real selector-anchoring fix, and this doc sync). See [Roadmap](#roadmap) for what's next. Full per-bug engineering history: [CHANGELOG.md](CHANGELOG.md).
+> **Status:** Active development · Phases 1–10 merged. Phase 10 makes a single run cover every page of an app instead of just the entry page. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
 
 ---
 
@@ -24,6 +24,7 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 
 - **UI automation** via Playwright (Chromium, Firefox, WebKit)
 - **Three-tier self-healing:** direct attempt (AdaptiveRetry) → LocatorStore → LLM inference (gpt-4o-mini)
+- **Whole-app coverage:** one command sweeps every page it discovers, bounded by a page cap and a time budget, deduplicating shared navigation and reporting every page it did *not* cover, with a reason
 - **Autonomous UI exploration:** recursive crawler (ClickExplorer) + DOM-based defect detection (ExploratoryAI)
 - **AI test generation:** PageAnalyser maps the DOM; TestGenerator creates scenarios; TestRunner executes them with full healing
 - **Visual regression testing:** pixel-level screenshot comparison with diff images and cumulative summary
@@ -32,7 +33,7 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 - **Database testing:** PostgreSQL via `pg` Pool with full mTLS support
 - **CI/CD ready:** GitHub Actions pipeline with Allure report upload
 
-**Delivered so far:** core AI healing + reporting foundation → a stability audit (14 defects fixed) → visual regression, live dashboard, AI test generation, and Allure reporting → repository hygiene → a single consolidated self-healing engine with a bounded LocatorStore → real Postgres coverage in CI → a token-gated dashboard → a comprehensive `node:test` + Playwright regression layer (308 + 30 tests, a second CI job) and a real selector-anchoring fix in `PageAnalyser` → an approval gate for AI-inferred selector fixes, so a Tier 3 guess is reviewed by a human before it's ever trusted again → flaky-test detection and quarantine, so a genuinely unreliable interaction stops blocking CI without ever being silently hidden. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md). See [Roadmap](#roadmap) for what's next.
+**Delivered so far:** core AI healing + reporting foundation → a stability audit (14 defects fixed) → visual regression, live dashboard, AI test generation, and Allure reporting → repository hygiene → a single consolidated self-healing engine with a bounded LocatorStore → real Postgres coverage in CI → a token-gated dashboard → a comprehensive `node:test` + Playwright regression layer (308 + 30 tests, a second CI job) and a real selector-anchoring fix in `PageAnalyser` → an approval gate for AI-inferred selector fixes, so a Tier 3 guess is reviewed by a human before it's ever trusted again → flaky-test detection and quarantine, so a genuinely unreliable interaction stops blocking CI without ever being silently hidden → whole-app coverage, so one run sweeps every page it finds instead of only the one you named. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md). See [Roadmap](#roadmap) for what's next.
 
 ---
 
@@ -45,7 +46,7 @@ One command, no hand-written test code: Falcon loads a site, crawls it, turns wh
 A demo against a fixture built for exactly this kind of test doesn't prove much. So instead, everything below comes from pointing Falcon at a real, independently-built, publicly deployed product it had no prior knowledge of: [axonradar.netlify.app](https://axonradar.netlify.app/) (a TypeScript AI-intelligence platform, [source](https://github.com/eddieir/AI-agency)). No config, no fixtures, no hints about the site's structure. Just its 11 real pages (`/`, `/news`, `/models`, `/benchmarks`, `/playground`, `/evaluations`, `/router`, `/operations`, `/developers`, `/creators`, `/compare`), run through the same explore, generate, heal pipeline and streamed to one live dashboard:
 
 ```sh
-node docs/demo/multi-page-axonradar-dashboard-demo.js
+node falcon.js --url=https://axonradar.netlify.app --max-pages=11
 ```
 
 ![Dashboard showing the real aggregate totals across all 11 pages](docs/demo/axonradar-04-full-sweep-totals.png)
@@ -54,10 +55,12 @@ node docs/demo/multi-page-axonradar-dashboard-demo.js
 
 ### How it works, one page at a time
 
-The screenshots below zoom in on a single page of that same sweep (the homepage) so you can see the mechanism firsthand, in the order it actually happens: dashboard connects, the crawler explores, scenarios generate and run. `PageAnalyser.generateActions()` caps navigation-type scenarios at 3 per page by design, to avoid infinite click loops, which is why one page alone only produces a handful of scenarios; the 184-scenario total above is what you get running that same mechanism across every page of the site instead of just one.
+The screenshots below zoom in on a single page of that same sweep (the homepage) so you can see the mechanism firsthand, in the order it actually happens: dashboard connects, the crawler explores, scenarios generate and run. `PageAnalyser.generateActions()` caps navigation-type scenarios at 3 per page by design, to avoid infinite click loops, which is why one page alone only produces a handful of scenarios; the total above is what you get when the sweep runs that same mechanism across every page of the site.
+
+To watch it against a single page instead, narrow the sweep:
 
 ```sh
-node falcon.js --url=https://axonradar.netlify.app
+node falcon.js --url=https://axonradar.netlify.app --single-page
 ```
 
 ![Falcon live dashboard: connect, explore, generate, run](docs/demo/falcon-axonradar-demo.gif)
@@ -207,7 +210,8 @@ status: quarantined
 Nothing about this is a separate, simplified code path: every run above is a real `TestRunner.executeTest()` call, `ReportManager` is the same one every scenario test file uses, and quarantining changes only how a failure is *reported*, never whether the interaction actually passed or failed. Review flaky scenarios and quarantine/unquarantine them either from the live dashboard's "Flaky tests" panel, or headlessly:
 
 ```sh
-node scripts/flakiness/review.js list                       # what's flaky, broken, or already quarantined
+node scripts/flakiness/review.js list                       # every tracked scenario
+node scripts/flakiness/review.js list flaky                 # or filter: new | stable | broken | flaky
 node scripts/flakiness/review.js quarantine "<scenario-key>"
 node scripts/flakiness/review.js unquarantine "<scenario-key>"
 ```
@@ -240,12 +244,16 @@ node falcon.js --url=https://your-app.example.com
 The recordings above aren't hand-drawn. They're real frames captured from a live `node falcon.js` run with Playwright, assembled with `ffmpeg`. Frame timing depends on real network/render latency, so a fixed frame index (e.g. "frame 6 is always the explore state") silently goes stale between runs. `docs/demo/build-gif-list.js` instead hashes every captured frame, collapses consecutive duplicates, and keeps one frame per *actual* dashboard state change, whatever real time that landed at:
 
 ```sh
-# 1. Start falcon.js and wait for the dashboard to come up
+# 1. Start the run and the capture together. Waiting for the dashboard to
+#    answer before starting the capture lets a short run finish first — the
+#    empty and explore states are then already gone. capture-dashboard.js
+#    waits for the port itself, so both start at once.
 node falcon.js --url=https://axonradar.netlify.app &
-until curl -s -o /dev/null http://localhost:3000; do sleep 0.05; done
 
 # 2. Capture frames with Playwright while the run streams events
-node docs/demo/capture-dashboard.js 60 120
+#    (frameCount, intervalMs, output directory under docs/demo/)
+node docs/demo/capture-dashboard.js 60 120 frames-axonradar
+wait
 
 # 3. Pick one frame per real state change (connect / explore / results)
 node docs/demo/build-gif-list.js docs/demo/frames-axonradar docs/demo/axonradar-gif-list.txt 3.0
@@ -363,6 +371,7 @@ Falcon-Automation/
 │       ├── PageAnalyser.js          # DOM scanner (single source of truth; see CHANGELOG.md#phase-3--competitive-features)
 │       ├── ReportManager.js         # Accurate pass/fail/skip/quarantined reporting, sets process.exitCode
 │       ├── ServiceContainer.js      # Partial DI container (browserManager, apiClient, dbClient, reportManager)
+│       ├── SiteSweep.js             # Whole-app sweep: bounded frontier, dedupe, coverage accounting (Phase 10)
 │       ├── TestGenerator.js         # Delegates to PageAnalyser for scenario generation
 │       ├── TestRunner.js            # Scenario + exploratory test orchestrator
 │       └── VisualRegression.js      # Pixel-diff screenshot comparison
@@ -374,6 +383,11 @@ Falcon-Automation/
 │   │   ├── ReportManagerExitCode.check.js
 │   │   ├── DBConfigBehavior.check.js
 │   │   └── DashboardAuth.check.js
+│   ├── regression/                  # The node:test + Playwright regression layer
+│   │   ├── *.check.cjs              # node:test suites, one per module area
+│   │   ├── browser.spec.js          # Playwright specs against inline HTML fixtures
+│   │   └── helpers.cjs              # Module loader with injectable dependencies
+│   ├── fixtures/                    # Shared test fixtures (cli-preload.cjs)
 │   └── full_automation.test.js      # Playwright-native suite (allure-playwright reporter)
 ├── scripts/
 │   ├── db/
@@ -520,8 +534,10 @@ A failing scenario has always been reported as `failed`, full stop, with no way 
 
 Classifying a scenario as flaky never changes what happens on its own: nothing is auto-quarantined. A **human** decides, either from the live dashboard's "Flaky tests" panel or headlessly:
 
+A scenario that has never passed cannot be quarantined at all, and that's enforced rather than merely documented: `FlakinessTracker.quarantineEligibility()` is the single rule, and the tracker, the `POST /flakiness/quarantine` route (409, with the reason), the CLI (`Refused: …`, exit 1) and the dashboard panel (no button, just why) all defer to it. The rule is "has passed at least once", not "isn't classified `broken`" — a scenario that has only ever failed twice is still `new`, because two samples are under the verdict threshold, and buying *that* out of the exit code would hide a regression just as effectively. There's no force flag. It becomes quarantinable the moment it genuinely passes once, which is the moment "unreliable" becomes the true description of it.
+
 ```sh
-node scripts/flakiness/review.js list                       # everything flaky, broken, or already quarantined
+node scripts/flakiness/review.js list                       # every tracked scenario; add new|stable|broken|flaky to filter
 node scripts/flakiness/review.js quarantine "<scenario-key>"
 node scripts/flakiness/review.js unquarantine "<scenario-key>"
 ```
@@ -538,8 +554,8 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 
 **`regression` job** (~1 minute): the `node:test` + Playwright layer added alongside the community-health files:
 1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
-2. `npm run test:coverage`: 308 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
-3. `npm run test:browser`: 30 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
+2. `npm run test:coverage`: 399 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
+3. `npm run test:browser`: 34 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
 4. Uploads `reports/` as the `regression-reports` artifact
 
 **`test` job** (~1.5 minutes): the original scenario/E2E pipeline, against a real seeded Postgres:
@@ -549,7 +565,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 4. Visual-regression baselines restored from cache (`actions/cache@v4`, keyed on branch name)
 5. Scenario tests: `LoginTest`, `CheckoutTest`, `UserApiTest`, `ProductApiTest`, then `UserDBTest` and `OrderDBTest` against the real seeded database. None of these use `continue-on-error`; a real failure fails the job
 6. `node falcon.js --no-dashboard`, the autonomous pipeline
-7. `npx playwright test` (`continue-on-error: true`, since this suite still tolerates E2E flake)
+7. `npx playwright test`, the Playwright-native suite with the Allure reporter — no `continue-on-error` here either, so a failure in it fails the job
 8. Allure report generated (`npx allure awesome`) and uploaded alongside `reports/` as the `falcon-reports` artifact
 
 The full, current file is the source of truth; see `.github/workflows/ci.yml`. [CHANGELOG.md](CHANGELOG.md)'s Phase 3, Phase 6, and Phase 7 sections document why specific pieces of the `test` job exist (Allure's CLI quirks, the visual-regression cache, the Postgres service container, the three regression checks).
@@ -571,6 +587,15 @@ DASHBOARD_TOKEN=some-secret node falcon.js --dashboard
 # Autonomous pipeline without dashboard (CI / headless environments)
 node falcon.js --no-dashboard
 
+# Whole-app coverage (Phase 10). A run sweeps every page it discovers,
+# bounded by a page cap and a wall-clock budget. Every page it doesn't
+# cover appears in the report with a reason.
+node falcon.js --url=https://your-app.example.com --max-pages=25
+node falcon.js --url=https://your-app.example.com --budget-ms=120000
+node falcon.js --url=https://your-app.example.com --no-dedupe          # run shared nav on every page
+node falcon.js --url=https://your-app.example.com --allow-cross-origin # follow links off-origin
+node falcon.js --url=https://your-app.example.com --single-page        # entry page only
+
 # Individual scenario tests
 node tests/ui/LoginTest.js
 node tests/ui/CheckoutTest.js
@@ -586,8 +611,8 @@ npm run test:unit
 
 # The larger node:test + Playwright regression layer (needs Node 20.19+;
 # see Installation). This is what the "regression" CI job runs.
-npm run test:regression   # 308 node:test cases, tests/regression/*.check.cjs
-npm run test:browser      # 30 Playwright specs, tests/regression/browser.spec.js
+npm run test:regression   # 399 node:test cases, tests/regression/*.check.cjs
+npm run test:browser      # 34 Playwright specs, tests/regression/browser.spec.js
 npm run test:coverage     # same as test:regression, with coverage collection
 
 # Same, but reporting into an already-running `node falcon.js` dashboard
@@ -611,7 +636,10 @@ Falcon's differentiator is genuine self-healing, not a hardcoded selector list, 
 
 - **Decisions that nobody ever gets around to making.** `HealingTrust` makes an unreviewed Tier 3 guess visible and gates it behind approval; `FlakinessTracker` does the same for quarantine. Neither one expires today: if nobody opens the dashboard or runs the CLI for a while, a pending healing fix just sits there paying the Tier 3 LLM cost silently, and a flaky scenario nobody's quarantined keeps blocking CI the same way it always did. The next step is a shared staleness signal, at minimum a loud warning, possibly a failed check, when either `data/healing_pending.json` or an unquarantined flaky scenario has been sitting unreviewed past some threshold, so neither kind of decision can be ignored indefinitely by default.
 
+Detailed plans for the phases after this one, with implementation specifications and acceptance criteria, are in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md).
+
 ✅ Shipped since the last update:
+- **Coverage of the whole app, not just the page you pointed at.** Falcon used to crawl a site, discard every page it found, and generate tests for the entry URL alone. A run now sweeps every page it discovers, bounded by a page cap and a wall-clock budget, deduplicating the navigation that repeats on every page, and reporting each page it didn't cover along with why. Against a real 11-page site that's the difference between 1 page and 4 scenarios, and 6 pages and 91 scenarios, from the same command.
 - **Flaky-test detection and quarantine.** `FlakinessTracker` classifies every scenario (`new`/`stable`/`broken`/`flaky`) from its real pass/fail history, so a genuinely unreliable interaction is told apart from a real regression instead of both just being "failed." A human quarantines a flaky scenario, from the dashboard's "Flaky tests" panel or `scripts/flakiness/review.js`; a quarantined failure is reported as `quarantined`, not `failed`, still visible in every report, and never silently merged into a passing result either.
 - **An approval gate for AI-inferred selector fixes.** A Tier 3 (LLM) success used to be written straight into `LocatorStore` and trusted for reuse the moment it worked once. It now goes to `HealingTrust` as a pending fix instead, visible on the live dashboard's "Healing trust" panel or via `scripts/healing/review.js`, and only becomes a trusted Tier 2 alternative once a human explicitly approves it; rejecting it discards the fix while keeping an audit record. `HealingReport.summary()` also aggregates the full healing log into a reviewable trend, selector by selector, tier by tier, instead of a flat event list.
 - A single, consolidated self-healing engine across every entry point: one three-tier chain (retry to locator cache to LLM), with `LocatorStore` now bounded so it can't grow unbounded over a long project history.
