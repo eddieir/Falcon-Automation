@@ -552,7 +552,7 @@ Total regression suite after this phase: 383 `node:test` cases (up from 308) and
 
 ## Phase 10 follow-up — the defects the Phase 10 verification found elsewhere
 
-Re-verifying Phases 8 and 9 on real browsers, a real Postgres and real HTTP (written up in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) §1) produced twelve findings. Seven of them are the substance of Phases 11 and 12. These five were small enough to close immediately, and one of them was a live hole in the safety story quarantine exists to protect.
+Re-verifying Phases 8 and 9 on real browsers, a real Postgres and real HTTP (written up in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) §1) produced twelve findings. Seven of them are the substance of the phases that follow this one. These five were small enough to close immediately, and one of them was a live hole in the safety story quarantine exists to protect.
 
 ### A scenario that has never passed could be quarantined, which turns a red run green
 
