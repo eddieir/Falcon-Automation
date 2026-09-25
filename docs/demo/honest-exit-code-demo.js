@@ -25,6 +25,8 @@
  */
 const { spawnSync } = require("child_process");
 const path = require("path");
+const fs = require("fs");
+const os = require("os");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 
@@ -34,7 +36,7 @@ const REPO_ROOT = path.join(__dirname, "..", "..");
 // process.exit() — so the exit code Node ends up with is whatever
 // ReportManager actually set, and nothing else.
 const CHILD_CODE = `
-const ReportManager = require(require("path").join(process.cwd(), "src/core/ReportManager"));
+const ReportManager = require(require("path").join(process.env.FALCON_REPO_ROOT, "src/core/ReportManager"));
 const tests = JSON.parse(process.argv[1]);
 const reportManager = new ReportManager();
 reportManager.startRun();
@@ -42,18 +44,30 @@ reportManager.generateReport({ tests });
 `;
 
 function runCase(tests) {
-    const result = spawnSync("node", ["-e", CHILD_CODE, "--", JSON.stringify(tests)], {
-        cwd: REPO_ROOT,
-        encoding: "utf8",
-        timeout: 15000,
-    });
-    const output = result.stdout || "";
-    const resultLineMatch = output.match(/Test Run Complete — (\w+)/);
-    return {
-        reported: resultLineMatch ? resultLineMatch[1] : "(no report line — see stderr)",
-        exitCode: result.status,
-        stderr: result.stderr || "",
-    };
+    // The child runs in a throwaway directory, not the repo. ReportManager
+    // writes its report to `process.cwd()/reports/test-report.json`, so a
+    // child started in the repo root would overwrite the developer's real
+    // report six times over — a demo about honest reporting has no business
+    // destroying the report of whatever they last ran. The module itself is
+    // still required from the repo, by absolute path.
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-exit-code-demo-"));
+    try {
+        const result = spawnSync("node", ["-e", CHILD_CODE, "--", JSON.stringify(tests)], {
+            cwd: scratch,
+            env: { ...process.env, FALCON_REPO_ROOT: REPO_ROOT },
+            encoding: "utf8",
+            timeout: 15000,
+        });
+        const output = result.stdout || "";
+        const resultLineMatch = output.match(/Test Run Complete — (\w+)/);
+        return {
+            reported: resultLineMatch ? resultLineMatch[1] : "(no report line — see stderr)",
+            exitCode: result.status,
+            stderr: result.stderr || "",
+        };
+    } finally {
+        fs.rmSync(scratch, { recursive: true, force: true });
+    }
 }
 
 const statuses = (...list) => list.map((status) => ({ status }));

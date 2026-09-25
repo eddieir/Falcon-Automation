@@ -88,8 +88,13 @@ function assert(condition, message) {
     }
 }
 
+// Held at module scope so the catch handler at the bottom can close it if a
+// scenario throws partway through.
+let openBrowser = null;
+
 (async () => {
     const browser = await chromium.launch();
+    openBrowser = browser;
 
     // ══════════════════════════════════════════════════════════════════
     // Scenario 1 — a `type` action on /news, healed for real
@@ -261,8 +266,14 @@ function assert(condition, message) {
 
     console.log("\nAll assertions held against the live site. Phase 11's claim stands.\n");
     process.exit(0);
-})().catch((error) => {
+})().catch(async (error) => {
     console.error("\nDemo crashed:", error);
+    // Close the browser the failure path opened, not just the temp state —
+    // a demo that leaks a Chromium process every time the live site shifts
+    // under it is its own kind of mess to debug.
+    if (openBrowser) {
+        await openBrowser.close().catch(() => {});
+    }
     fs.rmSync(dataDir, { recursive: true, force: true });
     process.exit(1);
 });
