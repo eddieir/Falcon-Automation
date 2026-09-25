@@ -46,12 +46,14 @@ class HealingReport {
      * @param {string}      [opts.description]
      * @param {string}      [opts.error]
      * @param {string}      [opts.trust]     - "pending" when a Tier 3 fix is awaiting review (Phase 8)
+     * @param {string}      [opts.action]    - "click" | "type" | "select" (Phase 11) — which
+     *                                          interaction was healed
      */
     static log(opts = {}) {
         HealingReport._instance._log(opts);
     }
 
-    _log({ original, resolved, tier, description = "", error = null, trust = null }) {
+    _log({ original, resolved, tier, description = "", error = null, trust = null, action = null }) {
         const entry = {
             timestamp:   new Date().toISOString(),
             original,
@@ -60,6 +62,7 @@ class HealingReport {
             description,
             ...(error ? { error } : {}),
             ...(trust ? { trust } : {}),
+            ...(action ? { action } : {}),
         };
 
         this.logs.push(entry);
