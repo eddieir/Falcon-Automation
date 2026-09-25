@@ -432,6 +432,24 @@ test("flakiness: quarantining/unquarantining an unknown key returns 404, not a s
   assert.equal(unquarantine.statusCode, 404);
 });
 
+test("flakiness: quarantining a scenario that has never passed is refused with 409, and it stays red", async (t) => {
+  isolateFlakinessSingleton(t);
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const auth = { "X-Dashboard-Token": "fixture-token" };
+  const key = FlakinessTracker.keyFor({ url: "https://x.com", action: "click", locator: "#broken" });
+
+  for (let i = 0; i < 3; i++) {
+    FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#broken", status: "failed" });
+  }
+
+  const res = await httpJSON(d.port, "POST", "/flakiness/quarantine", auth, { key });
+  assert.equal(res.statusCode, 409);
+  assert.match(res.body.error, /never passed/);
+  assert.equal(res.body.classification, "broken");
+  assert.equal(FlakinessTracker.isQuarantined(key), false);
+});
+
 test("flakiness: POST with a non-string or missing `key` is rejected, not crashed on", async (t) => {
   isolateFlakinessSingleton(t);
   const d = setup(t, "fixture-token");
