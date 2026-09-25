@@ -8,20 +8,13 @@ Build Falcon as a trustworthy, production-grade, AI-powered Playwright test auto
 
 For any non-trivial feature, bug, or release, use the `/production-cycle` skill. Delegate by role; do not ask one agent to invent requirements, implement, and approve its own work.
 
-1. Product Manager defines the problem, outcome, and success metrics.
-2. Product Owner turns it into acceptance criteria and prioritizes scope.
-3. Project Manager creates dependencies, sequencing, risks, and status.
-4. Solution Architect defines boundaries and records meaningful decisions.
-5. Developer implements only the approved scope.
-6. QA Engineer independently designs and executes verification.
-7. Security Engineer reviews trust boundaries and secrets when relevant.
-8. Code Reviewer checks the diff independently.
-9. DevOps Engineer verifies CI/runtime impact.
-10. Release Manager makes the final evidence-based go/no-go decision.
-11. Technical Writer updates user-facing and operational documentation.
-12. Production Director coordinates handoffs and resolves conflicts.
+The main session coordinates on Sonnet at medium effort. Invoke only specialists whose outputs are needed; the ordered phases are dependencies, not a requirement to run all 12 agents. See the skill's routing table for documentation, small bug, standard, and full cycles.
 
-Small, obvious edits may use only the relevant specialists, but never skip independent verification.
+Each agent has an explicit Haiku or Sonnet model and a turn limit. Never override a role with Opus, Fable, `inherit`, extended-context variants, or a premium fallback. Check effective session/provider overrides before dispatch. These are economical defaults, not a billing cap.
+
+Give each task one owner, an allowed file scope, acceptance IDs, relevant evidence, a recipient, and an effort bound. The coordinator relays compact result packets between specialists and owns the run ledger; workers do not rediscover completed work or assume private peer messaging. Reuse valid evidence, share only deltas, and invalidate affected verdicts when the reviewed revision changes.
+
+Default to two concurrent tasks with disjoint edits, at most one retry per task, and the selected cycle's dispatch budget. A partial or budget-exhausted task stays incomplete; preserve required independent verification and replan instead of silently escalating models or marking missing evidence green.
 
 ## Repository facts
 
