@@ -134,6 +134,26 @@ for (const [name, scriptPath] of [
         null
     );
 
+    // CI is a convention, not a boolean. Some tooling exports CI=false to turn
+    // CI behaviour off, and a bare truthiness check would read that non-empty
+    // string as "in CI" and fail a contributor's local run — the exact outcome
+    // the branch above exists to prevent. Runners in the wild use "1" as often
+    // as "true", so both ends of that have to hold.
+    for (const [value, expectedExit, label] of [
+        ["false", 0, "clean skip"],
+        ["0", 0, "clean skip"],
+        ["1", 1, "real failure"],
+    ]) {
+        check(
+            `${name}: no DB configured with CI="${value}" → ${label}, exit ${expectedExit}`,
+            scriptPath,
+            { DB_HOST: "", DB_USER: "", CI: value },
+            expectedExit,
+            expectedExit === 0 ? "Skipping" : "no database configured in CI",
+            null
+        );
+    }
+
     check(
         `${name}: DB configured with wrong credentials → real failure, exit 1, not a skip`,
         scriptPath,

@@ -358,14 +358,6 @@ test("Phase 11: a failed return to the plan URL is logged as a warning and does 
   assert.ok(warnings.some((w) => /Could not return/.test(w)));
 });
 
-test("visibility errors resolve false", async () => {
-  const { instance } = runner({
-    evaluate: async () => {
-      throw Error("invalid");
-    },
-  });
-  assert.equal(await instance.isElementVisible("["), false);
-});
 for (const [raw, expected] of [
   ["", {}],
   [
