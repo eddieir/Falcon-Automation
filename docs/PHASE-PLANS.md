@@ -147,9 +147,16 @@ class SiteSweep {
 **Sweep algorithm**
 
 1. Navigate to `entryUrl` in a fresh page; record it as page 1 of the frontier.
-2. Run `ClickExplorer.explore()` from the entry page to discover the frontier. Take
-   `clickExplorer.visitedPages`, normalize each URL (strip hash, strip trailing slash, preserve
-   query), and dedupe.
+2. Discover the frontier two ways, and union them. **As built, the `href` harvest does nearly all
+   the work** — this differs from the original plan and is the reason the phase functions at all:
+   - Read every `a[href]` off the entry page (capped at 500 anchors). A site's navigation already
+     names its own pages, and the `href` IDL property resolves them absolute.
+   - Run `ClickExplorer.explore()` and take `clickExplorer.visitedPages`. This was the original
+     plan's only mechanism, but `ClickExplorer` discovers pages by *clicking* the first five
+     text-bearing elements, which on a real site typically returns the entry page and nothing
+     else. Against axonradar it contributes one page where the harvest finds thirty.
+
+   Normalize every URL (strip hash, strip trailing slash, preserve query) and dedupe.
 3. Filter the frontier: drop cross-origin URLs when `sameOriginOnly`; drop non-HTTP(S) schemes
    (`mailto:`, `tel:`, `javascript:`); keep insertion order so the entry page is always first.
 4. Truncate to `maxPages`. Everything dropped is recorded as `status: "skipped"`, `reason: "max-pages"`
@@ -224,11 +231,17 @@ wrappers over `SiteSweep`, so the demo and the product are provably the same cod
 - dedupe signature collapses identical scenarios and records `firstRunOn`; `dedupe: false` disables it
 - `deduped` results never reach `FlakinessTracker`
 
-`tests/regression/browser.spec.js` (added specs, real Chromium against `page.setContent` fixtures):
+`tests/regression/browser.spec.js` (added specs, real Chromium against routed `sweep.test` fixtures):
 
-- a two-page fixture where both pages share a nav bar produces one nav scenario, not two
-- per-page results aggregate correctly into the run total
-- a page that 404s is recorded `unreachable` without failing the sweep
+- a three-page fixture is swept end to end and per-page results aggregate into the run total
+- the nav bar repeated on all three pages is deduplicated, with every deduped row carrying `firstRunOn`
+- a page returning a real HTTP 404 is recorded `unreachable`, not `tested`, and surfaces as a failure
+- a page returning 500 does not abort the sweep; the pages after it are still tested
+
+The 404 case matters specifically because Playwright's `goto()` **resolves** on an HTTP error
+response rather than rejecting — an error page arrives at the sweep looking exactly like a healthy
+one. That is a browser-level truth a fake page cannot model, which is why it needs a real-Chromium
+spec and not only a unit test.
 
 `tests/regression/reporting.check.cjs`: `deduped` is a valid status, excluded from every tally, and
 does not affect the exit code.
@@ -239,7 +252,12 @@ does not affect the exit code.
 2. `test-report.json` contains a `coverage` block and a per-page breakdown.
 3. Shared-chrome scenarios are deduplicated, and the count is reported rather than hidden.
 4. Every page not tested appears with an explicit reason.
-5. `--single-page` reproduces pre-Phase-10 behaviour exactly.
+5. `--single-page` reproduces pre-Phase-10 behaviour. **As built, the tested pipeline is verbatim
+   — verified side by side against `main` across all six CLI modes, with identical exit codes and
+   identical `result`/`tests`/`uiIssues`/`healingEvents`/`summary` fields — but the report also
+   gains the `coverage` block and lists the crawl's other pages as `skipped`/`single-page`. That
+   is a deliberate choice: narrowing the sweep is a decision, and the report should say what it
+   cost rather than pretend those pages were never seen.**
 6. One dead page cannot abort a sweep.
 7. Full local suite green; CI green on the real Actions run.
 
