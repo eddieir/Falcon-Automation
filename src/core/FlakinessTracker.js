@@ -172,14 +172,61 @@ class FlakinessTracker {
     }
 
     /**
+     * Can this scenario be quarantined at all?
+     *
+     * Quarantine buys a failing scenario out of the exit code, so the one
+     * thing it must never cover is a scenario that has never once passed:
+     * that isn't flakiness, that's a regression, and silencing it turns a
+     * genuinely red run green. "Has a pass in its retained history" is the
+     * check rather than `classification !== "broken"` on purpose — a
+     * scenario that has only ever failed twice is still classified "new"
+     * (too few samples for a verdict) and is exactly as dangerous to hide.
+     *
+     * @returns {{tracked: boolean, eligible: boolean, reason: string|null}}
+     */
+    quarantineEligibility(key) {
+        const entry = this._getScenario(key);
+        if (!entry) {
+            return { tracked: false, eligible: false, reason: "No tracked scenario for that key." };
+        }
+        // Already quarantined: re-applying is idempotent, not a new decision.
+        if (entry.quarantined) return { tracked: true, eligible: true, reason: null };
+
+        const passes = (entry.history ?? []).filter((h) => h?.status === "passed").length;
+        if (passes === 0) {
+            return {
+                tracked: true,
+                eligible: false,
+                reason: `This scenario has never passed (${entry.sampleSize} recorded run(s), all failed). `
+                      + "That's a regression, not flakiness — fix it or delete it, but it can't be quarantined.",
+            };
+        }
+        return { tracked: true, eligible: true, reason: null };
+    }
+
+    /**
      * Quarantine a scenario: future failures report as "quarantined"
      * instead of "failed" and stop blocking CI. Never touches whether the
      * scenario actually passes or fails — it only changes how a failure is
-     * reported. Returns null if there's no tracked entry for that key.
+     * reported. Returns null if there's no tracked entry for that key, and
+     * throws (code QUARANTINE_REFUSED) if the scenario has never passed —
+     * see quarantineEligibility(). There is deliberately no force flag.
      */
     quarantine(key, { by = "dashboard" } = {}) {
         const entry = this._getScenario(key);
         if (!entry) return null;
+
+        const eligibility = this.quarantineEligibility(key);
+        if (!eligibility.eligible) {
+            const refusal = new Error(eligibility.reason);
+            refusal.code = "QUARANTINE_REFUSED";
+            refusal.entry = entry;
+            throw refusal;
+        }
+
+        // Idempotent: a second quarantine of the same scenario is the same
+        // decision, and the ledger is an audit trail, not a click counter.
+        if (entry.quarantined) return entry;
 
         entry.quarantined = true;
         entry.quarantinedAt = new Date().toISOString();

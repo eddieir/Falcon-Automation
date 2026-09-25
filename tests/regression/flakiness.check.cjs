@@ -208,6 +208,77 @@ test("quarantine: quarantining an already-quarantined scenario is idempotent, no
   assert.equal(first.quarantined, true);
   assert.equal(second.quarantined, true);
 });
+test("quarantine: the same decision twice writes one ledger row, not two", async (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.quarantine(key, { by: "peyman" });
+  tracker.quarantine(key, { by: "someone-else" });
+  await tracker._queue;
+  assert.equal(tracker.decisions.length, 1);
+  assert.equal(tracker.decisions[0].by, "peyman");
+});
+
+// ── quarantineEligibility(): the guard that keeps a regression loud ──
+
+test("quarantineEligibility: an untracked key is neither tracked nor eligible", (t) => {
+  const { tracker } = trackerAt(t);
+  const result = tracker.quarantineEligibility("https://never.example.com::click::#nope");
+  assert.equal(result.tracked, false);
+  assert.equal(result.eligible, false);
+  assert.match(result.reason, /No tracked scenario/);
+});
+test("quarantineEligibility: a scenario with at least one pass is eligible", (t) => {
+  const { tracker } = trackerAt(t);
+  tracker.record({ ...fixture(), status: "failed" });
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "failed" });
+  const result = tracker.quarantineEligibility("https://example.com::click::#save");
+  assert.equal(result.eligible, true);
+  assert.equal(result.reason, null);
+});
+test("quarantineEligibility: a 'broken' scenario that has never passed is refused", (t) => {
+  const { tracker } = trackerAt(t);
+  for (let i = 0; i < 3; i++) tracker.record({ ...fixture(), status: "failed" });
+  assert.equal(tracker.list()[0].classification, "broken");
+  const result = tracker.quarantineEligibility("https://example.com::click::#save");
+  assert.equal(result.tracked, true);
+  assert.equal(result.eligible, false);
+  assert.match(result.reason, /never passed/);
+});
+test("quarantineEligibility: an all-failing scenario still classified 'new' is refused too", (t) => {
+  // Two failures is under the 3-sample verdict threshold, so it reads as
+  // "new" — but hiding it would silence a red run just as effectively.
+  const { tracker } = trackerAt(t);
+  for (let i = 0; i < 2; i++) tracker.record({ ...fixture(), status: "failed" });
+  assert.equal(tracker.list()[0].classification, "new");
+  assert.equal(tracker.quarantineEligibility("https://example.com::click::#save").eligible, false);
+});
+test("quarantine: refuses a never-passed scenario, throws QUARANTINE_REFUSED, and changes nothing", async (t) => {
+  const { tracker, emitted } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  for (let i = 0; i < 3; i++) tracker.record({ ...fixture(), status: "failed" });
+
+  assert.throws(() => tracker.quarantine(key, { by: "peyman" }), (error) => {
+    assert.equal(error.code, "QUARANTINE_REFUSED");
+    assert.equal(error.entry.key, key);
+    return true;
+  });
+
+  await tracker._queue;
+  assert.equal(tracker.isQuarantined(key), false);
+  assert.equal(tracker.decisions.length, 0);
+  assert.equal(emitted.filter(([name]) => name === "scenarioQuarantined").length, 0);
+});
+test("quarantine: a refused scenario becomes quarantinable as soon as it genuinely passes once", (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  for (let i = 0; i < 3; i++) tracker.record({ ...fixture(), status: "failed" });
+  assert.throws(() => tracker.quarantine(key), (error) => error.code === "QUARANTINE_REFUSED");
+
+  tracker.record({ ...fixture(), status: "passed" });
+  assert.equal(tracker.quarantine(key).quarantined, true);
+});
 test("unquarantine: reverses quarantine and records a separate ledger entry", async (t) => {
   const { tracker } = trackerAt(t);
   const key = "https://example.com::click::#save";

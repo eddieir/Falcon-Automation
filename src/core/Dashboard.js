@@ -363,7 +363,21 @@ class Dashboard {
                 return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
             }
             const { key } = req.body || {};
-            const entry = typeof key === "string" ? FlakinessTracker.quarantine(key, { by: "dashboard" }) : null;
+            let entry = null;
+            try {
+                entry = typeof key === "string" ? FlakinessTracker.quarantine(key, { by: "dashboard" }) : null;
+            } catch (error) {
+                // A scenario that has never passed is a regression, not a
+                // flake. Refusing it here is the point of the route, so it
+                // answers 409 with the reason rather than a bare 500.
+                if (error.code === "QUARANTINE_REFUSED") {
+                    return res.status(409).json({
+                        error: error.message,
+                        classification: error.entry?.classification ?? null,
+                    });
+                }
+                throw error;
+            }
             if (!entry) return res.status(404).json({ error: "No tracked scenario for that key." });
             res.json(entry);
         });

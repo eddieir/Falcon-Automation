@@ -362,7 +362,17 @@
     letter-spacing: 2px;
   }
 
-  .flaky-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .flaky-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+
+  .flaky-blocked {
+    font-size: 12px;
+    color: var(--muted);
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: help;
+    white-space: nowrap;
+  }
 
   .btn-quarantine { border-color: var(--quarantine); color: var(--quarantine); }
   .btn-quarantine:hover { background: var(--quarantine); color: var(--bg); }
@@ -785,6 +795,14 @@
     return (history || []).slice(-10).map((h) => (h.status === "passed" ? "🟢" : "🔴")).join("");
   }
 
+  // Mirrors FlakinessTracker.quarantineEligibility(): a scenario with no pass
+  // anywhere in its retained history can't be quarantined, so the control for
+  // it isn't offered. The server refuses it too (409) — this only keeps the UI
+  // from presenting a button that exists to be rejected.
+  function canQuarantine(entry) {
+    return (entry.history || []).some((h) => h && h.status === "passed");
+  }
+
   function renderFlaky() {
     const list = $("flaky-list");
     const empty = $("flaky-empty");
@@ -816,7 +834,9 @@
         <div class="flaky-actions">
           ${entry.quarantined
             ? `<button class="btn btn-approve" data-action="unquarantine" data-key="${escapeHtml(entry.key)}">Unquarantine</button>`
-            : `<button class="btn btn-quarantine" data-action="quarantine" data-key="${escapeHtml(entry.key)}">Quarantine</button>`}
+            : canQuarantine(entry)
+              ? `<button class="btn btn-quarantine" data-action="quarantine" data-key="${escapeHtml(entry.key)}">Quarantine</button>`
+              : `<span class="flaky-blocked" title="A scenario that has never passed is a regression, not a flake — quarantining it would turn a genuinely red run green.">Not quarantinable</span>`}
         </div>
       `;
       return row;

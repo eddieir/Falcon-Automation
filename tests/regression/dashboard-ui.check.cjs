@@ -478,6 +478,38 @@ test("Phase 9: quarantine button POSTs the scenario key, with auth header, and d
   assert.equal(button.disabled, true);
 });
 
+test("a scenario that has never passed gets no Quarantine button, only the reason it can't have one", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(flakyDetectedEvent({
+    classification: "broken",
+    flakeRate: 1,
+    sampleSize: 3,
+    history: [{ status: "failed" }, { status: "failed" }, { status: "failed" }],
+  }));
+  const row = nodes.get("flaky-list").children[0].innerHTML;
+  assert.doesNotMatch(row, /data-action="quarantine"/);
+  assert.match(row, /Not quarantinable/);
+});
+
+test("a broken scenario that has passed at least once keeps its Quarantine button", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(flakyDetectedEvent({
+    classification: "broken",
+    history: [{ status: "passed" }, { status: "failed" }, { status: "failed" }],
+  }));
+  assert.match(nodes.get("flaky-list").children[0].innerHTML, /data-action="quarantine"/);
+});
+
+test("an already-quarantined scenario keeps its Unquarantine button even with no pass in history", () => {
+  const { handlers, nodes } = dashboardUI();
+  handlers.event(flakyDetectedEvent({
+    classification: "broken",
+    quarantined: true,
+    history: [{ status: "failed" }, { status: "failed" }],
+  }));
+  assert.match(nodes.get("flaky-list").children[0].innerHTML, /data-action="unquarantine"/);
+});
+
 test("Phase 9: unquarantine button POSTs to /flakiness/unquarantine", async () => {
   const { handlers, nodes, fetchCalls } = dashboardUI();
   handlers.event(flakyDetectedEvent({ quarantined: true }));
