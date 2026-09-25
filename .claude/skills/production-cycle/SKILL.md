@@ -1,6 +1,6 @@
 ---
 name: production-cycle
-description: Run Falcon work through a production-house workflow from discovery to release decision. Use for features, non-trivial bugs, incidents, refactors, CI changes, and releases.
+description: Run Falcon work through a risk-scaled production workflow from intake to release decision. Use for features, non-trivial bugs, incidents, refactors, CI changes, and releases.
 argument-hint: "[issue, feature, bug, or release objective]"
 disable-model-invocation: true
 ---
@@ -9,142 +9,53 @@ disable-model-invocation: true
 
 Run this workflow for: $ARGUMENTS
 
-The main Claude session is the Production Director unless the user explicitly selects another role. Use the project agents in `.claude/agents/`. Keep a live status table in the conversation or the task plan. Do not create ceremony with no decision value; scale depth to risk, but preserve independent verification.
+The main session is the Sonnet Production Director and sole coordinator. Before dispatch, confirm session model Sonnet and medium effort; check global subagent model/effort overrides, premium alias remapping, or other settings that could defeat specialist model choices. If effective selection is uncertain or would silently use a premium model, resolve it or tell the human before dispatch. Activate only roles needed by task risk and acceptance evidence; do not invoke every role by default. Haiku roles: Product Manager, Product Owner, Project Manager, Technical Writer, Release Manager. Sonnet roles: Production Director and technical roles (Solution Architect, Developer, QA Engineer, Code Reviewer, Security Engineer, DevOps Engineer). The coordinator dispatches and relays all work through the main session; do not assume agents can message one another or spawn nested agents.
 
-## Phase 0 — Intake
+## Coordination contract
 
-Read `CLAUDE.md`, relevant repository files, open work supplied by the user, and current git status.
+At intake, set a run ID and create a durable coordinator-owned ledger under `.git/production-cycle/<run-id>/`. Resolve the actual Git directory with `git rev-parse --git-path production-cycle` so worktrees use the right location. Keep the brief, task dispatches, returned evidence, revision, decisions, open risks, actual model per dispatch, and dispatch/resume counts there. Define revision as HEAD plus working-tree diff identity, including relevant untracked files; do not identify work only by HEAD. Only the coordinator updates this ledger. Workers return findings and edit only explicitly allowlisted deliverable paths.
 
-Capture:
-- objective;
-- request source;
-- users affected;
-- urgency;
-- constraints;
-- non-goals;
-- definition of success;
-- unknowns.
+Every dispatch states: unique task ID; target revision; specific task; applicable acceptance criteria (AC IDs); allowlisted paths; inputs/evidence; intended consumer; and effort bound. Give one independent task per dispatch. Never allow concurrent edits to overlapping paths.
 
-If an unknown materially changes scope, safety, cost, public API, or data handling, ask the human. Otherwise state a reversible assumption.
+Require a concise return of at most 200 words with these fields: `TASK_ID`, `REVISION`, `STATUS`, `INPUTS`, `EVIDENCE_PATHS`, `RECIPIENT`, `DELTA`, `OPEN_RISKS`. `INPUTS` lists consumed packet IDs; `STATUS` is `DONE`, `BLOCKED`, `PARTIAL`, or `NEEDS_INPUT`. If task ID or revision is unknown, require `UNKNOWN`; include commands/results in evidence where relevant. Reject ungrounded claims and ask for missing evidence within the task’s retry allowance.
 
-Exit gate: objective and decision owner are clear.
+Bound coordination: at most 2 concurrent tasks. Dispatch ceilings, including retries and resumed tasks: fast work 4, standard work 8, full work 16. Classify scope and risk at intake. These are soft coordination ceilings, not claimed model-token usage or guaranteed hard token caps. Never fabricate token or cost measurements. Allow at most one retry per blocked task; then replan within the remaining ceiling or report the blocker. Do not automatically escalate to a more expensive model. Do not skip a required risk gate to fit a budget; surface the constraint and obtain a human decision if the gate cannot be completed.
 
-## Phase 1 — Product discovery
+## Phase 0 — Intake and risk
 
-Invoke `product-manager`.
+Read `CLAUDE.md`, relevant repository files, user-supplied context, and current Git status. Record objective, source, affected users, urgency, constraints, non-goals, success definition, unknowns, risk class, and decision owner in the ledger. Ask the human only when an unknown materially affects scope, safety, cost, public API, or data handling; otherwise state a reversible assumption.
 
-Required output:
-- problem statement;
-- users/jobs;
-- evidence and assumptions;
-- success metrics;
-- options and recommendation;
-- non-goals.
+Choose a tier: fast for bounded, low-risk changes; standard for ordinary feature/fix work, including a bounded security fix with contained impact; full for broad or high-impact work, including security-sensitive, operational, or release-critical changes beyond a contained fix. Keep a live status summary in the conversation or task plan. The exit gate is a clear objective, decision owner, and risk tier.
 
-Exit gate: the work solves a defined user problem and has a measurable outcome.
+## Phase 1 — Product and acceptance (when needed)
 
-## Phase 2 — Scope and acceptance
+Use Product Manager when user problem, evidence, outcomes, or product tradeoffs are unclear. Return problem/users, evidence versus assumptions, success measure, options/recommendation, and non-goals. Use Product Owner when scope or acceptance is material or ambiguous; return prioritized stories, observable AC-IDs, non-functional and edge/error criteria, evidence, out-of-scope, and open decisions. Have QA review testability when criteria are needed. Skip these roles for an unambiguous narrow fix or docs-only change. Exit when scope and observable success are clear enough to implement.
 
-Invoke `product-owner` with the approved product brief.
+## Phase 2 — Plan and design (risk-triggered)
 
-Required output:
-- prioritized stories;
-- AC-01... acceptance criteria in observable form;
-- non-functional criteria;
-- edge/error cases;
-- acceptance evidence;
-- out-of-scope and open decisions.
+Use Project Manager when dependencies, parallel work, milestones, or cross-team sequencing matter. Use Solution Architect for cross-boundary changes, new interfaces, migrations, non-obvious failure modes, or architectural tradeoffs. Use Security Engineer for prompts/AI healing, authentication, network exposure, persistence, filesystem, databases, secrets, CI permissions, or dependencies. Use DevOps Engineer for workflows, runtime, configuration, services, artifacts, or deployment. Each returns only its relevant decision and evidence. Plan independent tasks and path ownership before dispatching. Exit when required design and controls satisfy the ACs.
 
-QA reviews criteria for testability before implementation.
+## Phase 3 — Implementation
 
-Exit gate: no Must-have criterion is ambiguous or untestable.
+Dispatch Developer with approved AC IDs, selected design, repository constraints, exact allowlisted paths, required verification, inputs, consumer, and effort bound. Ask for the smallest coherent change, focused tests where appropriate, diff inspection, and command/result evidence. Parallelize only independent modules with disjoint paths. Exit when implementation is complete and each AC has candidate evidence.
 
-## Phase 3 — Delivery and design
+## Phase 4 — Independent verification
 
-Invoke `project-manager` and `solution-architect`. They may work in parallel after scope freezes.
+Select reviewers based on impact. QA checks AC traceability, regression/negative cases, and execution evidence when applicable; docs-only work uses the docs accuracy review path and does not require QA. Code Reviewer independently inspects the diff read-only. Security and DevOps review final changes when their triggers apply. The implementer cannot approve their own work. On a blocker, return a bounded repair task, then rerun every affected review. Any changed revision invalidates reviews of affected content; record the revision each verdict covers.
 
-Project Manager returns dependencies, owners, critical path, risks, and milestones.
-Architect returns affected boundaries, interfaces, failure modes, alternatives, decision, migration, rollback, and test seams.
+Minimum validation by impact: docs-only, links/commands and repository consistency; isolated logic, focused unit/regression checks; core framework, `npm run test:unit`, `npm run test:regression`, and relevant browser tests; browser/selector behavior, regression plus `npm run test:browser`; CI/DB/runtime, relevant local checks plus hosted GitHub Actions evidence; broad/release candidate, `npm test`, relevant scenario suites, autonomous pipeline, and CI. Preserve all required risk gates. Exit only when each applicable gate passes: QA accepts when required, review has no blocker or unresolved major finding, and required Security/DevOps verdicts are non-blocking.
 
-Invoke `security-engineer` now if work affects AI prompts/healing, authentication, network endpoints, persistence, filesystem, DB, secrets, CI permissions, or dependencies.
-Invoke `devops-engineer` now if work affects workflows, runtime, configuration, services, artifacts, or deployment.
+## Phase 5 — Documentation and release decision
 
-Exit gate: implementation tasks are sequenced; architecture and risk controls satisfy acceptance criteria.
+Use Technical Writer when user-facing behavior, configuration, limitations, or upgrade/release notes changed. After writing, have Code Reviewer inspect the final documentation diff for accuracy and scope; refresh any verdict affected by that revision. Always use Release Manager for `/production-cycle`, including every short path. Supply the brief/ACs, exact revision and diff, test/CI evidence, applicable QA/review/security/DevOps verdicts, final docs review, risks, and rollout/rollback plan. Record GO, CONDITIONAL GO, or NO-GO with rationale.
 
-## Phase 4 — Implementation
+## Phase 6 — Human handoff
 
-Invoke `developer` with only:
-- approved stories and AC IDs;
-- selected architecture;
-- repository constraints;
-- exact allowed scope;
-- required verification.
+Report outcome, changed files, AC traceability, test/CI evidence, review verdicts and reviewed revision, known risks/conditions, rollout/rollback, and explicit next action. Never merge, deploy, publish, delete, rotate credentials, or accept security risk unless the human explicitly authorized that action.
 
-Developer reproduces the bug/current behavior where practical, implements the smallest coherent patch, adds focused tests, inspects the diff, and records commands/results.
+## Common short paths
 
-For independent modules only, multiple developer tasks may run in parallel. Never let agents edit overlapping files concurrently.
-
-Exit gate: implementation is complete, focused tests pass, and each AC has candidate evidence.
-
-## Phase 5 — Independent verification
-
-Invoke these independently:
-- `qa-engineer` for AC traceability, regression, negative testing, and exact execution evidence;
-- `code-reviewer` for a read-only diff review;
-- `security-engineer` for the final diff when security-relevant;
-- `devops-engineer` for final workflow/runtime evidence when operationally relevant.
-
-The implementer cannot approve their own work. If a blocker appears, return it to Developer with evidence, then rerun the affected review. Do not simply edit around a failed test or reviewer concern.
-
-Minimum Falcon gates by impact:
-- docs-only: validate links/commands and repository consistency;
-- isolated logic: focused unit/regression checks;
-- core framework: `npm run test:unit`, `npm run test:regression`, relevant browser tests;
-- browser/selector behavior: regression plus `npm run test:browser`;
-- CI/DB/runtime: local relevant tests plus hosted GitHub Actions evidence;
-- broad/release candidate: `npm test`, relevant scenario suites, autonomous pipeline, and CI.
-
-Exit gate: QA accepts, review has no blocker/major unresolved finding, required security/DevOps verdicts are non-blocking.
-
-## Phase 6 — Documentation and release decision
-
-Invoke `technical-writer` to synchronize verified behavior, config, limitations, and upgrade notes.
-
-Invoke `release-manager` with the complete evidence packet:
-- product brief and accepted ACs;
-- changed files/diff;
-- test commands/results;
-- QA, review, security, and DevOps verdicts;
-- docs status;
-- known risks;
-- rollout/rollback plan.
-
-Exit gate: Release Manager records GO, CONDITIONAL GO, or NO-GO.
-
-## Phase 7 — Human handoff
-
-Return:
-1. outcome;
-2. changed files;
-3. AC traceability;
-4. test/CI evidence;
-5. review verdicts;
-6. known risks and conditions;
-7. rollout/rollback;
-8. explicit next action.
-
-Never merge, deploy, publish, delete, rotate credentials, or accept security risk unless the human explicitly authorized that action.
-
-## Fast paths
-
-### Small bug
-Product Owner clarifies AC → Developer adds failing regression and fix → QA + Code Reviewer → Release Manager.
-
-### Security incident
-Production Director → Security triage → containment recommendation → human authorization → Developer/DevOps remediation → QA + Security retest → Release Manager. Never disclose secret values.
-
-### Documentation-only
-Technical Writer → Code Reviewer validates accuracy → Release Manager. Add Product Owner only if behavior/scope is ambiguous.
-
-### Release-only
-DevOps evidence → QA evidence → Security status → Technical Writer release notes → Release Manager.
+- Small bug: Product Owner only if ACs are unclear → Developer → applicable independent QA and Code Reviewer → Release Manager.
+- Security incident: Production Director → Security triage → containment recommendation → existing or new human authorization for containment/remediation → Developer/DevOps → QA and Security retest + Code Reviewer → Release Manager. Never disclose secret values.
+- Documentation-only: Technical Writer → Code Reviewer for final accuracy; Product Owner only if behavior/scope is ambiguous → Release Manager. QA is not required unless risk or acceptance criteria call for it.
+- Release-only: collect required DevOps, QA, and Security evidence → Technical Writer when notes changed → Release Manager.

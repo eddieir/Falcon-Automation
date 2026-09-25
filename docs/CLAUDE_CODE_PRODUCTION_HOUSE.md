@@ -1,199 +1,142 @@
 # Claude Code Production House for Falcon
 
-This repository includes a role-based delivery system for Claude Code. It separates product decisions, implementation, independent verification, operational readiness, and release approval so that one context does not both create and certify a change.
+Twelve available specialists, activated only when needed. Each owns a distinct decision or deliverable, uses an explicit economical model, and passes evidence to the next owner through the main session. Implementation never certifies itself.
 
-## 1. Prerequisites
+## Start a cycle
 
-1. Install current Claude Code.
-2. Clone the repository and enter its root.
-3. Install dependencies:
+From the repository root:
 
 ```bash
-npm ci
-npx playwright install --with-deps chromium
-cp .env.example .env
+claude --model sonnet --effort medium
 ```
 
-4. Start Claude Code from the repository root:
+```text
+/production-cycle Fix the dashboard socket limiter's unbounded per-IP state while preserving authorized connections.
+```
+
+The project settings default the coordinator to Sonnet at medium effort. Check `/model`, `/effort` and `/context` before starting. Restart Claude Code if the agents directory was added after the session started. Install dependencies/browser binaries only if the selected verification needs them; documentation review does not require `npm ci` or Playwright downloads.
+
+For a focused specialist task:
+
+```text
+Use the code-reviewer agent to review the current diff against main, restricted to the changed dashboard files and AC-01 through AC-03.
+```
+
+The main session is normally the director; do not launch a second director to repeat coordination. A standalone director session is also available with `claude --model sonnet --effort medium --agent production-director`.
+
+## Model and ownership map
+
+“Dedicated” means explicitly assigned per role, not twelve different model products.
+
+| Role | Model | Turns per invocation | Exclusive responsibility | Main recipients |
+|---|---|---:|---|---|
+| Production Director | Sonnet | 20 | Routing, evidence ledger, conflict resolution | Selected specialists |
+| Product Manager | Haiku | 8 | User problem, value and measurable outcome | Product Owner |
+| Product Owner | Haiku | 8 | Scope, priority, observable AC IDs | Developer, QA, planning roles |
+| Project Manager | Haiku | 8 | Dependency order, task ownership and delivery status | Director |
+| Solution Architect | Sonnet | 16 | Interfaces, boundaries, failure and migration design | Developer, QA, Security, DevOps |
+| Developer | Sonnet | 16 | Production implementation and focused tests | QA, Code Reviewer |
+| QA Engineer | Sonnet | 16 | Independent AC verification and defect evidence | Developer, Release Manager |
+| Security Engineer | Sonnet | 16 | Trust-boundary findings and security verdict | Developer, Release Manager |
+| DevOps Engineer | Sonnet | 16 | CI/runtime/configuration changes and operational evidence | Developer, Release Manager |
+| Code Reviewer | Sonnet | 16 | Independent read-only diff review | Developer, Release Manager |
+| Technical Writer | Haiku | 8 | Documentation of verified behavior | Code Reviewer, Release Manager |
+| Release Manager | Haiku | 8 | Evidence-based readiness decision | Director / human owner |
+
+Sonnet specialists use medium effort. Haiku roles avoid elaborate reasoning for bookkeeping and bounded synthesis. No role inherits the main session model or automatically escalates to Opus/Fable. Turn limits are per invocation, not per whole cycle; continuations count toward the dispatch budget.
+
+Aliases are used for provider compatibility; they do not pin a price or immutable model version. Check the effective mapping on your account. Explicit full model IDs can be substituted only after verifying availability and cost, while retaining the Haiku/Sonnet policy.
+
+### Model preflight
+
+Before launching work, check for CLI, local, user, managed or environment settings that override the intended models. In particular, inspect `CLAUDE_CODE_EFFORT_LEVEL`, `CLAUDE_CODE_SUBAGENT_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_HAIKU_MODEL`, and configured fallback chains without printing unrelated environment variables or secrets. Remove conflicting overrides in the session configuration; never silently alter organization settings.
+
+On Claude Code versions before 2.1.251, the subagent environment override takes precedence over the agent file. Newer versions can also force one model globally. Invocation overrides, provider alias mappings, allowlists and fallback chains can change the actual model. If the assigned model is unavailable or resolves to a premium model, stop that task and report the configuration problem. Do not pay for a premium fallback.
+
+Project `settings.json` provides a default, not an account-level spending lock. `maxTurns` limits agent turns, not tokens or dollars. Dispatch counts, word targets and context discipline below are workflow controls. Use actual provider usage data when available; otherwise report usage as unknown. No claimed savings percentage is meaningful without measurement.
+
+## Choose the smallest sufficient route
+
+| Route | Typical specialist work | Total dispatch budget |
+|---|---|---:|
+| Fast: documentation | Writer → Reviewer → Release Manager | 4 |
+| Fast: isolated bug with clear ACs | Developer → QA + Reviewer → Release Manager | 4 |
+| Standard | Acceptance if missing → implementation → relevant independent checks → docs if needed → release | 8 |
+| Full: cross-cutting feature/release | Discovery, scope, design/delivery, implementation, all applicable gates, docs, release | 16 |
+
+Maximum concurrency is two. One retry per task is allowed within the total budget, including resumed tasks. A four-dispatch bug path has no spare retry: if it fails or needs extra specialists, replan explicitly. Risk decides which gates apply; budget exhaustion never waives them. Mark skipped roles `NOT NEEDED` with a reason, not `PASS`.
+
+Examples:
+
+- A spelling fix needs no Product Manager, Architect, QA runtime run or Security review. The reviewer still checks the actual final diff.
+- A dashboard limiter fix uses the standard route if Security or architecture work is needed. QA covers pruning, authorized/unauthorized clients, lifecycle and process exit behavior; Security checks bypass and denial of service.
+- Human approval of healed locators is a full route: Product Owner specifies pending/approve/reject/reuse behavior; Architect owns state transitions; Security examines poisoning and authorization; Developer changes implementation; independent checks certify the resulting diff.
+
+## How specialists share results
+
+The coordinator sends each consumer the relevant producer packet and evidence references. This works with ordinary project subagents; it does not require experimental agent teams or assume workers can message one another. For example, QA's reproducer goes to Developer, the corrected diff goes back to QA, and both outcomes go to Reviewer and Release Manager. Consumers acknowledge the input IDs they used and return only new findings.
+
+The coordinator keeps a local run ledger under the Git metadata directory, resolved with:
 
 ```bash
-claude
+git rev-parse --git-path production-cycle
 ```
 
-5. Run `/context` and confirm the root `CLAUDE.md` is loaded.
-6. If the agent files were added while Claude Code was already open and the `.claude/agents` directory did not previously exist, restart Claude Code.
+Create a unique run subdirectory there, including in linked worktrees. Keep the task table, packets, evidence index and decisions outside tracked source. Only the coordinator writes the ledger; workers return packets or write explicitly assigned deliverable/log paths. It contains no secrets and is not itself shared by Git; include a concise, sanitized summary in the human handoff.
 
-Project agents live in `.claude/agents/` and are version-controlled. Their short descriptions let Claude delegate automatically; their detailed role instructions load only when invoked.
+A dispatch identifies task ID, selected role/model, objective, AC IDs, base/head plus working-diff revision, allowed paths, input packet IDs/evidence, expected output, recipient, required check and remaining effort. Send excerpts and paths, not entire previous conversations or repository dumps.
 
-## 2. Team
-
-| Agent | Owns | Must not own |
-|---|---|---|
-| production-director | orchestration, gates, conflict routing | self-approval |
-| product-manager | problem, users, outcome, metrics | technical design |
-| product-owner | scope, priority, acceptance criteria | implementation |
-| project-manager | sequence, dependencies, risks, status | product priority |
-| solution-architect | boundaries, interfaces, failure modes, ADRs | release approval |
-| developer | scoped implementation and focused tests | independent acceptance |
-| qa-engineer | risk-based verification and defect verdict | changing requirements |
-| security-engineer | threats, findings, security verdict | risk acceptance |
-| devops-engineer | CI, runtime, config, artifacts, operability | product scope |
-| code-reviewer | independent diff review | editing during review |
-| technical-writer | accurate user/operator documentation | inventing behavior |
-| release-manager | evidence-based GO/NO-GO | implementing fixes |
-
-## 3. Normal use
-
-Start a full cycle explicitly:
+Each result is at most 200 words, excluding referenced evidence files:
 
 ```text
-/production-cycle Add review and approval for Tier-3 AI-healed selectors before they are reused.
+TASK_ID: QA-02; REVISION: <head SHA + working-diff ID>
+STATUS: DONE | BLOCKED | PARTIAL | NEEDS_INPUT
+INPUTS: DEV-01, AC-01..03
+DELTA: AC-01/02 pass; AC-03 fails on idle-client cleanup.
+EVIDENCE_PATHS: <path + line or log>; <command, exit, counts, environment>
+RECIPIENT: developer — fix reproduced idle-client leak; release-manager — gate blocked.
+OPEN_RISKS: Idle-client leak remains; no other criteria rerun.
 ```
 
-The skill is intentionally user-invoked so a casual question does not trigger a full production process. Claude coordinates the appropriate specialists and scales the depth to the risk.
+Large findings, test output or acceptance matrices belong in referenced artifacts. Do not truncate blockers to meet the word target: return a concise blocker index with complete evidence references. Read-only roles return their artifact content to the coordinator to persist rather than gaining write access.
 
-You can also call a specialist directly:
+A result is valid only for its recorded revision and environment. The coordinator fingerprints the working diff as well as HEAD, including relevant untracked files; HEAD alone misses uncommitted edits. Any subsequent implementation, test, configuration or documentation edit invalidates affected checks. Serialize overlapping writers and freeze reviewed files during checks. After the writer changes docs, review the final documentation diff before release.
 
-```text
-Use the product-owner agent to write acceptance criteria for locator approval.
-Use the qa-engineer agent to verify the current branch against AC-01 through AC-08.
-Use the code-reviewer agent to review this branch against main.
-```
+## Token discipline
 
-An @-mention guarantees one agent runs:
+- Search narrowly once, then reuse the file/evidence index. Expand scope only for a concrete missing dependency.
+- Load role instructions on demand. Do not preload the whole team or every artifact into every worker.
+- Dispatch independent work in parallel only when it can use stable inputs and disjoint outputs.
+- Keep one owner per deliverable; QA verifies behavior, Reviewer inspects correctness, Security checks threats. Share findings rather than duplicate the same sweep.
+- Run the smallest relevant test first. The verifier may independently rerun a necessary check, but do not repeat unchanged full suites without a reason.
+- Record dispatches, retries, actual model, status and usage when exposed. Do not invent token totals from word counts.
+- At the limit, persist partial evidence and remaining work, then replan. Do not restart discovery, recurse into more agents or switch to a premium model.
 
-```text
-@agent-security-engineer review the dashboard authentication changes
-```
+## Verification and release gates
 
-Run an entire session as one role:
-
-```bash
-claude --agent qa-engineer
-claude --agent solution-architect
-```
-
-Use a role session for focused work; use `/production-cycle` when handoffs and gates matter.
-
-## 4. Detailed feature example
-
-Prompt:
-
-```text
-/production-cycle Add human approval for AI-healed locators. An LLM suggestion must remain pending until approved, rejected suggestions must not be reused, and the existing no-key fallback must remain unchanged.
-```
-
-Expected flow:
-
-1. Product Manager defines the trust problem and success measures, such as approval rate, false-heal rate, and time to review.
-2. Product Owner creates AC IDs for pending, approve, reject, reuse, missing-key, persistence, CLI, and report behavior.
-3. QA challenges every criterion for observability and prepares negative paths.
-4. Project Manager sequences store/schema, CLI, runtime integration, tests, docs, and CI.
-5. Architect selects state transitions and migration/rollback behavior.
-6. Security reviews poisoning, untrusted selector content, secret leakage, and authorization boundaries.
-7. Developer implements only the accepted slice and supplies focused evidence.
-8. QA executes traceability and regression; Code Reviewer independently inspects the diff.
-9. DevOps checks CI, artifacts, environment, and exit-code propagation.
-10. Technical Writer updates commands and behavior.
-11. Release Manager issues GO, CONDITIONAL GO, or NO-GO.
-
-## 5. Detailed bug example
-
-Prompt:
-
-```text
-/production-cycle Fix the dashboard socket limiter's unbounded per-IP state without changing authorized connection behavior.
-```
-
-Use the small-bug fast path:
-1. Product Owner writes observable acceptance criteria, including pruning and behavior preservation.
-2. Architect confirms lifecycle and cleanup boundaries.
-3. Developer first adds a deterministic regression test, proves it fails, implements the fix, and reruns it.
-4. QA verifies valid/invalid token behavior, rate limiting, pruning, cleanup, and process exit.
-5. Security reviews bypass and denial-of-service cases.
-6. Code Reviewer checks the entire diff.
-7. Release Manager decides from evidence.
-
-## 6. Evidence packet
-
-Every non-trivial handoff should keep this structure:
-
-```markdown
-### Scope
-- Story:
-- Acceptance criteria:
-- Non-goals:
-
-### Change
-- Files:
-- Design decision:
-- Migration/rollback:
-
-### Evidence
-- Command:
-- Result:
-- AC mapping:
-
-### Review
-- QA:
-- Code review:
-- Security:
-- DevOps:
-
-### Risk
-- Known:
-- Accepted by:
-- Remaining action:
-```
-
-Never use "all tests pass" without the command, result, and environment. Never mark a skipped DB path as exercised. For hosted CI behavior, link or name the actual GitHub Actions run.
-
-## 7. Falcon gate matrix
-
-| Change | Required minimum |
+| Change | Required evidence |
 |---|---|
-| Documentation only | command/link consistency review |
-| Local core logic | focused regression + relevant unit checks |
-| Selector/browser behavior | regression + Playwright browser suite |
-| Dashboard/auth/network | unit/regression + real HTTP/socket checks + security review |
-| DB/config | missing-config path + configured PostgreSQL path in CI |
-| CI workflow | YAML/script review + actual Actions run |
-| OpenAI/healing | no-key path + mocked/deterministic path + trust/security review |
-| Release candidate | relevant scenario suites, autonomous pipeline, CI, docs, rollback |
+| Documentation/configured agents | Frontmatter parsing, model/role consistency, command/link review |
+| Local core logic | Focused regression and relevant unit checks |
+| Selector/browser behavior | Regression and Playwright browser suite |
+| Dashboard/auth/network | Unit/regression, real HTTP/socket checks, security review |
+| DB/configuration | Missing-config behavior and configured PostgreSQL execution in CI |
+| CI workflow | YAML/script review and actual GitHub Actions run |
+| OpenAI/healing | No-key fallback, deterministic mocked path, trust/security review |
+| Release candidate | Relevant scenario suites, autonomous pipeline, CI, docs and rollback |
 
-Run narrow checks early for speed. Run the full gate that matches risk before release.
+Run agent frontmatter validation without making model calls:
 
-## 8. Handling failures
+```bash
+claude plugin validate .claude/agents
+```
 
-- Ambiguous scope: Product Owner decides or escalates to the human.
-- Architecture conflict: Architect supplies tradeoffs; Product Owner confirms scope impact.
-- Failed test: QA records reproducible evidence; Developer fixes; QA retests.
-- Security P0/P1: release is blocked; only the human can accept risk.
-- CI-only failure: DevOps analyzes logs and environment; do not dismiss it because local tests pass.
-- Documentation mismatch: verified implementation and acceptance criteria are authoritative; update docs before GO.
-- Missing evidence: status is UNKNOWN, never PASS.
+This command needs Claude Code 2.1.233 or newer and checks parsing, not actual role execution or billing. Inspect that every definition has a unique name, the intended model, bounded turns and tools matching its responsibility. For a runtime smoke test, use a small docs-only cycle and inspect the actual dispatched models and packets; it consumes model usage.
 
-## 9. Keeping the team effective
+QA rejects unmet Must-have criteria. Reviewer blocks unresolved blocker/major findings. Required evidence absent or stale is `UNKNOWN`; partial output is not acceptance. Release Manager cannot issue GO while a required gate is unknown, failed or stale. CONDITIONAL GO requires explicit owner-accepted, time-bounded nonblocking conditions. P0/P1 defects, unaccepted security findings and broken required CI remain NO-GO.
 
-- Keep agent descriptions short; detailed instructions belong inside the agent files.
-- Avoid overlapping edits from concurrent agents.
-- Review and evolve prompts when they produce repeated false positives or miss defects.
-- Keep `CLAUDE.md` concise and repository-specific.
-- Use `/doctor` if Claude Code reports duplicate agents or configuration problems.
-- Use `/context` to verify loaded project instructions.
-- Product and architecture artifacts can live in an issue/PR for normal work; create repository documents only for durable decisions.
-- Agents recommend; the repository owner authorizes merges, deployments, destructive actions, credential rotation, and risk acceptance.
+The final handoff includes outcome, changed files, AC evidence, independent verdicts, limitations, rollout/rollback where relevant, and the next action. Existing explicit human authorization remains valid; the workflow grants no new permission to merge, deploy, publish, delete, rotate credentials or accept security risk.
 
-## 10. Completion checklist
+## Source references
 
-- [ ] Product outcome and non-goals are explicit.
-- [ ] Acceptance criteria have unique IDs and observable evidence.
-- [ ] Delivery dependencies and risks have owners.
-- [ ] Architecture/failure/rollback decisions are recorded.
-- [ ] Implementation is scoped and has focused tests.
-- [ ] QA independently traced every Must-have AC.
-- [ ] Code review has no unresolved blocker or major finding.
-- [ ] Security and DevOps reviews are complete when applicable.
-- [ ] Documentation matches verified behavior.
-- [ ] Release Manager recorded a decision.
-- [ ] The human owner has the exact next action.
+The role files and workflow are repository policy. Claude Code mechanics were checked against the official [subagent documentation](https://code.claude.com/docs/en/sub-agents) and [model configuration documentation](https://code.claude.com/docs/en/model-config). Capabilities and precedence depend on the installed version; the screenshot's model menu is not a configuration file.
