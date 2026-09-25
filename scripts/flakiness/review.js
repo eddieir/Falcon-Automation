@@ -48,7 +48,15 @@ async function main() {
                 process.exitCode = 1;
                 return;
             }
-            const entry = FlakinessTracker.quarantine(arg, { by: "cli" });
+            let entry;
+            try {
+                entry = FlakinessTracker.quarantine(arg, { by: "cli" });
+            } catch (error) {
+                if (error.code !== "QUARANTINE_REFUSED") throw error;
+                console.error(`Refused: ${error.message}`);
+                process.exitCode = 1;
+                return;
+            }
             await FlakinessTracker._queue;
             if (!entry) {
                 console.error(`No tracked scenario for key "${arg}".`);

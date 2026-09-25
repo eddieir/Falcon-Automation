@@ -90,7 +90,9 @@ class HealingTrust {
         const entry = {
             original,
             suggested,
-            description,
+            // A later sighting that arrives without a description must not wipe
+            // the one a reviewer already has in front of them.
+            description: description || existing?.description || "",
             firstSeen:   existing?.firstSeen ?? new Date().toISOString(),
             lastSeen:    new Date().toISOString(),
             occurrences: (existing?.occurrences ?? 0) + 1,

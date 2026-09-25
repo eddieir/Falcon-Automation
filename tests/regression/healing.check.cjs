@@ -481,6 +481,14 @@ test("healing trust: description defaults to an empty string when omitted", (t) 
   assert.equal(entry.description, "");
 });
 
+test("healing trust: a later sighting without a description keeps the one the reviewer already has", (t) => {
+  const { trust } = trustAt(t);
+  trust.recordPending({ original: "#old", suggested: "#new", description: "Save order" });
+  const second = trust.recordPending({ original: "#old", suggested: "#newer" });
+  assert.equal(second.description, "Save order");
+  assert.equal(trust.list()[0].description, "Save order");
+});
+
 test("healing trust: approve/reject default decidedBy to \"dashboard\" when not specified", async (t) => {
   const { trust } = trustAt(t);
   trust.recordPending({ original: "#a", suggested: "#a2" });
