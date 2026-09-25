@@ -280,3 +280,58 @@ for (const status of [401, 429, 500])
     };
     assert.equal(await Analyser.getAlternativeLocator("fixture"), null);
   });
+
+// The summary line used to print `healingEvents.length` as "Self-healing
+// events", counting every attempt — including ones that resolved nothing,
+// which is what a Tier 3 ask looks like with no API key configured. A real
+// 11-page run reported "Self-healing events: 22" having repaired exactly
+// zero selectors. The line has to separate repairs from attempts.
+for (const [label, events, expected] of [
+  [
+    "repairs and failed attempts are counted separately",
+    [
+      { original: "#a", resolved: "#a2", tier: "LocatorStore" },
+      { original: "#b", resolved: null, tier: "LLM" },
+      { original: "#b", resolved: null, tier: "exhausted" },
+    ],
+    /Self-healing: 1 selector\(s\) repaired, 2 attempt\(s\) that resolved nothing/,
+  ],
+  [
+    "a run that repaired nothing says so",
+    [
+      { original: "#a", resolved: null, tier: "LLM" },
+      { original: "#a", resolved: null, tier: "exhausted" },
+    ],
+    /Self-healing: 0 selector\(s\) repaired, 2 attempt\(s\) that resolved nothing/,
+  ],
+  [
+    "a clean run mentions no failed attempts",
+    [{ original: "#a", resolved: "#a2", tier: "LocatorStore" }],
+    /Self-healing: 1 selector\(s\) repaired$/m,
+  ],
+]) {
+  test(`healing summary: ${label}`, (t) => {
+    const dir = temp();
+    const cwd = process.cwd();
+    const oldCode = process.exitCode;
+    process.chdir(dir);
+    const log = console.log;
+    const lines = [];
+    console.log = (line) => lines.push(String(line));
+    t.after(() => {
+      console.log = log;
+      process.chdir(cwd);
+      process.exitCode = oldCode;
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    const Report = load("src/core/ReportManager.js", { "../../utils/Logger": silent });
+    const manager = new Report();
+    manager.startRun();
+    manager.generateReport({
+      tests: [{ name: "a", status: "passed" }],
+      healingEvents: events,
+    });
+    assert.match(lines.join("\n"), expected);
+  });
+}
