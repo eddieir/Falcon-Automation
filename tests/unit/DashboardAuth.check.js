@@ -45,12 +45,13 @@ function httpRequest(port, method, urlPath, headers = {}, jsonBody) {
     });
 }
 
-function connectSocket(port, token) {
+function connectSocket(port, token, { transports, timeout = 3000 } = {}) {
     return new Promise((resolve) => {
         const socket = io(`http://localhost:${port}`, {
             auth: token !== undefined ? { token } : {},
             reconnection: false,
-            timeout: 3000,
+            timeout,
+            ...(transports ? { transports } : {}),
         });
         socket.on("connect", () => {
             socket.close();
@@ -209,17 +210,44 @@ async function testRateLimiting() {
         `got 0 of ${REQUEST_COUNT} rate-limited (statuses seen: ${[...new Set(responses.map((r) => r.statusCode))].join(", ")})`
     );
 
-    const socketResults = await Promise.all(
-        Array.from({ length: REQUEST_COUNT }, () => connectSocket(port))
-    );
+    // Deliberately NOT 130 parallel connections. The default transport is
+    // HTTP long-polling, and a simultaneous burst that size overwhelms the
+    // polling layer itself: connections then fail with "xhr poll error"
+    // before the handshake reaches the limiter, so the limiter's own message
+    // never appears and this assertion fails for a reason that has nothing to
+    // do with rate limiting (~2 runs in 11 locally). Forcing the websocket
+    // transport and connecting in small serial batches keeps every attempt a
+    // real handshake, which is the thing being tested.
+    const socketResults = [];
+    const BATCH = 10;
+    for (let sent = 0; sent < REQUEST_COUNT; sent += BATCH) {
+        const batch = Math.min(BATCH, REQUEST_COUNT - sent);
+        socketResults.push(...await Promise.all(
+            Array.from({ length: batch }, () => connectSocket(port, undefined, { transports: ["websocket"], timeout: 10000 }))
+        ));
+    }
     const socketRateLimited = socketResults.filter(
         (r) => r.connected === false && /too many/i.test(r.message || "")
+    ).length;
+    const transportErrors = socketResults.filter(
+        (r) => r.connected === false && !/too many/i.test(r.message || "")
     ).length;
     check(
         `Socket: firing ${REQUEST_COUNT} connection attempts gets at least one rate-limit rejection`,
         socketRateLimited > 0,
-        `got 0 of ${REQUEST_COUNT} rate-limited (sample message: ${socketResults.find((r) => !r.connected)?.message})`
+        `got 0 of ${REQUEST_COUNT} rate-limited, ${transportErrors} transport error(s) `
+            + `(sample message: ${socketResults.find((r) => !r.connected)?.message})`
     );
+    // Reported, not asserted. A handful of the 130 attempts can still lose a
+    // handshake to machine load, and that says nothing about the limiter — so
+    // it's printed for whoever reads the log rather than failing the build.
+    if (transportErrors > 0) {
+        console.log(
+            `ℹ️  Socket: ${transportErrors} of ${REQUEST_COUNT} attempts failed for a non-rate-limit reason `
+            + `(sample: ${socketResults.find((r) => r.connected === false && !/too many/i.test(r.message || ""))?.message}) `
+            + `— ${socketRateLimited} were rate-limited.`
+        );
+    }
 
     await dashboard.stop();
 }
