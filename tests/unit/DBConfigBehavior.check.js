@@ -95,11 +95,22 @@ for (const [name, scriptPath] of [
     ["UserDBTest", "tests/db/UserDBTest.js"],
     ["OrderDBTest", "tests/db/OrderDBTest.js"],
 ]) {
+    // Phase 11 corrects this expectation. ReportManager.generateReport() now
+    // reports NO_TESTS_RUN (exit 1) for a run whose every result is
+    // `skipped` — no passed, no failed, no quarantined, so nothing was
+    // actually verified — the same rule an all-deduped SiteSweep run already
+    // followed. UserDBTest.js/OrderDBTest.js still log "Skipping" and still
+    // report a single `skipped` result exactly as before; only the resulting
+    // process exit code changed, because it is no longer distinguishable
+    // from any other all-skipped run that silently lost coverage. This is a
+    // known regression in local ergonomics for a contributor without
+    // Postgres running `npm run test:db` — see this task's report for the
+    // open risk; tests/db/*.js are outside this task's file scope to fix.
     check(
-        `${name}: no DB configured → skipped, exit 0`,
+        `${name}: no DB configured → skipped, exit 1 (NO_TESTS_RUN)`,
         scriptPath,
         NO_DB_CONFIGURED,
-        0,
+        1,
         "Skipping",
         null
     );

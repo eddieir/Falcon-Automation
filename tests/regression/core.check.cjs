@@ -3,14 +3,52 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { load, silent, temp } = require("./helpers.cjs");
+// TestRunner's return-to-plan-url check (Phase 11) lazily requires the real
+// SiteSweep.js to reuse its normalizeUrl() static — see the comment on
+// TestRunner._returnToPlanUrl() for why the require is lazy. Pulling in the
+// real module here would also pull in its whole production dependency graph
+// (ClickExplorer, ExploratoryAI, TestGenerator, the real Logger singleton),
+// which sitesweep.check.cjs deliberately avoids at the unit level. This is
+// the same normalizeUrl() logic, kept unit-test-local for the same reason.
+const normalizeUrlForTest = (raw) => {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  let parsed;
+  try {
+    parsed = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  parsed.hash = "";
+  if (parsed.pathname.length > 1 && parsed.pathname.endsWith("/")) {
+    parsed.pathname = parsed.pathname.slice(0, -1);
+  }
+  return parsed.toString();
+};
+const siteSweepDouble = { normalizeUrl: normalizeUrlForTest };
 function runner(page = {}, { flaky } = {}) {
   const calls = [];
   const flakyCalls = [];
   const Runner = load("src/core/TestRunner.js", {
     "../../utils/Logger": silent,
     "./AIHealer/AIHealer": class {
+      constructor(page) {
+        this.page = page;
+      }
       async healAndClick(...args) {
         calls.push(args);
+      }
+      // Phase 11: type/select now go through the healer too. This double
+      // delegates straight to the page's fill()/selectOption() (no retry of
+      // its own) so every existing test that supplies those page methods
+      // directly keeps exercising the same behavior it always did; the real
+      // AIHealer's own Tier 1/2/3 chain is covered separately in
+      // healing.check.cjs and tests/regression/browser.spec.js.
+      async healAndType(selector, value) {
+        return this.page.fill(selector, value);
+      }
+      async healAndSelect(selector, value) {
+        return this.page.selectOption(selector, value);
       }
     },
     "./AIHealer/HealingReport": { log() {} },
@@ -22,6 +60,7 @@ function runner(page = {}, { flaky } = {}) {
       isQuarantined: () => false,
       keyFor: ({ url, action, locator }) => `${url}::${action}::${locator}`,
     },
+    "./SiteSweep": siteSweepDouble,
   });
   return { instance: new Runner(page), calls, flakyCalls };
 }
@@ -33,17 +72,15 @@ test("runner sends missing click locators through healing", async () => {
   assert.equal((await instance.executeTest())[0].status, "passed");
   assert.deepEqual(calls, [["#old", "Save"]]);
 });
-for (const [action, method] of [
-  ["type", "fill"],
-  ["select", "selectOption"],
+for (const [action, method, pageMethod] of [
+  ["type", "healAndType", "fill"],
+  ["select", "healAndSelect", "selectOption"],
 ]) {
-  test(`runner retries ${action} and records exactly one success`, async () => {
-    let attempts = 0;
+  test(`runner sends missing ${action} locators through healing`, async () => {
     const { instance } = runner({
-      [method]: async (s, v) => {
+      [pageMethod]: async (s, v) => {
         assert.equal(s, "#field");
         assert.equal(v, "value");
-        if (++attempts < 3) throw Error("timeout");
       },
     });
     await instance.runScenario({
@@ -52,22 +89,29 @@ for (const [action, method] of [
       value: "value",
       description: "Field",
     });
-    assert.equal(attempts, 3);
     assert.equal(instance.results.length, 1);
     assert.equal(instance.results[0].status, "passed");
   });
-  test(`runner records exhausted ${action}`, async () => {
-    let attempts = 0;
-    const { instance } = runner({
-      [method]: async () => {
-        attempts++;
-        throw Error("invalid");
-      },
-    });
+  // Phase 11 corrects the old contract here. type/select used to run
+  // through a bare 3-attempt loop that called page.fill()/page.selectOption()
+  // directly, with no healing chain at all — a missing target just failed
+  // three times. They now go through AIHealer.healAndType()/healAndSelect(),
+  // which owns its own Tier 1 AdaptiveRetry plus Tier 2/3 healing internally
+  // (exercised against a real DOM in tests/regression/browser.spec.js), so
+  // TestRunner must call the healer exactly once per scenario — exactly as
+  // it already does for click ("runner does not multiply healer retry
+  // chain", above).
+  test(`runner does not multiply healer retry chain for ${action}`, async () => {
+    const { instance } = runner();
+    let calls = 0;
+    instance.healer[method] = async () => {
+      calls++;
+      throw Error("exhausted");
+    };
     await instance.runScenario({ action, locator: "#field", value: "value" });
-    assert.equal(attempts, 3);
+    assert.equal(calls, 1);
     assert.equal(instance.results[0].status, "failed");
-    assert.equal(instance.results[0].error, "invalid");
+    assert.equal(instance.results[0].error, "exhausted");
   });
 }
 test("runner does not multiply healer retry chain", async () => {
@@ -186,6 +230,134 @@ test("Phase 9: unsupported/skipped actions are never fed to FlakinessTracker", a
   await instance.runScenario({ action: "unknown" });
   assert.equal(flakyCalls.length, 0);
 });
+
+// ── Phase 11: no silent skip, healing for every action, page-return ──
+
+test("Phase 11: an invisible type target reaches the healing chain instead of being skipped, and fails (not skipped) when unresolved", async () => {
+  const { instance, flakyCalls } = runner({
+    // The element isn't visible — under the old contract this alone marked
+    // the scenario "skipped" before the healer was ever consulted.
+    evaluate: async () => false,
+  });
+  instance.healer.healAndType = async () => {
+    throw Error("timeout waiting for selector");
+  };
+  instance.testPlan.url = "https://example.com/page";
+  instance.testPlan.test_scenarios = [
+    { action: "type", locator: "#renamed", value: "x", description: "Field" },
+  ];
+  const results = await instance.executeTest();
+  assert.equal(results.length, 1);
+  assert.equal(results[0].status, "failed");
+  assert.notEqual(results[0].status, "skipped");
+  assert.equal(flakyCalls.length, 1);
+  assert.equal(flakyCalls[0].status, "failed");
+  assert.equal(flakyCalls[0].errorType, "TIMEOUT");
+});
+test("Phase 11: an invisible select target that the healer resolves still passes", async () => {
+  const { instance } = runner({ evaluate: async () => false });
+  let received;
+  instance.healer.healAndSelect = async (...args) => {
+    received = args;
+  };
+  instance.testPlan.test_scenarios = [
+    { action: "select", locator: "#renamed", value: "it", description: "Country" },
+  ];
+  const results = await instance.executeTest();
+  assert.deepEqual(received, ["#renamed", "it", "Country"]);
+  assert.equal(results[0].status, "passed");
+});
+test("Phase 11: executeTest() returns to the plan URL after a scenario navigates away", async () => {
+  let currentUrl = "https://example.com/page";
+  const gotoCalls = [];
+  const { instance } = runner({
+    url: () => currentUrl,
+    goto: async (url) => {
+      gotoCalls.push(url);
+      currentUrl = url;
+    },
+  });
+  instance.healer.healAndClick = async (selector) => {
+    // Only the nav link actually navigates; "Save" on the returned-to page
+    // must not.
+    if (selector === "#nav") currentUrl = "https://example.com/cart";
+  };
+  instance.testPlan.url = "https://example.com/page";
+  instance.testPlan.test_scenarios = [
+    { action: "click", locator: "#nav", description: "Go to cart" },
+    { action: "click", locator: "#save", description: "Save" },
+  ];
+  await instance.executeTest();
+  assert.deepEqual(gotoCalls, ["https://example.com/page"]);
+});
+test("Phase 11: executeTest() never navigates when the page did not drift, even across a harmless trailing slash", async () => {
+  const gotoCalls = [];
+  const { instance } = runner({
+    url: () => "https://example.com/page/",
+    goto: async (url) => gotoCalls.push(url),
+  });
+  instance.testPlan.url = "https://example.com/page";
+  instance.testPlan.test_scenarios = [
+    { action: "click", locator: "#x", description: "X" },
+  ];
+  await instance.executeTest();
+  assert.deepEqual(gotoCalls, []);
+});
+test("Phase 11: a page double without url()/goto() is left alone rather than crashing executeTest()", async () => {
+  const { instance } = runner({ evaluate: async () => true });
+  instance.healer.healAndClick = async () => {};
+  instance.testPlan.url = "https://example.com/page";
+  instance.testPlan.test_scenarios = [
+    { action: "click", locator: "#x", description: "X" },
+  ];
+  const results = await instance.executeTest();
+  assert.equal(results[0].status, "passed");
+});
+test("Phase 11: a failed return to the plan URL is logged as a warning and does not abort remaining scenarios", async () => {
+  const warnings = [];
+  const calls = [];
+  const Runner = load("src/core/TestRunner.js", {
+    "../../utils/Logger": {
+      info() {},
+      warning: (m) => warnings.push(m),
+      error() {},
+      async flush() {},
+    },
+    "./AIHealer/AIHealer": class {
+      constructor(page) {
+        this.page = page;
+      }
+      async healAndClick(...args) {
+        calls.push(args);
+      }
+    },
+    "./AIHealer/HealingReport": { log() {} },
+    "./FlakinessTracker": {
+      record: () => null,
+      isQuarantined: () => false,
+      keyFor: () => "key",
+    },
+    "./SiteSweep": siteSweepDouble,
+  });
+  const page = {
+    url: () => "https://example.com/elsewhere",
+    goto: async () => {
+      throw Error("navigation failed");
+    },
+  };
+  const instance = new Runner(page, {
+    url: "https://example.com/page",
+    test_scenarios: [
+      { action: "click", locator: "#a", description: "A" },
+      { action: "click", locator: "#b", description: "B" },
+    ],
+  });
+  const results = await instance.executeTest();
+  assert.equal(results.length, 2);
+  assert.ok(results.every((r) => r.status === "passed"));
+  assert.ok(warnings.some((w) => /Could not return/.test(w)));
+});
+
 test("visibility errors resolve false", async () => {
   const { instance } = runner({
     evaluate: async () => {

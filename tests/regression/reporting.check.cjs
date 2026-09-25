@@ -8,7 +8,12 @@ for (const [statuses, result, exit] of [
   [["passed"], "PASSED", 0],
   [["failed"], "FAILED", 1],
   [["passed", "failed"], "PARTIAL", 1],
-  [["skipped"], "PASSED", 0],
+  // Phase 11 — a run whose scenarios are all `skipped` verified nothing, the
+  // same way an all-deduped run does, so it must be NO_TESTS_RUN/exit 1
+  // rather than PASSED. This corrects the old contract (`["skipped"]` used
+  // to report PASSED because `failed` was zero, regardless of whether
+  // anything was actually verified).
+  [["skipped"], "NO_TESTS_RUN", 1],
   [[], "NO_TESTS_RUN", 1],
   [["passed", "skipped"], "PASSED", 0],
   // Phase 9 — a quarantined result is a real failure that a human has
@@ -36,7 +41,9 @@ for (const [statuses, result, exit] of [
   [["deduped"], "NO_TESTS_RUN", 1],
   [["deduped", "deduped"], "NO_TESTS_RUN", 1],
   [["passed", "deduped"], "PASSED", 0],
-  [["skipped", "deduped"], "PASSED", 0],
+  // Phase 11 — corrected alongside the ["skipped"] case above: skipped and
+  // deduped together still verified nothing.
+  [["skipped", "deduped"], "NO_TESTS_RUN", 1],
   [["quarantined", "deduped"], "PASSED", 0],
   [["failed", "deduped"], "FAILED", 1],
   [["passed", "failed", "deduped"], "PARTIAL", 1],

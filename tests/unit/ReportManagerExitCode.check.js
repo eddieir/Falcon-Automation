@@ -76,14 +76,27 @@ check(
     1
 );
 
-// A skip-only run (e.g. DB tests with no database configured locally) must
-// exit 0 — a contributor without Postgres running shouldn't get a broken
-// `npm run test:db`. See UserDBTest.js / OrderDBTest.js's skip path.
+// Phase 11 corrects this case. A skip-only run verified nothing — no
+// passed, no failed, no quarantined — so it must report NO_TESTS_RUN and
+// exit 1, exactly like an all-deduped or an empty run, rather than PASSED.
+// Before this phase, generateReport() only gated on `failed === 0`, so a run
+// whose every scenario was skipped (a non-click target that never reached
+// the healer, back when a missing target short-circuited before AIHealer
+// ever saw it) still reported PASSED — the same class of false green Phase 6
+// exists to kill, just reached through `skipped` instead of a swallowed
+// exception.
+//
+// Known side effect: UserDBTest.js / OrderDBTest.js also push a single
+// `skipped` result when no local database is configured, relying on the old
+// PASSED/exit-0 contract so `npm run test:db` doesn't fail for a contributor
+// without Postgres running. That call site is outside this task's file
+// scope, so it still reports NO_TESTS_RUN/exit 1 locally without a database
+// — flagged as an open risk rather than silently left on the old contract.
 check(
-    "all tests skipped, none failed → PASSED → exit 0",
+    "all tests skipped, none failed → NO_TESTS_RUN → exit 1",
     [{ name: "a", status: "skipped" }],
-    "PASSED",
-    0
+    "NO_TESTS_RUN",
+    1
 );
 
 // No results pushed at all is itself a signal something is wrong (a test
