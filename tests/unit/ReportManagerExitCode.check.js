@@ -86,12 +86,13 @@ check(
 // exists to kill, just reached through `skipped` instead of a swallowed
 // exception.
 //
-// Known side effect: UserDBTest.js / OrderDBTest.js also push a single
-// `skipped` result when no local database is configured, relying on the old
-// PASSED/exit-0 contract so `npm run test:db` doesn't fail for a contributor
-// without Postgres running. That call site is outside this task's file
-// scope, so it still reports NO_TESTS_RUN/exit 1 locally without a database
-// — flagged as an open risk rather than silently left on the old contract.
+// The DB tests used to reach this case: both pushed a single `skipped`
+// result when no local database was configured, and relied on the old
+// PASSED/exit-0 contract so `npm run test:db` stayed green for a contributor
+// without Postgres. They no longer produce a report at all on that path —
+// running without a database is a declaration that nothing was verified, not
+// a verdict — so this case now describes only what it says it does. See
+// tests/unit/DBConfigBehavior.check.js for the three branches that replaced it.
 check(
     "all tests skipped, none failed → NO_TESTS_RUN → exit 1",
     [{ name: "a", status: "skipped" }],

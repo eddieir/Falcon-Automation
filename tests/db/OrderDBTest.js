@@ -34,7 +34,13 @@ const ErrorHandler = require("../../src/core/ErrorHandler");
 class OrderDBTest extends BaseTest {
     async runTest() {
         if (!this.dbClient) {
-            if (process.env.CI) {
+            // `CI` is a convention, not a boolean: runners set it to "true" or
+            // "1", and some tooling exports CI=false specifically to turn CI
+            // behaviour off. A bare truthiness check treats that "false" as
+            // set and fails a contributor's local run, which is the exact
+            // outcome this branch exists to prevent.
+            const ci = (process.env.CI || "").toLowerCase();
+            if (ci !== "" && ci !== "0" && ci !== "false") {
                 await Middleware.beforeTest(this.testName);
                 const message = "Order DB Test: no database configured in CI (DB_HOST/DB_USER not set) — CI provisions a Postgres service container, so this run verified nothing.";
                 Logger.error(`❌ ${message}`);
