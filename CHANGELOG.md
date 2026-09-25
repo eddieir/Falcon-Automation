@@ -663,3 +663,13 @@ Three demo scripts were added or extended, each of which exits non-zero if its o
 `docs/demo/flaky-test-detection-demo.js` gains the guard that landed after Phase 10: a scenario that has never passed is refused quarantine, and becomes quarantinable only once it genuinely passes.
 
 Measured against the previous release on the same 11-page site, the same command now reports 0 skipped where it reported 2 — two `Fill input field` scenarios that were silently dropped before reaching the healer, now resolved into one pass and one honest failure.
+
+### A recorded UI suite, because the demos were all scripts
+
+**Problem:** every demo above is a Node script that drives Playwright and prints assertions. That is good evidence for a reader who runs it, and no evidence at all for a reader who doesn't — and none of it looked like a test suite. Healing in particular was only ever shown through log lines and a stubbed LLM, so the obvious question ("does this actually work in a browser, without an API key?") had no answer anyone could watch.
+
+**Fix:** `tests/demo/axonradar.ui.spec.js`, six Playwright tests against the live site, run with `npm run test:demo` and recorded by `playwright.demo.config.js` (`video: "on"`, so a passing run is recorded too, which is the point). Four are ordinary UI tests — every nav route loads, search narrows the feed to cards that genuinely contain the query, a category chip filters rather than reorders, the comparator grows a column. Two hand Falcon a selector that does not exist on the page (`#news-search`, `#model-2-select`) and assert the interaction lands anyway: the live feed filters, the comparison table updates, and `HealingReport` records one Tier 2 repair with the right action. Tier 2 needs no API key, so these are reproducible by anyone.
+
+`docs/demo/build-ui-test-recording.js` turns the videos into the README's GIF and MP4. It locates each recording through `reports/ui-demo-results.json` rather than by walking the artefact directory, because Playwright names those directories after a truncated, hashed form of the test title and matching on them breaks silently the first time a title is edited. Reading the reporter's JSON also gives it each test's status, and it refuses to write either file if any test failed or any video is missing.
+
+The suite is not in CI and is excluded from `npx playwright test` via `testIgnore` in `playwright.config.js`: it depends on a third-party deploy staying up, and this repo's engineering rules rule out uncontrolled third-party sites as a CI dependency. Last measured run: 6 passed in 32.5s.
