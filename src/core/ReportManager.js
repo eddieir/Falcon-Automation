@@ -66,6 +66,18 @@ const path = require("path");
  * in its own bucket for the same reason quarantined is — the deduplication
  * is a claim about coverage, and a claim you can't count is not auditable.
  *
+ * Phase 11 — "skipped" joins "deduped" as a status that proves nothing on
+ * its own. Before this phase, a run whose scenarios were all `skipped` (a
+ * target the healer never even got to try, back when a missing target
+ * short-circuited before reaching AIHealer) still reported PASSED, because
+ * `failed` was zero — the exact class of false green Phase 6 exists to
+ * kill, just reached through `skipped` instead of a swallowed exception.
+ * `passed`, `failed` and `quarantined` are the only statuses that describe a
+ * scenario this run actually reached a verdict on; a run where none of them
+ * occurred — everything `skipped` and/or `deduped` — verified nothing and
+ * must report NO_TESTS_RUN and exit 1 exactly as an empty run does, even
+ * though `total` is nonzero.
+ *
  * `coverage` and `pages` are persisted verbatim as the sweep reported them
  * (see the SweepResult shape in docs/PHASE-PLANS.md). Nothing here derives or
  * second-guesses them: the run's tally comes from `tests`, and a report that
@@ -145,20 +157,22 @@ class ReportManager {
         const deduped     = tests.filter((t) => t.status === "deduped").length;
         const total        = tests.length;
 
-        // `deduped` is the one status describing work that never happened: the
-        // scenario was byte-identical to one already run on an earlier page, so
-        // it was dropped before execution. Every other status, `quarantined`
-        // and `skipped` included, describes a scenario this run actually
-        // reached a verdict on. The branches below therefore count `executed`
-        // rather than `total` — a run whose rows are *all* deduped tested
-        // nothing, and must stay NO_TESTS_RUN (exit 1) exactly as an empty run
-        // does. Gating on `total` would hand back a green exit code for a run
-        // that executed not one scenario.
-        const executed = total - deduped;
+        // `deduped` and (as of Phase 11) `skipped` are the statuses that
+        // describe work this run never actually reached a verdict on:
+        // `deduped` because it was byte-identical to a scenario already run
+        // on an earlier page, `skipped` because it named an action nobody
+        // implements. `passed`, `failed` and `quarantined` are the only
+        // statuses that mean this run genuinely exercised the scenario. The
+        // branches below therefore gate on `verified` rather than `total` —
+        // a run whose rows are all deduped and/or skipped tested nothing,
+        // and must stay NO_TESTS_RUN (exit 1) exactly as an empty run does.
+        // Gating on `total` would hand back a green exit code for a run
+        // that verified not one scenario.
+        const verified = passed + failed + quarantined;
 
         // Top-level result: PASSED only if every executed test passed
         let overallResult;
-        if (executed === 0) {
+        if (verified === 0) {
             overallResult = "NO_TESTS_RUN";
         } else if (failed === 0) {
             overallResult = "PASSED";
@@ -204,8 +218,19 @@ class ReportManager {
         if (uiIssues.length > 0) {
             console.log(`   UI Issues detected: ${uiIssues.length}`);
         }
+        // "Self-healing events: 22" reads as 22 selectors repaired. It wasn't:
+        // every healing attempt is logged, and an attempt that resolved
+        // nothing — Tier 3 asked with no API key configured, say — is logged
+        // exactly like one that worked. A run where the healer resolved not a
+        // single selector was reporting a number that looked like success, so
+        // the line now separates what was repaired from what was merely tried.
         if (healingEvents.length > 0) {
-            console.log(`   Self-healing events: ${healingEvents.length}`);
+            const resolved = healingEvents.filter((event) => event && event.resolved).length;
+            const unresolved = healingEvents.length - resolved;
+            console.log(
+                `   Self-healing: ${resolved} selector(s) repaired` +
+                (unresolved > 0 ? `, ${unresolved} attempt(s) that resolved nothing` : "")
+            );
         }
         console.log(`   Report written to: ${reportPath}\n`);
 

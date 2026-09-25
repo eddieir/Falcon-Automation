@@ -552,7 +552,7 @@ Total regression suite after this phase: 383 `node:test` cases (up from 308) and
 
 ## Phase 10 follow-up — the defects the Phase 10 verification found elsewhere
 
-Re-verifying Phases 8 and 9 on real browsers, a real Postgres and real HTTP (written up in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) §1) produced twelve findings. Seven of them are the substance of Phases 11 and 12. These five were small enough to close immediately, and one of them was a live hole in the safety story quarantine exists to protect.
+Re-verifying Phases 8 and 9 on real browsers, a real Postgres and real HTTP (written up in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) §1) produced twelve findings. Seven of them are the substance of the phases that follow this one. These five were small enough to close immediately, and one of them was a live hole in the safety story quarantine exists to protect.
 
 ### A scenario that has never passed could be quarantined, which turns a red run green
 
@@ -595,3 +595,81 @@ CodeQL flagged `js/incomplete-url-substring-sanitization`, high severity, on thr
 `tests/regression/flakiness.check.cjs` covers the eligibility rule directly: the `broken` case, the all-failing-but-still-`new` case, the refusal leaving no flag and no ledger row, and the scenario becoming quarantinable after one genuine pass. `tests/regression/dashboard.check.cjs` covers the 409 over real HTTP. `tests/regression/dashboard-ui.check.cjs` covers all three row states — no button, button, and Unquarantine on an already-quarantined row with no pass in history. `tests/regression/cli.check.cjs` gains the first coverage the review CLIs have had: the refusal exits 1 and writes no ledger, a genuinely flaky scenario quarantines and is attributed to `cli`, an unknown key exits 1, and `list` filters.
 
 Total regression suite after this pass: 399 `node:test` cases (up from 383) and 34 Playwright specs.
+
+---
+
+## Phase 11 — Healing for Every Action, and No Silent Green
+
+Verifying Phase 10 raised a question that had never been asked in quite this form: when a locator changes, does Falcon actually understand it and heal it? The answer was established by experiment rather than by reading code — the real `SiteSweep`, a three-page local site, a button renamed *after* the plan was generated, and a mock OpenAI endpoint so every Tier 3 call could be counted.
+
+For a click, the answer was yes, and cleanly. Tier 1 exhausted its three adaptive retries, Tier 2 had nothing stored, Tier 3 read the live DOM and inferred the new selector, the scenario passed, and the fix landed in `HealingTrust` as pending rather than in `LocatorStore` — the Phase 8 trust gate holds inside a sweep. After approval, the same break healed at Tier 2 with no LLM call for that selector.
+
+For everything else the answer was no, and the way it failed was the worst kind this project recognises.
+
+### Healing applied to clicks only
+
+**Problem:** `TestRunner.runScenario()` called `page.fill()` and `page.selectOption()` directly, inside a bare three-attempt loop, and `AIHealer` exposed healing for `click` alone. Every self-healing claim in the README was true only for a third of the actions Falcon supports.
+
+**Fix:** `AIHealer` resolves a selector once and then performs the caller's action against it, rather than three near-copies of `healAndClick()`. Tier 2 and Tier 3 perform the *real* action — a fill fills, a select selects. Healing a form field by clicking it would report a pass for an interaction that never happened, which is worse than the failure it was hiding. The uniqueness guard that refuses an ambiguous healed selector applies to every action, not just clicks, and the Phase 8 trust gate is unconditional: a Tier 3 resolution for a fill waits for a human exactly as one for a click does. Healing records now name the action that was healed.
+
+### A missing input was silently skipped, and a skip is not a failure
+
+**Problem:** `executeTest()` marked any non-click scenario whose target wasn't visible as `skipped` before the healer was ever consulted. `skipped` doesn't fail a run, so this tally reported PASSED and exited 0:
+
+```
+skipped   Fill quantity — Element not visible
+skipped   Choose size   — Element not visible
+passed    Click buy
+```
+
+A renamed input id neither healed nor failed. It quietly removed coverage while the build stayed green — the exact class of false green Phase 6 exists to kill, reached through `skipped` instead of through a swallowed exception.
+
+**Fix:** every supported action reaches the healing chain unconditionally. If the chain cannot resolve the target, the scenario `fails` and is recorded to `FlakinessTracker` with an error type. `skipped` is reserved for an action nobody implements. Alongside it, `ReportManager` gains one rule in the shape of Phase 10's `deduped` rule: `passed`, `failed` and `quarantined` are the only statuses that mean a verdict was reached, so a run with none of them is `NO_TESTS_RUN` and exits 1 exactly as an empty run does.
+
+### Scenarios kept running after the page changed under them
+
+**Problem:** once a navigation-type scenario clicked a link, every later scenario in that plan executed against the new page's DOM. Reproduced in a three-page fixture, where `Navigate: Account` failed for no reason other than the browser already being on `/cart`. Pre-existing, but Phase 10 multiplies it: every discovered page now contributes up to three navigation scenarios instead of only the entry page.
+
+**Fix:** `TestRunner` compares the normalised URL before and after each scenario and returns to the plan's URL only when it actually drifted, so the common case costs no extra page loads. A failed return is logged and does not abort the remaining scenarios.
+
+### Running without a local database is a declaration, not a verdict
+
+**Problem:** the new exit-code rule caught something it shouldn't have. Both DB tests push a single `skipped` row when `DB_HOST`/`DB_USER` are unset — the Phase 6 convenience that lets a contributor without Postgres run the suite — so `npm run test:db` started exiting 1 locally, contradicting the repository's own contributor instructions.
+
+**Fix:** the distinction moved to where the intent lives rather than softening the rule. With no database configured and CI unset, the test says plainly that nothing was verified and exits 0 without writing a report. With no database configured *while CI is set*, the workflow is broken — CI provisions a Postgres service container, so a missing configuration there means the job is silently testing nothing, and that is a real failure naming the missing configuration. `ReportManager` was not touched. Independent review then found the control could be fooled: `CI` is a convention, not a boolean, and some tooling exports `CI=false` specifically to turn CI behaviour off, which a truthiness check reads as "in CI". `false` and `0` are now not CI; `1` and `true` are. All five variants are asserted on the real process exit code.
+
+### Verification
+
+`tests/regression/healing.check.cjs` covers the generalised chain per action and the unconditional trust gate; `tests/regression/browser.spec.js` covers what a fake page object cannot model, driving real Chromium against renamed inputs and selects; `tests/regression/core.check.cjs` covers the runner's return-to-page behaviour and the cost-free common case; `tests/regression/reporting.check.cjs` and `tests/unit/ReportManagerExitCode.check.js` assert the exit code directly; `tests/unit/DBConfigBehavior.check.js` spawns the real DB scripts and asserts their process exit codes across every `CI` value.
+
+Independent QA drove the healed interactions in a real browser and confirmed the fill genuinely landed in the renamed field and the select genuinely changed the option — a passed row is not proof an interaction happened — and re-ran a full multi-page sweep to confirm Phase 10 was not regressed.
+
+Total regression suite after this phase: 414 `node:test` cases and 38 Playwright specs.
+
+### The run summary counted healing attempts as healing successes
+
+**Problem:** building the Phase 11 demo against the live site produced a run that printed `Self-healing events: 22`. It had repaired zero selectors. `ReportManager` printed `healingEvents.length`, and every attempt is logged — including a Tier 3 ask that resolves nothing because no API key is configured. The healing log for that run was 11 `LLM` entries and 11 `exhausted` entries, `resolved: 0` on all of them. Anyone reading the summary would have concluded 22 selectors were fixed. The README's own "15 selectors self-healed" figure came from the same counting method.
+
+**Fix:** the line separates repairs from attempts — `Self-healing: 0 selector(s) repaired, 11 attempt(s) that resolved nothing`. Three regression cases cover a mixed run, a run that repaired nothing, and a clean run that mentions no failed attempts. The README's case-study figures were re-measured from a real run rather than carried forward.
+
+### Demo
+
+Three demo scripts were added or extended, each of which exits non-zero if its own assertions fail, so a demo cannot quietly succeed while the mechanism behind it is broken:
+
+`docs/demo/phase-11-heal-every-action-demo.js` breaks the locators of two real controls on the live site — the `/news` search field and the second model dropdown on `/compare`, neither of which carries an id, name or test id — between analysis and execution, and proves the three-tier chain now repairs both. The typed value and the selected option are read back out of the live page, because a `passed` line is not evidence that an interaction happened. The LLM call is stubbed, and the script says so in its own output.
+
+`docs/demo/honest-exit-code-demo.js` spawns each reporting case as a real child process and compares the reported result against the exit code the operating system actually saw, including the two cases that used to report PASSED: an all-skipped run and an all-deduplicated one.
+
+`docs/demo/flaky-test-detection-demo.js` gains the guard that landed after Phase 10: a scenario that has never passed is refused quarantine, and becomes quarantinable only once it genuinely passes.
+
+Measured against the previous release on the same 11-page site, the same command now reports 0 skipped where it reported 2 — two `Fill input field` scenarios that were silently dropped before reaching the healer, now resolved into one pass and one honest failure.
+
+### A recorded UI suite, because the demos were all scripts
+
+**Problem:** every demo above is a Node script that drives Playwright and prints assertions. That is good evidence for a reader who runs it, and no evidence at all for a reader who doesn't — and none of it looked like a test suite. Healing in particular was only ever shown through log lines and a stubbed LLM, so the obvious question ("does this actually work in a browser, without an API key?") had no answer anyone could watch.
+
+**Fix:** `tests/demo/axonradar.ui.spec.js`, six Playwright tests against the live site, run with `npm run test:demo` and recorded by `playwright.demo.config.js` (`video: "on"`, so a passing run is recorded too, which is the point). Four are ordinary UI tests — every nav route loads, search narrows the feed to cards that genuinely contain the query, a category chip filters rather than reorders, the comparator grows a column. Two hand Falcon a selector that does not exist on the page (`#news-search`, `#model-2-select`) and assert the interaction lands anyway: the live feed filters, the comparison table updates, and `HealingReport` records one Tier 2 repair with the right action. Tier 2 needs no API key, so these are reproducible by anyone.
+
+`docs/demo/build-ui-test-recording.js` turns the videos into the README's GIF and MP4. It locates each recording through `reports/ui-demo-results.json` rather than by walking the artefact directory, because Playwright names those directories after a truncated, hashed form of the test title and matching on them breaks silently the first time a title is edited. Reading the reporter's JSON also gives it each test's status, and it refuses to write either file if any test failed or any video is missing.
+
+The suite is not in CI and is excluded from `npx playwright test` via `testIgnore` in `playwright.config.js`: it depends on a third-party deploy staying up, and this repo's engineering rules rule out uncontrolled third-party sites as a CI dependency. Last measured run: 6 passed in 32.5s.
