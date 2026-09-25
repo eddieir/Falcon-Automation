@@ -210,7 +210,8 @@ status: quarantined
 Nothing about this is a separate, simplified code path: every run above is a real `TestRunner.executeTest()` call, `ReportManager` is the same one every scenario test file uses, and quarantining changes only how a failure is *reported*, never whether the interaction actually passed or failed. Review flaky scenarios and quarantine/unquarantine them either from the live dashboard's "Flaky tests" panel, or headlessly:
 
 ```sh
-node scripts/flakiness/review.js list                       # what's flaky, broken, or already quarantined
+node scripts/flakiness/review.js list                       # every tracked scenario
+node scripts/flakiness/review.js list flaky                 # or filter: new | stable | broken | flaky
 node scripts/flakiness/review.js quarantine "<scenario-key>"
 node scripts/flakiness/review.js unquarantine "<scenario-key>"
 ```
@@ -243,12 +244,16 @@ node falcon.js --url=https://your-app.example.com
 The recordings above aren't hand-drawn. They're real frames captured from a live `node falcon.js` run with Playwright, assembled with `ffmpeg`. Frame timing depends on real network/render latency, so a fixed frame index (e.g. "frame 6 is always the explore state") silently goes stale between runs. `docs/demo/build-gif-list.js` instead hashes every captured frame, collapses consecutive duplicates, and keeps one frame per *actual* dashboard state change, whatever real time that landed at:
 
 ```sh
-# 1. Start falcon.js and wait for the dashboard to come up
+# 1. Start the run and the capture together. Waiting for the dashboard to
+#    answer before starting the capture lets a short run finish first — the
+#    empty and explore states are then already gone. capture-dashboard.js
+#    waits for the port itself, so both start at once.
 node falcon.js --url=https://axonradar.netlify.app &
-until curl -s -o /dev/null http://localhost:3000; do sleep 0.05; done
 
 # 2. Capture frames with Playwright while the run streams events
-node docs/demo/capture-dashboard.js 60 120
+#    (frameCount, intervalMs, output directory under docs/demo/)
+node docs/demo/capture-dashboard.js 60 120 frames-axonradar
+wait
 
 # 3. Pick one frame per real state change (connect / explore / results)
 node docs/demo/build-gif-list.js docs/demo/frames-axonradar docs/demo/axonradar-gif-list.txt 3.0
@@ -378,6 +383,11 @@ Falcon-Automation/
 │   │   ├── ReportManagerExitCode.check.js
 │   │   ├── DBConfigBehavior.check.js
 │   │   └── DashboardAuth.check.js
+│   ├── regression/                  # The node:test + Playwright regression layer
+│   │   ├── *.check.cjs              # node:test suites, one per module area
+│   │   ├── browser.spec.js          # Playwright specs against inline HTML fixtures
+│   │   └── helpers.cjs              # Module loader with injectable dependencies
+│   ├── fixtures/                    # Shared test fixtures (cli-preload.cjs)
 │   └── full_automation.test.js      # Playwright-native suite (allure-playwright reporter)
 ├── scripts/
 │   ├── db/
@@ -524,8 +534,10 @@ A failing scenario has always been reported as `failed`, full stop, with no way 
 
 Classifying a scenario as flaky never changes what happens on its own: nothing is auto-quarantined. A **human** decides, either from the live dashboard's "Flaky tests" panel or headlessly:
 
+A scenario that has never passed cannot be quarantined at all, and that's enforced rather than merely documented: `FlakinessTracker.quarantineEligibility()` is the single rule, and the tracker, the `POST /flakiness/quarantine` route (409, with the reason), the CLI (`Refused: …`, exit 1) and the dashboard panel (no button, just why) all defer to it. The rule is "has passed at least once", not "isn't classified `broken`" — a scenario that has only ever failed twice is still `new`, because two samples are under the verdict threshold, and buying *that* out of the exit code would hide a regression just as effectively. There's no force flag. It becomes quarantinable the moment it genuinely passes once, which is the moment "unreliable" becomes the true description of it.
+
 ```sh
-node scripts/flakiness/review.js list                       # everything flaky, broken, or already quarantined
+node scripts/flakiness/review.js list                       # every tracked scenario; add new|stable|broken|flaky to filter
 node scripts/flakiness/review.js quarantine "<scenario-key>"
 node scripts/flakiness/review.js unquarantine "<scenario-key>"
 ```
@@ -542,8 +554,8 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 
 **`regression` job** (~1 minute): the `node:test` + Playwright layer added alongside the community-health files:
 1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
-2. `npm run test:coverage`: 383 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
-3. `npm run test:browser`: 30 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
+2. `npm run test:coverage`: 399 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
+3. `npm run test:browser`: 34 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
 4. Uploads `reports/` as the `regression-reports` artifact
 
 **`test` job** (~1.5 minutes): the original scenario/E2E pipeline, against a real seeded Postgres:
@@ -553,7 +565,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 4. Visual-regression baselines restored from cache (`actions/cache@v4`, keyed on branch name)
 5. Scenario tests: `LoginTest`, `CheckoutTest`, `UserApiTest`, `ProductApiTest`, then `UserDBTest` and `OrderDBTest` against the real seeded database. None of these use `continue-on-error`; a real failure fails the job
 6. `node falcon.js --no-dashboard`, the autonomous pipeline
-7. `npx playwright test` (`continue-on-error: true`, since this suite still tolerates E2E flake)
+7. `npx playwright test`, the Playwright-native suite with the Allure reporter — no `continue-on-error` here either, so a failure in it fails the job
 8. Allure report generated (`npx allure awesome`) and uploaded alongside `reports/` as the `falcon-reports` artifact
 
 The full, current file is the source of truth; see `.github/workflows/ci.yml`. [CHANGELOG.md](CHANGELOG.md)'s Phase 3, Phase 6, and Phase 7 sections document why specific pieces of the `test` job exist (Allure's CLI quirks, the visual-regression cache, the Postgres service container, the three regression checks).
@@ -599,8 +611,8 @@ npm run test:unit
 
 # The larger node:test + Playwright regression layer (needs Node 20.19+;
 # see Installation). This is what the "regression" CI job runs.
-npm run test:regression   # 383 node:test cases, tests/regression/*.check.cjs
-npm run test:browser      # 30 Playwright specs, tests/regression/browser.spec.js
+npm run test:regression   # 399 node:test cases, tests/regression/*.check.cjs
+npm run test:browser      # 34 Playwright specs, tests/regression/browser.spec.js
 npm run test:coverage     # same as test:regression, with coverage collection
 
 # Same, but reporting into an already-running `node falcon.js` dashboard

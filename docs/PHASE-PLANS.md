@@ -60,18 +60,20 @@ CI green, 308 `node:test` + 30 Playwright, 94.79% statement coverage, zero open 
 
 | # | Severity | Defect | Addressed by |
 |---|---|---|---|
-| D1 | Critical | A `broken` scenario (fails every time) can be quarantined in one click. No classification guard in `FlakinessTracker.quarantine()`, none on `POST /flakiness/quarantine`, and `renderFlaky()` renders `broken` rows with a working Quarantine button. Verified: quarantining a 3/3-failing scenario made a genuinely failing run exit 0. Contradicts the module docblock and README. | Immediate fix |
+| D1 | Critical | A `broken` scenario (fails every time) can be quarantined in one click. No classification guard in `FlakinessTracker.quarantine()`, none on `POST /flakiness/quarantine`, and `renderFlaky()` renders `broken` rows with a working Quarantine button. Verified: quarantining a 3/3-failing scenario made a genuinely failing run exit 0. Contradicts the module docblock and README. | **Closed** — Phase 10 follow-up |
 | D2 | Critical | Flaky detection is inert in CI. `data/` is never cached between runs, and each scenario runs once per run against a 3-sample minimum, so every scenario in CI is permanently `new`. Nothing classifies, `flakyDetected` never fires, local quarantines never reach CI. | Phase 11 |
 | D3 | Critical | `falcon.js` discards the crawler's results — it re-navigates to root and generates for that page only. Its own header comment claims otherwise. | **Phase 10** |
 | D4 | Major | `_evictLeastRecentlyUsed()` sorts on `lastUsed` with no exemption for quarantined entries. Verified: quarantine + 600 new scenarios → decision gone, failures block again, nothing logged. | Phase 11 |
 | D5 | Major | A sometimes-missing `type`/`select` target is marked `skipped`, and `skipped` is never recorded — so the textbook flake shape classifies as `stable`, 0% fail rate. | Phase 11 |
-| D6 | Major | `DashboardAuth.check.js`'s socket rate-limit assertion fails ~18% of runs (2 of 11): `xhr poll error` from the overloaded polling transport masks the limiter's own message. Hard step in the `test` job. | Immediate fix |
+| D6 | Major | `DashboardAuth.check.js`'s socket rate-limit assertion fails ~18% of runs (2 of 11): `xhr poll error` from the overloaded polling transport masks the limiter's own message. Hard step in the `test` job. | **Closed** — Phase 10 follow-up |
 | D7 | Major | `HealingTrust.pending` and `.decisions` have no cap or eviction, nor does `quarantine_decisions.json`. 5,000 decisions → 1,500,329 bytes, full-file rewrite per decision, read synchronously at require time. `LocatorStore` stayed capped at 500 through the same test. | Phase 12 |
 | D8 | Major | State saves are a plain `writeFile`, not temp+rename, and `_loadJson` recovers from corruption to empty with no log line — silently voiding the entire review queue or every quarantine. | Phase 11 |
 | D9 | Minor | Rejection memory is written to disk and surfaced nowhere: not by `recordPending`, no route, not in `review.js list`. README claims otherwise. | Phase 12 |
-| D10 | Minor | `reports/test-report.json` and 38 `allure-report/` files are tracked despite being gitignored; the tree goes dirty on every run. | Immediate fix |
-| D11 | Minor | Four false doc claims: a `continue-on-error: true` that isn't in `ci.yml`; a demo regeneration recipe whose frame paths don't match; `review.js list` described as filtered when it isn't; Project Structure tree omits `tests/regression/`. | Immediate fix |
-| D12 | Minor | `recordPending` resets an existing description to `""` when the caller omits one; double-quarantine appends a duplicate ledger row. | Immediate fix / Phase 12 |
+| D10 | Minor | `reports/test-report.json` and 38 `allure-report/` files are tracked despite being gitignored; the tree goes dirty on every run. | **Closed** — Phase 10 follow-up |
+| D11 | Minor | Four false doc claims: a `continue-on-error: true` that isn't in `ci.yml`; a demo regeneration recipe whose frame paths don't match; `review.js list` described as filtered when it isn't; Project Structure tree omits `tests/regression/`. | **Closed** — Phase 10 follow-up |
+| D12 | Minor | `recordPending` resets an existing description to `""` when the caller omits one; double-quarantine appends a duplicate ledger row. | **Closed** — Phase 10 follow-up |
+
+**Closed in the Phase 10 follow-up (see [CHANGELOG.md](../CHANGELOG.md)):** D1, D6, D10, D11, D12. D1 is enforced in one place — `FlakinessTracker.quarantineEligibility()` — with the route, the CLI and the dashboard all deferring to it, and the rule is "has passed at least once", not "isn't classified `broken`", so an all-failing scenario still under the sample threshold can't be hidden either. The seven remaining defects are carried by the phases named against them; none of them has moved.
 
 ---
 
