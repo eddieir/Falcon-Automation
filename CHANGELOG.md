@@ -645,3 +645,21 @@ A renamed input id neither healed nor failed. It quietly removed coverage while 
 Independent QA drove the healed interactions in a real browser and confirmed the fill genuinely landed in the renamed field and the select genuinely changed the option — a passed row is not proof an interaction happened — and re-ran a full multi-page sweep to confirm Phase 10 was not regressed.
 
 Total regression suite after this phase: 414 `node:test` cases and 38 Playwright specs.
+
+### The run summary counted healing attempts as healing successes
+
+**Problem:** building the Phase 11 demo against the live site produced a run that printed `Self-healing events: 22`. It had repaired zero selectors. `ReportManager` printed `healingEvents.length`, and every attempt is logged — including a Tier 3 ask that resolves nothing because no API key is configured. The healing log for that run was 11 `LLM` entries and 11 `exhausted` entries, `resolved: 0` on all of them. Anyone reading the summary would have concluded 22 selectors were fixed. The README's own "15 selectors self-healed" figure came from the same counting method.
+
+**Fix:** the line separates repairs from attempts — `Self-healing: 0 selector(s) repaired, 11 attempt(s) that resolved nothing`. Three regression cases cover a mixed run, a run that repaired nothing, and a clean run that mentions no failed attempts. The README's case-study figures were re-measured from a real run rather than carried forward.
+
+### Demo
+
+Three demo scripts were added or extended, each of which exits non-zero if its own assertions fail, so a demo cannot quietly succeed while the mechanism behind it is broken:
+
+`docs/demo/phase-11-heal-every-action-demo.js` breaks the locators of two real controls on the live site — the `/news` search field and the second model dropdown on `/compare`, neither of which carries an id, name or test id — between analysis and execution, and proves the three-tier chain now repairs both. The typed value and the selected option are read back out of the live page, because a `passed` line is not evidence that an interaction happened. The LLM call is stubbed, and the script says so in its own output.
+
+`docs/demo/honest-exit-code-demo.js` spawns each reporting case as a real child process and compares the reported result against the exit code the operating system actually saw, including the two cases that used to report PASSED: an all-skipped run and an all-deduplicated one.
+
+`docs/demo/flaky-test-detection-demo.js` gains the guard that landed after Phase 10: a scenario that has never passed is refused quarantine, and becomes quarantinable only once it genuinely passes.
+
+Measured against the previous release on the same 11-page site, the same command now reports 0 skipped where it reported 2 — two `Fill input field` scenarios that were silently dropped before reaching the healer, now resolved into one pass and one honest failure.

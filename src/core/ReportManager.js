@@ -218,8 +218,19 @@ class ReportManager {
         if (uiIssues.length > 0) {
             console.log(`   UI Issues detected: ${uiIssues.length}`);
         }
+        // "Self-healing events: 22" reads as 22 selectors repaired. It wasn't:
+        // every healing attempt is logged, and an attempt that resolved
+        // nothing — Tier 3 asked with no API key configured, say — is logged
+        // exactly like one that worked. A run where the healer resolved not a
+        // single selector was reporting a number that looked like success, so
+        // the line now separates what was repaired from what was merely tried.
         if (healingEvents.length > 0) {
-            console.log(`   Self-healing events: ${healingEvents.length}`);
+            const resolved = healingEvents.filter((event) => event && event.resolved).length;
+            const unresolved = healingEvents.length - resolved;
+            console.log(
+                `   Self-healing: ${resolved} selector(s) repaired` +
+                (unresolved > 0 ? `, ${unresolved} attempt(s) that resolved nothing` : "")
+            );
         }
         console.log(`   Report written to: ${reportPath}\n`);
 

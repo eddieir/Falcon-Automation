@@ -51,7 +51,21 @@ node falcon.js --url=https://axonradar.netlify.app --max-pages=11
 
 ![Dashboard showing the real aggregate totals across all 11 pages](docs/demo/axonradar-04-full-sweep-totals.png)
 
-**184 scenarios generated. 174 passed (94.6%). 15 selectors self-healed. 23 real UI issues found.** 8 failed, and that's disclosed on purpose, not smoothed over: 7 of those 8 are cases where Tier 1 and Tier 2 healing genuinely ran out of options and Tier 3 (the LLM fallback) would normally take over, but this run had no `OPENAI_API_KEY` configured, so Tier 3 never fired. That's the honest number, not a curated one.
+**184 scenarios generated across 11 pages. 133 passed, 11 failed, 40 deduplicated, 0 skipped. 23 real UI issues found. Exit code 1.**
+
+Every one of those numbers is disclosed as measured, including the unflattering ones. The 40 deduplicated scenarios are shared navigation that repeats on every page, counted rather than hidden. The 11 failures are almost all cases where Tier 1 and Tier 2 healing genuinely ran out of options and Tier 3 would take over, but this run had no `OPENAI_API_KEY` configured, so Tier 3 never fired. The healing log for the run records **0 selectors actually repaired against 11 attempts that resolved nothing** — Falcon says exactly that in its summary rather than reporting the attempts as successes.
+
+The `0 skipped` is the part worth pausing on. Running the identical command against the previous release gives:
+
+| | before Phase 11 | after Phase 11 |
+|---|---|---|
+| Total | 184 | 184 |
+| Passed | 132 | 133 |
+| Failed | 10 | 11 |
+| **Skipped** | **2** | **0** |
+| Deduped | 40 | 40 |
+
+Those two skips were real and silent — `⏭ Skipping Fill input field: Element is not visible`, twice, on a live site, never reaching the healing chain. They now reach it and resolve into an actual verdict: one passes, one fails honestly. On this particular site the run was red anyway, so nothing was being hidden behind a green build here; the site where those two skips are the *only* problem is the one Phase 11 exists for.
 
 ### How it works, one page at a time
 
@@ -175,6 +189,59 @@ node scripts/healing/review.js reject  "<original-selector>"
 
 Reproduce the demo above yourself: `node docs/demo/healing-trust-axonradar-demo.js`.
 
+### Healing every action, demonstrated against the same real site
+
+The two sections above heal a *click*. Until Phase 11 that was the only action Falcon could heal: a `type` or `select` whose locator broke was marked `skipped` before the healer was ever consulted, and a skip doesn't fail a run. A renamed input id cost you coverage and left the build green.
+
+Below, two real controls on the live site have their locators broken the way a deploy between analysis and execution breaks them — the `/news` search field, and the second model dropdown on `/compare`. Neither element carries an id, a name, or a `data-testid`, so the plan holds a structural selector, which is exactly what a front-end refactor invalidates. The LLM call itself is stubbed (there is no API key in this environment, and the script says so in its own output); everything downstream is the real code path:
+
+```
+=== Scenario 1: /news — search input's locator breaks between plan and run (type) ===
+✓ PageAnalyser plans "input" for the /news search field (got "input")
+✓ the real search field is uniquely findable by its placeholder (count=1)
+❌ Tier 1 exhausted for News search field. Engaging Tier 2/3 healing.
+🤖 Asking AI to infer locator for: input
+  [stubbed LLM] would infer: input[placeholder="Search headline, body, or source"]
+Read back from the live field: "quantum computing"
+✓ the typed text actually landed in the real /news search field
+✓ Tier 1 genuinely failed and Tier 3 genuinely resolved this — not a disguised Tier 1 pass (tier=LLM)
+
+=== Scenario 2: /compare — second model dropdown's locator breaks between plan and run (select) ===
+✓ the plan selector resolves to exactly one element before the mutation (count=1)
+❌ Tier 1 exhausted for Compare model 2 dropdown. Engaging Tier 2/3 healing.
+Read back from the live dropdown: "kimi-k2-6"
+✓ the option actually changed in the real /compare dropdown
+✓ Tier 1 genuinely failed and Tier 3 genuinely resolved this — not a disguised Tier 1 pass (tier=LLM)
+
+=== Scenario 3: neither fix was silently trusted — Phase 8's gate applies to type/select too ===
+LocatorStore.getAlternatives("input") -> []
+✓ LocatorStore has nothing for the healed input selector (a guess earns no automatic trust)
+✓ the type fix is sitting in HealingTrust as pending review
+✓ the select fix is sitting in HealingTrust as pending review
+```
+
+The value is read back out of the live page in both cases, because a `passed` line proves nothing on its own: a healed fill that reports success without filling anything would be worse than the failure it replaced. The healing record now carries the action it repaired (`"action":"type"`, `"action":"select"`), and the Phase 8 trust gate applies unchanged — an LLM guess for a form field waits for a human exactly as one for a button does.
+
+Reproduce it yourself: `node docs/demo/phase-11-heal-every-action-demo.js`.
+
+### Exit codes that mean what they say
+
+Every guarantee above is worth nothing if the process exits 0 regardless. This demo spawns each case as a real child process and compares the reported result against the exit code the operating system actually saw:
+
+```
+case                              reported      claimed  observed  match
+every scenario passed             PASSED        0        0         yes
+one real failure among passes     PARTIAL       1        1         yes
+a failure a human quarantined     PASSED        0        0         yes
+Phase 11: every scenario skipped  NO_TESTS_RUN  1        1         yes
+Phase 10: every scenario deduped  NO_TESTS_RUN  1        1         yes
+no scenarios at all               NO_TESTS_RUN  1        1         yes
+```
+
+The fourth and fifth rows are the interesting ones. Work that never ran cannot be a pass: a run made entirely of skipped or deduplicated scenarios verified nothing, and now exits 1 exactly as an empty run does. Before Phase 10 and Phase 11 respectively, both of those reported PASSED.
+
+Reproduce it yourself: `node docs/demo/honest-exit-code-demo.js`.
+
 ### Flaky-test detection, demonstrated against the same real site
 
 The same interaction, run repeatedly against the real page, sometimes passes and sometimes fails, exactly the way a genuinely timing-sensitive element behaves in a real suite. Below, `FlakinessTracker` watches six real `TestRunner` runs of the same scenario, classifies it, and a human quarantines it so it stops blocking CI without the instability ever being hidden:
@@ -215,6 +282,17 @@ node scripts/flakiness/review.js list flaky                 # or filter: new | s
 node scripts/flakiness/review.js quarantine "<scenario-key>"
 node scripts/flakiness/review.js unquarantine "<scenario-key>"
 ```
+
+The same demo ends by showing what quarantine will *not* do. A scenario that has failed every time it has ever run is refused outright:
+
+```
+=== Step 6: a scenario that has failed every single time cannot be quarantined at all ===
+Refused: quarantine() threw code "QUARANTINE_REFUSED"
+
+=== Step 7: the same scenario becomes quarantinable the moment it genuinely passes once ===
+```
+
+That is a regression, not flakiness, and quarantining it would turn a genuinely red run green. The rule is "has passed at least once", not "isn't classified `broken`" — a scenario that has only ever failed twice is still classified `new`, because two samples are under the verdict threshold, and hiding that would be just as effective a way to lose a real failure. There is no force flag anywhere.
 
 Reproduce the demo above yourself: `node docs/demo/flaky-test-detection-demo.js`.
 
@@ -277,12 +355,22 @@ node docs/demo/self-heal-axonradar-demo.js
 # Healing trust: Tier 3 succeeds but isn't trusted until a human approves it
 node docs/demo/healing-trust-axonradar-demo.js
 
-# Flaky-test detection: the same interaction, genuinely nondeterministic, quarantined
+# Flaky-test detection: the same interaction, genuinely nondeterministic, quarantined —
+# and a scenario that has never passed being refused quarantine outright
 node docs/demo/flaky-test-detection-demo.js
 
 # Visual regression: a real baseline vs. a genuine injected change
 node docs/demo/visual-regression-axonradar-demo.js
+
+# Healing on every action: a real search field and a real dropdown whose locators
+# break between analysis and execution, healed through the same three tiers
+node docs/demo/phase-11-heal-every-action-demo.js
+
+# Exit-code honesty: every reported result checked against the real process exit code
+node docs/demo/honest-exit-code-demo.js
 ```
+
+Each one exits non-zero if its own assertions fail, so a demo cannot quietly succeed while the mechanism behind it is broken.
 
 ---
 
