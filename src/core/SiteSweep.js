@@ -324,7 +324,18 @@ class SiteSweep {
 
         try {
             page = await this.context.newPage();
-            await page.goto(record.url, { waitUntil: "load", timeout: this.pageTimeoutMs });
+            const response = await page.goto(record.url, { waitUntil: "load", timeout: this.pageTimeoutMs });
+
+            // Playwright resolves goto() on a 404 or a 500 — it only rejects
+            // when navigation itself fails. Without this check an error page
+            // counts as a tested page: it generates no scenarios, so it quietly
+            // inflates pagesTested and drags the headline coverage number away
+            // from what was actually exercised. An error status is a finding
+            // about the app, not a page worth sweeping.
+            const status = response?.status();
+            if (status !== undefined && status >= 400) {
+                throw new Error(`HTTP ${status}`);
+            }
         } catch (error) {
             record.status = "unreachable";
             record.reason = error.message;

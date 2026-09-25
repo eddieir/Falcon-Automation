@@ -307,3 +307,95 @@ test('crawler continues when one candidate is unclickable',async({page})=>{
  await page.setContent('<button id="disabled" disabled>Disabled</button><button id="enabled" onclick="window.clicked=true">Enabled</button>');
  const explorer=new Explorer(page);await explorer.explore();expect(await page.evaluate(()=>window.clicked)).toBe(true);expect(explorer.exploredElements.map(e=>e.selector)).toContain('#enabled');
 });
+
+// ── SiteSweep against a real browser (Phase 10) ─────────────────────────────
+// sitesweep.check.cjs covers the orchestration logic against a fake context.
+// These exercise the sweep through a real Chromium context, which is where
+// browser-level truths live that a fake page cannot model — most importantly
+// that Playwright's goto() resolves rather than rejects on an HTTP error, so
+// an error page reaches the sweep looking exactly like a healthy one.
+const Sweep = require("../../src/core/SiteSweep");
+
+const FIXTURE = {
+  "/": '<nav><a href="/about">About</a><a href="/pricing">Pricing</a></nav><button id="home-cta">Get started</button>',
+  "/about": '<nav><a href="/about">About</a><a href="/pricing">Pricing</a></nav><button id="about-cta">Contact us</button>',
+  "/pricing": '<nav><a href="/about">About</a><a href="/pricing">Pricing</a></nav><button id="pricing-cta">Buy</button>',
+};
+
+async function serveFixture(context, extra = {}) {
+  const routes = { ...FIXTURE, ...extra };
+  await context.route("http://sweep.test/**", (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    const body = routes[pathname];
+    if (body === undefined) {
+      return route.fulfill({ status: 404, contentType: "text/html", body: "<p>Not found</p>" });
+    }
+    if (typeof body === "object") return route.fulfill(body);
+    return route.fulfill({ contentType: "text/html", body });
+  });
+}
+
+test("sweep covers every discovered page and aggregates their results", async ({ page }) => {
+  const context = page.context();
+  await serveFixture(context);
+
+  const result = await new Sweep(context, { maxPages: 10 }).run("http://sweep.test/");
+
+  expect(result.coverage.pagesTested).toBe(3);
+  expect(result.coverage.pagesUnreachable).toBe(0);
+  expect(result.pages.map((p) => p.url).sort()).toEqual([
+    "http://sweep.test/",
+    "http://sweep.test/about",
+    "http://sweep.test/pricing",
+  ]);
+  // Every page contributed its own scenarios to the aggregate.
+  expect(result.coverage.scenariosGenerated).toBe(
+    result.pages.reduce((sum, p) => sum + p.scenariosGenerated, 0),
+  );
+  expect(result.coverage.scenariosGenerated).toBeGreaterThan(3);
+});
+
+test("sweep deduplicates the navigation that repeats on every page", async ({ page }) => {
+  const context = page.context();
+  await serveFixture(context);
+
+  const result = await new Sweep(context, { maxPages: 10 }).run("http://sweep.test/");
+
+  // The same two nav links exist on all three pages. They must be executed
+  // once, not once per page, and the later sightings must be reported rather
+  // than silently dropped.
+  expect(result.coverage.scenariosDeduplicated).toBeGreaterThan(0);
+  const deduped = result.pages.flatMap((p) => p.results.filter((r) => r.status === "deduped"));
+  expect(deduped.length).toBe(result.coverage.scenariosDeduplicated);
+  for (const row of deduped) expect(row.firstRunOn).toBeTruthy();
+});
+
+test("a page returning HTTP 404 is unreachable, not a tested page", async ({ page }) => {
+  const context = page.context();
+  // /pricing is served as a real 404. Playwright's goto() resolves on an error
+  // response rather than rejecting, so without an explicit status check this
+  // page counts as "tested" while containing nothing to test, inflating the
+  // coverage number with pages that were never really covered.
+  await serveFixture(context, { "/pricing": { status: 404, contentType: "text/html", body: "<p>Gone</p>" } });
+
+  const result = await new Sweep(context, { maxPages: 10 }).run("http://sweep.test/");
+
+  const pricing = result.pages.find((p) => p.url === "http://sweep.test/pricing");
+  expect(pricing.status).toBe("unreachable");
+  expect(pricing.reason).toMatch(/404/);
+  expect(result.coverage.pagesUnreachable).toBe(1);
+  expect(result.coverage.pagesTested).toBe(2);
+  // And it surfaces as a real failure rather than only a page-level status.
+  expect(pricing.results.some((r) => r.status === "failed")).toBe(true);
+});
+
+test("one dead page does not abort the sweep", async ({ page }) => {
+  const context = page.context();
+  await serveFixture(context, { "/about": { status: 500, contentType: "text/html", body: "boom" } });
+
+  const result = await new Sweep(context, { maxPages: 10 }).run("http://sweep.test/");
+
+  expect(result.coverage.pagesUnreachable).toBe(1);
+  expect(result.coverage.pagesTested).toBe(2);
+  expect(result.pages.find((p) => p.url === "http://sweep.test/pricing").status).toBe("tested");
+});
