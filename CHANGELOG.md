@@ -547,3 +547,51 @@ The dashboard gains a Coverage panel: pages tested against pages discovered, per
 Verified against real sweeps of `axonradar.netlify.app`: exit 1 on real failures, exit 1 against a domain that does not resolve, and a coverage block where `pagesDiscovered` equals tested plus skipped plus unreachable.
 
 Total regression suite after this phase: 383 `node:test` cases (up from 308) and 30 Playwright specs.
+
+---
+
+## Phase 10 follow-up — the defects the Phase 10 verification found elsewhere
+
+Re-verifying Phases 8 and 9 on real browsers, a real Postgres and real HTTP (written up in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) §1) produced twelve findings. Seven of them are the substance of Phases 11 and 12. These five were small enough to close immediately, and one of them was a live hole in the safety story quarantine exists to protect.
+
+### A scenario that has never passed could be quarantined, which turns a red run green
+
+**Problem:** quarantine exists so a genuinely unreliable interaction stops blocking CI. The module docblock and the README both say a `broken` scenario — one that fails every time — is never a quarantine candidate. Nothing enforced it. `FlakinessTracker.quarantine()` had no classification check, `POST /flakiness/quarantine` had none, and the dashboard rendered a working Quarantine button on `broken` rows. Reproduced end to end: quarantining a scenario that had failed three times out of three made a genuinely failing run exit 0.
+
+**Fix:** a new `quarantineEligibility(key)` is the single rule, and all three surfaces defer to it. The rule is "has this scenario passed at least once in its retained history", not "is its classification `broken`" — a scenario that has only ever failed twice is still classified `new`, because two samples are under the verdict threshold, and hiding that is exactly as dangerous. `quarantine()` throws with `code: "QUARANTINE_REFUSED"` and changes nothing: no flag, no ledger row, no socket event. The route answers 409 with the reason and the classification rather than a bare 500, `scripts/flakiness/review.js` prints `Refused: …` and exits 1, and the dashboard shows "Not quarantinable" with the reason on hover instead of a button that exists to be rejected. There is deliberately no force flag. A scenario becomes quarantinable the moment it genuinely passes once, which is the point at which "unreliable" is the true description.
+
+### Quarantining twice wrote two ledger rows for one decision
+
+**Problem:** `data/quarantine_decisions.json` is an audit ledger. Re-applying a quarantine appended a second row with a second attribution, so the ledger counted clicks rather than decisions.
+
+**Fix:** re-quarantining an already-quarantined scenario returns the entry and writes nothing. The first decision, and whoever made it, is what the ledger keeps.
+
+### A repeat Tier 3 sighting erased the description a reviewer was looking at
+
+**Problem:** `HealingTrust.recordPending()` defaults `description` to `""`, and every later sighting of the same selector overwrote the stored entry wholesale. A caller that omitted the description blanked one that was already there, so a pending fix could lose the human-readable label a reviewer needs to judge it.
+
+**Fix:** the description falls back to the existing entry's, the same way `firstSeen` already did.
+
+### The socket rate-limit assertion failed about one run in six
+
+**Problem:** `tests/unit/DashboardAuth.check.js` fired 130 simultaneous socket.io connections and asserted at least one was rejected by the limiter. socket.io's default transport is HTTP long-polling, and a burst that size overwhelms the polling layer itself: connections failed with `xhr poll error` before the handshake reached the limiter, so the limiter's message never appeared. Two failures in eleven local runs, on a hard step in the `test` job — a flaky gate on the suite whose entire purpose is honest signal.
+
+**Fix:** the burst forces the websocket transport and connects in serial batches of ten, so all 130 attempts are real handshakes. Fourteen consecutive local runs, zero failures. A handshake that still loses out to machine load is now reported as an informational line with its message rather than failing the build, because it says nothing about the limiter.
+
+### Untracked what the tooling regenerates
+
+`reports/test-report.json` and 38 files under `allure-report/` were tracked despite being gitignored, so the working tree went dirty on every run and every diff carried generated noise. Removed from the index; the ignore rules that were already there now apply.
+
+### Four documentation claims that weren't true
+
+`README.md` said the Playwright-native CI step carries `continue-on-error: true`; it doesn't, and hasn't since Phase 6 — a failure there fails the job, which is the more important thing to state correctly. The demo regeneration recipe passed `docs/demo/frames-axonradar` to `build-gif-list.js` while `capture-dashboard.js` only ever wrote to `docs/demo/frames`, so step 3 could not find step 2's output; `capture-dashboard.js` now takes the output directory as its third argument. That recipe also told you to wait for the dashboard before starting the capture, which lets a short run finish first and loses the empty and explore states — the capture script now waits for the port itself and the recipe starts both together. `scripts/flakiness/review.js list` was described as printing what's flaky, broken, or quarantined; it prints every tracked scenario and takes an optional classification filter. The Project Structure tree omitted `tests/regression/` entirely — the largest test directory in the repo.
+
+### Three CodeQL alerts on the Phase 10 branch
+
+CodeQL flagged `js/incomplete-url-substring-sanitization`, high severity, on three negative assertions in the regression suite — `assert.ok(!urls.includes("old.com"))` and two like it. No production code path was involved and no URL was being sanitized, but a substring host check is worth flagging wherever it appears, and an assertion is clearer as `assert.doesNotMatch(urls, /old\.com/)` anyway, which is the form the matching positive assertions already used.
+
+### Verification
+
+`tests/regression/flakiness.check.cjs` covers the eligibility rule directly: the `broken` case, the all-failing-but-still-`new` case, the refusal leaving no flag and no ledger row, and the scenario becoming quarantinable after one genuine pass. `tests/regression/dashboard.check.cjs` covers the 409 over real HTTP. `tests/regression/dashboard-ui.check.cjs` covers all three row states — no button, button, and Unquarantine on an already-quarantined row with no pass in history. `tests/regression/cli.check.cjs` gains the first coverage the review CLIs have had: the refusal exits 1 and writes no ledger, a genuinely flaky scenario quarantines and is attributed to `cli`, an unknown key exits 1, and `list` filters.
+
+Total regression suite after this pass: 399 `node:test` cases (up from 383) and 34 Playwright specs.
