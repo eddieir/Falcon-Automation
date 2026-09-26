@@ -724,7 +724,7 @@ A quarantine made locally was documented as "demonstrably applies on the next CI
 
 ## Phase 13 — Decisions that can't rot
 
-Phase 8 and Phase 9 create queues: pending healing fixes await review, and quarantined scenarios remain hidden from the build. Both can accumulate indefinitely while the system stays silent about the cost. Phase 13 makes both visible: a new `scripts/review/status.js` CLI surfaces staleness and gates CI, and quarantined scenarios that have passed their rehabilitation window surface as candidates for unquarantining.
+Phase 8 and Phase 9 create queues: pending healing fixes await review, and quarantined scenarios remain hidden from the build. Both can accumulate indefinitely while the system stays silent about the cost. Phase 13 makes both visible: a new `scripts/review/status.js` CLI reports staleness and runs in CI as a soft warning — it never fails a build over a stale queue, only over a genuinely invalid flag or threshold — and quarantined scenarios that have passed their rehabilitation window surface as candidates for unquarantining.
 
 ### Unreviewed pending fixes pay the Tier 3 cost silently
 

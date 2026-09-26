@@ -206,11 +206,16 @@ jobs:
       # always printed, but the step exits 0 for staleness alone, so this job's
       # red keeps meaning "a test failed" rather than "someone hasn't triaged the
       # review queue". It still exits non-zero on invalid arguments or invalid
-      # configuration — that's a real defect, not a backlog signal. On a fresh PR
-      # branch the state cache above restores nothing (the exact key embeds
-      # github.run_id so it never hits, and the falcon-state-<branch>- prefix has
-      # never been saved before), so this step has no queue to report and passes
-      # trivially; real debt only accumulates on main.
+      # configuration — that's a real defect, not a backlog signal.
+      #
+      # What this step can actually see: the exact cache key above embeds
+      # github.run_id, so it never hits on restore and every restore falls back
+      # to the falcon-state-<branch>- prefix. On a branch's very first run that
+      # prefix matches nothing and there is no queue to report; on later pushes
+      # to the same branch it does restore that branch's own earlier state. So a
+      # queue only accumulates across runs on a long-lived branch — in practice
+      # main — and a short-lived PR branch will usually have little or nothing
+      # here.
       - name: Check review queue staleness
         run: node scripts/review/status.js
 
