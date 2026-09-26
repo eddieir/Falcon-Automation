@@ -143,7 +143,7 @@ class ReportManager {
      * @param {Array}  opts.tests        - Array of { name, status, duration?, error? }
      *                                     status must be one of: "passed" | "failed" |
      *                                     "skipped" | "quarantined" | "deduped" | "unavailable"
-     * @param {Array}  [opts.uiIssues]   - Issues detected by ExploratoryAI (optional)
+     * @param {Array}  [opts.uiIssues]   - Issues detected by DOMIssueScanner (optional)
      * @param {Array}  [opts.healingEvents] - Events from HealingReport (optional)
      * @param {Object} [opts.coverage]   - SweepResult.coverage from SiteSweep (optional)
      * @param {Array}  [opts.pages]      - SweepResult per-page breakdown (optional)
