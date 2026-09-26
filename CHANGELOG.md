@@ -719,3 +719,57 @@ A quarantine made locally was documented as "demonstrably applies on the next CI
 ### Verification
 
 491 regression tests passing, 43 browser tests passing, 94.70% statement coverage, measured on Node 22. Every measurement was performed locally (no remote or mocked calls). Coverage improved from the Phase 9 baseline of 93.17% statements.
+
+---
+
+## Documentation Correction Pass
+
+External review identified capability claims that overstated what is AI, what is covered by CI, and what the Tier 3 approval gate protects. All findings were verified against the code and this pass corrects the documentation to reflect the actual system.
+
+### Overstated "AI" capabilities in README and terminology
+
+**Problem:** README title, key feature descriptions, and test-generation terminology implied machine learning or LLM calls throughout the platform. In reality, `PageAnalyser`, `TestGenerator`, and `ClickExplorer` make zero model calls; they are deterministic DOM-driven interaction generators. The scanner is pure heuristics. Only Tier 3 locator inference uses an LLM.
+
+**Fix:** Retitled README to "Self-Healing Test Automation with AI-Assisted Locator Recovery" to accurately reflect one tier's AI involvement. Replaced "AI test generation" with "DOM-driven interaction generation" to describe the actual mechanism. Split into separate capabilities: "DOM-driven interaction generation" and "AI-assisted locator recovery", clarifying which part uses the LLM. Renamed `ExploratoryAI` class to `DOMIssueScanner` (with references updated in `docs/PHASE-PLANS.md`) and describe it as a rule-based DOM scanner running heuristic checks that produce false positives, never as AI or confirmed-defect detection.
+
+### Browser coverage claim was inaccurate
+
+**Problem:** README stated "UI automation via Playwright (Chromium, Firefox, WebKit)" without distinguishing validated from experimental support. Only Chromium is installed and tested in CI; Firefox and WebKit exist at the `BrowserManager` level but are never exercised.
+
+**Fix:** Clarified that Chromium is continuously validated in CI; Firefox and WebKit are supported at the `BrowserManager` level but not covered by CI.
+
+### Healing trust section left impression that Tier 3 is gated before execution
+
+**Problem:** The healing trust section discussed approval without clearly stating whether the inferred selector is acted upon in the current run or queued for future runs. Readers could assume Tier 3 guesses are held for approval before being tried.
+
+**Fix:** Stated plainly that a Tier 3-inferred selector **is executed in the current run** (the click clicks, the fill fills), but **is not persisted** until approval. Included the practical consequence: an unreviewed inference can click a real element in the current run. Emphasized that Falcon should run only against staging/test environments, never production.
+
+### Rule-based scanning example was falsely presented as a confirmed defect
+
+**Problem:** Example flagged a mobile menu button's `aria-label` as "no accessible label", claimed it as a "real, actionable finding", and implied the 23 findings in the full sweep were all real defects. The element has an accessible label; the rule checks only `innerText`, so this is an intentional false-positive source.
+
+**Fix:** Rewrote the example as a known false positive illustrating the limits of rule-based heuristics. Clarified that the 23 UI issues across 11 pages are heuristic findings (potential issues), not confirmed defects. Noted that the scanner logs "may include false positives" exactly for this reason, and that human review distinguishes real problems from expected behavior.
+
+### Test counts in "Delivered so far" were stale
+
+**Problem:** Claimed "(308 + 30 tests)" when current measured figures are **491 `node:test` regression tests and 43 Playwright browser tests**.
+
+**Fix:** Updated counts to current measured values and added Phase 12 to the milestone list.
+
+### Tier 3 data privacy was underdocumented
+
+**Problem:** README mentioned "targeted DOM snapshot" but readers needed specifics about what attributes leave the network and what data is redacted. Also, the optional nature of Tier 3 (it requires `OPENAI_API_KEY` and does not run without it) was not explicit.
+
+**Fix:** Added "What Tier 3 sends to OpenAI" section documenting the exact element query, attribute serialization, truncation at 6,000 characters, and that non-password attributes are not redacted. Stated that Tier 3 requires `OPENAI_API_KEY` to be set and is effectively opt-in.
+
+### Missing safety warning for autonomous clicking
+
+**Problem:** README had no warning that Falcon autonomously clicks links and buttons during discovery, and that `ClickExplorer` interacts with several elements per page.
+
+**Fix:** Added prominent safety section before demos stating that Falcon should run only against staging/test/disposable environments, never production, because autonomous clicking (including unreviewed Tier 3 inferences) can act on real elements.
+
+### Updated log-line transcripts for new wording
+
+**Problem:** Terminal output transcript showed old class name and log lines that the Developer changed.
+
+**Fix:** Updated log lines to reflect new wording: DOMIssueScanner name, new log messages from the scanner ("Scanning the DOM for rule-based UI issues", "Rule-based scan flagged..."), new Step 4 wording ("Executing generated test scenarios" instead of "AI-generated"), and summary-writing log.

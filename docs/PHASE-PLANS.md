@@ -140,7 +140,7 @@ class SiteSweep {
     scenariosGenerated: number,
     scenariosDeduplicated: number,
     results: [ /* TestRunner result objects */ ],
-    uiIssues: [ /* ExploratoryAI issues */ ],
+    uiIssues: [ /* DOMIssueScanner issues */ ],
     durationMs: number
   }],
   coverage: {
@@ -178,7 +178,7 @@ class SiteSweep {
      `status: "unreachable"`, `reason: error.message`, and continue — one dead page must never abort
      the sweep.
    - `emit("pageStart", { url, index, total })`
-   - `ExploratoryAI.detectUIIssues()` (guarded; non-array → `[]`, matching current `falcon.js`)
+   - `DOMIssueScanner.detectUIIssues()` (guarded; non-array → `[]`, matching current `falcon.js`)
    - `TestGenerator.generateTestScenarios()`
    - Apply deduplication (below)
    - `new TestRunner(page, testPlan).executeTest()`
