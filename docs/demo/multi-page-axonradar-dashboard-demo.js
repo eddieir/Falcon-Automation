@@ -1,6 +1,6 @@
 /**
  * multi-page-axonradar-dashboard-demo.js — same real pipeline as
- * multi-page-axonradar-demo.js (ExploratoryAI -> TestGenerator ->
+ * multi-page-axonradar-demo.js (DOMIssueScanner -> TestGenerator ->
  * TestRunner, self-healing included) run against every real page of
  * https://axonradar.netlify.app, but this version streams every event to
  * the live Dashboard so the on-screen counters reflect the real,
@@ -10,7 +10,7 @@
  */
 const { chromium } = require("playwright");
 const path = require("path");
-const ExploratoryAI = require(path.join("..", "..", "src/core/ExploratoryAI"));
+const DOMIssueScanner = require(path.join("..", "..", "src/core/DOMIssueScanner"));
 const TestGenerator = require(path.join("..", "..", "src/core/TestGenerator"));
 const TestRunner    = require(path.join("..", "..", "src/core/TestRunner"));
 const Dashboard      = require(path.join("..", "..", "src/core/Dashboard"));
@@ -35,8 +35,8 @@ const PAGES = [
             await page.goto(url, { waitUntil: "load", timeout: 20000 });
             dashboard.emit("explorerPage", { url });
 
-            const exploratoryAI = new ExploratoryAI(page);
-            await exploratoryAI.detectUIIssues().catch(() => []);
+            const domIssueScanner = new DOMIssueScanner(page);
+            await domIssueScanner.detectUIIssues().catch(() => []);
 
             const generator = new TestGenerator(page);
             const testPlan = await generator.generateTestScenarios();

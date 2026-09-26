@@ -18,7 +18,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  *   unreachable    Set/array of URLs whose goto() rejects
  *   slow           { url: ms } extra time spent in goto()
  *   scenarios      { url: [scenario] } handed back by TestGenerator
- *   issues         { url: value } handed back by ExploratoryAI (any type)
+ *   issues         { url: value } handed back by DOMIssueScanner (any type)
  *   generatorThrows Set/array of URLs whose generateTestScenarios() rejects
  *   TestRunner     override the TestRunner double
  */
@@ -70,7 +70,7 @@ function harness(world = {}, opts = {}) {
     }
   }
 
-  class FakeExploratoryAI {
+  class FakeDOMIssueScanner {
     constructor(page) {
       this.page = page;
     }
@@ -126,7 +126,7 @@ function harness(world = {}, opts = {}) {
   const SiteSweep = load("src/core/SiteSweep.js", {
     "../../utils/Logger": silent,
     "./ClickExplorer": FakeClickExplorer,
-    "./ExploratoryAI": FakeExploratoryAI,
+    "./DOMIssueScanner": FakeDOMIssueScanner,
     "./TestGenerator": FakeTestGenerator,
     "./TestRunner": world.TestRunner || FakeTestRunner,
   });

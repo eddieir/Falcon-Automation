@@ -59,7 +59,7 @@ const mocks = {
     newContext: async () => ({ newPage: async () => page }),
     close: async () => {},
   }) } },
-  "./src/core/ExploratoryAI": class { async detectUIIssues() { return []; } },
+  "./src/core/DOMIssueScanner": class { async detectUIIssues() { return []; } },
   "./src/core/ClickExplorer": class {
     constructor() { this.visitedPages = new Set(["http://fixture.test/"]); }
     async explore() {}

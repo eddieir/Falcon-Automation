@@ -7,7 +7,7 @@ const { load, silent, temp } = require("./helpers.cjs");
 // SiteSweep.js to reuse its normalizeUrl() static — see the comment on
 // TestRunner._returnToPlanUrl() for why the require is lazy. Pulling in the
 // real module here would also pull in its whole production dependency graph
-// (ClickExplorer, ExploratoryAI, TestGenerator, the real Logger singleton),
+// (ClickExplorer, DOMIssueScanner, TestGenerator, the real Logger singleton),
 // which sitesweep.check.cjs deliberately avoids at the unit level. This is
 // the same normalizeUrl() logic, kept unit-test-local for the same reason.
 const normalizeUrlForTest = (raw) => {

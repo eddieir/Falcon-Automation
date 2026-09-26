@@ -1,6 +1,6 @@
-# Falcon-Automation: AI-Powered Test Automation Framework
+# Falcon-Automation: Self-Healing Test Automation with AI-Assisted Locator Recovery
 
-> **Status:** Active development · Phases 1–11 merged. Phase 10 makes a single run cover every page of an app instead of just the entry page; Phase 11 extends healing to every action type and stops a run that verified nothing from reporting a pass. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
+> **Status:** Active development · Phases 1–12 merged. Phase 10 covers every page of an app in one run; Phase 11 heals every action type; Phase 12 makes healing state and flaky decisions survive CI via cached state files and adds `--repeat=N` for immediate classification. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
 
 ---
 
@@ -20,20 +20,25 @@ Falcon was built to remove that tax, not paper over it. Not a bigger locator lib
 
 The rest of Falcon follows from that same instinct. If tests shouldn't need constant hand-holding to survive a redesign, they also shouldn't need to be hand-written in the first place for every new page, so Falcon crawls the app itself, reads the live DOM, and generates the test plan. If a report says "passed," that needs to be true, not aspirational, so every result is a real pass/fail/skip tally, not a hopeful default. And if your team is going to trust an AI-healed selector in production, you need to be able to see exactly what it healed and why, and approve it yourself, not take it on faith. The same goes for a red build: before you quarantine it, you need to know whether it's actually broken or just unreliable, not guess.
 
+## ⚠️ Safety Requirements
+
+**Falcon autonomously clicks links and buttons and fills form controls during discovery.** `ClickExplorer` clicks several elements per page, and `--allow-cross-origin` widens that further. Always run Falcon against a **staging, test, or otherwise disposable environment** — never production. An unreviewed AI-inferred selector can click a real element, which in a real application could delete data, submit a payment, or publish content.
+
 **What that looks like in practice:**
 
-- **UI automation** via Playwright (Chromium, Firefox, WebKit)
+- **UI automation** via Playwright — Chromium is continuously validated in CI; Firefox and WebKit are supported at the `BrowserManager` level but not covered by CI
 - **Three-tier self-healing, on every action:** direct attempt (AdaptiveRetry) → LocatorStore → LLM inference (gpt-4o-mini), for clicks, form fills and dropdown selections alike
 - **Whole-app coverage:** one command sweeps every page it discovers, bounded by a page cap and a time budget, deduplicating shared navigation and reporting every page it did *not* cover, with a reason
-- **Autonomous UI exploration:** recursive crawler (ClickExplorer) + DOM-based defect detection (ExploratoryAI)
-- **AI test generation:** PageAnalyser maps the DOM; TestGenerator creates scenarios; TestRunner executes them with full healing
+- **Autonomous UI exploration:** recursive crawler (ClickExplorer) + rule-based DOM issue scanning (DOMIssueScanner)
+- **DOM-driven interaction generation:** PageAnalyser maps the DOM; TestGenerator creates scenarios; TestRunner executes them with full healing
+- **AI-assisted locator recovery:** when an interaction's selector fails, Tier 3 (gpt-4o-mini) infers a replacement and a human approves it before reuse
 - **Visual regression testing:** pixel-level screenshot comparison with diff images and cumulative summary
 - **Real-time live dashboard:** express + socket.io stream every test event to a browser UI at `localhost:3000`
 - **Accurate reporting:** structured pass/fail/skip tallying + Allure HTML report via `allure-playwright`
 - **Database testing:** PostgreSQL via `pg` Pool with full mTLS support
 - **CI/CD ready:** GitHub Actions pipeline with Allure report upload
 
-**Delivered so far:** core AI healing + reporting foundation → a stability audit (14 defects fixed) → visual regression, live dashboard, AI test generation, and Allure reporting → repository hygiene → a single consolidated self-healing engine with a bounded LocatorStore → real Postgres coverage in CI → a token-gated dashboard → a comprehensive `node:test` + Playwright regression layer (308 + 30 tests, a second CI job) and a real selector-anchoring fix in `PageAnalyser` → an approval gate for AI-inferred selector fixes, so a Tier 3 guess is reviewed by a human before it's ever trusted again → flaky-test detection and quarantine, so a genuinely unreliable interaction stops blocking CI without ever being silently hidden → whole-app coverage, so one run sweeps every page it finds instead of only the one you named. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md). See [Roadmap](#roadmap) for what's next.
+**Delivered so far:** core healing + reporting foundation → a stability audit (14 defects fixed) → visual regression, live dashboard, DOM-driven test generation, and Allure reporting → repository hygiene → a single consolidated self-healing engine with a bounded LocatorStore → real Postgres coverage in CI → a token-gated dashboard → a comprehensive regression layer (491 `node:test` cases and 43 Playwright browser tests across two CI jobs) and a real selector-anchoring fix in `PageAnalyser` → an approval gate for AI-inferred selector fixes, so a Tier 3 guess is reviewed by a human before it's ever trusted again → flaky-test detection and quarantine, so a genuinely unreliable interaction stops blocking CI without ever being silently hidden → whole-app coverage, so one run sweeps every page it finds instead of only the one you named → healing state and flaky decisions that survive CI via cached state files. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md). See [Roadmap](#roadmap) for what's next.
 
 ---
 
@@ -124,15 +129,16 @@ node falcon.js --url=https://axonradar.netlify.app --single-page
 🟢 INFO: 🖥  Dashboard → http://localhost:3000
 🟢 INFO: 🌍 Navigating to https://axonradar.netlify.app/…
 🟢 INFO: ✅ Loaded: https://axonradar.netlify.app/
-🟢 INFO: 🔍 Step 1: Detecting UI issues with ExploratoryAI…
-🟢 INFO: 🧐 AI detected 2 potential UI issues.
+🟢 INFO: 🔍 Step 1: Detecting UI issues with DOMIssueScanner…
+🟢 INFO: 🔍 Scanning the DOM for rule-based UI issues...
+🟢 INFO: 🧐 Rule-based scan flagged 2 potential UI issue(s) — heuristics, may include false positives.
 🟢 INFO:   → 2 issue(s) found
 🟢 INFO: 🔍 Step 2: Mapping site with ClickExplorer…
 🟢 INFO:   → 1 page(s) explored
-🟢 INFO: 🤖 Step 3: Generating test scenarios from DOM analysis…
+🟢 INFO: 🔍 Step 3: Generating test scenarios from DOM analysis…
 🟢 INFO: ✅ [PageAnalyser] Found 66 interactive elements
 🟢 INFO:   → 4 scenario(s) generated for https://axonradar.netlify.app/
-🟢 INFO: ▶  Step 4: Executing AI-generated test scenarios…
+🟢 INFO: ▶  Step 4: Executing generated test scenarios (repeat=1)…
 🟢 INFO: ▶ Executing [1/1]: Click RESCAN ↻ (click)
 🟢 INFO: 🔹 Tier 1: Trying Click RESCAN ↻ (html:nth-of-type(1) > body:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > button:nth-of-type(1))
 🟢 INFO: ✅ Passed: Click RESCAN ↻ (59ms)
@@ -142,6 +148,7 @@ node falcon.js --url=https://axonradar.netlify.app --single-page
 🟢 INFO: ✅ Passed: Navigate: News (31ms)
 🟢 INFO: ▶ Executing [1/1]: Navigate: Models (click)
 🟢 INFO: ✅ Passed: Navigate: Models (37ms)
+🟢 INFO: 🛠 Writing exploratory scan summary...
 🟢 INFO: 📊 Exploratory Test Summary:
 🟢 INFO: ❗ UI Issues Found:  2
 🟢 INFO: 🌍 Pages Explored:  1
@@ -153,7 +160,7 @@ node falcon.js --url=https://axonradar.netlify.app --single-page
    Report written to: reports/test-report.json
 ```
 
-Those 2 UI issues aren't noise. `ExploratoryAI` correctly flagged the site's mobile menu button, unprompted, with no rule written for this site: a hidden element with no accessible label (`<button aria-label="Open menu" class="menu-toggle"><span></span><span></span></button>`). That's a real, actionable finding a reviewer can act on, not a fabricated pass rate. Run across all 11 pages, this same detection is what produced the 23 UI issues in the full sweep above.
+Those 2 UI issues aren't fabricated, but they illustrate the limits of rule-based heuristics. `DOMIssueScanner` flagged the site's mobile menu button as a known false positive: a hidden element with `innerText` empty (`<button aria-label="Open menu" class="menu-toggle"><span></span><span></span></button>`). The element **does** have an accessible label, and a menu button hidden at desktop width is behaving as designed. The rule checks only `innerText`, not accessible names, so this exact false positive recurs. The 23 UI issues flagged across all 11 pages are heuristic findings, not confirmed defects — a human reviewer can distinguish real problems from expected behavior. This is why `DOMIssueScanner` reports them as "potential" issues and notes that heuristics may include false positives.
 
 ### Self-healing, demonstrated against the same real site
 
@@ -177,7 +184,7 @@ Tier 1 genuinely exhausts its 3 retries with real exponential backoff (not a moc
 
 ### Healing trust, demonstrated against the same real site
 
-A Tier 2 fix (above) was already reviewed once, which is how it got into `LocatorStore` in the first place, so it's reused immediately. A Tier 3 fix is different: an LLM guess that's never been looked at by anyone. Below, the same site is hit with a selector that has no cached fix at all, so Tier 1 and Tier 2 both genuinely fail and Tier 3 is asked. The LLM call itself is stubbed (see [`docs/demo/healing-trust-axonradar-demo.js`](docs/demo/healing-trust-axonradar-demo.js) for why), but everything downstream, the real click, the pending-review entry, the approval gate, and the persisted `LocatorStore` write, is the real code path:
+A Tier 2 fix (above) was already reviewed once, which is how it got into `LocatorStore` in the first place, so it's reused immediately. A Tier 3 fix is different: an LLM guess that's never been looked at by anyone. The inferred selector **is executed in the current run** — a click clicks, a fill fills — but **it is not persisted** until a human approves it. Below, the same site is hit with a selector that has no cached fix at all, so Tier 1 and Tier 2 both genuinely fail and Tier 3 is asked. The LLM call itself is stubbed (see [`docs/demo/healing-trust-axonradar-demo.js`](docs/demo/healing-trust-axonradar-demo.js) for why), but everything downstream, the real click, the pending-review entry, the approval gate, and the persisted `LocatorStore` write, is the real code path. The consequence: an unreviewed inference can click a real element in the current run, which is why Falcon should run only against staging or test environments, never production:
 
 ```
 === Step 1: a selector breaks with no cached fix. Tier 1 and Tier 2 both fail, so Tier 3 is asked ===
@@ -213,6 +220,10 @@ node scripts/healing/review.js reject  "<original-selector>"
 ```
 
 Reproduce the demo above yourself: `node docs/demo/healing-trust-axonradar-demo.js`.
+
+### What Tier 3 sends to OpenAI
+
+Tier 3 sends a targeted DOM snapshot to `gpt-4o-mini` (temperature 0), not the full page. The snapshot includes all interactive elements (`input, button, a, select, textarea, label, [data-testid], [aria-label]`), serializing each element's tag name and **all of its HTML attributes**, then truncating to 6,000 characters. Element labels, IDs, test IDs, names, classes, URLs, and button text in that snapshot leave your network. Non-password attributes are sent as-is; password-field `value` attributes are specifically stripped. This means readable content and structural hints reach OpenAI to help the model find the right element. Tier 3 requires `OPENAI_API_KEY` to be set and does not fall back to lower tiers if the key is missing — it simply does not run, so Tier 3 is effectively opt-in. A run with no API key still passes Tiers 1 and 2; it just never reaches the LLM.
 
 ### Healing every action, demonstrated against the same real site
 
@@ -411,7 +422,7 @@ Each one exits non-zero if its own assertions fail, so a demo cannot quietly suc
 
 ```mermaid
 flowchart TD
-    CLI["falcon.js: CLI entry point"] --> Explore["ExploratoryAI\nDOM-based defect scan"]
+    CLI["falcon.js: CLI entry point"] --> Explore["DOMIssueScanner\nrule-based UI issue scan"]
     CLI --> Crawl["ClickExplorer\nrecursive autonomous crawl"]
     Crawl --> Analyse["PageAnalyser\nDOM → element map"]
     Analyse --> Gen["TestGenerator\nscenario plan"]
@@ -486,7 +497,7 @@ Falcon-Automation/
 │       ├── Dashboard.js             # express + socket.io live dashboard server
 │       ├── DBClient.js              # PostgreSQL pool with mTLS support
 │       ├── ErrorHandler.js
-│       ├── ExploratoryAI.js         # DOM-based UI defect detector
+│       ├── DOMIssueScanner.js       # Rule-based DOM issue scanner (heuristic findings, may include false positives)
 │       ├── FlakinessTracker.js      # Pass/fail history, classification, quarantine gate (Phase 9)
 │       ├── Middleware.js            # Lifecycle hooks + cross-process event emit
 │       ├── PageAnalyser.js          # DOM scanner (single source of truth; see CHANGELOG.md#phase-3--competitive-features)

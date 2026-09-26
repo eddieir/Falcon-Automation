@@ -4,8 +4,8 @@ const Logger = require("../../utils/Logger");
  * ClickExplorer — recursive web crawler for autonomous UI exploration.
  *
  * Discovers and clicks interactive elements depth-first, recording visited
- * URLs to prevent cycles.  Designed to work alongside ExploratoryAI: the
- * crawler surfaces pages; ExploratoryAI analyses each one for defects.
+ * URLs to prevent cycles.  Designed to work alongside DOMIssueScanner: the
+ * crawler surfaces pages; DOMIssueScanner analyses each one for defects.
  *
  * Key fix (Phase 1):
  *   The previous implementation built selectors using `[innerText="…"]`,
