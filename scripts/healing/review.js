@@ -24,6 +24,14 @@ function printList(entries) {
         console.log(`    -> ${entry.suggested}`);
         console.log(`    description: ${entry.description || "(none)"}`);
         console.log(`    seen ${entry.occurrences}x, last ${entry.lastSeen}`);
+        console.log(`    Tier 3 invocations: ${entry.tier3Invocations ?? 0}`);
+        // A legacy entry recorded before Phase 13 has no `previouslyRejected`
+        // field at all — treat that the same as count 0, never crash on it.
+        const previouslyRejected = entry.previouslyRejected;
+        if (previouslyRejected && previouslyRejected.count > 0) {
+            const lastBy = previouslyRejected.lastRejectedBy ?? "(unknown)";
+            console.log(`    ⚠ previously rejected ${previouslyRejected.count} time(s), last by ${lastBy} at ${previouslyRejected.lastRejectedAt}`);
+        }
         console.log("");
     }
 }
