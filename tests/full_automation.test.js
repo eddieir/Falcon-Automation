@@ -14,7 +14,7 @@
 const { test, expect } = require("@playwright/test");
 const axios            = require("axios");
 
-// ── 1. AI-generated test plan (illustrative) ──────────────────────────────
+// ── 1. Hand-written scenarios (illustrative) ──────────────────────────────
 test.describe("Falcon Full Automation Suite", () => {
 
     // ── Login test ──────────────────────────────────────────────────────
