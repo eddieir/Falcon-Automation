@@ -5,6 +5,17 @@ on:
     branches: [New_era_Falcon, main, "feat/**", "test/**"]
   pull_request:
     branches: [New_era_Falcon, main]
+  # Operator convenience only — push/pull_request never populate `inputs.*`,
+  # so the `test` job's falcon.js invocation below hardcodes --repeat=3
+  # rather than referencing ${{ inputs.repeat }}, which would silently
+  # resolve to an empty string on every event that actually triggers CI.
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: "Times to repeat each scenario's test plan (falcon.js --repeat)"
+        type: number
+        default: 3
+        required: false
 
 permissions:
   contents: read
@@ -148,9 +159,50 @@ jobs:
       - name: Run Order DB test
         run: node tests/db/OrderDBTest.js
 
+      # ── Falcon flakiness/quarantine/healing state (Phase 12) ────────────────
+      # Restores the four gitignored data/*.json state files the tracker code
+      # reads/writes; NOT the whole data/ dir — data/locator_store.json is
+      # Phase 8's approved Tier-2 selector cache and must not be restored
+      # here, or Phase 8 healing behavior in CI would silently change.
+      - name: Restore Falcon state (flakiness/quarantine/healing)
+        id: restore-falcon-state
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            data/scenario_history.json
+            data/quarantine_decisions.json
+            data/healing_pending.json
+            data/healing_decisions.json
+          key: falcon-state-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            falcon-state-${{ github.ref_name }}-
+
       # ── Autonomous exploration (no dashboard in CI) ─────────────────────────
       - name: Run Falcon autonomous pipeline
-        run: node falcon.js --no-dashboard
+        run: node falcon.js --no-dashboard --repeat=3
+
+      # Runs even if the pipeline step above failed — the exact case where a
+      # new failure sample must be persisted for D2/quarantine to accumulate.
+      # An explicit, unconditional save is used instead of relying on
+      # actions/cache@v4's automatic post-job save, whose behavior after a
+      # failing later step is unverified in this repo. continue-on-error is
+      # deliberately scoped to this step alone: actions/cache/save@v4 fails
+      # with a Path Validation Error when none of the listed paths exist, so
+      # with if: always() a cold run where falcon.js dies before writing any
+      # state would otherwise turn the job red for a pure infrastructure
+      # reason unrelated to the quality gate (which is the falcon.js step's
+      # own exit code, untouched by this).
+      - name: Save Falcon state (flakiness/quarantine/healing)
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            data/scenario_history.json
+            data/quarantine_decisions.json
+            data/healing_pending.json
+            data/healing_decisions.json
+          key: falcon-state-${{ github.ref_name }}-${{ github.run_id }}
 
       # ── Playwright native suite (with Allure reporter) ──────────────────────
       - name: Run Playwright native tests
