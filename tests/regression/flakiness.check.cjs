@@ -611,6 +611,51 @@ test("AC-08: when every tracked entry is protected and the cap is still exceeded
   assert.match(evictionWarnings[0], /501/);
 });
 
+// Built directly against `tracker.scenarios` (never through `record()`, which
+// triggers its own eviction pass on every call and would silently re-shape
+// the very edge case being constructed here) so `_evictLeastRecentlyUsed()`
+// runs exactly once against a known, fixed starting shape.
+function seedScenario(tracker, locator, { lastUsed, quarantined = false }) {
+  const key = `https://example.com::click::${locator}`;
+  tracker._setScenario(key, {
+    key, url: "https://example.com", action: "click", locator,
+    history: [{ status: "passed", timestamp: new Date().toISOString(), duration: null, errorType: null, outcome: null }],
+    classification: "new", flakeRate: 0, sampleSize: 1,
+    lastUsed, quarantined, quarantinedAt: null, quarantinedBy: null,
+  });
+  return key;
+}
+
+test("P12-10 (AC-08): a partial breach — evicting every unprotected entry still leaves the cap exceeded — logs exactly one warning with tracked/protected/evicted/shortfall counts", (t) => {
+  const { tracker, warnings } = trackerAt(t);
+  const protectedCount = 505;
+  const unprotectedCount = 5;
+  for (let i = 0; i < protectedCount; i++) seedScenario(tracker, `#p${i}`, { lastUsed: i, quarantined: true });
+  for (let i = 0; i < unprotectedCount; i++) seedScenario(tracker, `#u${i}`, { lastUsed: 1000 + i });
+  const totalBefore = Object.keys(tracker.scenarios).length;
+  assert.equal(totalBefore, protectedCount + unprotectedCount);
+
+  tracker._evictLeastRecentlyUsed();
+
+  for (let i = 0; i < protectedCount; i++) {
+    assert.equal(tracker._hasScenario(`https://example.com::click::#p${i}`), true, "protected entries must never be evicted");
+  }
+  for (let i = 0; i < unprotectedCount; i++) {
+    assert.equal(tracker._hasScenario(`https://example.com::click::#u${i}`), false, "every unprotected entry is still evicted");
+  }
+  const totalAfter = Object.keys(tracker.scenarios).length;
+  assert.equal(totalAfter, protectedCount);
+  assert.ok(totalAfter > 500, "the cap remains exceeded after evicting every unprotected entry"); // MAX_TRACKED_SCENARIOS
+
+  const evictionWarnings = warnings.filter((w) => w.includes("eviction"));
+  assert.equal(evictionWarnings.length, 1, "a partial breach must warn exactly once, never silently");
+  const [message] = evictionWarnings;
+  assert.match(message, new RegExp(String(totalBefore)), "message must name the tracked total");
+  assert.match(message, new RegExp(String(protectedCount)), "message must name the protected count");
+  assert.match(message, new RegExp(String(unprotectedCount)), "message must name how many were evicted");
+  assert.match(message, new RegExp(String(totalAfter - 500)), "message must name the remaining shortfall over the cap"); // MAX_TRACKED_SCENARIOS
+});
+
 // ── D4/Q10: ledger reconciliation on _reload() ──
 
 test("D4/Q10: on reload, the ledger's latest verdict wins over a disagreeing history flag", (t) => {

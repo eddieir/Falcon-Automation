@@ -29,8 +29,16 @@ const { root, load, temp } = require("./helpers.cjs");
 //      an "unavailable" result — AC-07's exit-code consumer, exercised only
 //      in-process (via ReportManager directly) by the delivered tests.
 //   3. FlakinessTracker._evictLeastRecentlyUsed()'s partially-protected-over-
-//      cap case: some entries protected, but not enough of them to keep the
-//      cap. The implementer flagged this exact gap as untested.
+//      cap case: some entries protected, but not enough unprotected ones to
+//      close the shortfall. The implementer flagged this exact gap as
+//      untested; it was originally characterized here as a silent breach
+//      (P12-09 finding, P2) and reported to the coordinator. P12-10 fixed it
+//      — the warning condition now fires whenever eviction cannot fully
+//      restore the cap, naming tracked/protected/evicted/shortfall counts —
+//      and the two tests below were updated accordingly: the exact-cap case
+//      (line ~205) still expects no warning (no shortfall), and the
+//      over-cap case (line ~230) now asserts the corrected single warning
+//      and its four counts, not silence.
 
 // ── 1 & 2: a from-scratch CLI preload for the --single-page path ───────────
 //
@@ -227,38 +235,51 @@ test("FlakinessTracker eviction: partially protected and still over cap evicts e
   assert.equal(evictionWarnings.length, 0, "cap was reached without needing every unprotected entry, so no warning is expected here");
 });
 
-test("FlakinessTracker eviction: protected pool alone already exceeds the cap — every unprotected entry is evicted, the cap stays silently exceeded, and no warning fires", (t) => {
+test("P12-10 fix: protected pool alone already exceeds the cap — every unprotected entry is still evicted, the cap stays exceeded, but now exactly one warning fires naming tracked/protected/evicted/shortfall counts", (t) => {
   const { tracker, warnings } = trackerAt(t);
   const MAX = 500;
-  // To force "even evicting every unprotected entry still leaves the cap
-  // exceeded", the protected pool alone must already exceed MAX. This is the
-  // literal reading of `_evictLeastRecentlyUsed()`'s
-  // `toEvict = Math.min(keys.length - MAX_TRACKED_SCENARIOS, unprotected.length)`:
-  // when the protected pool alone is over cap, `unprotected.length` is the
-  // binding constraint and the result stays over cap.
+  // Forces "even evicting every unprotected entry still leaves the cap
+  // exceeded": the protected pool alone already exceeds MAX. Per
+  // `_evictLeastRecentlyUsed()`'s `toEvict = Math.min(overflow,
+  // unprotected.length)`, `unprotected.length` is the binding constraint
+  // here, so a shortfall remains after eviction — which, since the P12-10
+  // fix, is exactly the case the new Logger.warning condition
+  // (`shortfall = overflow - toEvict > 0`) catches.
   const reallyProtected = 550;
   for (let i = 0; i < reallyProtected; i++) seedEntry(tracker, `#p${i}`, { lastUsed: i, quarantined: true });
   const smallUnprotected = 10;
   for (let i = 0; i < smallUnprotected; i++) seedEntry(tracker, `#u${i}`, { lastUsed: 1000 + i });
   const totalBefore = Object.keys(tracker.scenarios).length;
   assert.equal(totalBefore, reallyProtected + smallUnprotected);
+  const overflow = totalBefore - MAX;
+  const expectedEvicted = Math.min(overflow, smallUnprotected); // = smallUnprotected here (10 < 60)
+  const expectedShortfall = overflow - expectedEvicted;
 
   tracker._evictLeastRecentlyUsed();
 
   const totalAfter = Object.keys(tracker.scenarios).length;
   // Every unprotected entry is gone...
   for (let i = 0; i < smallUnprotected; i++) {
-    assert.equal(tracker._hasScenario(`https://example.com::click::#u${i}`), false);
+    assert.equal(tracker._hasScenario(`https://example.com::click::#u${i}`), false, "every unprotected entry is still evicted");
   }
-  // ...every protected entry survives...
+  // ...every protected entry survives (the fix must never touch a protected entry)...
   for (let i = 0; i < reallyProtected; i++) {
-    assert.equal(tracker._hasScenario(`https://example.com::click::#p${i}`), true);
+    assert.equal(tracker._hasScenario(`https://example.com::click::#p${i}`), true, "protected entries must never be evicted");
   }
-  // ...and yet the tracked total is STILL well over MAX_TRACKED_SCENARIOS —
-  // the cap is not honored in this shape, and unlike the "all protected"
-  // branch, this silent partial breach logs no warning at all.
+  // ...and the tracked total is STILL over MAX_TRACKED_SCENARIOS — the fix
+  // does not (and per D4 must not) reach into the protected pool to force
+  // the cap; it only changes whether the shortfall is reported.
   assert.equal(totalAfter, reallyProtected);
-  assert.ok(totalAfter > MAX, "documents that the cap is silently exceeded when protected entries alone already exceed it");
+  assert.ok(totalAfter > MAX, "the cap remains exceeded — the fix reports the breach, it does not evict a human decision to close it");
+
   const evictionWarnings = warnings.filter((w) => w.includes("eviction"));
-  assert.equal(evictionWarnings.length, 0, "no warning is logged for this partial, silent cap breach — only the all-protected branch warns");
+  // Exactly one warning per call — not one per evicted/protected entry, and
+  // not silent as it was pre-fix (P12-09/P2).
+  assert.equal(evictionWarnings.length, 1, "a partial breach must warn exactly once per call, never silently and never once-per-entry");
+  const [message] = evictionWarnings;
+  assert.match(message, new RegExp(String(totalBefore)), "warning must name the tracked total");
+  assert.match(message, new RegExp(String(reallyProtected)), "warning must name the protected count");
+  assert.match(message, new RegExp(String(expectedEvicted)), "warning must name how many unprotected entries were actually evicted");
+  assert.match(message, new RegExp(String(expectedShortfall)), "warning must name the remaining shortfall over the cap");
+  assert.equal(expectedShortfall, totalAfter - MAX, "sanity: the shortfall this test expects matches the actual post-eviction overage");
 });
