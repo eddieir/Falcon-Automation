@@ -267,8 +267,13 @@ test("warnings from both read and write paths carry path/error context but never
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const { Store, warnings } = storeWithLogger();
   const file = path.join(dir, "state.json");
-  const secretLookingContent = "{ \"password\": \"do-not-log-me\", broken";
-  fs.writeFileSync(file, secretLookingContent);
+  // Not a real secret and not credential-shaped (no password/token/secret/
+  // api_key field name, no random-looking value) — just a distinctive,
+  // obviously-synthetic canary token embedded in otherwise-invalid JSON, so
+  // the corrupt-file path still fires while the fixture can never be
+  // mistaken for live credentials by a human or a scanner.
+  const canaryContent = "{ \"note\": \"FALCON-TEST-CANARY-8f2c9d1e\", broken";
+  fs.writeFileSync(file, canaryContent);
 
   Store.readJsonSync(file, {});
 
@@ -279,7 +284,7 @@ test("warnings from both read and write paths carry path/error context but never
 
   assert.ok(warnings.length >= 2);
   for (const w of warnings) {
-    assert.ok(!w.includes("do-not-log-me"), `warning leaked file contents: ${w}`);
+    assert.ok(!w.includes("FALCON-TEST-CANARY-8f2c9d1e"), `warning leaked file contents: ${w}`);
   }
   assert.ok(warnings.every((w) => w.includes(file)));
 });
