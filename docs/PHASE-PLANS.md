@@ -54,21 +54,21 @@ quarantine genuinely flips the process exit code 1 → 0 while keeping the failu
 quarantining one scenario does not mask another regression (`PARTIAL`, exit 1); all eight new
 dashboard routes return 401 unauthenticated with zero side effects; prototype-pollution defenses for
 `__proto__`/`constructor`/`toString` keys genuinely hold; history caps hold (60 → 20, 700 → 500).
-CI green, 308 `node:test` + 30 Playwright, 94.79% statement coverage, zero open CodeQL alerts.
+CI green, zero open CodeQL alerts.
 
 **Defects found.** These are the backlog the phases below are built around:
 
 | # | Severity | Defect | Addressed by |
 |---|---|---|---|
 | D1 | Critical | A `broken` scenario (fails every time) can be quarantined in one click. No classification guard in `FlakinessTracker.quarantine()`, none on `POST /flakiness/quarantine`, and `renderFlaky()` renders `broken` rows with a working Quarantine button. Verified: quarantining a 3/3-failing scenario made a genuinely failing run exit 0. Contradicts the module docblock and README. | **Closed** — Phase 10 follow-up |
-| D2 | Critical | Flaky detection is inert in CI. `data/` is never cached between runs, and each scenario runs once per run against a 3-sample minimum, so every scenario in CI is permanently `new`. Nothing classifies, `flakyDetected` never fires, local quarantines never reach CI. | Phase 11 |
+| D2 | Critical | Flaky detection is inert in CI. `data/` is never cached between runs, and each scenario runs once per run against a 3-sample minimum, so every scenario in CI is permanently `new`. Nothing classifies, `flakyDetected` never fires, local quarantines never reach CI. | **Phase 12** |
 | D3 | Critical | `falcon.js` discards the crawler's results — it re-navigates to root and generates for that page only. Its own header comment claims otherwise. | **Phase 10** |
-| D4 | Major | `_evictLeastRecentlyUsed()` sorts on `lastUsed` with no exemption for quarantined entries. Verified: quarantine + 600 new scenarios → decision gone, failures block again, nothing logged. | Phase 11 |
-| D5 | Major | A sometimes-missing `type`/`select` target is marked `skipped`, and `skipped` is never recorded — so the textbook flake shape classifies as `stable`, 0% fail rate. | Phase 11 |
+| D4 | Major | `_evictLeastRecentlyUsed()` sorts on `lastUsed` with no exemption for quarantined entries. Verified: quarantine + 600 new scenarios → decision gone, failures block again, nothing logged. | **Phase 12** |
+| D5 | Major | A sometimes-missing `type`/`select` target is marked `skipped`, and `skipped` is never recorded — so the textbook flake shape classifies as `stable`, 0% fail rate. | **Phase 11 (reporting) / Phase 12 (classification)** |
 | D6 | Major | `DashboardAuth.check.js`'s socket rate-limit assertion fails ~18% of runs (2 of 11): `xhr poll error` from the overloaded polling transport masks the limiter's own message. Hard step in the `test` job. | **Closed** — Phase 10 follow-up |
-| D7 | Major | `HealingTrust.pending` and `.decisions` have no cap or eviction, nor does `quarantine_decisions.json`. 5,000 decisions → 1,500,329 bytes, full-file rewrite per decision, read synchronously at require time. `LocatorStore` stayed capped at 500 through the same test. | Phase 12 |
-| D8 | Major | State saves are a plain `writeFile`, not temp+rename, and `_loadJson` recovers from corruption to empty with no log line — silently voiding the entire review queue or every quarantine. | Phase 11 |
-| D9 | Minor | Rejection memory is written to disk and surfaced nowhere: not by `recordPending`, no route, not in `review.js list`. README claims otherwise. | Phase 12 |
+| D7 | Major | `HealingTrust.pending` and `.decisions` have no cap or eviction, nor does `quarantine_decisions.json`. 5,000 decisions → 1,500,329 bytes, full-file rewrite per decision, read synchronously at require time. `LocatorStore` stayed capped at 500 through the same test. | Phase 13 |
+| D8 | Major | State saves are a plain `writeFile`, not temp+rename, and `_loadJson` recovers from corruption to empty with no log line — silently voiding the entire review queue or every quarantine. | **Phase 12** |
+| D9 | Minor | Rejection memory is written to disk and surfaced nowhere: not by `recordPending`, no route, not in `review.js list`. README claims otherwise. | **Phase 13** |
 | D10 | Minor | `reports/test-report.json` and 38 `allure-report/` files are tracked despite being gitignored; the tree goes dirty on every run. | **Closed** — Phase 10 follow-up |
 | D11 | Minor | Four false doc claims: a `continue-on-error: true` that isn't in `ci.yml`; a demo regeneration recipe whose frame paths don't match; `review.js list` described as filtered when it isn't; Project Structure tree omits `tests/regression/`. | **Closed** — Phase 10 follow-up |
 | D12 | Minor | `recordPending` resets an existing description to `""` when the caller omits one; double-quarantine appends a duplicate ledger row. | **Closed** — Phase 10 follow-up |
@@ -77,6 +77,12 @@ CI green, 308 `node:test` + 30 Playwright, 94.79% statement coverage, zero open 
 | D15 | Major | Scenarios keep executing after a navigation has changed the page under them, so they run against a DOM their plan was never generated from. | **Phase 11** |
 
 **Closed in the Phase 10 follow-up (see [CHANGELOG.md](../CHANGELOG.md)):** D1, D6, D10, D11, D12. D1 is enforced in one place — `FlakinessTracker.quarantineEligibility()` — with the route, the CLI and the dashboard all deferring to it, and the rule is "has passed at least once", not "isn't classified `broken`", so an all-failing scenario still under the sample threshold can't be hidden either. The seven remaining defects are carried by the phases named against them; none of them has moved.
+
+**Phase 12 verification:** 491 regression tests passing, 43 browser tests passing, 94.70% statement
+coverage, measured on Node 22. Every measurement was performed locally (no remote or mocked calls).
+Coverage improved from the pre-Phase-12 baseline of 93.17% statements. The locally-known limitation:
+the cache's actual cross-run restore behavior and the hosted GitHub Actions run for the final commit
+were not verified (Node 22 is CI's version; local Node was 18.16, incompatible with test runner flags).
 
 ---
 
@@ -357,6 +363,8 @@ behaviour updated to the corrected contract and called out as such.
 
 ## Phase 12 — Guarantees that survive CI
 
+**Status:** ✅ Delivered.
+
 **Closes:** D2, D4, D8. (D5's reporting half is closed by Phase 11; what remains here is the classification half.)
 
 ### Why
@@ -403,8 +411,29 @@ a warning, a `.corrupt-*` sidecar, and a clean start.
 
 ### Acceptance criteria
 
-A quarantine made locally demonstrably applies on the next CI run; the D5 fixture classifies `flaky`;
-the D4 fixture retains its decision; no state file can be truncated by an interrupted write.
+State persists across CI runs that share the same `ref_name` (successive pushes to the same branch,
+or successive runs of the same pull request), but a pull request's cache lineage is separate from
+its base branch's (state cannot transfer from a developer laptop into CI, as the Actions cache can
+only restore what a previous Actions run saved); the D5 fixture classifies `flaky` using the new
+`unavailable` outcome; the D4 fixture retains its quarantine decision under 600 new scenarios; no
+state file can be truncated by an interrupted write; corrupt state produces a `.corrupt-*` sidecar
+with the original bytes.
+
+### Decisions for Phase 13 and beyond
+
+- `--repeat` upper bound: 50. Beyond this, wall-clock cost becomes prohibitive and a scenario
+  becomes practically indistinguishable from "broken" in terms of classification signal.
+- Budget coverage with `--repeat`: the wall-clock budget (`--budget-ms`, default 600000) is checked
+  between pages and covers all repetitions of a page collectively. With `--repeat=3` each page takes
+  roughly three times as long, so the budget can be exhausted sooner and later pages reported as
+  `skipped` with reason `budget-exhausted`.
+- Cache scope and limitation: state is persisted across CI runs via `actions/cache@v4` on the same
+  `ref_name` (branch or PR). `data/locator_store.json` is deliberately not cached to preserve the
+  integrity of CI healing behavior. A pull request's first run has no prior CI history to restore;
+  `--repeat` is the mechanism to produce a same-run verdict on that first run.
+- Known limitation carried to Phase 13: if eviction cannot bring the total under the cap because too
+  many entries are protected by quarantine decisions, the protected pool itself becomes unbounded
+  (D7 scope).
 
 ---
 

@@ -169,6 +169,15 @@ class TestRunner {
                     });
                     const duration = Date.now() - startTime;
                     const errorType = AdaptiveRetry.classify(error);
+                    // AC-05 (Q6/Q8): AIHealer marks its two "chain exhausted"
+                    // throws with error.code === "TARGET_UNAVAILABLE". That
+                    // is a sub-classification of "failed" for classification
+                    // purposes — FlakinessTracker.record() still only ever
+                    // sees status "passed"/"failed" — but its own reporting
+                    // bucket for the result row, distinct from an ordinary
+                    // failure and never conflated with "skipped" (a genuinely
+                    // unknown action, handled earlier in this method).
+                    const outcome = error.code === "TARGET_UNAVAILABLE" ? "unavailable" : null;
                     FlakinessTracker.record({
                         url: this.testPlan.url,
                         action: scenario.action,
@@ -177,6 +186,7 @@ class TestRunner {
                         status: "failed",
                         duration,
                         errorType,
+                        outcome,
                     });
 
                     const scenarioKey = FlakinessTracker.keyFor({
@@ -190,6 +200,16 @@ class TestRunner {
                             name: scenario.description,
                             status: "quarantined",
                             duration,
+                            error: error.message,
+                            errorType,
+                            ...(outcome ? { outcome } : {}),
+                        });
+                    } else if (outcome === "unavailable") {
+                        this.results.push({
+                            name: scenario.description,
+                            status: "unavailable",
+                            duration,
+                            reason: error.message,
                             error: error.message,
                             errorType,
                         });
@@ -260,4 +280,81 @@ class TestRunner {
     }
 }
 
+/**
+ * Repeat orchestration (Phase 12, AC-02/AC-03, design Q1-Q5): generate a test
+ * plan once, execute it `repeatCount` times, so a target that fails
+ * intermittently gets multiple samples in a single run rather than requiring
+ * `repeatCount` separate invocations of falcon.js.
+ *
+ * - Both existing call sites (SiteSweep._sweepPage, falcon.js's
+ *   runEntryPageOnly) already generate `testPlan` exactly once per page, so
+ *   this sits at that same boundary — it never re-generates the plan.
+ * - A NEW TestRunner is constructed per iteration so `.results` never
+ *   accumulates across repetitions.
+ * - Before every iteration after the first, the page is navigated back to
+ *   `testPlan.url` unconditionally (not the drift-check `_returnToPlanUrl`
+ *   uses between scenarios within one repetition) so no repetition starts on
+ *   DOM/navigation state a previous repetition left behind. Guarded exactly
+ *   like `_returnToPlanUrl` for lightweight test doubles that don't implement
+ *   `page.goto`/`page.url`; a failed return is a Logger.warning, not a thrown
+ *   error, so the remaining repetitions still run.
+ * - Every result row is tagged with a 1-indexed `repetition` field.
+ *   `name` is never touched — SiteSweep releases dedupe claims by matching
+ *   `result.name === scenario.description` (SiteSweep.js `_sweepPage`'s
+ *   catch), and a renamed row would silently break that.
+ * - `repeatCount` of 1 is byte-identical to today's single `executeTest()`
+ *   call, apart from the added `repetition: 1` field.
+ *
+ * @param {import('playwright').Page} page
+ * @param {Object} testPlan - already-generated plan (url + test_scenarios)
+ * @param {number} repeatCount - >= 1
+ * @returns {Promise<Array>} one flat array of every iteration's result rows
+ */
+async function runRepeatedTestPlan(page, testPlan, repeatCount) {
+    const count = Number.isFinite(repeatCount) && repeatCount >= 1 ? Math.floor(repeatCount) : 1;
+    const allResults = [];
+
+    for (let i = 1; i <= count; i++) {
+        if (i > 1) {
+            const canNavigate = testPlan && testPlan.url
+                && typeof page.goto === "function" && typeof page.url === "function";
+            if (canNavigate) {
+                try {
+                    await page.goto(testPlan.url, { waitUntil: "load" });
+                } catch (error) {
+                    Logger.warning(
+                        `⚠️ Could not return to ${testPlan.url} before repetition ${i}: ${error.message}`
+                    );
+                }
+            }
+        }
+
+        const runner = new TestRunner(page, testPlan);
+        try {
+            const results = await runner.executeTest();
+            for (const result of results) {
+                allResults.push({ ...result, repetition: i });
+            }
+        } catch (error) {
+            // SiteSweep._sweepPage salvages whatever verdicts were already
+            // reached before a mid-plan throw (see its own comment) — with a
+            // single executeTest() call that came from reading the
+            // TestRunner instance's own `.results` after the fact. Here a
+            // fresh TestRunner is constructed per repetition, so the
+            // equivalent salvage (this iteration's partial results, tagged
+            // with `repetition`, plus every earlier iteration's completed
+            // results) is attached to the rethrown error instead.
+            const salvaged = Array.isArray(runner.results) ? runner.results : [];
+            for (const result of salvaged) {
+                allResults.push({ ...result, repetition: i });
+            }
+            error.partialResults = allResults;
+            throw error;
+        }
+    }
+
+    return allResults;
+}
+
 module.exports = TestRunner;
+module.exports.runRepeatedTestPlan = runRepeatedTestPlan;

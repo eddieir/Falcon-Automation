@@ -17,6 +17,23 @@
  *     --allow-cross-origin, and --single-page, which restores the
  *     pre-Phase-10 one-page pipeline verbatim for anyone depending on it.
  *
+ * Phase 12 — repeat execution and an honest "unavailable" outcome:
+ *   - --repeat=N re-executes each page's generated test plan N times (each
+ *     page's plan is still generated only once) so an intermittent target
+ *     gets multiple samples in a single run. N must be a positive integer no
+ *     greater than 50 (comfortably above the 3 samples FlakinessTracker
+ *     needs for a same-run verdict, capped well short of inflating a single
+ *     run's cost or CI minutes unboundedly); omitted, it defaults to 1
+ *     (today's behaviour, byte-identical apart from a `repetition: 1` field
+ *     on result rows). Unlike --max-pages/--budget-ms, an invalid --repeat
+ *     (non-numeric, non-integer, <= 0, > 50, or a conflicting duplicate) is
+ *     a hard failure: Logger.error names the bad value and the process exits
+ *     non-zero before the dashboard starts or the browser launches.
+ *   - A target the AI-healing chain could not resolve at all is reported as
+ *     its own "unavailable" status, distinct from "skipped" (an action
+ *     nobody implements, never attempted) and from an ordinary "failed"
+ *     (resolved but the interaction itself broke).
+ *
  * Phase 3 additions (retained):
  *   - Real-time live dashboard (http://localhost:3000) — express + socket.io
  *     were already installed; now wired into every execution pipeline.
@@ -60,6 +77,57 @@ const numericArg = (args, name, fallback) => {
         Logger.warning(`⚠️  Ignoring ${raw} — expected a positive number; using ${fallback}.`);
         return fallback;
     }
+    return value;
+};
+
+/** Hard upper bound for --repeat=N — see the Phase 12 header comment above. */
+const MAX_REPEAT = 50;
+
+/**
+ * Read `--repeat=<N>`, the one flag Falcon must fail hard on rather than
+ * fall back for (AC-02): --max-pages/--budget-ms above treat a bad value as
+ * "not supplied" because silently disabling a bound is safe, but silently
+ * defaulting an invalid repeat count would let a broken invocation run
+ * anyway and report a green(ish) result nobody actually asked for.
+ *
+ * Absent --repeat ⇒ 1 (no-op, today's behaviour). Present but invalid
+ * (non-numeric, non-integer, <= 0, > MAX_REPEAT) or a duplicate/conflicting
+ * --repeat= occurrence ⇒ Logger.error naming the offending value, followed
+ * by process.exit(1) — the caller in the IIFE below does this before the
+ * dashboard starts or the browser launches, so a bad flag never produces a
+ * partial run.
+ *
+ * @param {string[]} args
+ * @returns {number|null} the validated count, or null if invalid (the
+ *   caller has already logged why and must exit non-zero)
+ */
+const requireRepeatCount = (args) => {
+    const prefix = "--repeat=";
+    const occurrences = args.filter((a) => a.startsWith(prefix));
+    if (occurrences.length === 0) return 1;
+
+    const rawValues = [...new Set(occurrences.map((a) => a.slice(prefix.length)))];
+    if (rawValues.length > 1) {
+        Logger.error(
+            `❌ Conflicting --repeat values supplied (${rawValues.join(", ")}) — pass --repeat once.`
+        );
+        return null;
+    }
+
+    const raw = rawValues[0];
+    if (raw.trim() === "") {
+        Logger.error("❌ --repeat requires a value, e.g. --repeat=3.");
+        return null;
+    }
+
+    const value = Number(raw);
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0 || value > MAX_REPEAT) {
+        Logger.error(
+            `❌ Invalid --repeat=${raw} — expected an integer between 1 and ${MAX_REPEAT}.`
+        );
+        return null;
+    }
+
     return value;
 };
 
@@ -133,7 +201,8 @@ const runWholeApp = async (context, entryUrl, emit, opts) => {
     Logger.info(
         `🧭 Sweeping ${entryUrl} — up to ${opts.maxPages} page(s), ` +
         `${(opts.budgetMs / 1000).toFixed(0)} s budget, dedupe ${opts.dedupe ? "on" : "off"}, ` +
-        `${opts.sameOriginOnly ? "same-origin only" : "cross-origin allowed"}…`
+        `${opts.sameOriginOnly ? "same-origin only" : "cross-origin allowed"}, ` +
+        `repeat=${opts.repeat ?? 1}…`
     );
 
     // pageStart/pageComplete stream straight through to the dashboard's
@@ -154,7 +223,7 @@ const runWholeApp = async (context, entryUrl, emit, opts) => {
  * expectations are pinned to that behaviour. Its one page is returned in
  * SweepResult shape so the reporting path below stays common to both modes.
  */
-const runEntryPageOnly = async (context, url, emit) => {
+const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
     Logger.warning("⚠️  --single-page: only the entry page will be tested (pre-Phase-10 behaviour).");
     const startedAt = Date.now();
 
@@ -197,9 +266,8 @@ const runEntryPageOnly = async (context, url, emit) => {
     Logger.info(`  → ${testPlan.test_scenarios.length} scenario(s) generated for ${testPlan.url}`);
 
     // ── Step 4: Execute Generated Test Plan ──────────────────────────────────
-    Logger.info("▶  Step 4: Executing AI-generated test scenarios…");
-    const runner  = new TestRunner(page, testPlan);
-    const results = await runner.executeTest();
+    Logger.info(`▶  Step 4: Executing AI-generated test scenarios (repeat=${repeatCount})…`);
+    const results = await TestRunner.runRepeatedTestPlan(page, testPlan, repeatCount);
 
     const only = {
         url,
@@ -254,6 +322,14 @@ const runEntryPageOnly = async (context, url, emit) => {
     const dedupe           = !args.includes("--no-dedupe");
     const sameOriginOnly   = !args.includes("--allow-cross-origin");
 
+    // AC-02: unlike max-pages/budget-ms above, an invalid --repeat is a hard
+    // failure — process.exit(1) here, before the dashboard starts or the
+    // browser launches, so a typo'd flag never produces a partial run.
+    const repeatCount = requireRepeatCount(args);
+    if (repeatCount === null) {
+        process.exit(1);
+    }
+
     if (!urlArg) {
         Logger.info(`ℹ️  No --url supplied — defaulting to ${DEFAULT_URL}`);
     }
@@ -288,12 +364,13 @@ const runEntryPageOnly = async (context, url, emit) => {
         const context = await browser.newContext();
 
         const sweep = singlePage
-            ? await runEntryPageOnly(context, url, emit)
+            ? await runEntryPageOnly(context, url, emit, repeatCount)
             : await runWholeApp(context, url, emit, {
                 maxPages,
                 budgetMs,
                 dedupe,
                 sameOriginOnly,
+                repeat: repeatCount,
             });
 
         // One flat array for ReportManager: the tally, the pass/fail branch
@@ -315,6 +392,14 @@ const runEntryPageOnly = async (context, url, emit) => {
                 emit("testSkip", { name: r.name, reason: r.reason });
             } else if (r.status === "quarantined") {
                 emit("testQuarantined", { name: r.name, error: r.error });
+            } else if (r.status === "unavailable") {
+                // Phase 12: a target the healing chain could not resolve at
+                // all. The dashboard has no dedicated "unavailable" lifecycle
+                // event, and it would need its own contract change to gain
+                // one; "testFail" already renders the failure honestly (name
+                // + error) without the live view silently dropping the row,
+                // which is what a missing branch here would do.
+                emit("testFail", { name: r.name, error: r.error });
             }
         }
 

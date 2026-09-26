@@ -105,6 +105,23 @@ function harness(world = {}, opts = {}) {
       }));
     }
   }
+  // Phase 12: SiteSweep._sweepPage now calls TestRunner.runRepeatedTestPlan()
+  // instead of constructing a TestRunner and calling executeTest() directly.
+  // This double reproduces that orchestration faithfully enough for every
+  // existing test here (which all run with the default repeat=1, so it
+  // behaves exactly like a single executeTest() call plus the added
+  // `repetition` field) while still supporting the dedicated repeat tests
+  // below, which read `repeat` off the constructed instance's opts.
+  FakeTestRunner.runRepeatedTestPlan = async (page, testPlan, repeatCount) => {
+    const count = Number.isFinite(repeatCount) && repeatCount >= 1 ? Math.floor(repeatCount) : 1;
+    const all = [];
+    for (let i = 1; i <= count; i++) {
+      const instance = new FakeTestRunner(page, testPlan);
+      const results = await instance.executeTest();
+      for (const result of results) all.push({ ...result, repetition: i });
+    }
+    return all;
+  };
 
   const SiteSweep = load("src/core/SiteSweep.js", {
     "../../utils/Logger": silent,
@@ -647,16 +664,82 @@ test("constructor defaults match the documented contract", () => {
   assert.equal(sweep.budgetMs, 600000);
   assert.equal(sweep.pageTimeoutMs, 20000);
   assert.equal(sweep.dedupe, true);
+  assert.equal(sweep.repeat, 1);
   assert.equal(sweep.onEvent, null);
 });
 
 test("constructor ignores non-numeric and non-function options rather than trusting them", () => {
   const { SiteSweep } = harness();
   const sweep = new SiteSweep({}, {
-    maxPages: "lots", budgetMs: null, pageTimeoutMs: undefined, onEvent: "nope",
+    maxPages: "lots", budgetMs: null, pageTimeoutMs: undefined, onEvent: "nope", repeat: "many",
   });
   assert.equal(sweep.maxPages, 20);
   assert.equal(sweep.budgetMs, 600000);
   assert.equal(sweep.pageTimeoutMs, 20000);
+  assert.equal(sweep.repeat, 1);
   assert.equal(sweep.onEvent, null);
+});
+
+test("constructor accepts a valid repeat option", () => {
+  const { SiteSweep } = harness();
+  const sweep = new SiteSweep({}, { repeat: 3 });
+  assert.equal(sweep.repeat, 3);
+});
+
+// ── Phase 12: repeat (AC-03/AC-04) ──
+
+test("repeat: each kept scenario on a page executes `repeat` times, tagged with repetition", async () => {
+  const { sweep, plans } = harness(
+    { scenarios: { "https://a.com/": [click("Click Save", "#save")] } },
+    { repeat: 3 },
+  );
+  const result = await sweep.run("https://a.com");
+  const page = byUrl(result, "https://a.com/");
+  assert.equal(page.results.length, 3);
+  assert.deepEqual(page.results.map((r) => r.repetition), [1, 2, 3]);
+  assert.ok(page.results.every((r) => r.name === "Click Save" && r.status === "passed"));
+  // The plan itself is still generated once per page, not once per
+  // repetition (Q2: generate once, execute N times) — the same generated
+  // testPlan object is what every repetition's TestRunner receives.
+  assert.equal(plans.length, 3);
+  assert.equal(new Set(plans).size, 1);
+});
+
+test("repeat: the budget check between pages still covers all repetitions of a page collectively (Q4, unchanged)", async () => {
+  // Two pages, repeat=5 each: the budget is checked only between pages, so a
+  // page already in flight always finishes all its repetitions.
+  const { sweep } = harness(
+    {
+      visited: ["https://a.com/b"],
+      scenarios: {
+        "https://a.com/": [click("Click Save", "#save")],
+        "https://a.com/b": [click("Click Delete", "#delete")],
+      },
+    },
+    { repeat: 5 },
+  );
+  const result = await sweep.run("https://a.com");
+  assert.equal(byUrl(result, "https://a.com/").results.length, 5);
+  assert.equal(byUrl(result, "https://a.com/b").results.length, 5);
+});
+
+test("repeat: an unavailable row is not silently dropped from a page's tally", () => {
+  const { SiteSweep } = harness();
+  const record = {
+    results: [
+      { name: "a", status: "passed" },
+      { name: "b", status: "unavailable" },
+      { name: "b", status: "unavailable", repetition: 2 },
+    ],
+    uiIssues: [],
+    scenariosGenerated: 2,
+    scenariosDeduplicated: 0,
+    status: "tested",
+    reason: undefined,
+    durationMs: 5,
+    url: "https://a.com/",
+  };
+  const summary = SiteSweep._summaryOf(record);
+  assert.equal(summary.unavailable, 2);
+  assert.equal(summary.passed, 1);
 });

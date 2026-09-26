@@ -526,7 +526,8 @@ Falcon-Automation/
 │   ├── healing_pending.json         # Tier 3 fixes awaiting human review (Phase 8)
 │   ├── healing_decisions.json       # Approved/rejected audit ledger (Phase 8)
 │   ├── scenario_history.json        # Per-scenario pass/fail history, bounded (Phase 9)
-│   └── quarantine_decisions.json    # Quarantine/unquarantine audit ledger (Phase 9)
+│   ├── quarantine_decisions.json    # Quarantine/unquarantine audit ledger (Phase 9)
+│   └── *.corrupt-*-*-*              # Recovered corrupted state files (Phase 12, manual cleanup)
 ├── reports/                         # Generated at runtime (gitignored)
 │   ├── execution.log
 │   ├── test-report.json
@@ -644,6 +645,21 @@ Approving writes the fix into `LocatorStore` (Tier 2 reuses it from then on) and
 
 ---
 
+## State Durability and Recovery (Phase 12)
+
+Falcon's decision ledgers and scenario history are persisted across runs. To ensure an interrupted write cannot truncate a file, all four state files (`scenario_history.json`, `quarantine_decisions.json`, `healing_pending.json`, `healing_decisions.json`) are now written to a temporary file in the same directory and renamed into place, making the write atomic at the filesystem level.
+
+If a state file cannot be parsed (corrupt JSON), Falcon logs a warning naming the file, preserves the original bytes beside it as `<name>.corrupt-<timestamp>-<pid>-<uuid>`, starts from empty state and continues the run. An existing sidecar is never overwritten. The warning does not include the parser's own message to avoid quoting file contents in logs.
+
+When you see a `.corrupt-*` file appear next to a state file, the operator should:
+1. Inspect the sidecar to understand what was lost or corrupted
+2. Manually recover any critical decisions (e.g., re-quarantine a scenario if its decision was lost)
+3. Delete the sidecar deliberately once recovered
+
+A concurrent-write scenario is not supported by the atomic-rename model: two Falcon processes writing the same state file can still lose one another's updates. The supported model is one writer at a time per state file.
+
+---
+
 ## Flaky-Test Detection (Phase 9)
 
 A failing scenario has always been reported as `failed`, full stop, with no way to tell "the app genuinely broke" from "this interaction is just unreliable." That distinction matters: test-maintenance surveys consistently point at flaky tests as one of the fastest-growing sources of wasted QA time, and a team that can't tell the two apart either chases ghosts or, worse, starts ignoring red builds altogether.
@@ -656,6 +672,8 @@ A failing scenario has always been reported as `failed`, full stop, with no way 
 | `stable` | Every recent outcome passed |
 | `broken` | Every recent outcome failed: a real, consistent regression. This stays loud; it is never a quarantine candidate |
 | `flaky` | A mix of passes and failures for the *exact same* interaction |
+
+Every scenario's outcome is one of: `passed`, `failed`, `skipped`, `quarantined`, `deduped`, or `unavailable`. The `unavailable` status is new in Phase 12: a supported `type` or `select` target that the full three-tier healing chain cannot resolve. `unavailable` is distinct from `skipped` (an action type Falcon does not implement), is its own reporting bucket, and gates the run like a failure — a run containing unavailable scenarios cannot report PASSED. Unavailable samples are recorded by `FlakinessTracker` and count toward classification: a target that is sometimes present and sometimes absent classifies as `flaky`, not `stable`.
 
 Classifying a scenario as flaky never changes what happens on its own: nothing is auto-quarantined. A **human** decides, either from the live dashboard's "Flaky tests" panel or headlessly:
 
@@ -670,6 +688,8 @@ node scripts/flakiness/review.js unquarantine "<scenario-key>"
 Quarantining a scenario changes only how a subsequent failure is *reported*: `TestRunner` reports it as `quarantined` instead of `failed`, a status `ReportManager` deliberately excludes from both the "does this run pass" and "is this a real regression" checks, so a quarantined failure never flips a green build red, never merges silently into `passed` either, and always stays visible in the run summary (`Total: 5 | Passed: 3 | Failed: 0 | Skipped: 0 | Quarantined: 2`). The quarantined interaction is still run, still recorded, and still contributes to its own classification going forward. Quarantining is a CI-blocking decision, not a coverage decision.
 
 `GET /flakiness/scenarios`, `GET /flakiness/scenarios?classification=flaky`, `POST /flakiness/quarantine`, and `POST /flakiness/unquarantine` back the dashboard panel, gated by the same `DASHBOARD_TOKEN` and rate limiter as every other dashboard route. `data/scenario_history.json` (bounded to 500 tracked scenarios, LRU-evicted, 20 outcomes kept per scenario) and `data/quarantine_decisions.json` (the audit ledger) are both gitignored, the same as the Phase 8 healing files.
+
+The `by` field recorded in `data/quarantine_decisions.json` is a free-text operator label, not a validated email address or user ID, and now persists across CI runs via the workflow's state cache — audit consumers should not assume uniqueness, identity-verification, or email format.
 
 ---
 
@@ -688,10 +708,11 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 2. Three fast, no-browser/no-DB regression checks: `tests/unit/ReportManagerExitCode.check.js`, `tests/unit/DBConfigBehavior.check.js`, and `tests/unit/DashboardAuth.check.js`
 3. **Postgres service container** (`postgres:16-alpine`, disposable, health-checked) is seeded via `scripts/db/ci-seed.sql`
 4. Visual-regression baselines restored from cache (`actions/cache@v4`, keyed on branch name)
-5. Scenario tests: `LoginTest`, `CheckoutTest`, `UserApiTest`, `ProductApiTest`, then `UserDBTest` and `OrderDBTest` against the real seeded database. None of these use `continue-on-error`; a real failure fails the job
-6. `node falcon.js --no-dashboard`, the autonomous pipeline
-7. `npx playwright test`, the Playwright-native suite with the Allure reporter — no `continue-on-error` here either, so a failure in it fails the job
-8. Allure report generated (`npx allure awesome`) and uploaded alongside `reports/` as the `falcon-reports` artifact
+5. **Flakiness and healing state restored from cache** (`data/scenario_history.json`, `data/quarantine_decisions.json`, `data/healing_pending.json`, `data/healing_decisions.json`), branch-keyed with fallback to the most recent cache on that branch. This enables flaky-test classification and quarantine decisions to survive across CI runs. Note: `data/locator_store.json` is deliberately not cached (restoring approved Tier 2 selectors would change how healing behaves in CI); CI reads it fresh. State is saved back after the pipeline runs, even on failure, because a failure is a sample.
+6. Scenario tests: `LoginTest`, `CheckoutTest`, `UserApiTest`, `ProductApiTest`, then `UserDBTest` and `OrderDBTest` against the real seeded database. None of these use `continue-on-error`; a real failure fails the job
+7. `node falcon.js --no-dashboard --repeat=3`, the autonomous pipeline with three repetitions per page, enabling classification without depending on cached history
+8. `npx playwright test`, the Playwright-native suite with the Allure reporter — no `continue-on-error` here either, so a failure in it fails the job
+9. Allure report generated (`npx allure awesome`) and uploaded alongside `reports/` as the `falcon-reports` artifact
 
 The full, current file is the source of truth; see `.github/workflows/ci.yml`. [CHANGELOG.md](CHANGELOG.md)'s Phase 3, Phase 6, and Phase 7 sections document why specific pieces of the `test` job exist (Allure's CLI quirks, the visual-regression cache, the Postgres service container, the three regression checks).
 
@@ -720,6 +741,16 @@ node falcon.js --url=https://your-app.example.com --budget-ms=120000
 node falcon.js --url=https://your-app.example.com --no-dedupe          # run shared nav on every page
 node falcon.js --url=https://your-app.example.com --allow-cross-origin # follow links off-origin
 node falcon.js --url=https://your-app.example.com --single-page        # entry page only
+
+# Repetition for classification (Phase 12). A single run can now reach the
+# 3-sample minimum needed to classify a scenario without waiting for cached history.
+# Re-executes each page's generated test plan N times, starting from a fresh load.
+# Valid values: 1–50. Invalid values fail before the dashboard starts (unlike 
+# --max-pages/--budget-ms, which warn and fall back; a silent --repeat=1 would be
+# indistinguishable from a user not asking to repeat). With --repeat=3, the
+# budget-ms is checked between pages and covers all repetitions collectively, so
+# later pages may be skipped if time is exhausted.
+node falcon.js --url=https://your-app.example.com --repeat=3
 
 # Individual scenario tests
 node tests/ui/LoginTest.js

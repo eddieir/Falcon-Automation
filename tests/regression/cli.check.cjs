@@ -130,6 +130,90 @@ test("review CLI: quarantining an unknown key exits 1 and says so", (t) => {
   assert.match(child.stderr, /No tracked scenario/);
 });
 
+// ── Phase 12: --repeat=N (AC-02, AC-03) ──
+//
+// AC-02 requires a HARD failure for a bad --repeat, unlike the warn-and-
+// fall-back numericArg() pattern --max-pages/--budget-ms already use. Every
+// invalid case here must exit non-zero *before* the browser ever launches —
+// asserted via the launch marker file, not inferred from the exit code alone
+// (a crash for an unrelated reason would also exit non-zero).
+
+function runFalconCLI(t, extraArgs, env = {}) {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const launchMarker = path.join(dir, "launched.marker");
+  const optsCapture = path.join(dir, "sweep-opts.json");
+  const child = spawnSync(
+    process.execPath,
+    [
+      "--require",
+      path.join(root, "tests/fixtures/cli-preload.cjs"),
+      path.join(root, "falcon.js"),
+      "--no-dashboard",
+      "--url=http://fixture.test",
+      ...extraArgs,
+    ],
+    {
+      cwd: dir,
+      env: {
+        ...process.env,
+        FALCON_FIXTURE_MODE: "success",
+        FALCON_LAUNCH_MARKER: launchMarker,
+        FALCON_CAPTURE_OPTS_PATH: optsCapture,
+        ...env,
+      },
+      encoding: "utf8",
+      timeout: 5000,
+    },
+  );
+  assert.equal(child.error, undefined);
+  return { child, launchMarker, optsCapture, dir };
+}
+
+test("--repeat omitted executes once (default observable behavior)", (t) => {
+  const { child, launchMarker, optsCapture } = runFalconCLI(t, []);
+  assert.equal(child.status, 0, child.stdout + child.stderr);
+  assert.equal(fs.existsSync(launchMarker), true);
+  const opts = JSON.parse(fs.readFileSync(optsCapture, "utf8"));
+  assert.equal(opts.repeat, 1);
+});
+
+test("--repeat=1 matches the default observable behavior", (t) => {
+  const { child, optsCapture } = runFalconCLI(t, ["--repeat=1"]);
+  assert.equal(child.status, 0, child.stdout + child.stderr);
+  const opts = JSON.parse(fs.readFileSync(optsCapture, "utf8"));
+  assert.equal(opts.repeat, 1);
+});
+
+test("--repeat=3 reaches the sweep as 3", (t) => {
+  const { child, optsCapture } = runFalconCLI(t, ["--repeat=3"]);
+  assert.equal(child.status, 0, child.stdout + child.stderr);
+  const opts = JSON.parse(fs.readFileSync(optsCapture, "utf8"));
+  assert.equal(opts.repeat, 3);
+});
+
+for (const bad of ["abc", "0", "-2", "1.5", "51", ""]) {
+  test(`--repeat=${bad || "(empty)"} is a hard failure before browser launch`, (t) => {
+    const { child, launchMarker, optsCapture } = runFalconCLI(t, [`--repeat=${bad}`]);
+    assert.notEqual(child.status, 0, child.stdout + child.stderr);
+    assert.equal(fs.existsSync(launchMarker), false, "browser must never launch on invalid --repeat");
+    assert.equal(fs.existsSync(optsCapture), false, "SiteSweep must never be constructed on invalid --repeat");
+  });
+}
+
+test("duplicate conflicting --repeat values are a hard failure before browser launch", (t) => {
+  const { child, launchMarker } = runFalconCLI(t, ["--repeat=3", "--repeat=5"]);
+  assert.notEqual(child.status, 0, child.stdout + child.stderr);
+  assert.equal(fs.existsSync(launchMarker), false);
+});
+
+test("duplicate identical --repeat values are accepted (not a conflict)", (t) => {
+  const { child, optsCapture } = runFalconCLI(t, ["--repeat=3", "--repeat=3"]);
+  assert.equal(child.status, 0, child.stdout + child.stderr);
+  const opts = JSON.parse(fs.readFileSync(optsCapture, "utf8"));
+  assert.equal(opts.repeat, 3);
+});
+
 test("review CLI: list prints every tracked scenario, and filters when given a classification", (t) => {
   const scenarios = {
     ...scenarioFixture(["passed", "failed", "passed"]),
