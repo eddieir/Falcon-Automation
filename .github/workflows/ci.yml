@@ -5,17 +5,13 @@ on:
     branches: [New_era_Falcon, main, "feat/**", "test/**"]
   pull_request:
     branches: [New_era_Falcon, main]
-  # Operator convenience only — push/pull_request never populate `inputs.*`,
-  # so the `test` job's falcon.js invocation below hardcodes --repeat=3
-  # rather than referencing ${{ inputs.repeat }}, which would silently
-  # resolve to an empty string on every event that actually triggers CI.
+  # Manual re-run only. CI deliberately runs a fixed `--repeat=3` (see the
+  # `test` job's falcon.js invocation below) rather than exposing a
+  # dispatch input for it — on push/pull_request, `inputs.*` doesn't exist
+  # as a context at all, so a step referencing it would silently resolve to
+  # an empty string. An operator who wants a different repeat count runs
+  # `node falcon.js --repeat=N` locally instead.
   workflow_dispatch:
-    inputs:
-      repeat:
-        description: "Times to repeat each scenario's test plan (falcon.js --repeat)"
-        type: number
-        default: 3
-        required: false
 
 permissions:
   contents: read
