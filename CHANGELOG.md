@@ -712,9 +712,9 @@ Flaky-test detection and quarantine work only when state persists. Phase 9 worke
 
 ### Durable, visible, and cross-run
 
-State accumulated in CI now consists of samples, not decisions — nothing in CI can create a quarantine decision, because only the dashboard and `scripts/flakiness/review.js` can, and neither runs in the CI job. The `by` field recorded in `data/quarantine_decisions.json` is a free-text operator label, not a validated email address or user ID. State persists across CI runs via the workflow cache, carrying history between runs on the same branch and enabling a pull request to restore from its base branch.
+State accumulated in CI now consists of samples, not decisions — nothing in CI can create a quarantine decision, because only the dashboard and `scripts/flakiness/review.js` can, and neither runs in the CI job. The `by` field recorded in `data/quarantine_decisions.json` is a free-text operator label, not a validated email address or user ID. State persists across CI runs that share the same `ref_name` (successive pushes to the same branch, or successive runs of the same pull request) via the restore-keys fallback in `actions/cache@v4`; a pull request's cache lineage is separate from its base branch's.
 
-A quarantine made locally was documented as "demonstrably applies on the next CI run" in Phase 12 milestone descriptions. That requires a developer's laptop state to enter the CI cache, which caching cannot do — the Actions cache can only restore what a previous Actions run saved. The truthful behavior is: state persists across CI runs on the same branch, and a pull request can restore from its base branch.
+A quarantine made locally was documented as "demonstrably applies on the next CI run" in Phase 12 milestone descriptions. That requires a developer's laptop state to enter the CI cache, which caching cannot do — the Actions cache can only restore what a previous Actions run saved. The truthful behavior is: state persists across CI runs on the same `ref_name`, but a pull request has no cache inheritance from its base branch; a PR's first run starts with no prior CI history and needs `--repeat` to produce a same-run verdict.
 
 ### Verification
 
