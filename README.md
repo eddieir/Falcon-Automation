@@ -135,7 +135,7 @@ node falcon.js --url=https://axonradar.netlify.app --single-page
 🟢 INFO:   → 2 issue(s) found
 🟢 INFO: 🔍 Step 2: Mapping site with ClickExplorer…
 🟢 INFO:   → 1 page(s) explored
-🟢 INFO: 🤖 Step 3: Generating test scenarios from DOM analysis…
+🟢 INFO: 🔍 Step 3: Generating test scenarios from DOM analysis…
 🟢 INFO: ✅ [PageAnalyser] Found 66 interactive elements
 🟢 INFO:   → 4 scenario(s) generated for https://axonradar.netlify.app/
 🟢 INFO: ▶  Step 4: Executing generated test scenarios (repeat=1)…
@@ -422,7 +422,7 @@ Each one exits non-zero if its own assertions fail, so a demo cannot quietly suc
 
 ```mermaid
 flowchart TD
-    CLI["falcon.js: CLI entry point"] --> Explore["ExploratoryAI\nDOM-based defect scan"]
+    CLI["falcon.js: CLI entry point"] --> Explore["DOMIssueScanner\nrule-based UI issue scan"]
     CLI --> Crawl["ClickExplorer\nrecursive autonomous crawl"]
     Crawl --> Analyse["PageAnalyser\nDOM → element map"]
     Analyse --> Gen["TestGenerator\nscenario plan"]
@@ -497,7 +497,7 @@ Falcon-Automation/
 │       ├── Dashboard.js             # express + socket.io live dashboard server
 │       ├── DBClient.js              # PostgreSQL pool with mTLS support
 │       ├── ErrorHandler.js
-│       ├── ExploratoryAI.js         # DOM-based UI defect detector
+│       ├── DOMIssueScanner.js       # Rule-based DOM issue scanner (heuristic findings, may include false positives)
 │       ├── FlakinessTracker.js      # Pass/fail history, classification, quarantine gate (Phase 9)
 │       ├── Middleware.js            # Lifecycle hooks + cross-process event emit
 │       ├── PageAnalyser.js          # DOM scanner (single source of truth; see CHANGELOG.md#phase-3--competitive-features)

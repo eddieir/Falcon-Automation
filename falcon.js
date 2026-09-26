@@ -255,7 +255,7 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
     Array.from(visitedPages).forEach((u) => emit("explorerPage", { url: u }));
     Logger.info(`  → ${visitedPages.size} page(s) explored`);
 
-    // ── Step 3: AI Test Generation ───────────────────────────────────────────
+    // ── Step 3: DOM-Driven Test Generation ───────────────────────────────────
     Logger.info("🔍 Step 3: Generating test scenarios from DOM analysis…");
 
     // Re-navigate to the root to generate scenarios from the main page
