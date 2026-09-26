@@ -200,6 +200,20 @@ jobs:
             data/healing_decisions.json
           key: falcon-state-${{ github.ref_name }}-${{ github.run_id }}
 
+      # ── Review queue staleness (Phase 13) ────────────────────────────────────
+      # Reports pending Tier 3 healing fixes and flaky-scenario decisions nobody
+      # has acted on within threshold. Soft warning by default: findings are
+      # always printed, but the step exits 0 for staleness alone, so this job's
+      # red keeps meaning "a test failed" rather than "someone hasn't triaged the
+      # review queue". It still exits non-zero on invalid arguments or invalid
+      # configuration — that's a real defect, not a backlog signal. On a fresh PR
+      # branch the state cache above restores nothing (the exact key embeds
+      # github.run_id so it never hits, and the falcon-state-<branch>- prefix has
+      # never been saved before), so this step has no queue to report and passes
+      # trivially; real debt only accumulates on main.
+      - name: Check review queue staleness
+        run: node scripts/review/status.js
+
       # ── Playwright native suite (with Allure reporter) ──────────────────────
       - name: Run Playwright native tests
         run: npx playwright test

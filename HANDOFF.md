@@ -23,7 +23,7 @@ Falcon is a Node.js test automation framework built on Playwright. Its different
 
 | Item | Value |
 |---|---|
-| `main` | Phases 1–12 merged (at ac27825). Phase 13 ("Decisions that can't rot") is implemented on branch `phase-13/decisions-cant-rot`, uncommitted, pending review and merge authorization. |
+| `main` | Phases 1–12 merged (at ac27825). Phase 13 ("Decisions that can't rot") is committed on branch `phase-13/decisions-cant-rot`, not yet pushed, reviewed, or merged. |
 | Node version | 24 in CI (`node-version: "24"` in `ci.yml`, bumped in Phase 6). **Node 20.19+ required locally** — `package.json` declares `engines.node`, since `test:regression`/`test:coverage` use `node:test` flags that don't exist on older Node. |
 | Test target | https://www.saucedemo.com (UI/DB scenarios), https://jsonplaceholder.typicode.com (API scenarios), https://www.google.com (GoogleSearchTest — not run in CI, see §9), plus inline HTML fixtures for `tests/regression/*` suite (no real target site, deterministic) |
 

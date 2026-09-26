@@ -71,10 +71,32 @@ class FlakinessTracker {
         this.scenarios = AtomicJsonStore.readJsonSync(this.historyPath, {});
         this.decisions = AtomicJsonStore.readJsonSync(this.decisionsPath, []);
 
-        // Cap BEFORE reconciliation runs below, so reconciliation only ever
-        // sees the retained rows — see the P13 handoff for the open risk
-        // this implies for a protected key whose only "quarantine" ledger
-        // row is older than the retained window.
+        // Reconcile against the FULLY LOADED ledger first, then cap. Folding
+        // is in-memory and cheap, so doing it before the cap costs nothing —
+        // and it matters: if a key's only "quarantine" row would fall outside
+        // the retained window and `scenarios[key].quarantined` disagrees
+        // (`false`), reconciling first still sees that row and forces
+        // `entry.quarantined` to `true` before the row is ever dropped. That
+        // write lands on the scenario entry itself, not on the ledger array,
+        // so it survives the cap below intact — `_evictLeastRecentlyUsed()`'s
+        // `isProtected` checks `entry.quarantined === true` directly, so the
+        // key stays protected even though its ledger row (and therefore its
+        // membership in `_protectedKeys()`) is gone after capping. Capping
+        // first, as before, discarded the row before reconciliation could
+        // ever see it, silently losing both the audit trail and eviction
+        // protection for an already-disagreeing key.
+        for (const [key, action] of this._effectiveDecisionMap()) {
+            if (!this._hasScenario(key)) continue;
+            const entry = this._getScenario(key);
+            const verdict = action === "quarantine";
+            if (entry.quarantined !== verdict) {
+                this._setScenario(key, { ...entry, quarantined: verdict });
+            }
+        }
+
+        // Cap AFTER reconciliation now runs above — this remains the D7
+        // migration path for an already-oversized file on disk, and still
+        // logs exactly one warning naming how many rows were dropped.
         if (this.decisions.length > QUARANTINE_DECISIONS_MAX_ROWS) {
             const totalFound = this.decisions.length;
             const dropped = totalFound - QUARANTINE_DECISIONS_MAX_ROWS;
@@ -83,15 +105,6 @@ class FlakinessTracker {
                 `FlakinessTracker: loaded quarantine ledger had ${totalFound} rows, exceeding `
                 + `QUARANTINE_DECISIONS_MAX_ROWS (${QUARANTINE_DECISIONS_MAX_ROWS}); dropped ${dropped} oldest row(s).`,
             );
-        }
-
-        for (const [key, action] of this._effectiveDecisionMap()) {
-            if (!this._hasScenario(key)) continue;
-            const entry = this._getScenario(key);
-            const verdict = action === "quarantine";
-            if (entry.quarantined !== verdict) {
-                this._setScenario(key, { ...entry, quarantined: verdict });
-            }
         }
     }
 
