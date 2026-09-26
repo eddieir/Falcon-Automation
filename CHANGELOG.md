@@ -673,3 +673,49 @@ Measured against the previous release on the same 11-page site, the same command
 `docs/demo/build-ui-test-recording.js` turns the videos into the README's GIF and MP4. It locates each recording through `reports/ui-demo-results.json` rather than by walking the artefact directory, because Playwright names those directories after a truncated, hashed form of the test title and matching on them breaks silently the first time a title is edited. Reading the reporter's JSON also gives it each test's status, and it refuses to write either file if any test failed or any video is missing.
 
 The suite is not in CI and is excluded from `npx playwright test` via `testIgnore` in `playwright.config.js`: it depends on a third-party deploy staying up, and this repo's engineering rules rule out uncontrolled third-party sites as a CI dependency. Last measured run: 6 passed in 32.5s.
+
+---
+
+## Phase 12 — Guarantees that survive CI
+
+Flaky-test detection and quarantine work only when state persists. Phase 9 worked locally but evaporated between CI runs, the most common flake shape was invisible to the classifier, human decisions were silently evicted, and corrupt state voided every decision. Phase 10 made this urgent: many more pages means many more scenarios, evictions and decisions.
+
+### Flaky-test detection is now inert in CI
+
+**Problem:** `data/scenario_history.json` is never cached between Actions runs. Each scenario runs once per run against a 3-sample minimum, so every scenario in CI is permanently `new`. Nothing classifies as `flaky`, `flakyDetected` never fires, and local quarantines never reach CI.
+
+**Fix:** The `test` job now restores four state files before the pipeline runs and saves them afterwards, keyed to the branch with fallback to the most recent cache on it: `data/scenario_history.json`, `data/quarantine_decisions.json`, `data/healing_pending.json`, `data/healing_decisions.json`. Deliberately not the whole `data/` directory — `data/locator_store.json` lives there too, and restoring approved Tier 2 selectors between CI runs would change how healing behaves in CI. State is saved even when the pipeline fails, because a failure is a sample. The cache tolerates its own write errors so a cold run that died before writing anything does not turn the job red.
+
+### One run cannot reach the 3-sample minimum without cached history
+
+**Problem:** Flakiness classification requires 3+ samples. A developer running `falcon.js` locally will never see a verdict on first run, and CI has no history at all.
+
+**Fix:** `falcon.js` accepts a new `--repeat=N` flag that re-executes each page's generated test plan N times within one run, starting from a fresh page load each time. Each repetition is recorded as a distinct sample, so `--repeat=3` produces a verdict immediately. Valid values are integers 1–50. An invalid value (non-numeric, zero, negative, fractional, above 50, or the flag given twice with conflicting values) **fails the run with a non-zero exit code before the dashboard starts**. Unlike `--max-pages`/`--budget-ms`, which warn and fall back to their default, a silently-defaulted `--repeat` to 1 would be indistinguishable from a user not asking to repeat, and the samples would never be collected. With `--repeat=N`, the budget-ms is checked between pages and covers all repetitions collectively, so later pages may be skipped if time is exhausted.
+
+### A sometimes-missing target now classifies as flaky, not stable
+
+**Problem:** A sometimes-missing `type` or `select` target is marked `skipped` before the healer is consulted, and `skipped` is never recorded to `FlakinessTracker`. The textbook flake shape (present sometimes, absent others) has no signal in the history, so it classifies as `stable`, 0% fail rate.
+
+**Fix:** Phase 11 deleted the silent skip and made unresolvable targets fail instead. Phase 12 adds a new outcome, `unavailable`, for a target that is not visible and cannot be healed. `unavailable` is distinct from `skipped` (an action type Falcon does not implement), recorded by `FlakinessTracker`, and counts as a failure for classification purposes. A target that is sometimes present and sometimes absent now classifies as `flaky`.
+
+### Quarantine evicts human decisions
+
+**Problem:** `_evictLeastRecentlyUsed()` sorts on `lastUsed` with no exemption for quarantined entries. Verified: quarantine + 600 new scenarios → decision gone, failures block again, nothing logged.
+
+**Fix:** Quarantined entries and any entry referenced by the decision ledger are now protected from eviction. If eviction cannot bring the total back under the cap because too many entries are protected, the system warns once naming the tracked total, the protected count, how many were evicted and how far over the cap that leaves things, rather than dropping a human decision quietly.
+
+### State files can be truncated by an interrupted write
+
+**Problem:** All four state files are written with a plain `writeFile`, not temp-then-rename. An interrupted write truncates the file to zero bytes. `_loadJson` recovers to empty with no log line, silently voiding the entire review queue or every quarantine.
+
+**Fix:** State files are now written to a temporary file in the same directory and renamed into place, making the write atomic at the filesystem level. `_loadJson` catches parse errors, logs a warning naming the file, preserves the original bytes beside it as `<name>.corrupt-<timestamp>-<pid>-<uuid>`, and starts from empty state. An existing sidecar is never overwritten. The operator should manually recover the decision from the sidecar and delete it once recovered.
+
+### Durable, visible, and cross-run
+
+State accumulated in CI now consists of samples, not decisions — nothing in CI can create a quarantine decision, because only the dashboard and `scripts/flakiness/review.js` can, and neither runs in the CI job. The `by` field recorded in `data/quarantine_decisions.json` is a free-text operator label, not a validated email address or user ID. State persists across CI runs via the workflow cache, carrying history between runs on the same branch and enabling a pull request to restore from its base branch.
+
+A quarantine made locally was documented as "demonstrably applies on the next CI run" in Phase 12 milestone descriptions. That requires a developer's laptop state to enter the CI cache, which caching cannot do — the Actions cache can only restore what a previous Actions run saved. The truthful behavior is: state persists across CI runs on the same branch, and a pull request can restore from its base branch.
+
+### Verification
+
+491 regression tests passing, 43 browser tests passing, 94.70% statement coverage, measured on Node 22. Every measurement was performed locally (no remote or mocked calls). Coverage improved from the Phase 9 baseline of 93.17% statements.
