@@ -1,6 +1,6 @@
 const Logger = require("../../utils/Logger");
 const ClickExplorer = require("./ClickExplorer");
-const ExploratoryAI = require("./ExploratoryAI");
+const DOMIssueScanner = require("./DOMIssueScanner");
 const TestGenerator = require("./TestGenerator");
 const TestRunner = require("./TestRunner");
 
@@ -426,7 +426,7 @@ class SiteSweep {
 
     async _detectIssues(page, url) {
         try {
-            const issues = await new ExploratoryAI(page).detectUIIssues();
+            const issues = await new DOMIssueScanner(page).detectUIIssues();
             if (Array.isArray(issues)) return issues;
             Logger.warning(`⚠️  detectUIIssues() did not return an array for ${url} — defaulting to []`);
         } catch (error) {

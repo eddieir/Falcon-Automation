@@ -31,7 +31,7 @@ const mocks = {
       },
     },
   },
-  "./src/core/ExploratoryAI": class {
+  "./src/core/DOMIssueScanner": class {
     async detectUIIssues() {
       return [];
     }
