@@ -2,7 +2,7 @@
 
 > **For:** Any engineer or Claude Code session continuing this work
 > **Author:** Peyman Iravani — QA Manager / Tech Lead
-> **Last updated:** post-Phase-7 QA hardening pass (`fix/qa-hardening-and-doc-sync`) — this file had drifted three merged PRs behind `main` (missed PR #13's regression suite, PR #14's selector fix, PR #15's demo) before this rewrite.
+> **Last updated:** post-Phase-12. Phase 13 ("Decisions that can't rot") implementation in progress on branch `phase-13/decisions-cant-rot`, pending review and merge authorization.
 > **Repo:** https://github.com/eddieir/Falcon-Automation
 
 ---
@@ -23,10 +23,9 @@ Falcon is a Node.js test automation framework built on Playwright. Its different
 
 | Item | Value |
 |---|---|
-| `main` | Phases 1–7 merged (PR #12 for Phase 7), plus PR #13 (comprehensive `node:test`/Playwright regression suite + community-health files), PR #14 (real selector-anchoring fix in `PageAnalyser`), PR #15 (README demo GIF/stills) |
-| Open work | `fix/qa-hardening-and-doc-sync` — this pass: a full independent QA re-verification of everything through PR #15, fixing 4 real bugs it found (see §9), and syncing this file + README to actual `main` |
-| Node version | 24 in CI (`node-version: "24"` in `ci.yml`, bumped in Phase 6). **Node 20.19+ required locally** as of this pass — `package.json` now declares `engines.node`, since `test:regression`/`test:coverage` use `node:test` flags (`--test-concurrency`, `--experimental-test-coverage` alongside `--test`) that don't exist on older Node (confirmed: both fail outright on 18.16.0). |
-| Test target | https://www.saucedemo.com (UI/DB scenarios), https://jsonplaceholder.typicode.com (API scenarios), https://www.google.com (GoogleSearchTest — not run in CI, see §9), plus inline HTML fixtures for the newer `tests/regression/*` suite (no real target site, faster and deterministic) |
+| `main` | Phases 1–12 merged (at ac27825). Phase 13 ("Decisions that can't rot") is implemented on branch `phase-13/decisions-cant-rot`, uncommitted, pending review and merge authorization. |
+| Node version | 24 in CI (`node-version: "24"` in `ci.yml`, bumped in Phase 6). **Node 20.19+ required locally** — `package.json` declares `engines.node`, since `test:regression`/`test:coverage` use `node:test` flags that don't exist on older Node. |
+| Test target | https://www.saucedemo.com (UI/DB scenarios), https://jsonplaceholder.typicode.com (API scenarios), https://www.google.com (GoogleSearchTest — not run in CI, see §9), plus inline HTML fixtures for `tests/regression/*` suite (no real target site, deterministic) |
 
 Two things worth knowing about this history if you're new to the repo:
 1. A real Supabase DB password and an OpenAI key were at different points committed to `.env` on various branches early on. Both were treated as compromised and the user was told to rotate them.
@@ -198,15 +197,18 @@ Unchanged since Phase 3/5 apart from the scanner's name: `Dashboard.start()` →
 
 | Priority | Area | Issue | Target |
 |---|---|---|---|
-| — | `tests/ui/GoogleSearchTest.js` | **Deliberately not run in CI.** Fixed the cookie-consent bug (see §4), but running it locally a few times in a row got this machine's IP served an actual Google "unusual traffic" bot-detection block page instead of results — confirmed directly, not assumed. GitHub Actions runner IPs are well-known to bot-detection systems; wiring this into CI would very likely mean a test that's red most of the time for reasons that have nothing to do with Falcon's own code. Decision (explicit, from the user): keep the fix, don't add it to CI. Kept as a manual/local demonstration of `AIHealer` against a real third-party site. | Resolved (won't add to CI) |
-| P2 | `src/core/ServiceContainer.js` | Partial DI — some shared deps go through it, others are constructed directly. | Unscheduled |
-| P3 | Self-healing trust | Every healing event is logged, but nothing surfaces it as a trend, and a Tier-3 (LLM) resolution is trusted and reused with no review step. | **Phase 8 — the only roadmap phase not yet started as of this pass.** |
-| P3 | `ReportManager.generateReport()` | A skip-only run (no failures, nothing passed either) reports `result: "PASSED"` — technically correct by the "no failures = passed" rule, but the label is a little misleading. Not fixed since Phase 6, since fixing it changes what `npm run test:db` prints for every contributor without local Postgres. | Unscheduled |
+| — | `tests/ui/GoogleSearchTest.js` | **Deliberately not run in CI.** Fixed the cookie-consent bug, but running it locally repeatedly gets bot-detection blocks. GitHub Actions runner IPs are well-known to bot-detection systems; wiring into CI would mean a test red most of the time for reasons unrelated to Falcon. Decision (explicit): keep the fix, don't add to CI. Kept as a manual/local demonstration of `AIHealer` against a real third-party site. | Resolved (won't add to CI) |
+| P2 | `src/core/ServiceContainer.js` | Partial DI — some shared deps go through it, others constructed directly. | Unscheduled |
+| P3 | `ReportManager.generateReport()` | A skip-only run reports `result: "PASSED"` — technically correct but misleading. Not fixed since Phase 6 because it changes what `npm run test:db` prints for contributors without local Postgres. | Unscheduled |
 | P2 | `Dashboard._socketConnectAttempts` | Grows unboundedly per distinct IP over a very long-running dashboard process — no pruning of stale/inactive IPs. Low-priority for a local-first tool. | Unscheduled |
 
-Resolved in Phase 7: dashboard had no auth at all (`POST /emit`, `GET /events`, and every socket connection wide open, `cors: { origin: "*" }`) — now gated behind `DASHBOARD_TOKEN` when set, unchanged when not. `GoogleSearchTest.js`'s cookie-consent-dialog bug (see above — fixed, but intentionally still not in CI, which is a different thing from "not fixed").
+Resolved in Phase 7: dashboard had no auth at all — now gated behind `DASHBOARD_TOKEN` when set.
 
-Resolved in the post-Phase-7 QA-hardening pass (found by an independent, from-scratch re-verification of everything through PR #15 — none of these were caught by the PRs that introduced them): the `.env.example` DB-placeholder crash, the `reporting.check.cjs` TAP-lexer corruption on Node 18, the missing `engines.node` declaration, and PR #14's under-tested regression coverage. Full detail in §4.
+Resolved in Phase 8: unreviewed Tier 3 fixes gate behind human approval; rejection memory added in Phase 13.
+
+Resolved in Phase 9: flaky-test detection and quarantine gating.
+
+Resolved in Phase 13: staleness thresholds and rehabilitation candidates for quarantined scenarios; rejection memory surfaced; decision ledgers and pending fixes bounded and capped.
 
 ---
 

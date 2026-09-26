@@ -1,6 +1,6 @@
 # Falcon-Automation: Self-Healing Test Automation with AI-Assisted Locator Recovery
 
-> **Status:** Active development · Phases 1–12 merged. Phase 10 covers every page of an app in one run; Phase 11 heals every action type; Phase 12 makes healing state and flaky decisions survive CI via cached state files and adds `--repeat=N` for immediate classification. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
+> **Status:** Active development · Phases 1–12 merged. Phase 10 covers every page of an app in one run; Phase 11 heals every action type; Phase 12 makes healing state and flaky decisions survive CI via cached state files. Phase 13 ("Decisions that can't rot") is in progress on branch `phase-13/decisions-cant-rot`. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
 
 ---
 
@@ -317,6 +317,7 @@ node scripts/flakiness/review.js list                       # every tracked scen
 node scripts/flakiness/review.js list flaky                 # or filter: new | stable | broken | flaky
 node scripts/flakiness/review.js quarantine "<scenario-key>"
 node scripts/flakiness/review.js unquarantine "<scenario-key>"
+node scripts/flakiness/review.js rehab                       # rehabilitation candidates (Phase 13)
 ```
 
 The same demo ends by showing what quarantine will *not* do. A scenario that has failed every time it has ever run is refused outright:
@@ -642,17 +643,17 @@ Every healing attempt, across all three tiers, is already recorded by `HealingRe
 
 A pending Tier 3 fix can be reviewed and decided on two ways:
 
-- **The live dashboard's "Healing trust" panel** (`localhost:3000`, or wherever `DASHBOARD_PORT` points): lists every fix awaiting review with its suggested replacement, description, and how many times it's recurred, with **Approve**/**Reject** buttons. Backed by `GET /healing/pending`, `GET /healing/trend`, `POST /healing/approve`, and `POST /healing/reject`, gated by the same `DASHBOARD_TOKEN` and rate limiter as `/emit` and `/events`.
+- **The live dashboard's "Healing trust" panel** (`localhost:3000`, or wherever `DASHBOARD_PORT` points): lists every fix awaiting review with its suggested replacement, description, Tier 3 invocation count, and rejection history (if any), with **Approve**/**Reject** buttons. Backed by `GET /healing/pending`, `GET /healing/trend`, `POST /healing/approve`, and `POST /healing/reject`, gated by the same `DASHBOARD_TOKEN` and rate limiter as `/emit` and `/events`.
 - **`scripts/healing/review.js`**, for headless environments where the dashboard isn't open:
 
   ```sh
-  node scripts/healing/review.js list                        # what's awaiting review
+  node scripts/healing/review.js list                        # what's awaiting review (shows rejection history)
   node scripts/healing/review.js approve "<original-selector>"
   node scripts/healing/review.js reject  "<original-selector>"
   node scripts/healing/review.js approve-all
   ```
 
-Approving writes the fix into `LocatorStore` (Tier 2 reuses it from then on) and records the decision in `data/healing_decisions.json`. Rejecting discards it, never touching `LocatorStore`, but keeps the same audit record so a rejected guess doesn't quietly get re-suggested with no memory of having been turned down. Both `data/healing_pending.json` and `data/healing_decisions.json` are gitignored, the same as `locator_store.json`.
+Approving writes the fix into `LocatorStore` (Tier 2 reuses it from then on) and records the decision in `data/healing_decisions.json`. Rejecting discards it, never touching `LocatorStore`, but keeps the same audit record so a rejected guess doesn't quietly get re-suggested with no memory of having been turned down. Rejection memory carries a count and timestamps; when the same selector-suggestion pair is proposed again, the history is flagged so a human can see it was previously rejected. Both `data/healing_pending.json` and `data/healing_decisions.json` are gitignored, the same as `locator_store.json`.
 
 ---
 
@@ -668,6 +669,87 @@ When you see a `.corrupt-*` file appear next to a state file, the operator shoul
 3. Delete the sidecar deliberately once recovered
 
 A concurrent-write scenario is not supported by the atomic-rename model: two Falcon processes writing the same state file can still lose one another's updates. The supported model is one writer at a time per state file.
+
+---
+
+## Staleness and Rehabilitation (Phase 13)
+
+Falcon creates queues of human decisions: pending healing fixes await review, and quarantined scenarios remain hidden from the build. Neither creates enough urgency on its own, so both can accumulate indefinitely while the framework stays silent about the cost.
+
+Phase 13 makes both visible. A pending fix older than a configurable threshold or a quarantined scenario that has passed its last N runs surfaces in a new review status check, so the queue cannot rot unnoticed.
+
+### Staleness thresholds
+
+Three new optional environment variables, validated at read time (reject invalid values with a clear message naming the setting):
+
+```ini
+# How long an unreviewed pending healing fix can sit before it's flagged stale.
+# Integer 1-3650 days; default 14. Age measured from the fix's firstSeen.
+# Boundary rule: a record exactly ON the threshold is NOT stale.
+HEALING_PENDING_STALE_DAYS=14
+
+# How long a flaky, non-quarantined scenario can sit before it's flagged stale.
+# Integer 1-3650 days; default 14. Age measured from the scenario's flakySince.
+FLAKY_UNREVIEWED_STALE_DAYS=14
+
+# How many consecutive passed results a quarantined scenario needs to surface
+# as a rehabilitation candidate (still quarantined, never auto-unquarantined).
+# Integer 1-20; default 5. A failure resets the counter.
+REHAB_CANDIDATE_WINDOW=5
+```
+
+### Review status check
+
+`scripts/review/status.js` reports staleness and surfaces rehabilitation candidates:
+
+```sh
+npm run review:status          # soft-warning mode: print findings, exit 0
+npm run review:status:strict   # hard-gate mode: print findings, exit 1 if anything stale
+node scripts/review/status.js --fail-on-stale  # same as :strict
+```
+
+Exit codes:
+
+| Situation | Exit |
+|---|---|
+| Nothing stale | 0 |
+| Something stale, no `--fail-on-stale` flag | 0 (findings printed) |
+| Something stale, with `--fail-on-stale` | 1 |
+| Invalid configuration (bad env values) | 2 |
+| Unrecognized argument | 3 |
+| State files missing or empty | 0 |
+| State file corrupt (JSON parse error) | 0 (recovered to empty, warned, original preserved as `.corrupt-*`) |
+
+The check accepts exactly one flag, `--fail-on-stale`, and deliberately no flag that takes a path or reads a config file.
+
+### Quarantine rehabilitation
+
+A quarantined scenario whose most recent `REHAB_CANDIDATE_WINDOW` recorded outcomes have all passed is surfaced as a rehabilitation candidate. It remains quarantined (never auto-unquarantined — lifting a quarantine stays an explicit human action), but the candidate shows up:
+
+- In `npm run review:status` output
+- In the `flaky:list` command, filtered or unfiltered
+- In `node scripts/flakiness/review.js rehab` (read-only subcommand)
+- In the dashboard's `GET /flakiness/rehabilitation` route and "Flaky tests" panel
+
+A scenario with fewer than N recorded outcomes is not a candidate. Any failure removes candidacy and resets the counter. `unavailable` (a form field that can't be found) is stored as a failure, so it disqualifies.
+
+### Rejection memory
+
+A pending healing fix now carries `previouslyRejected: { count, lastRejectedAt, lastRejectedBy }`, visible in the CLI and dashboard. When a selector-suggestion pair that was previously rejected is proposed again, the rejection is flagged so a human can see the history.
+
+**Important limitation:** Rejection memory is computed by folding the healing decision ledger, which is now capped at the newest 500 rows. Once a rejection ages out of that window, the pair can be proposed again as if new. This is a deliberate consequence of closing D7 and D9 together with a single source of truth rather than a second store that could disagree — read [CHANGELOG.md](CHANGELOG.md#phase-13) for the trade-off.
+
+### Tier 3 invocation visibility
+
+A pending fix carries `tier3Invocations`, counted at the real Tier 3 call boundary — every call to the selector-inference step, including calls that return nothing or whose healed action then fails. This counter is displayed by `scripts/healing/review.js list` and in the dashboard healing panel.
+
+**Terminology is binding: this is an INVOCATION COUNT, not a cost estimate.** No dollar figure, token count, or pricing data is captured or displayed anywhere. `occurrences` (times re-recorded as pending) and `tier3Invocations` (times Tier 3 was called) are distinct and must never be conflated.
+
+### Bounded state
+
+Both decision ledgers — healing approvals/rejections and quarantine decisions — are now newest-N ring buffers at 500 rows. The pending healing queue is LRU-capped at 200 entries by `lastSeen`. Eviction is logged at `info` level.
+
+Ledgers are capped on load as well as on mutation (migration path for an already-oversized file). The pending queue is never truncated on load — it loads whole and logs a warning if it exceeds the cap, because pending entries are live human work nobody has acted on yet, and are only trimmed when a new fix arrives.
 
 ---
 
@@ -694,9 +776,12 @@ A scenario that has never passed cannot be quarantined at all, and that's enforc
 node scripts/flakiness/review.js list                       # every tracked scenario; add new|stable|broken|flaky to filter
 node scripts/flakiness/review.js quarantine "<scenario-key>"
 node scripts/flakiness/review.js unquarantine "<scenario-key>"
+node scripts/flakiness/review.js rehab                       # read-only: rehabilitation candidates (Phase 13)
 ```
 
 Quarantining a scenario changes only how a subsequent failure is *reported*: `TestRunner` reports it as `quarantined` instead of `failed`, a status `ReportManager` deliberately excludes from both the "does this run pass" and "is this a real regression" checks, so a quarantined failure never flips a green build red, never merges silently into `passed` either, and always stays visible in the run summary (`Total: 5 | Passed: 3 | Failed: 0 | Skipped: 0 | Quarantined: 2`). The quarantined interaction is still run, still recorded, and still contributes to its own classification going forward. Quarantining is a CI-blocking decision, not a coverage decision.
+
+**Phase 13 — Rehabilitation candidates:** A quarantined scenario that has passed its last `REHAB_CANDIDATE_WINDOW` consecutive runs (default 5) is surfaced as a rehabilitation candidate, in the CLI, the API routes, and the dashboard panel. It remains quarantined until a human explicitly unquarantines it — nothing is auto-promoted. If it fails again, it drops out of candidacy and the counter resets.
 
 `GET /flakiness/scenarios`, `GET /flakiness/scenarios?classification=flaky`, `POST /flakiness/quarantine`, and `POST /flakiness/unquarantine` back the dashboard panel, gated by the same `DASHBOARD_TOKEN` and rate limiter as every other dashboard route. `data/scenario_history.json` (bounded to 500 tracked scenarios, LRU-evicted, 20 outcomes kept per scenario) and `data/quarantine_decisions.json` (the audit ledger) are both gitignored, the same as the Phase 8 healing files.
 
@@ -787,6 +872,11 @@ npm run test:coverage     # same as test:regression, with coverage collection
 # if the dashboard requires a token, DASHBOARD_TOKEN too)
 DASHBOARD_URL=http://localhost:3000 node tests/ui/LoginTest.js
 
+# Review status: pending healing fixes and flaky scenarios (Phase 13)
+npm run review:status            # soft-warning: print staleness, exit 0
+npm run review:status:strict     # hard-gate: print staleness, exit 1 if anything stale
+node scripts/review/status.js --fail-on-stale  # same as review:status:strict
+
 # The recorded UI suite: a real browser against the live axonradar.netlify.app.
 # Not part of `npx playwright test` and not in CI — it depends on a
 # third-party site being up. Records a video per test into reports/.
@@ -806,11 +896,9 @@ npx allure open allure-report
 
 ## Roadmap
 
-Falcon's differentiator is genuine self-healing, not a hardcoded selector list, but "AI healed this selector" is only as trustworthy as the visibility behind it, and a red build is only as trustworthy as the data behind why it's red. That's the throughline for what's next:
+Falcon's differentiator is genuine self-healing, not a hardcoded selector list, but "AI healed this selector" is only as trustworthy as the visibility behind it, and a red build is only as trustworthy as the data behind why it's red. That's the throughline for what's next.
 
-- **Decisions that nobody ever gets around to making.** `HealingTrust` makes an unreviewed Tier 3 guess visible and gates it behind approval; `FlakinessTracker` does the same for quarantine. Neither one expires today: if nobody opens the dashboard or runs the CLI for a while, a pending healing fix just sits there paying the Tier 3 LLM cost silently, and a flaky scenario nobody's quarantined keeps blocking CI the same way it always did. The next step is a shared staleness signal, at minimum a loud warning, possibly a failed check, when either `data/healing_pending.json` or an unquarantined flaky scenario has been sitting unreviewed past some threshold, so neither kind of decision can be ignored indefinitely by default.
-
-Detailed plans for the phases after this one, with implementation specifications and acceptance criteria, are in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md).
+Detailed plans for the phases ahead, with implementation specifications and acceptance criteria, are in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md).
 
 ✅ Shipped since the last update:
 - **Healing that covers every action, and a run that can't go green having verified nothing.** Healing used to apply to clicks alone: a renamed input was marked `skipped` before the healer was ever consulted, and because a skip isn't a failure, two skips beside one pass reported PASSED and exited 0. A renamed field quietly cost coverage and the build stayed green over it. `type` and `select` now go through the same three tiers a click does, with the same approval gate; an unresolvable target fails instead of skipping; and `passed`, `failed` and `quarantined` are the only statuses that count as a verdict, so a run without one of them exits 1 like an empty run. A scenario that navigates away also no longer leaves the rest of its plan running against the page it landed on.
