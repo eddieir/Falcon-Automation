@@ -66,9 +66,9 @@ CI green, zero open CodeQL alerts.
 | D4 | Major | `_evictLeastRecentlyUsed()` sorts on `lastUsed` with no exemption for quarantined entries. Verified: quarantine + 600 new scenarios → decision gone, failures block again, nothing logged. | **Phase 12** |
 | D5 | Major | A sometimes-missing `type`/`select` target is marked `skipped`, and `skipped` is never recorded — so the textbook flake shape classifies as `stable`, 0% fail rate. | **Phase 11 (reporting) / Phase 12 (classification)** |
 | D6 | Major | `DashboardAuth.check.js`'s socket rate-limit assertion fails ~18% of runs (2 of 11): `xhr poll error` from the overloaded polling transport masks the limiter's own message. Hard step in the `test` job. | **Closed** — Phase 10 follow-up |
-| D7 | Major | `HealingTrust.pending` and `.decisions` have no cap or eviction, nor does `quarantine_decisions.json`. 5,000 decisions → 1,500,329 bytes, full-file rewrite per decision, read synchronously at require time. `LocatorStore` stayed capped at 500 through the same test. | Phase 13 |
+| D7 | Major | `HealingTrust.pending` and `.decisions` have no cap or eviction, nor does `quarantine_decisions.json`. 5,000 decisions → 1,500,329 bytes, full-file rewrite per decision, read synchronously at require time. `LocatorStore` stayed capped at 500 through the same test. | **Closed** — Phase 13 |
 | D8 | Major | State saves are a plain `writeFile`, not temp+rename, and `_loadJson` recovers from corruption to empty with no log line — silently voiding the entire review queue or every quarantine. | **Phase 12** |
-| D9 | Minor | Rejection memory is written to disk and surfaced nowhere: not by `recordPending`, no route, not in `review.js list`. README claims otherwise. | **Phase 13** |
+| D9 | Minor | Rejection memory is written to disk and surfaced nowhere: not by `recordPending`, no route, not in `review.js list`. README claims otherwise. | **Closed** — Phase 13 |
 | D10 | Minor | `reports/test-report.json` and 38 `allure-report/` files are tracked despite being gitignored; the tree goes dirty on every run. | **Closed** — Phase 10 follow-up |
 | D11 | Minor | Four false doc claims: a `continue-on-error: true` that isn't in `ci.yml`; a demo regeneration recipe whose frame paths don't match; `review.js list` described as filtered when it isn't; Project Structure tree omits `tests/regression/`. | **Closed** — Phase 10 follow-up |
 | D12 | Minor | `recordPending` resets an existing description to `""` when the caller omits one; double-quarantine appends a duplicate ledger row. | **Closed** — Phase 10 follow-up |
@@ -439,6 +439,8 @@ with the original bytes.
 
 ## Phase 13 — Decisions that can't rot
 
+**Status:** ✅ Implemented. Pending review and merge authorization.
+
 **Closes:** D7, D9, D12, and the roadmap's own stated next item.
 
 ### Why
@@ -475,6 +477,67 @@ happen quietly.
 
 A pending fix older than threshold fails `status.js --fail-on-stale`; a re-suggested rejected fix is
 flagged; neither ledger exceeds its cap under 10,000 decisions.
+
+### Shipped
+
+**1. Staleness thresholds.** Three optional env vars with integer validation (1-3650 or 1-20, reject invalid
+with a message naming the setting):
+- `HEALING_PENDING_STALE_DAYS` (default 14): age from `firstSeen`
+- `FLAKY_UNREVIEWED_STALE_DAYS` (default 14): age from `flakySince`
+- `REHAB_CANDIDATE_WINDOW` (default 5): consecutive passes to surface a candidate
+Boundary rule: stale iff `age > threshold` (on-threshold is NOT stale).
+
+**2. Review status CLI (`scripts/review/status.js`)** with fixed exit-code contract:
+
+| Situation | Exit |
+|---|---|
+| Nothing stale | 0 |
+| Something stale, no flag | 0 (findings printed) |
+| Something stale, with `--fail-on-stale` | 1 |
+| Invalid configuration | 2 |
+| Unrecognized argument | 3 |
+| State files missing/empty | 0 |
+| State file corrupt | 0 (recovered to empty, warned, original preserved) |
+
+Accepts exactly one flag, `--fail-on-stale`, and deliberately no file-path flag.
+
+**3. CI wiring — documented choice.** The check runs in the `test` job in soft-warning mode (no flag,
+no `continue-on-error`). NOT a hard gate. Reasons, both verified: the state cache is branch-scoped
+and restores only from the same `ref_name` — on a fresh PR branch the cache misses, making a gate
+vacuous; and the `test` job's current red means "a test failed", so gating would give one status two
+unrelated meanings. Promotion to hard-gate (`--fail-on-stale`) is appropriate once the check runs in
+a `main`-scoped or scheduled context under its own check name. Note: as of this phase, the ci.yml
+step itself may not yet be present — the choice is documented here; if absent, that is a separate
+owner's responsibility.
+
+**4. Quarantine rehabilitation.** A quarantined scenario whose most recent `REHAB_CANDIDATE_WINDOW`
+recorded outcomes have all passed surfaces as a rehabilitation candidate in:
+- `scripts/flakiness/review.js rehab` (read-only subcommand)
+- `GET /flakiness/rehabilitation` dashboard route
+- Dashboard "Flaky tests" panel
+- `npm run review:status` output
+
+Never auto-unquarantined. A scenario needs at least N recorded outcomes to be a candidate. Any failure
+resets the counter. `unavailable` (target not visible) counts as failure.
+
+**5. Rejection memory (closes D9).** A pending fix now carries `previouslyRejected: { count, lastRejectedAt, lastRejectedBy }`,
+rendered distinctly by the CLI and dashboard. When a selector-suggestion pair is proposed again,
+the history is flagged. **Documented limitation worth stating:** rejection memory is computed by folding
+the decision ledger, capped at 500 rows. Once a rejection ages out, the pair can be proposed again as
+if new. This is a deliberate consequence of binding both ledgers to a single source of truth.
+
+**6. Tier 3 invocation visibility.** A pending fix carries `tier3Invocations`, counted at the real Tier 3
+call boundary — every call to the selector-inference step, including calls that return nothing or whose
+healed action fails. Displayed by the CLI and dashboard. **Terminology is binding: INVOCATION COUNT, never
+cost.** No dollar figure, token count, or pricing data is captured or displayed.
+
+**7. Bounded state (closes D7).** Both decision ledgers are newest-N ring buffers at 500 rows; pending
+healing entries are LRU-capped at 200 by `lastSeen`. Eviction is logged. Ledgers are capped on load
+as well as on mutation (migration for existing oversized files); pending queue loads whole and warns
+if it exceeds the cap, because pending entries are live human work.
+
+**8. D12.** Already fixed before this phase (decision ledger double-writes and description resets); now
+protected by explicit regression tests. Do NOT describe D12 as newly fixed in Phase 13.
 
 ---
 
