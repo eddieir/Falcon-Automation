@@ -175,9 +175,13 @@ test("autoheal infers from real DOM through a controlled provider, but does not 
   await healer.healSelector("#renamed", "Save");
   expect(requests).toBe(2);
 });
-test("unrecoverable selector records failure instead of success or skip", async ({
+test("an unresolvable click target reports 'unavailable', not a silent success or a 'failed' that hides the distinction", async ({
   page,
 }) => {
+  // Phase 12 (AC-05): the healing chain being fully exhausted (no AI
+  // suggestion at all) is marked error.code === "TARGET_UNAVAILABLE" by
+  // AIHealer and surfaces as its own "unavailable" status, distinct from an
+  // ordinary "failed" (resolved but the interaction itself broke).
   await page.setContent("<p>No matching element</p>");
   const runner = new Runner(page, {
     test_scenarios: [
@@ -187,7 +191,9 @@ test("unrecoverable selector records failure instead of success or skip", async 
   runner.healer._retry.maxAttempts = 1;
   runner.healer.getAlternativeSelector = async () => null;
   const result = await runner.executeTest();
-  expect(result[0].status).toBe("failed");
+  expect(result[0].status).toBe("unavailable");
+  expect(result[0].status).not.toBe("skipped");
+  expect(result[0].status).not.toBe("passed");
 });
 
 // ── Phase 11: healing for every action, and no silent green ─────────────────
@@ -244,9 +250,17 @@ test("a renamed select target heals through Tier 3 inference via a controlled pr
   );
 });
 
-test("an unresolvable renamed input fails rather than skips, and FlakinessTracker records it with a classified error type", async ({
+test("an unresolvable renamed type target ends 'unavailable' (not 'skipped', not a silent pass), and FlakinessTracker still records it as a classified failure", async ({
   page,
 }) => {
+  // Phase 12 (AC-05): a fake page double can't model page.fill() against a
+  // genuinely missing element, which is exactly why this runs against real
+  // Chromium. The target is unresolvable after the full healing chain, so
+  // TestRunner must report "unavailable" — distinct from "skipped" (never
+  // attempted) and from an ordinary "failed" — while FlakinessTracker still
+  // sees it as a plain "failed" sample (unavailable is additive `outcome`,
+  // not a new status FlakinessTracker itself has to learn) so classify()'s
+  // pass/fail window keeps working unmodified.
   await page.setContent("<p>No matching field here</p>");
   const runnerUrl = "http://runner.test/form";
   const runner = new Runner(page, {
@@ -258,13 +272,112 @@ test("an unresolvable renamed input fails rather than skips, and FlakinessTracke
   runner.healer._retry.maxAttempts = 1;
   runner.healer.getAlternativeSelector = async () => null;
   const results = await runner.executeTest();
-  expect(results[0].status).toBe("failed");
+  expect(results[0].status).toBe("unavailable");
   expect(results[0].status).not.toBe("skipped");
+  expect(results[0].status).not.toBe("passed");
   const key = Flaky.keyFor({ url: runnerUrl, action: "type", locator: "#absent-field" });
   const entry = Flaky.list().find((e) => e.key === key);
   expect(entry).toBeTruthy();
   expect(entry.history.at(-1).status).toBe("failed");
+  expect(entry.history.at(-1).outcome).toBe("unavailable");
   expect(entry.history.at(-1).errorType).toBeTruthy();
+});
+
+test("an unresolvable renamed select target also ends 'unavailable'", async ({ page }) => {
+  await page.setContent("<p>No matching select here</p>");
+  const runner = new Runner(page, {
+    url: "http://runner.test/select-form",
+    test_scenarios: [
+      { action: "select", locator: "#absent-select", value: "it", description: "Missing Select" },
+    ],
+  });
+  runner.healer._retry.maxAttempts = 1;
+  runner.healer.getAlternativeSelector = async () => null;
+  const results = await runner.executeTest();
+  expect(results[0].status).toBe("unavailable");
+});
+
+test("an unsupported action still reports 'skipped' even though 'unavailable' now exists as a status", async ({ page }) => {
+  await page.setContent("<p>content</p>");
+  const runner = new Runner(page, {
+    test_scenarios: [{ action: "hover", locator: "#x", description: "Hover" }],
+  });
+  const results = await runner.executeTest();
+  expect(results[0].status).toBe("skipped");
+});
+
+// ── Phase 12: --repeat / runRepeatedTestPlan against a real page ────────────
+
+test("runRepeatedTestPlan produces N samples for one stable target, and repetition 1's navigation does not contaminate repetition 2", async ({ page }) => {
+  await page.route("http://runner.test/repeat/**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<a id="nav" href="/repeat/other">Other</a><button id="save" onclick="window.saveCount=(window.saveCount||0)+1">Save</button>',
+    }),
+  );
+  await page.goto("http://runner.test/repeat/");
+  const testPlan = {
+    url: "http://runner.test/repeat/",
+    test_scenarios: [
+      { action: "click", locator: "#nav", description: "Navigate: Other" },
+      { action: "click", locator: "#save", description: "Save" },
+    ],
+  };
+  const results = await Runner.runRepeatedTestPlan(page, testPlan, 3);
+  expect(results).toHaveLength(6);
+  expect(results.map((r) => r.repetition)).toEqual([1, 1, 2, 2, 3, 3]);
+  // Every repetition's "Save" click succeeds — proof that repetition 2 (and
+  // 3) started from a fresh navigation to testPlan.url rather than
+  // inheriting wherever repetition 1's "Navigate: Other" click left the page.
+  expect(results.every((r) => r.status === "passed")).toBe(true);
+  expect(page.url()).toBe("http://runner.test/repeat/");
+});
+
+test("a failure in one repetition is not erased by a later passing repetition", async ({ page }) => {
+  await page.route("http://runner.test/flaky-target", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<button id="save" onclick="window.saved=true">Save</button>',
+    }),
+  );
+  await page.goto("http://runner.test/flaky-target");
+  const testPlan = {
+    url: "http://runner.test/flaky-target",
+    test_scenarios: [{ action: "click", locator: "#gone", description: "Gone" }],
+  };
+  let attempt = 0;
+  const OriginalHealer = Healer.prototype.healAndClick;
+  Healer.prototype.healAndClick = async function (...args) {
+    attempt++;
+    if (attempt === 2) return; // second repetition "passes"
+    throw Object.assign(Error("not found"), { code: "TARGET_UNAVAILABLE" });
+  };
+  try {
+    const results = await Runner.runRepeatedTestPlan(page, testPlan, 3);
+    expect(results.map((r) => r.status)).toEqual(["unavailable", "passed", "unavailable"]);
+  } finally {
+    Healer.prototype.healAndClick = OriginalHealer;
+  }
+});
+
+test("pages/contexts opened during a repeated run close on both success and failure", async ({ page, context }) => {
+  const before = context.pages().length;
+  await page.route("http://runner.test/close-check", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<button id="save" onclick="window.saved=true">Save</button>',
+    }),
+  );
+  await page.goto("http://runner.test/close-check");
+  const testPlan = {
+    url: "http://runner.test/close-check",
+    test_scenarios: [{ action: "click", locator: "#save", description: "Save" }],
+  };
+  await Runner.runRepeatedTestPlan(page, testPlan, 3);
+  // runRepeatedTestPlan reuses the one page it's handed across every
+  // repetition (SiteSweep/falcon.js own the page's lifecycle around the
+  // call) — it must not leak extra pages/contexts of its own.
+  expect(context.pages().length).toBe(before);
 });
 
 test("a scenario that navigates away does not break later scenarios in the same plan", async ({

@@ -1,7 +1,7 @@
-const fs   = require("fs");
 const path = require("path");
 const LocatorStore = require("./LocatorStore");
 const Middleware   = require("../Middleware");
+const AtomicJsonStore = require("../util/AtomicJsonStore");
 
 /**
  * HealingTrust — Phase 8 approval gate for Tier 3 (LLM-inferred) selector
@@ -31,21 +31,8 @@ class HealingTrust {
 
     /** (Re)load both files from disk. Exposed for tests that swap the paths after construction. */
     _reload() {
-        this.pending   = this._loadJson(this.pendingPath, {});
-        this.decisions = this._loadJson(this.decisionsPath, []);
-    }
-
-    _loadJson(filePath, fallback) {
-        try {
-            if (fs.existsSync(filePath)) {
-                const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
-                if (Array.isArray(fallback)) return Array.isArray(raw) ? raw : fallback;
-                return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : fallback;
-            }
-        } catch {
-            // Corrupt file — start fresh rather than crash the run
-        }
-        return fallback;
+        this.pending   = AtomicJsonStore.readJsonSync(this.pendingPath, {});
+        this.decisions = AtomicJsonStore.readJsonSync(this.decisionsPath, []);
     }
 
     /**
@@ -98,7 +85,7 @@ class HealingTrust {
             occurrences: (existing?.occurrences ?? 0) + 1,
         };
         this._setPending(original, entry);
-        this._queue = this._queue.then(() => this._save(this.pendingPath, this.pending));
+        this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending));
         Middleware.emit("healingPending", entry);
         return entry;
     }
@@ -123,8 +110,8 @@ class HealingTrust {
         const decision = { ...entry, decision: "approved", decidedAt: new Date().toISOString(), decidedBy: approvedBy };
         this.decisions.push(decision);
         this._queue = this._queue
-            .then(() => this._save(this.pendingPath, this.pending))
-            .then(() => this._save(this.decisionsPath, this.decisions));
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending))
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
         Middleware.emit("healingApproved", decision);
         return decision;
     }
@@ -144,19 +131,10 @@ class HealingTrust {
         const decision = { ...entry, decision: "rejected", decidedAt: new Date().toISOString(), decidedBy: rejectedBy };
         this.decisions.push(decision);
         this._queue = this._queue
-            .then(() => this._save(this.pendingPath, this.pending))
-            .then(() => this._save(this.decisionsPath, this.decisions));
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending))
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
         Middleware.emit("healingRejected", decision);
         return decision;
-    }
-
-    async _save(filePath, data) {
-        try {
-            await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-            await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2), "utf8");
-        } catch {
-            // A failed audit write must never abort the run
-        }
     }
 }
 

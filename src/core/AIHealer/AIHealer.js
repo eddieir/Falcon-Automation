@@ -197,17 +197,30 @@ class AIHealer {
                 // it — keeps error-type classification working) and also
                 // attached as `cause` for anyone inspecting the error object
                 // directly.
-                throw new Error(
-                    `AI-Healer could not resolve ${description} (${selector}) after healing — ` +
-                    `the healed attempt against "${aiSuggestedLocator}" also failed: ${clickErr.message}`,
-                    { cause: clickErr }
-                );
+                {
+                    // AC-05 seam (Q6): a plain additive property, not a new
+                    // exception subclass — the message text above is
+                    // untouched so AdaptiveRetry.classify() (which matches on
+                    // message substrings) keeps working. TestRunner reads
+                    // this code to distinguish "chain exhausted" from any
+                    // other failure and report it as its own "unavailable"
+                    // status instead of a plain "failed".
+                    const err = new Error(
+                        `AI-Healer could not resolve ${description} (${selector}) after healing — ` +
+                        `the healed attempt against "${aiSuggestedLocator}" also failed: ${clickErr.message}`,
+                        { cause: clickErr }
+                    );
+                    err.code = "TARGET_UNAVAILABLE";
+                    throw err;
+                }
             }
         } else {
             const msg = `AI-Healer could not resolve ${description} (${selector}): element not found after healing`;
             Logger.error(`🔥 ${msg}`);
             HealingReport.log({ original: selector, resolved: null, tier: "LLM", description, action });
-            throw new Error(msg);
+            const err = new Error(msg);
+            err.code = "TARGET_UNAVAILABLE";
+            throw err;
         }
     }
 
