@@ -330,33 +330,46 @@ class FlakinessTracker {
      * ledger decision is "quarantine" (`_protectedKeys()`), is excluded from
      * the eviction pool entirely. Sort/slice runs only over the remaining
      * unprotected keys, using the same overflow count as before, so
-     * unprotected entries stay bounded exactly as today. If every tracked
-     * key is protected and the cap is still exceeded, nothing is evicted —
-     * a single Logger.warning names the tracked/protected counts so a human
-     * decision is never dropped silently.
+     * unprotected entries stay bounded exactly as today.
+     *
+     * Eviction never touches a protected entry, so it can only ever reduce
+     * the tracked total down to (approximately) the size of the protected
+     * pool — if the protected pool alone is at or over the cap, or is close
+     * enough to it that the unprotected pool can't cover the whole overflow,
+     * evicting every unprotected entry still leaves the cap exceeded
+     * (P12-10: this used to happen silently whenever *some* unprotected
+     * entries existed but not enough of them — only the fully-protected case
+     * warned). Whenever eviction cannot fully restore the cap, exactly one
+     * Logger.warning fires naming the tracked total, the protected count,
+     * how many entries were actually evicted, and the remaining shortfall
+     * over the cap — a human decision is never dropped, but it is also never
+     * silent when it leaves the cap exceeded.
      */
     _evictLeastRecentlyUsed() {
         const keys = Object.keys(this.scenarios);
-        if (keys.length <= MAX_TRACKED_SCENARIOS) return;
+        const overflow = keys.length - MAX_TRACKED_SCENARIOS;
+        if (overflow <= 0) return;
 
         const protectedKeys = this._protectedKeys();
         const isProtected = (key) => this._getScenario(key)?.quarantined === true || protectedKeys.has(key);
         const unprotected = keys.filter((key) => !isProtected(key));
 
-        if (unprotected.length === 0) {
-            Logger.warning(
-                `FlakinessTracker eviction skipped: ${keys.length} tracked scenarios exceed `
-                + `MAX_TRACKED_SCENARIOS (${MAX_TRACKED_SCENARIOS}), but all ${keys.length} are protected `
-                + "(quarantined or ledger-referenced); no entry was evicted.",
-            );
-            return;
-        }
-
-        const toEvict = Math.min(keys.length - MAX_TRACKED_SCENARIOS, unprotected.length);
+        const toEvict = Math.min(overflow, unprotected.length);
         unprotected
             .sort((a, b) => this.scenarios[a].lastUsed - this.scenarios[b].lastUsed)
             .slice(0, toEvict)
             .forEach((key) => delete this.scenarios[key]);
+
+        const shortfall = overflow - toEvict;
+        if (shortfall > 0) {
+            const protectedCount = keys.length - unprotected.length;
+            Logger.warning(
+                `FlakinessTracker eviction could not restore the cap: ${keys.length} tracked scenarios exceed `
+                + `MAX_TRACKED_SCENARIOS (${MAX_TRACKED_SCENARIOS}); ${protectedCount} are protected `
+                + `(quarantined or ledger-referenced) and were never eligible for eviction, ${toEvict} unprotected `
+                + `${toEvict === 1 ? "entry" : "entries"} evicted, leaving the tracked total ${shortfall} over the cap.`,
+            );
+        }
     }
 }
 
