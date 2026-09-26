@@ -229,14 +229,14 @@ class TestRunner {
 
     /**
      * Execute an exploratory run and persist a JSON summary.
-     * Called from falcon.js after ExploratoryAI and ClickExplorer have run.
+     * Called from falcon.js after DOMIssueScanner and ClickExplorer have run.
      *
      * @param {Object} opts
-     * @param {Array}  opts.uiIssues      - Issues found by ExploratoryAI
+     * @param {Array}  opts.uiIssues      - Issues found by DOMIssueScanner
      * @param {Array}  opts.exploredPages - Pages visited by ClickExplorer
      */
     async executeExploratoryTest({ uiIssues = [], exploredPages = [] } = {}) {
-        Logger.info("🛠 Running AI-powered exploratory test summary...");
+        Logger.info("🛠 Writing exploratory scan summary...");
         this.logResults({ uiIssues, exploredPages });
     }
 

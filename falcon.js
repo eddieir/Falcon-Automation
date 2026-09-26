@@ -4,7 +4,7 @@
  * Phase 10 — whole-app coverage:
  *   - A run now covers the whole application, not just its entry page.
  *     SiteSweep discovers the frontier with ClickExplorer and then, for
- *     every page it keeps, runs ExploratoryAI + TestGenerator + TestRunner
+ *     every page it keeps, runs DOMIssueScanner + TestGenerator + TestRunner
  *     on that page. Until Phase 10 this file threw the crawler's results
  *     away: it logged the page count, re-navigated to the root URL and
  *     generated scenarios for that one page. The header comment below
@@ -49,7 +49,7 @@
 
 require("dotenv").config();
 const { chromium }    = require("playwright");
-const ExploratoryAI   = require("./src/core/ExploratoryAI");
+const DOMIssueScanner = require("./src/core/DOMIssueScanner");
 const ClickExplorer   = require("./src/core/ClickExplorer");
 const TestRunner      = require("./src/core/TestRunner");
 const TestGenerator   = require("./src/core/TestGenerator");
@@ -233,9 +233,9 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
     emit("explorerPage", { url });
 
     // ── Step 1: Detect UI Issues ─────────────────────────────────────────────
-    Logger.info("🔍 Step 1: Detecting UI issues with ExploratoryAI…");
-    const exploratoryAI = new ExploratoryAI(page);
-    let uiIssues = await exploratoryAI.detectUIIssues();
+    Logger.info("🔍 Step 1: Detecting UI issues with DOMIssueScanner…");
+    const domIssueScanner = new DOMIssueScanner(page);
+    let uiIssues = await domIssueScanner.detectUIIssues();
     if (!Array.isArray(uiIssues)) {
         Logger.warning("⚠️  detectUIIssues() did not return an array — defaulting to []");
         uiIssues = [];
@@ -256,7 +256,7 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
     Logger.info(`  → ${visitedPages.size} page(s) explored`);
 
     // ── Step 3: AI Test Generation ───────────────────────────────────────────
-    Logger.info("🤖 Step 3: Generating test scenarios from DOM analysis…");
+    Logger.info("🔍 Step 3: Generating test scenarios from DOM analysis…");
 
     // Re-navigate to the root to generate scenarios from the main page
     await page.goto(url, { waitUntil: "domcontentloaded" }).catch(() => {});
@@ -266,7 +266,7 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
     Logger.info(`  → ${testPlan.test_scenarios.length} scenario(s) generated for ${testPlan.url}`);
 
     // ── Step 4: Execute Generated Test Plan ──────────────────────────────────
-    Logger.info(`▶  Step 4: Executing AI-generated test scenarios (repeat=${repeatCount})…`);
+    Logger.info(`▶  Step 4: Executing generated test scenarios (repeat=${repeatCount})…`);
     const results = await TestRunner.runRepeatedTestPlan(page, testPlan, repeatCount);
 
     const only = {

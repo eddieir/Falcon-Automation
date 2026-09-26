@@ -1,5 +1,5 @@
 /**
- * multi-page-axonradar-demo.js — runs Falcon's real pipeline (ExploratoryAI
+ * multi-page-axonradar-demo.js — runs Falcon's real pipeline (DOMIssueScanner
  * defect detection -> PageAnalyser/TestGenerator scenario generation ->
  * TestRunner self-healing execution) against every real, live page of
  * https://axonradar.netlify.app, not just the homepage.
@@ -17,7 +17,7 @@
  */
 const { chromium } = require("playwright");
 const path = require("path");
-const ExploratoryAI = require(path.join("..", "..", "src/core/ExploratoryAI"));
+const DOMIssueScanner = require(path.join("..", "..", "src/core/DOMIssueScanner"));
 const TestGenerator = require(path.join("..", "..", "src/core/TestGenerator"));
 const TestRunner    = require(path.join("..", "..", "src/core/TestRunner"));
 
@@ -40,8 +40,8 @@ const PAGES = [
         try {
             await page.goto(url, { waitUntil: "load", timeout: 20000 });
 
-            const exploratoryAI = new ExploratoryAI(page);
-            const uiIssues = await exploratoryAI.detectUIIssues().catch(() => []);
+            const domIssueScanner = new DOMIssueScanner(page);
+            const uiIssues = await domIssueScanner.detectUIIssues().catch(() => []);
 
             const generator = new TestGenerator(page);
             const testPlan = await generator.generateTestScenarios();
