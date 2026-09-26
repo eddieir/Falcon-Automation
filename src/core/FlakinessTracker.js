@@ -1,6 +1,7 @@
-const fs   = require("fs");
 const path = require("path");
 const Middleware = require("./Middleware");
+const Logger = require("../../utils/Logger");
+const AtomicJsonStore = require("./util/AtomicJsonStore");
 
 /**
  * FlakinessTracker — Phase 9. Persistent pass/fail history per scenario,
@@ -44,23 +45,64 @@ class FlakinessTracker {
         this._reload();
     }
 
-    /** (Re)load both files from disk. Exposed for tests that swap the paths after construction. */
+    /**
+     * (Re)load both files from disk. Exposed for tests that swap the paths
+     * after construction.
+     *
+     * After loading, reconciles the decision ledger against history (D4/Q10):
+     * the ledger (`quarantine_decisions.json`) is the append-only audit
+     * trail, so for every key present in BOTH `scenarios` and the folded
+     * ledger, `scenarios[key].quarantined` is forced to match the ledger's
+     * latest verdict for that key — the ledger wins on disagreement (e.g. a
+     * crash between the history save and the decisions save left them out of
+     * sync). A key present only in the ledger (no matching history entry) is
+     * NOT resurrected — there is no sample data to rebuild a `history` array
+     * from a decision record alone — it is left to the in-memory
+     * eviction-protection set (`_protectedKeys()`) to keep it immune from
+     * eviction if a matching entry ever reappears. This reconciliation is
+     * in-memory only; it is not written back to disk as a side effect of
+     * loading.
+     */
     _reload() {
-        this.scenarios = this._loadJson(this.historyPath, {});
-        this.decisions = this._loadJson(this.decisionsPath, []);
+        this.scenarios = AtomicJsonStore.readJsonSync(this.historyPath, {});
+        this.decisions = AtomicJsonStore.readJsonSync(this.decisionsPath, []);
+
+        for (const [key, action] of this._effectiveDecisionMap()) {
+            if (!this._hasScenario(key)) continue;
+            const entry = this._getScenario(key);
+            const verdict = action === "quarantine";
+            if (entry.quarantined !== verdict) {
+                this._setScenario(key, { ...entry, quarantined: verdict });
+            }
+        }
     }
 
-    _loadJson(filePath, fallback) {
-        try {
-            if (fs.existsSync(filePath)) {
-                const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
-                if (Array.isArray(fallback)) return Array.isArray(raw) ? raw : fallback;
-                return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : fallback;
+    /**
+     * Fold `this.decisions` (append-only, in array/time order) into a
+     * `Map<key, "quarantine"|"unquarantine">` of each key's *latest*
+     * effective decision — last write wins. A key quarantined and later
+     * unquarantined drops out once its last decision is "unquarantine"
+     * (Q9): this keeps protection bounded to currently-live decisions
+     * rather than every historical row.
+     */
+    _effectiveDecisionMap() {
+        const latest = new Map();
+        for (const decision of this.decisions) {
+            if (decision && typeof decision.key === "string"
+                && (decision.action === "quarantine" || decision.action === "unquarantine")) {
+                latest.set(decision.key, decision.action);
             }
-        } catch {
-            // Corrupt file — start fresh rather than crash the run
         }
-        return fallback;
+        return latest;
+    }
+
+    /** Keys whose latest ledger decision is "quarantine" — the eviction-protected set. */
+    _protectedKeys() {
+        const keys = new Set();
+        for (const [key, action] of this._effectiveDecisionMap()) {
+            if (action === "quarantine") keys.add(key);
+        }
+        return keys;
     }
 
     // Same rationale as HealingTrust's equivalent helpers: `scenarios` is a
@@ -116,22 +158,39 @@ class FlakinessTracker {
      * about the interaction itself; anything else (e.g. "skipped") is a
      * no-op and returns null.
      *
+     * `"unavailable"` (the target page/site couldn't be reached at all) is
+     * normalized at this boundary rather than taught to every caller: it is
+     * stored as `status: "failed"` (so it counts toward classify()'s
+     * pass/fail window exactly like any other failure — an alternating
+     * present/absent target correctly classifies "flaky") plus
+     * `outcome: "unavailable"` on the history entry, so a reporter can still
+     * tell the two failure kinds apart. Without this normalization, a raw
+     * "unavailable" status would hit the `status !== "passed" && status !==
+     * "failed"` guard below and be silently dropped — never recorded at all.
+     *
      * @param {Object} opts
      * @param {string} opts.url
      * @param {string} opts.action
      * @param {string} opts.locator
      * @param {string} [opts.description]
-     * @param {"passed"|"failed"} opts.status
+     * @param {"passed"|"failed"|"unavailable"} opts.status
      * @param {number} [opts.duration]
      * @param {string} [opts.errorType] - AdaptiveRetry.classify() result, when status is "failed"
+     * @param {string} [opts.outcome] - additional detail alongside errorType, e.g. "unavailable"
      */
-    record({ url, action, locator, description = "", status, duration = null, errorType = null }) {
-        if (status !== "passed" && status !== "failed") return null;
+    record({ url, action, locator, description = "", status, duration = null, errorType = null, outcome = null }) {
+        let normalizedStatus = status;
+        let normalizedOutcome = outcome;
+        if (status === "unavailable") {
+            normalizedStatus = "failed";
+            normalizedOutcome = outcome ?? "unavailable";
+        }
+        if (normalizedStatus !== "passed" && normalizedStatus !== "failed") return null;
 
         const key = this.keyFor({ url, action, locator });
         const existing = this._getScenario(key);
         const history = [...(existing?.history ?? []), {
-            status, timestamp: new Date().toISOString(), duration, errorType,
+            status: normalizedStatus, timestamp: new Date().toISOString(), duration, errorType, outcome: normalizedOutcome,
         }].slice(-MAX_HISTORY_PER_SCENARIO);
 
         const { classification, flakeRate, sampleSize } = this.classify(history);
@@ -149,7 +208,7 @@ class FlakinessTracker {
         };
         this._setScenario(key, entry);
         this._evictLeastRecentlyUsed();
-        this._queue = this._queue.then(() => this._save(this.historyPath, this.scenarios));
+        this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.historyPath, this.scenarios));
 
         // Only fire on the transition into "flaky" — re-recording an
         // already-flaky scenario every run would flood the dashboard/CLI
@@ -236,8 +295,8 @@ class FlakinessTracker {
         const decision = { key, action: "quarantine", by, at: entry.quarantinedAt };
         this.decisions.push(decision);
         this._queue = this._queue
-            .then(() => this._save(this.historyPath, this.scenarios))
-            .then(() => this._save(this.decisionsPath, this.decisions));
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.historyPath, this.scenarios))
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
         Middleware.emit("scenarioQuarantined", entry);
         return entry;
     }
@@ -258,30 +317,46 @@ class FlakinessTracker {
         const decision = { key, action: "unquarantine", by, at: new Date().toISOString() };
         this.decisions.push(decision);
         this._queue = this._queue
-            .then(() => this._save(this.historyPath, this.scenarios))
-            .then(() => this._save(this.decisionsPath, this.decisions));
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.historyPath, this.scenarios))
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
         Middleware.emit("scenarioUnquarantined", entry);
         return entry;
     }
 
-    /** Keep at most MAX_TRACKED_SCENARIOS entries, dropping the stalest first. */
+    /**
+     * Keep at most MAX_TRACKED_SCENARIOS entries, dropping the stalest first
+     * — but never a scenario a human has explicitly decided about (D4/AC-08):
+     * an entry currently `quarantined === true`, or a key whose latest
+     * ledger decision is "quarantine" (`_protectedKeys()`), is excluded from
+     * the eviction pool entirely. Sort/slice runs only over the remaining
+     * unprotected keys, using the same overflow count as before, so
+     * unprotected entries stay bounded exactly as today. If every tracked
+     * key is protected and the cap is still exceeded, nothing is evicted —
+     * a single Logger.warning names the tracked/protected counts so a human
+     * decision is never dropped silently.
+     */
     _evictLeastRecentlyUsed() {
         const keys = Object.keys(this.scenarios);
         if (keys.length <= MAX_TRACKED_SCENARIOS) return;
 
-        keys
-            .sort((a, b) => this.scenarios[a].lastUsed - this.scenarios[b].lastUsed)
-            .slice(0, keys.length - MAX_TRACKED_SCENARIOS)
-            .forEach((key) => delete this.scenarios[key]);
-    }
+        const protectedKeys = this._protectedKeys();
+        const isProtected = (key) => this._getScenario(key)?.quarantined === true || protectedKeys.has(key);
+        const unprotected = keys.filter((key) => !isProtected(key));
 
-    async _save(filePath, data) {
-        try {
-            await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-            await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2), "utf8");
-        } catch {
-            // A failed audit write must never abort the run
+        if (unprotected.length === 0) {
+            Logger.warning(
+                `FlakinessTracker eviction skipped: ${keys.length} tracked scenarios exceed `
+                + `MAX_TRACKED_SCENARIOS (${MAX_TRACKED_SCENARIOS}), but all ${keys.length} are protected `
+                + "(quarantined or ledger-referenced); no entry was evicted.",
+            );
+            return;
         }
+
+        const toEvict = Math.min(keys.length - MAX_TRACKED_SCENARIOS, unprotected.length);
+        unprotected
+            .sort((a, b) => this.scenarios[a].lastUsed - this.scenarios[b].lastUsed)
+            .slice(0, toEvict)
+            .forEach((key) => delete this.scenarios[key]);
     }
 }
 
