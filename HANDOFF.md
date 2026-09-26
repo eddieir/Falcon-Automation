@@ -190,7 +190,7 @@ Verified end-to-end, not just at the unit level: real `falcon.js --dashboard` ru
 
 ## 8. Architecture — Autonomous Pipeline (`falcon.js`)
 
-Unchanged since Phase 3/5: `Dashboard.start()` → `ExploratoryAI` → `ClickExplorer` → `TestGenerator` (delegates to `PageAnalyser`) → `TestRunner.executeTest()` → `TestRunner.executeExploratoryTest()`. Dashboard stays up for `DASHBOARD_LINGER_MS` (default 60s) after the run for review, then the process exits. `dashboard.url` (a getter, Phase 7) is what gets printed — includes `?token=` automatically when one's configured.
+Unchanged since Phase 3/5 apart from the scanner's name: `Dashboard.start()` → `DOMIssueScanner` (named `ExploratoryAI` until Phase 12) → `ClickExplorer` → `TestGenerator` (delegates to `PageAnalyser`) → `TestRunner.executeTest()` → `TestRunner.executeExploratoryTest()`. Dashboard stays up for `DASHBOARD_LINGER_MS` (default 60s) after the run for review, then the process exits. `dashboard.url` (a getter, Phase 7) is what gets printed — includes `?token=` automatically when one's configured.
 
 ---
 
