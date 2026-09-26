@@ -32,7 +32,9 @@
     "healing:reject": "node scripts/healing/review.js reject",
     "flaky:list": "node scripts/flakiness/review.js list",
     "flaky:quarantine": "node scripts/flakiness/review.js quarantine",
-    "flaky:unquarantine": "node scripts/flakiness/review.js unquarantine"
+    "flaky:unquarantine": "node scripts/flakiness/review.js unquarantine",
+    "review:status": "node scripts/review/status.js",
+    "review:status:strict": "node scripts/review/status.js --fail-on-stale"
   },
   "keywords": [
     "AI",

@@ -2,7 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { load, temp } = require("./helpers.cjs");
+const { load, temp, root } = require("./helpers.cjs");
 
 function trackerAt(t) {
   const dir = temp();
@@ -723,4 +723,353 @@ test("D4/Q10: reconciliation is in-memory only — it is not written back to dis
   assert.equal(Tracker._getScenario(key).quarantined, true, "in-memory reconciliation applied");
   assert.equal(fs.readFileSync(Tracker.historyPath, "utf8"), before, "the on-disk file must be untouched by _reload()");
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+});
+
+test("P13-16 (Case B): a quarantine row truncated away by the ledger cap is still seen by reconciliation, and the key stays protected through an explicit eviction", (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const Tracker = load("src/core/FlakinessTracker.js", {
+    "./Middleware": { emit() {} },
+    "../../utils/Logger": { info() {}, warning() {}, error() {}, async flush() {} },
+  });
+  Tracker.historyPath = path.join(dir, "history.json");
+  Tracker.decisionsPath = path.join(dir, "decisions.json");
+  fs.mkdirSync(dir, { recursive: true });
+
+  const targetKey = "https://example.com::click::#save";
+
+  // scenarios: the target (stored quarantined:false, the desync
+  // reconciliation exists to repair) plus 500 ordinary, unprotected
+  // competitors — enough to exceed MAX_TRACKED_SCENARIOS (500) so an
+  // explicit _evictLeastRecentlyUsed() call actually has something to do.
+  // The target gets the oldest possible lastUsed so it would be the very
+  // first entry evicted if protection ever failed to hold.
+  const scenarios = {
+    [targetKey]: {
+      key: targetKey, url: "https://example.com", action: "click", locator: "#save",
+      history: [{ status: "passed" }], classification: "new", flakeRate: 0, sampleSize: 1,
+      lastUsed: -1, quarantined: false, quarantinedAt: null, quarantinedBy: null,
+    },
+  };
+  for (let i = 0; i < 500; i++) {
+    const key = `https://example.com::click::#other${i}`;
+    scenarios[key] = {
+      key, url: "https://example.com", action: "click", locator: `#other${i}`,
+      history: [{ status: "passed" }], classification: "new", flakeRate: 0, sampleSize: 1,
+      lastUsed: i, quarantined: false, quarantinedAt: null, quarantinedBy: null,
+    };
+  }
+  fs.writeFileSync(Tracker.historyPath, JSON.stringify(scenarios));
+
+  // decisions ledger: the target's ONLY "quarantine" row, oldest by
+  // timestamp, followed by 500 later rows for unrelated keys — exactly
+  // enough for the QUARANTINE_DECISIONS_MAX_ROWS (500) cap to drop the
+  // target's row as the oldest of 501 total rows.
+  const decisions = [
+    { key: targetKey, action: "quarantine", by: "peyman", at: "2000-01-01T00:00:00.000Z" },
+  ];
+  for (let i = 0; i < 500; i++) {
+    decisions.push({ key: `#pad${i}`, action: "quarantine", by: "seed", at: new Date(2001, 0, 1 + i).toISOString() });
+  }
+  fs.writeFileSync(Tracker.decisionsPath, JSON.stringify(decisions));
+
+  Tracker._reload();
+
+  // The ledger row that would have proven this key protected is gone from
+  // the capped array now, but reconciliation (run against the full 501-row
+  // ledger before the cap, per this fix) already forced entry.quarantined
+  // to true — a write that lands on the scenario entry, not the ledger, so
+  // it isn't undone by the cap that follows.
+  assert.equal(Tracker.decisions.length, 500, "ledger is still capped at QUARANTINE_DECISIONS_MAX_ROWS");
+  assert.equal(Tracker.decisions.some((d) => d.key === targetKey), false, "the target's own row was in fact the one dropped");
+  assert.equal(Tracker._getScenario(targetKey).quarantined, true, "reconciliation must see the row before it is capped away");
+
+  // And the entry must actually survive eviction, not just carry the flag:
+  // _protectedKeys() no longer has this key (its ledger row is gone), so
+  // this only holds if isProtected()'s direct entry.quarantined check saves it.
+  Tracker._evictLeastRecentlyUsed();
+  assert.equal(Tracker._hasScenario(targetKey), true, "must survive eviction despite its ledger row being capped away");
+});
+
+// ── Phase 13: decisions can't rot ──
+
+test("record: flakySince is set on entering flaky, cleared on leaving flaky, and preserved while flaky stays flaky", (t) => {
+  const { tracker } = trackerAt(t);
+  const a = tracker.record({ ...fixture(), status: "passed" });
+  assert.equal(a.flakySince, null);
+  const b = tracker.record({ ...fixture(), status: "passed" });
+  assert.equal(b.flakySince, null);
+  const c = tracker.record({ ...fixture(), status: "failed" }); // 3rd sample -> flaky
+  assert.equal(c.classification, "flaky");
+  assert.ok(c.flakySince, "flakySince must be set on entering flaky");
+  const enteredAt = c.flakySince;
+
+  const d = tracker.record({ ...fixture(), status: "failed" }); // still flaky
+  assert.equal(d.classification, "flaky");
+  assert.equal(d.flakySince, enteredAt, "flakySince is preserved while still flaky");
+
+  for (let i = 0; i < 10; i++) tracker.record({ ...fixture(), status: "passed" }); // window fills with passes -> stable
+  const last = tracker.list()[0];
+  assert.equal(last.classification, "stable");
+  assert.equal(last.flakySince, null, "flakySince clears on leaving flaky");
+});
+
+test("record: flakySince gets a fresh timestamp on each new transition into flaky", (t) => {
+  const { tracker } = trackerAt(t);
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "passed" }); // stable
+  const enter1 = tracker.record({ ...fixture(), status: "failed" }); // -> flaky
+  assert.ok(enter1.flakySince);
+  // Backdate it (no wall-clock sleep) so a fresh re-entry is provably a NEW
+  // timestamp, not the same value carried forward.
+  const backdated = new Date(Date.now() - 86400000).toISOString();
+  tracker._setScenario(enter1.key, { ...enter1, flakySince: backdated });
+
+  for (let i = 0; i < 10; i++) tracker.record({ ...fixture(), status: "passed" }); // -> stable
+  const enter2 = tracker.record({ ...fixture(), status: "failed" }); // -> flaky again
+  assert.ok(enter2.flakySince);
+  assert.notEqual(enter2.flakySince, backdated);
+});
+
+test("unquarantine: restarts flakySince's clock when the scenario is currently classified flaky", async (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "failed" }); // -> flaky
+  // Backdate flakySince to simulate it having been flagged flaky a long
+  // time before this quarantine/unquarantine cycle (no wall-clock sleep).
+  const oldEntry = tracker.list()[0];
+  const backdated = new Date(Date.now() - 30 * 86400000).toISOString();
+  tracker._setScenario(oldEntry.key, { ...oldEntry, flakySince: backdated });
+
+  tracker.quarantine(key);
+  const entry = tracker.unquarantine(key);
+  await tracker._queue;
+  assert.equal(entry.classification, "flaky");
+  assert.ok(entry.flakySince);
+  assert.notEqual(entry.flakySince, backdated, "the review clock restarts, it doesn't keep the pre-quarantine timestamp");
+
+  // Confirm behaviourally too: with the clock genuinely restarted, a
+  // 14-day-stale threshold must NOT flag this scenario, even though the
+  // pre-quarantine timestamp (30 days old) would have.
+  const result = tracker.unreviewedFlakyStale({ thresholdDays: 14, now: Date.now() });
+  assert.deepEqual(result.stale, []);
+  assert.equal(result.notStale.length, 1);
+});
+
+test("unquarantine: does not set flakySince for a scenario that isn't currently classified flaky", (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.quarantine(key);
+  const entry = tracker.unquarantine(key);
+  assert.equal(entry.classification, "new");
+  assert.equal(entry.flakySince, null);
+});
+
+test("unreviewedFlakyStale: boundary — exactly at threshold is NOT stale, one ms past is stale", (t) => {
+  const { tracker } = trackerAt(t);
+  const now = Date.parse("2024-06-01T00:00:00.000Z");
+  const thresholdDays = 14;
+  const exactMs = now - thresholdDays * 86400000;
+  const pastMs = exactMs - 1;
+
+  tracker.record({ ...fixture(), locator: "#exact", status: "passed" });
+  tracker.record({ ...fixture(), locator: "#exact", status: "passed" });
+  const exactEntry = tracker.record({ ...fixture(), locator: "#exact", status: "failed" }); // -> flaky
+  assert.equal(exactEntry.classification, "flaky");
+  exactEntry.flakySince = new Date(exactMs).toISOString();
+  tracker._setScenario(exactEntry.key, exactEntry);
+
+  tracker.record({ ...fixture(), locator: "#past", status: "passed" });
+  tracker.record({ ...fixture(), locator: "#past", status: "passed" });
+  const pastEntry = tracker.record({ ...fixture(), locator: "#past", status: "failed" }); // -> flaky
+  pastEntry.flakySince = new Date(pastMs).toISOString();
+  tracker._setScenario(pastEntry.key, pastEntry);
+
+  const result = tracker.unreviewedFlakyStale({ thresholdDays, now });
+  assert.deepEqual(result.notStale.map((e) => e.locator), ["#exact"]);
+  assert.deepEqual(result.stale.map((e) => e.locator), ["#past"]);
+  assert.deepEqual(result.unknownAge, []);
+});
+
+test("unreviewedFlakyStale: quarantined and non-flaky scenarios are excluded; a legacy flaky entry with no flakySince goes to unknownAge, never stale", (t) => {
+  const { tracker } = trackerAt(t);
+  tracker.record({ ...fixture(), locator: "#stable", status: "passed" });
+  tracker.record({ ...fixture(), locator: "#stable", status: "passed" });
+  tracker.record({ ...fixture(), locator: "#stable", status: "passed" });
+
+  tracker.record({ ...fixture(), locator: "#quarantined-flaky", status: "passed" });
+  tracker.record({ ...fixture(), locator: "#quarantined-flaky", status: "passed" });
+  const q = tracker.record({ ...fixture(), locator: "#quarantined-flaky", status: "failed" }); // -> flaky
+  tracker.quarantine(q.key);
+
+  tracker.record({ ...fixture(), locator: "#legacy-flaky", status: "passed" });
+  tracker.record({ ...fixture(), locator: "#legacy-flaky", status: "passed" });
+  const legacy = tracker.record({ ...fixture(), locator: "#legacy-flaky", status: "failed" }); // -> flaky
+  const stripped = { ...legacy };
+  delete stripped.flakySince;
+  tracker._setScenario(legacy.key, stripped);
+
+  const result = tracker.unreviewedFlakyStale({ thresholdDays: 1, now: Date.now() });
+  assert.deepEqual(result.stale, []);
+  assert.deepEqual(result.notStale, []);
+  assert.equal(result.unknownAge.length, 1);
+  assert.equal(result.unknownAge[0].locator, "#legacy-flaky");
+});
+
+test("rehabilitationCandidates: fewer than N passing results is not a candidate; exactly N consecutive passes is", (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  tracker.record({ ...fixture(), status: "passed" }); // eligible: at least one pass
+  tracker.quarantine(key);
+
+  // history so far: [passed]. Add 3 more so the (passed/failed-filtered)
+  // history length is 4 — still short of windowSize 5.
+  for (let i = 0; i < 3; i++) tracker.record({ ...fixture(), status: "passed" });
+  assert.deepEqual(tracker.rehabilitationCandidates({ windowSize: 5 }), [], "history.length < windowSize is never a candidate");
+
+  tracker.record({ ...fixture(), status: "passed" }); // history length now 5, all passed
+  const candidates = tracker.rehabilitationCandidates({ windowSize: 5 });
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].key, key);
+  assert.equal(candidates[0].windowSize, 5);
+  assert.equal(candidates[0].allPassedInWindow, true);
+  assert.equal(candidates[0].recentHistory.length, 5);
+  assert.ok(candidates[0].recentHistory.every((h) => h.status === "passed"));
+  assert.match(candidates[0].reason, /passed/);
+});
+
+test("rehabilitationCandidates: a later failure removes candidacy", (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "failed" });
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.quarantine(key);
+  for (let i = 0; i < 5; i++) tracker.record({ ...fixture(), status: "passed" });
+  assert.equal(tracker.rehabilitationCandidates({ windowSize: 5 }).length, 1);
+
+  tracker.record({ ...fixture(), status: "failed" });
+  assert.deepEqual(tracker.rehabilitationCandidates({ windowSize: 5 }), []);
+});
+
+test("rehabilitationCandidates: an 'unavailable' outcome (stored as failed) disqualifies the window", (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "failed" });
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.quarantine(key);
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "unavailable" }); // stored as failed
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "passed" });
+  assert.deepEqual(tracker.rehabilitationCandidates({ windowSize: 5 }), []);
+});
+
+test("rehabilitationCandidates: history shorter than windowSize (after filtering to passed/failed) is never a candidate", (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "failed" });
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.quarantine(key);
+  tracker.record({ ...fixture(), status: "passed" });
+  assert.deepEqual(tracker.rehabilitationCandidates({ windowSize: 20 }), []);
+});
+
+test("rehabilitationCandidates has zero write path: scenarios state is byte-identical before and after the call", (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "failed" });
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.quarantine(key);
+  for (let i = 0; i < 5; i++) tracker.record({ ...fixture(), status: "passed" });
+
+  const before = JSON.stringify(tracker.scenarios);
+  const candidates = tracker.rehabilitationCandidates({ windowSize: 5 });
+  assert.equal(candidates.length, 1);
+  candidates[0].recentHistory.push({ status: "tampered" }); // mutate the RESULT, not the source
+  assert.equal(JSON.stringify(tracker.scenarios), before, "rehabilitationCandidates must never mutate tracked state");
+});
+
+test("quarantine ledger ring-buffers at QUARANTINE_DECISIONS_MAX_ROWS (500) at mutation time, logging only the first rotation", (t) => {
+  const { tracker, warnings } = trackerAt(t);
+  // Seed 500 rows directly (bypassing quarantine()/unquarantine(), which
+  // would each need their own eligible scenario) so the very next real
+  // decision is what crosses the cap.
+  tracker.decisions = Array.from({ length: 500 }, (_, i) => ({
+    key: `seed-${i}`, action: "quarantine", by: "seed", at: new Date(i).toISOString(),
+  }));
+
+  const key = "https://example.com::click::#save";
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.quarantine(key, { by: "peyman" });
+  assert.equal(tracker.decisions.length, 500, "capped at QUARANTINE_DECISIONS_MAX_ROWS");
+  assert.equal(tracker.decisions[0].key, "seed-1", "oldest row dropped");
+  assert.equal(tracker.decisions[499].key, key, "newest row retained");
+  const rotationWarnings = warnings.filter((w) => w.includes("cap"));
+  assert.equal(rotationWarnings.length, 1);
+
+  // A second overflow this same process must not log again.
+  tracker.unquarantine(key);
+  const rotationWarningsAfter = warnings.filter((w) => w.includes("cap"));
+  assert.equal(rotationWarningsAfter.length, 1, "only the first rotation per process is logged");
+});
+
+test("quarantine ledger: a 10,000-row ledger is capped to QUARANTINE_DECISIONS_MAX_ROWS (500) on load, newest retained, exactly one warning", (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const decisions = Array.from({ length: 10000 }, (_, i) => ({
+    key: `#s${i}`, action: i % 2 === 0 ? "quarantine" : "unquarantine", by: "seed", at: new Date(i).toISOString(),
+  }));
+  const decisionsPath = path.join(dir, "decisions.json");
+  fs.writeFileSync(decisionsPath, JSON.stringify(decisions));
+  const warnings = [];
+  const Tracker = load("src/core/FlakinessTracker.js", {
+    "./Middleware": { emit: () => {} },
+    "../../utils/Logger": { info() {}, error() {}, async flush() {}, warning: (m) => warnings.push(m) },
+  });
+  Tracker.historyPath = path.join(dir, "history.json");
+  Tracker.decisionsPath = decisionsPath;
+  Tracker._reload();
+  assert.equal(Tracker.decisions.length, 500);
+  assert.equal(Tracker.decisions[0].key, "#s9500");
+  assert.equal(Tracker.decisions[499].key, "#s9999");
+  assert.equal(warnings.length, 1);
+});
+
+test("tolerates a write failure (ENOTDIR — path points inside an existing file) without poisoning the queue; a subsequent write still succeeds", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const notADirectory = path.join(dir, "not-a-directory");
+  fs.writeFileSync(notADirectory, "i am a file, not a directory");
+  const Tracker = load("src/core/FlakinessTracker.js", { "./Middleware": { emit() {} } });
+  Tracker.historyPath = path.join(dir, "history.json");
+  Tracker.decisionsPath = path.join(notADirectory, "decisions.json"); // ENOTDIR: parent is a file
+  Tracker._reload();
+
+  const RealLogger = require(path.join(root, "utils", "Logger.js"));
+  const realWarning = RealLogger.warning;
+  const warnings = [];
+  RealLogger.warning = (m) => warnings.push(m);
+  t.after(() => { RealLogger.warning = realWarning; });
+
+  const key = "https://example.com::click::#save";
+  Tracker.record({ ...fixture(), status: "passed" });
+  const entry = Tracker.quarantine(key);
+  await Tracker._queue;
+  assert.equal(entry.quarantined, true, "the in-memory decision still succeeds even though persistence fails");
+  assert.ok(warnings.length > 0, "the failed write must be logged");
+
+  Tracker.decisionsPath = path.join(dir, "decisions.json");
+  Tracker.unquarantine(key);
+  await Tracker._queue;
+  const onDisk = JSON.parse(fs.readFileSync(Tracker.decisionsPath, "utf8"));
+  assert.ok(onDisk.some((d) => d.action === "unquarantine"), "the subsequent write must actually land on disk");
 });

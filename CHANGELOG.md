@@ -722,6 +722,75 @@ A quarantine made locally was documented as "demonstrably applies on the next CI
 
 ---
 
+## Phase 13 — Decisions that can't rot
+
+Phase 8 and Phase 9 create queues: pending healing fixes await review, and quarantined scenarios remain hidden from the build. Both can accumulate indefinitely while the system stays silent about the cost. Phase 13 makes both visible: a new `scripts/review/status.js` CLI reports staleness and runs in CI as a soft warning — it never fails a build over a stale queue, only over a genuinely invalid flag or threshold — and quarantined scenarios that have passed their rehabilitation window surface as candidates for unquarantining.
+
+### Unreviewed pending fixes pay the Tier 3 cost silently
+
+**Problem:** A pending healing fix sits in `data/healing_pending.json` for weeks with no human review. Every run pays the LLM call cost on every related scenario, in silence. The dashboard and CLI surface the pending queue but create no urgency — it's easy to defer indefinitely.
+
+**Fix:** Three new optional environment variables define age limits:
+- `HEALING_PENDING_STALE_DAYS` (integer 1-3650, default 14): age from `firstSeen`
+- `FLAKY_UNREVIEWED_STALE_DAYS` (integer 1-3650, default 14): age from `flakySince`
+- `REHAB_CANDIDATE_WINDOW` (integer 1-20, default 5): consecutive passes to surface a rehab candidate
+
+A new `scripts/review/status.js` CLI reports anything past threshold. Exit codes:
+
+| Situation | Exit |
+|---|---|
+| Nothing stale | 0 |
+| Stale but no `--fail-on-stale` | 0 (print findings) |
+| Stale with `--fail-on-stale` | 1 |
+| Invalid config | 2 |
+| Unrecognized argument | 3 |
+| Files missing/empty | 0 |
+| Corrupt (recovered) | 0 |
+
+Npm scripts `review:status` and `review:status:strict` are wired to these modes. The check accepts exactly one flag, `--fail-on-stale`, and deliberately no file-path flag — everything runs from environment, so it can be CI-integrated without shell complexity.
+
+### Quarantined scenarios with repeated passes surface as rehab candidates
+
+**Problem:** A quarantined scenario that has genuinely stabilised (passed its last N runs) is still hidden from the build forever, because the quarantine decision was made and forgotten.
+
+**Fix:** A quarantined scenario whose most recent `REHAB_CANDIDATE_WINDOW` recorded outcomes have all passed surfaces as a rehabilitation candidate in:
+- `npm run review:status` output
+- `node scripts/flakiness/review.js rehab` (read-only subcommand, lists candidates)
+- `GET /flakiness/rehabilitation` dashboard route
+- "Flaky tests" panel on the live dashboard
+
+A scenario needs at least N outcomes to be a candidate. Any failure resets the counter. `unavailable` (form field not visible) counts as failure, so it disqualifies. The scenario **never auto-unquarantines** — lifting the quarantine stays explicit.
+
+### Rejection memory surfaces when a previously-rejected fix is proposed again
+
+**Problem:** A Tier 3 guess is rejected (discarded, never used). The next run produces the exact same selector-suggestion pair. A human sees it as new and wastes time re-deciding, or approves it only to discover they rejected it before.
+
+**Fix:** When a fix is proposed again, `recordPending` consults the decision ledger and flags `previouslyRejected: { count, lastRejectedAt, lastRejectedBy }`. The rejection is rendered distinctly by `scripts/healing/review.js list` and in the dashboard healing panel.
+
+**Important limitation:** Rejection memory is computed by folding the decision ledger, which is now capped at 500 newest rows. Once a rejection ages out, the pair can be proposed again as if new. This is a deliberate trade-off (see Bounding both ledgers below) — a second store would risk disagreement between two sources of truth, so Phase 13 binds them together.
+
+### Tier 3 invocation count surfaces the cost of late decisions
+
+**Problem:** A pending fix sits unreviewed for three months. A human sees it in the review queue and has no way to know how many LLM calls it cost, or whether the cost is still accruing.
+
+**Fix:** Each pending fix carries `tier3Invocations`, a count of every call to the selector-inference step (including calls that returned nothing or whose healed action then failed). Displayed by `scripts/healing/review.js list` and in the dashboard panel.
+
+**Terminology is binding:** this is an INVOCATION COUNT. Not a cost estimate, token count, or pricing data anywhere. The system captures zero token usage and zero pricing information. `occurrences` (times re-recorded as pending) and `tier3Invocations` (times Tier 3 was called) are distinct quantities and must never be conflated.
+
+### Bounding both ledgers
+
+**Problem:** `HealingTrust.pending` and `HealingTrust.decisions` have no cap. 5,000 decisions → 1,500,329 bytes in `healing_decisions.json`, full-file rewrite per decision, read synchronously at require time. `LocatorStore` stayed capped at 500 (Phase 5 discipline); both ledgers grew without bound.
+
+**Fix:** Both decision ledgers are now newest-N ring buffers at 500 rows. The pending healing queue is LRU-capped at 200 entries by `lastSeen`. Eviction is logged at info level.
+
+Ledgers are capped on load as well as on mutation (migration for existing oversized files). The pending queue loads whole and logs a warning if it exceeds the cap, because pending entries are live human work nobody has acted on yet; they're only trimmed when a new fix arrives.
+
+### CI integration: soft-warning mode, not a hard gate
+
+The review status check runs in the `test` job with no flag (soft-warning mode). It exits 0 whether or not anything is stale — findings are printed, but the run continues. This is a deliberate choice (see [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md#phase-13)) because the state cache is branch-scoped and restores only from the same `ref_name` — on a PR's first run or an orphan branch, nothing exists in the cache yet, and gating would be vacuous. Promotion to hard-gate mode (`--fail-on-stale`) is appropriate once the check runs in a `main`-scoped or scheduled context.
+
+---
+
 ## Documentation Correction Pass
 
 External review identified capability claims that overstated what is AI, what is covered by CI, and what the Tier 3 approval gate protects. All findings were verified against the code and this pass corrects the documentation to reflect the actual system.
