@@ -2,7 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { load, silent, temp } = require("./helpers.cjs");
+const { load, silent, temp, root } = require("./helpers.cjs");
 const Retry = load("src/core/AIHealer/AdaptiveRetry.js", {
   "../../../utils/Logger": silent,
 });
@@ -137,7 +137,7 @@ function healer(page, alternatives = []) {
       addLocator: (...args) => saved.push(args),
     },
     "./HealingReport": { log: (e) => events.push(e) },
-    "./HealingTrust": { recordPending: (e) => pending.push(e) },
+    "./HealingTrust": { recordPending: (e) => pending.push(e), recordTier3Invocation: () => {} },
     "./AdaptiveRetry": Retry,
   });
   const instance = new Healer(page);
@@ -471,14 +471,16 @@ function trustAt(t) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const added = [];
   const emitted = [];
+  const warnings = [];
   const Trust = load("src/core/AIHealer/HealingTrust.js", {
     "./LocatorStore": { addLocator: (...args) => added.push(args) },
     "../Middleware": { emit: (...args) => emitted.push(args) },
+    "../../../utils/Logger": { info() {}, error() {}, async flush() {}, warning: (m) => warnings.push(m) },
   });
   Trust.pendingPath = path.join(dir, "healing_pending.json");
   Trust.decisionsPath = path.join(dir, "healing_decisions.json");
   Trust._reload();
-  return { trust: Trust, added, emitted };
+  return { trust: Trust, added, emitted, warnings };
 }
 
 test("healing trust records a pending fix and lists it, without touching LocatorStore", (t) => {
@@ -886,4 +888,266 @@ test("healing report summary handles a large volume of interleaved selectors wit
   assert.ok(summary.every((row) => row.tiers.LLM === EVENTS_PER_SELECTOR / 2));
   const sel0 = summary.find((row) => row.original === "#sel-0");
   assert.equal(sel0.lastResolved, `#fix-0-${EVENTS_PER_SELECTOR - 1}`);
+});
+
+// ── Phase 13: decisions can't rot ──
+
+test("healing trust: unreviewedStale boundary — exactly at threshold is NOT stale, one ms past is stale", (t) => {
+  const { trust } = trustAt(t);
+  const now = Date.parse("2024-06-01T00:00:00.000Z");
+  const thresholdDays = 14;
+  const exactMs = now - thresholdDays * 86400000;
+  const pastMs = exactMs - 1;
+  trust.recordPending({ original: "#exact", suggested: "#x" });
+  trust.pending["#exact"].firstSeen = new Date(exactMs).toISOString();
+  trust.recordPending({ original: "#past", suggested: "#y" });
+  trust.pending["#past"].firstSeen = new Date(pastMs).toISOString();
+
+  const result = trust.unreviewedStale({ thresholdDays, now });
+  assert.deepEqual(result.notStale.map((e) => e.original), ["#exact"]);
+  assert.deepEqual(result.stale.map((e) => e.original), ["#past"]);
+});
+
+test("healing trust: unreviewedStale treats a missing/unparseable firstSeen as notStale, never crashing", (t) => {
+  const { trust } = trustAt(t);
+  trust.recordPending({ original: "#missing", suggested: "#y" });
+  delete trust.pending["#missing"].firstSeen;
+  trust.recordPending({ original: "#garbage", suggested: "#z" });
+  trust.pending["#garbage"].firstSeen = "not-a-date";
+
+  const result = trust.unreviewedStale({ thresholdDays: 1, now: Date.now() });
+  assert.deepEqual(result.stale, []);
+  assert.equal(result.notStale.length, 2);
+});
+
+test("healing trust: previouslyRejected identity requires an exact (original, suggested) pair match — no normalisation", async (t) => {
+  const { trust } = trustAt(t);
+  trust.recordPending({ original: "#old", suggested: "#new" });
+  trust.reject("#old");
+  await trust._queue;
+
+  const exact = trust.recordPending({ original: "#old", suggested: "#new" });
+  assert.equal(exact.previouslyRejected.count, 1);
+
+  const differentSuggested = trust.recordPending({ original: "#old", suggested: "#new2" });
+  assert.equal(differentSuggested.previouslyRejected.count, 0);
+
+  const caseMismatch = trust.recordPending({ original: "#OLD", suggested: "#new" });
+  assert.equal(caseMismatch.previouslyRejected.count, 0);
+
+  const whitespaceMismatch = trust.recordPending({ original: "#old ", suggested: "#new" });
+  assert.equal(whitespaceMismatch.previouslyRejected.count, 0);
+});
+
+test("healing trust: previouslyRejected.lastRejectedAt/By come from the LAST ledger row in array order, never sorted by decidedAt", (t) => {
+  const { trust } = trustAt(t);
+  trust.decisions = [
+    { original: "#old", suggested: "#new", decision: "rejected", decidedAt: "2024-06-01T00:00:00.000Z", decidedBy: "alice" },
+    { original: "#old", suggested: "#new", decision: "rejected", decidedAt: "2020-01-01T00:00:00.000Z", decidedBy: "bob" },
+  ];
+  trust._buildRejectionIndex();
+  const entry = trust.recordPending({ original: "#old", suggested: "#new" });
+  assert.equal(entry.previouslyRejected.count, 2);
+  // If a sort-by-date were introduced, this would read "alice"/2024 instead —
+  // the array's second (later-appended) row must win regardless of its date.
+  assert.equal(entry.previouslyRejected.lastRejectedAt, "2020-01-01T00:00:00.000Z");
+  assert.equal(entry.previouslyRejected.lastRejectedBy, "bob");
+});
+
+test("healing trust: malformed decision rows are skipped without throwing or corrupting other pairs' rejection counts", (t) => {
+  const { trust } = trustAt(t);
+  trust.decisions = [
+    null,
+    "not an object",
+    { original: 123, suggested: "#new", decision: "rejected", decidedAt: "2024-01-01T00:00:00.000Z" },
+    { original: "#old", suggested: "#new", decision: "pending", decidedAt: "2024-01-01T00:00:00.000Z" },
+    { original: "#old", suggested: "#new", decision: "rejected", decidedAt: "not-a-date" },
+    // Valid but missing decidedBy — must still count, contributing lastRejectedBy: null.
+    { original: "#old", suggested: "#new", decision: "rejected", decidedAt: "2024-01-01T00:00:00.000Z" },
+    { original: "#other", suggested: "#fix", decision: "rejected", decidedAt: "2024-02-01T00:00:00.000Z", decidedBy: "carol" },
+  ];
+  assert.doesNotThrow(() => trust._buildRejectionIndex());
+
+  const oldEntry = trust.recordPending({ original: "#old", suggested: "#new" });
+  assert.equal(oldEntry.previouslyRejected.count, 1);
+  assert.equal(oldEntry.previouslyRejected.lastRejectedBy, null);
+
+  const otherEntry = trust.recordPending({ original: "#other", suggested: "#fix" });
+  assert.equal(otherEntry.previouslyRejected.count, 1);
+  assert.equal(otherEntry.previouslyRejected.lastRejectedBy, "carol");
+});
+
+test("healing trust: tier3Invocations is 1 for a brand-new pending entry after exactly one recordTier3Invocation, and persists across reload", async (t) => {
+  const { trust } = trustAt(t);
+  trust.recordTier3Invocation("#sel");
+  const entry = trust.recordPending({ original: "#sel", suggested: "#fix" });
+  assert.equal(entry.tier3Invocations, 1);
+  await trust._queue;
+  trust._reload();
+  assert.equal(trust.list()[0].tier3Invocations, 1);
+});
+
+test("healing trust: occurrences and tier3Invocations diverge when a selector recurs without a fresh Tier3 invocation", (t) => {
+  const { trust } = trustAt(t);
+  trust.recordTier3Invocation("#sel");
+  const first = trust.recordPending({ original: "#sel", suggested: "#fix" });
+  assert.equal(first.occurrences, 1);
+  assert.equal(first.tier3Invocations, 1);
+
+  // Second sighting of the same selector without an intervening recordTier3Invocation:
+  // occurrences grows, tier3Invocations does not.
+  const second = trust.recordPending({ original: "#sel", suggested: "#fix2" });
+  assert.equal(second.occurrences, 2);
+  assert.equal(second.tier3Invocations, 1);
+});
+
+test("healing trust: recordTier3Invocation on an existing pending entry bumps tier3Invocations in place and persists it", async (t) => {
+  const { trust } = trustAt(t);
+  trust.recordPending({ original: "#sel", suggested: "#fix" });
+  trust.recordTier3Invocation("#sel");
+  trust.recordTier3Invocation("#sel");
+  await trust._queue;
+  assert.equal(trust.pending["#sel"].tier3Invocations, 2);
+  trust._reload();
+  assert.equal(trust.list()[0].tier3Invocations, 2);
+});
+
+test("healing trust: recordTier3Invocation for a selector that never becomes pending is capped at TIER3_TALLY_CAP with LRU-by-touch eviction", (t) => {
+  const { trust } = trustAt(t);
+  for (let i = 0; i < 200; i++) trust.recordTier3Invocation(`#never-${i}`);
+  // One more distinct key pushes the tally over its cap (200) — the oldest
+  // untouched key ("#never-0") must be evicted.
+  trust.recordTier3Invocation("#never-200");
+  trust.recordTier3Invocation("#never-1"); // touch to refresh recency, must not be evicted
+  const entry0 = trust.recordPending({ original: "#never-0", suggested: "#fix0" });
+  assert.equal(entry0.tier3Invocations, 0, "evicted from the tally, so a fresh pending entry sees 0");
+  const entry1 = trust.recordPending({ original: "#never-1", suggested: "#fix1" });
+  assert.equal(entry1.tier3Invocations, 2, "touched key survives eviction, its count including the refresh touch");
+});
+
+test("healing trust: 10,000-row decisions ledger is capped to HEALING_DECISIONS_MAX_ROWS (500) on load, newest retained, exactly one warning", (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const decisions = Array.from({ length: 10000 }, (_, i) => ({
+    original: `#s${i}`, suggested: `#f${i}`, decision: "rejected",
+    decidedAt: new Date(i).toISOString(), decidedBy: "seed",
+  }));
+  const decisionsPath = path.join(dir, "healing_decisions.json");
+  fs.writeFileSync(decisionsPath, JSON.stringify(decisions));
+  const warnings = [];
+  const Trust = load("src/core/AIHealer/HealingTrust.js", {
+    "./LocatorStore": { addLocator: () => {} },
+    "../Middleware": { emit: () => {} },
+    "../../../utils/Logger": { info() {}, error() {}, async flush() {}, warning: (m) => warnings.push(m) },
+  });
+  Trust.pendingPath = path.join(dir, "healing_pending.json");
+  Trust.decisionsPath = decisionsPath;
+  Trust._reload();
+  assert.equal(Trust.decisions.length, 500);
+  assert.equal(Trust.decisions[0].original, "#s9500");
+  assert.equal(Trust.decisions[499].original, "#s9999");
+  assert.equal(warnings.length, 1);
+});
+
+test("healing trust: pending queue never exceeds PENDING_MAX_ENTRIES (200) after mutation, evicting the oldest lastSeen first, and logs it", (t) => {
+  const { trust, warnings } = trustAt(t);
+  for (let i = 0; i < 200; i++) {
+    const entry = trust.recordPending({ original: `#s${i}`, suggested: `#f${i}` });
+    entry.lastSeen = new Date(i).toISOString(); // deterministic recency ordering
+    trust.pending[`#s${i}`] = entry;
+  }
+  assert.equal(Object.keys(trust.pending).length, 200);
+
+  trust.recordPending({ original: "#newest", suggested: "#newest-fix" });
+  assert.equal(Object.keys(trust.pending).length, 200, "cap is never exceeded after mutation");
+  assert.equal(trust._hasPending("#s0"), false, "oldest lastSeen must be evicted first");
+  assert.equal(trust._hasPending("#s1"), true);
+  assert.equal(trust._hasPending("#newest"), true);
+  assert.ok(warnings.some((w) => w.includes("PENDING_MAX_ENTRIES") && w.includes("#s0")));
+});
+
+test("healing trust: an oversized pending file loads WHOLE (never truncated on load), with one warning naming the count and the cap", (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const pendingObj = {};
+  for (let i = 0; i < 250; i++) {
+    pendingObj[`#s${i}`] = {
+      original: `#s${i}`, suggested: `#f${i}`, description: "",
+      firstSeen: new Date().toISOString(), lastSeen: new Date().toISOString(), occurrences: 1,
+    };
+  }
+  const pendingPath = path.join(dir, "healing_pending.json");
+  fs.writeFileSync(pendingPath, JSON.stringify(pendingObj));
+  const warnings = [];
+  const Trust = load("src/core/AIHealer/HealingTrust.js", {
+    "./LocatorStore": { addLocator: () => {} },
+    "../Middleware": { emit: () => {} },
+    "../../../utils/Logger": { info() {}, error() {}, async flush() {}, warning: (m) => warnings.push(m) },
+  });
+  Trust.pendingPath = pendingPath;
+  Trust.decisionsPath = path.join(dir, "healing_decisions.json");
+  Trust._reload();
+  assert.equal(Object.keys(Trust.pending).length, 250, "load is whole, never truncated");
+  assert.ok(warnings.some((w) => w.includes("250") && w.includes("PENDING_MAX_ENTRIES")));
+});
+
+test("healing trust: prototype-like selectors survive the full P13 lifecycle, including as a rejection-identity pair", async (t) => {
+  const { trust, added } = trustAt(t);
+  for (const key of ["__proto__", "constructor", "toString"]) {
+    trust.recordTier3Invocation(key);
+    const entry = trust.recordPending({ original: key, suggested: `#fix-${key}` });
+    assert.equal(entry.tier3Invocations, 1);
+  }
+  assert.equal(trust.list().length, 3);
+
+  trust.reject("__proto__", { rejectedBy: "reviewer" });
+  await trust._queue;
+  const again = trust.recordPending({ original: "__proto__", suggested: "#fix-__proto__" });
+  assert.equal(again.previouslyRejected.count, 1);
+  assert.equal(again.previouslyRejected.lastRejectedBy, "reviewer");
+
+  const approved = trust.approve("constructor");
+  await trust._queue;
+  assert.equal(approved.decision, "approved");
+  assert.deepEqual(added, [["constructor", "#fix-constructor"]]);
+  assert.equal(Object.getPrototypeOf(trust.pending), Object.prototype);
+});
+
+test("healing trust: a write failure (ENOTDIR — path points inside an existing file) does not poison the queue; a subsequent write still succeeds", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const notADirectory = path.join(dir, "not-a-directory");
+  fs.writeFileSync(notADirectory, "i am a file, not a directory");
+  const Trust = load("src/core/AIHealer/HealingTrust.js", {
+    "./LocatorStore": { addLocator: () => {} },
+    "../Middleware": { emit: () => {} },
+  });
+  Trust.pendingPath = path.join(dir, "pending.json");
+  Trust.decisionsPath = path.join(notADirectory, "healing_decisions.json"); // ENOTDIR: parent is a file
+  Trust._reload();
+
+  // AtomicJsonStore.writeJsonAtomic logs the failure itself via the real
+  // (process-wide) Logger singleton — spy on it directly rather than through
+  // HealingTrust's own injected mock, since HealingTrust doesn't re-export
+  // AtomicJsonStore's dependency.
+  const RealLogger = require(path.join(root, "utils", "Logger.js"));
+  const realWarning = RealLogger.warning;
+  const warnings = [];
+  RealLogger.warning = (m) => warnings.push(m);
+  t.after(() => { RealLogger.warning = realWarning; });
+
+  Trust.recordPending({ original: "#old", suggested: "#new" });
+  const decision = Trust.approve("#old"); // queues a decisions write that will fail with ENOTDIR
+  await Trust._queue;
+  assert.equal(decision.decision, "approved", "the in-memory decision still succeeds even though persistence fails");
+  assert.ok(warnings.length > 0, "the failed write must be logged");
+
+  // Repoint at a writable path and confirm the (unpoisoned) queue still works.
+  Trust.decisionsPath = path.join(dir, "healing_decisions.json");
+  Trust.recordPending({ original: "#next", suggested: "#next-fix" });
+  const nextDecision = Trust.approve("#next");
+  await Trust._queue;
+  assert.equal(nextDecision.decision, "approved");
+  const onDisk = JSON.parse(fs.readFileSync(Trust.decisionsPath, "utf8"));
+  assert.ok(onDisk.some((d) => d.original === "#next"), "the subsequent write must actually land on disk");
 });
