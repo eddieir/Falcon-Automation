@@ -1,4 +1,5 @@
 const Module = require("node:module");
+const fs = require("node:fs");
 const original = Module._load;
 const mode = process.env.FALCON_FIXTURE_MODE;
 const page = {
@@ -13,6 +14,15 @@ const mocks = {
   playwright: {
     chromium: {
       launch: async () => {
+        // AC-02 (--repeat validation): an invalid --repeat must exit before
+        // the browser ever launches. Rather than trust a passing exit code
+        // alone, cli.check.cjs writes this marker's path via
+        // FALCON_LAUNCH_MARKER and then asserts the file was never created —
+        // proof the process never reached this call, not just that it exited
+        // non-zero for some other reason.
+        if (process.env.FALCON_LAUNCH_MARKER) {
+          fs.writeFileSync(process.env.FALCON_LAUNCH_MARKER, "launched");
+        }
         if (mode === "launch-failure") throw Error("fixture launch failure");
         return {
           newContext: async () => ({ newPage: async () => page }),
@@ -59,6 +69,12 @@ const mocks = {
   "./src/core/SiteSweep": class {
     constructor(context, opts = {}) {
       this.opts = opts;
+      // AC-03/AC-02: cli.check.cjs runs falcon.js as a child process, so it
+      // can't inspect this instance directly — the repeat count SiteSweep
+      // actually received is written out for the parent test to read back.
+      if (process.env.FALCON_CAPTURE_OPTS_PATH) {
+        fs.writeFileSync(process.env.FALCON_CAPTURE_OPTS_PATH, JSON.stringify(opts));
+      }
     }
     async run(entryUrl) {
       // The URL reaches the sweep whole or the run is wrong: "?key=value=tail"
