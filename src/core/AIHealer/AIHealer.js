@@ -148,6 +148,7 @@ class AIHealer {
 
         // --- Tier 3: LLM inference ---
         Logger.info(`🤖 Asking AI to infer locator for: ${selector}`);
+        HealingTrust.recordTier3Invocation(selector);
         const aiSuggestedLocator = await this.getAlternativeSelector(selector);
 
         if (aiSuggestedLocator) {

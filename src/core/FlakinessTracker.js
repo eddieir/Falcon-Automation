@@ -36,12 +36,16 @@ const MIN_SAMPLES_FOR_VERDICT = 3;
 const WINDOW_SIZE             = 10;
 const MAX_HISTORY_PER_SCENARIO = 20;
 const MAX_TRACKED_SCENARIOS    = 500;
+const QUARANTINE_DECISIONS_MAX_ROWS = 500;
 
 class FlakinessTracker {
     constructor() {
         this.historyPath   = path.join(__dirname, "..", "..", "data", "scenario_history.json");
         this.decisionsPath = path.join(__dirname, "..", "..", "data", "quarantine_decisions.json");
         this._queue = Promise.resolve();
+        // Logs the *first* ledger rotation (mutation-time cap) per process,
+        // then stays silent — never a warning per push forever.
+        this._decisionsRotationLogged = false;
         this._reload();
     }
 
@@ -66,6 +70,20 @@ class FlakinessTracker {
     _reload() {
         this.scenarios = AtomicJsonStore.readJsonSync(this.historyPath, {});
         this.decisions = AtomicJsonStore.readJsonSync(this.decisionsPath, []);
+
+        // Cap BEFORE reconciliation runs below, so reconciliation only ever
+        // sees the retained rows — see the P13 handoff for the open risk
+        // this implies for a protected key whose only "quarantine" ledger
+        // row is older than the retained window.
+        if (this.decisions.length > QUARANTINE_DECISIONS_MAX_ROWS) {
+            const totalFound = this.decisions.length;
+            const dropped = totalFound - QUARANTINE_DECISIONS_MAX_ROWS;
+            this.decisions = this.decisions.slice(-QUARANTINE_DECISIONS_MAX_ROWS);
+            Logger.warning(
+                `FlakinessTracker: loaded quarantine ledger had ${totalFound} rows, exceeding `
+                + `QUARANTINE_DECISIONS_MAX_ROWS (${QUARANTINE_DECISIONS_MAX_ROWS}); dropped ${dropped} oldest row(s).`,
+            );
+        }
 
         for (const [key, action] of this._effectiveDecisionMap()) {
             if (!this._hasScenario(key)) continue;
@@ -195,6 +213,15 @@ class FlakinessTracker {
 
         const { classification, flakeRate, sampleSize } = this.classify(history);
         const wasFlaky = existing?.classification === "flaky";
+        // Same boolean gates both the flakySince reset below and the
+        // flakyDetected emit, so the two can never drift apart.
+        const enteringFlaky = classification === "flaky" && !wasFlaky;
+        const leavingFlaky = wasFlaky && classification !== "flaky";
+        const flakySince = enteringFlaky
+            ? new Date().toISOString()
+            : leavingFlaky
+                ? null
+                : (existing?.flakySince ?? null);
 
         const entry = {
             key, url, action, locator,
@@ -205,6 +232,7 @@ class FlakinessTracker {
             quarantined: existing?.quarantined ?? false,
             quarantinedAt: existing?.quarantinedAt ?? null,
             quarantinedBy: existing?.quarantinedBy ?? null,
+            flakySince,
         };
         this._setScenario(key, entry);
         this._evictLeastRecentlyUsed();
@@ -213,7 +241,7 @@ class FlakinessTracker {
         // Only fire on the transition into "flaky" — re-recording an
         // already-flaky scenario every run would flood the dashboard/CLI
         // with duplicate alerts for something already known and visible.
-        if (classification === "flaky" && !wasFlaky) {
+        if (enteringFlaky) {
             Middleware.emit("flakyDetected", entry);
         }
         return entry;
@@ -294,6 +322,7 @@ class FlakinessTracker {
 
         const decision = { key, action: "quarantine", by, at: entry.quarantinedAt };
         this.decisions.push(decision);
+        this._capDecisionsLedger();
         this._queue = this._queue
             .then(() => AtomicJsonStore.writeJsonAtomic(this.historyPath, this.scenarios))
             .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
@@ -312,15 +341,41 @@ class FlakinessTracker {
         entry.quarantined = false;
         entry.quarantinedAt = null;
         entry.quarantinedBy = null;
+        // Restart the review clock: a scenario let back into the queue is
+        // not instantly "stale" again just because it was flagged flaky
+        // long ago, before the quarantine.
+        if (entry.classification === "flaky") {
+            entry.flakySince = new Date().toISOString();
+        }
         this._setScenario(key, entry);
 
         const decision = { key, action: "unquarantine", by, at: new Date().toISOString() };
         this.decisions.push(decision);
+        this._capDecisionsLedger();
         this._queue = this._queue
             .then(() => AtomicJsonStore.writeJsonAtomic(this.historyPath, this.scenarios))
             .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
         Middleware.emit("scenarioUnquarantined", entry);
         return entry;
+    }
+
+    /**
+     * Ring-buffer the quarantine decision ledger to QUARANTINE_DECISIONS_MAX_ROWS,
+     * synchronously right after a push and before the write is queued. Logs
+     * only the first rotation per process (then stays silent for the rest of
+     * the process) — see the equivalent in HealingTrust._pushDecision.
+     */
+    _capDecisionsLedger() {
+        if (this.decisions.length > QUARANTINE_DECISIONS_MAX_ROWS) {
+            this.decisions = this.decisions.slice(-QUARANTINE_DECISIONS_MAX_ROWS);
+            if (!this._decisionsRotationLogged) {
+                this._decisionsRotationLogged = true;
+                Logger.warning(
+                    `FlakinessTracker quarantine ledger reached its cap (QUARANTINE_DECISIONS_MAX_ROWS=${QUARANTINE_DECISIONS_MAX_ROWS}) `
+                    + "and began discarding its oldest row. Further rotations this process will not be logged individually.",
+                );
+            }
+        }
     }
 
     /**
@@ -370,6 +425,70 @@ class FlakinessTracker {
                 + `${toEvict === 1 ? "entry" : "entries"} evicted, leaving the tracked total ${shortfall} over the cap.`,
             );
         }
+    }
+
+    /**
+     * Pure read, no writes: which currently-flaky, non-quarantined scenarios
+     * have gone unreviewed longer than `thresholdDays` (measured from
+     * `flakySince`). A boundary age exactly equal to the threshold is NOT
+     * stale. A scenario that's currently flaky and not quarantined but has
+     * `flakySince == null` (every legacy record, from before this field
+     * existed) is eligible but has no age to judge — it goes to
+     * `unknownAge` and must never appear in `stale`.
+     */
+    unreviewedFlakyStale({ thresholdDays, now = Date.now() }) {
+        const stale = [];
+        const notStale = [];
+        const unknownAge = [];
+        for (const entry of Object.values(this.scenarios)) {
+            if (!entry || entry.classification !== "flaky" || entry.quarantined) continue;
+            const sinceMs = entry.flakySince == null ? NaN : Date.parse(entry.flakySince);
+            if (entry.flakySince == null || Number.isNaN(sinceMs)) {
+                unknownAge.push(entry);
+                continue;
+            }
+            const age = now - sinceMs;
+            if (age > thresholdDays * 86400000) stale.push(entry);
+            else notStale.push(entry);
+        }
+        return { thresholdDays, stale, notStale, unknownAge };
+    }
+
+    /**
+     * Pure read, no writes, and — critically — no mutation of any reachable
+     * state (security condition 3): a quarantined scenario is a
+     * rehabilitation candidate iff its history (filtered to "passed"/"failed"
+     * entries only, matching record()'s own signal rule — "unavailable" is
+     * stored as "failed", so it correctly disqualifies) has at least
+     * `windowSize` such entries AND the most recent `windowSize` of them are
+     * ALL "passed". `recentHistory` on the result is a fresh copy, never a
+     * reference into `this.scenarios`.
+     */
+    rehabilitationCandidates({ windowSize, now = Date.now() } = {}) {
+        void now; // no age-based logic here (yet) — accepted for signature symmetry with the other pure reads.
+        const candidates = [];
+        for (const entry of Object.values(this.scenarios)) {
+            if (!entry || entry.quarantined !== true) continue;
+            const relevant = (entry.history ?? []).filter((h) => h?.status === "passed" || h?.status === "failed");
+            if (relevant.length < windowSize) continue;
+            const recent = relevant.slice(-windowSize);
+            if (!recent.every((h) => h.status === "passed")) continue;
+
+            candidates.push({
+                key: entry.key,
+                url: entry.url,
+                action: entry.action,
+                locator: entry.locator,
+                description: entry.description,
+                quarantinedAt: entry.quarantinedAt,
+                quarantinedBy: entry.quarantinedBy,
+                windowSize,
+                recentHistory: recent.map((h) => ({ ...h })),
+                allPassedInWindow: true,
+                reason: `The last ${windowSize} recorded outcome(s) while quarantined all passed — a candidate for a human to review and lift quarantine.`,
+            });
+        }
+        return candidates;
     }
 }
 
