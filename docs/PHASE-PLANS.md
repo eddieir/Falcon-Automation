@@ -67,8 +67,8 @@ CI green, zero open CodeQL alerts.
 | D5 | Major | A sometimes-missing `type`/`select` target is marked `skipped`, and `skipped` is never recorded — so the textbook flake shape classifies as `stable`, 0% fail rate. | **Phase 11 (reporting) / Phase 12 (classification)** |
 | D6 | Major | `DashboardAuth.check.js`'s socket rate-limit assertion fails ~18% of runs (2 of 11): `xhr poll error` from the overloaded polling transport masks the limiter's own message. Hard step in the `test` job. | **Closed** — Phase 10 follow-up |
 | D7 | Major | `HealingTrust.pending` and `.decisions` have no cap or eviction, nor does `quarantine_decisions.json`. 5,000 decisions → 1,500,329 bytes, full-file rewrite per decision, read synchronously at require time. `LocatorStore` stayed capped at 500 through the same test. | Phase 13 |
-| D8 | Major | State saves are a plain `writeFile`, not temp+rename, and `_loadJson` recovers from corruption to empty with no log line — silently voiding the entire review queue or every quarantine. | Phase 11 |
-| D9 | Minor | Rejection memory is written to disk and surfaced nowhere: not by `recordPending`, no route, not in `review.js list`. README claims otherwise. | Phase 12 |
+| D8 | Major | State saves are a plain `writeFile`, not temp+rename, and `_loadJson` recovers from corruption to empty with no log line — silently voiding the entire review queue or every quarantine. | **Phase 12** |
+| D9 | Minor | Rejection memory is written to disk and surfaced nowhere: not by `recordPending`, no route, not in `review.js list`. README claims otherwise. | **Phase 13** |
 | D10 | Minor | `reports/test-report.json` and 38 `allure-report/` files are tracked despite being gitignored; the tree goes dirty on every run. | **Closed** — Phase 10 follow-up |
 | D11 | Minor | Four false doc claims: a `continue-on-error: true` that isn't in `ci.yml`; a demo regeneration recipe whose frame paths don't match; `review.js list` described as filtered when it isn't; Project Structure tree omits `tests/regression/`. | **Closed** — Phase 10 follow-up |
 | D12 | Minor | `recordPending` resets an existing description to `""` when the caller omits one; double-quarantine appends a duplicate ledger row. | **Closed** — Phase 10 follow-up |
@@ -411,11 +411,13 @@ a warning, a `.corrupt-*` sidecar, and a clean start.
 
 ### Acceptance criteria
 
-State persists across CI runs on the same branch and a pull request can restore from its base branch
-(state cannot transfer from a developer laptop into CI, as the Actions cache can only restore what a
-previous Actions run saved); the D5 fixture classifies `flaky` using the new `unavailable` outcome;
-the D4 fixture retains its quarantine decision under 600 new scenarios; no state file can be
-truncated by an interrupted write; corrupt state produces a `.corrupt-*` sidecar with the original bytes.
+State persists across CI runs that share the same `ref_name` (successive pushes to the same branch,
+or successive runs of the same pull request), but a pull request's cache lineage is separate from
+its base branch's (state cannot transfer from a developer laptop into CI, as the Actions cache can
+only restore what a previous Actions run saved); the D5 fixture classifies `flaky` using the new
+`unavailable` outcome; the D4 fixture retains its quarantine decision under 600 new scenarios; no
+state file can be truncated by an interrupted write; corrupt state produces a `.corrupt-*` sidecar
+with the original bytes.
 
 ### Decisions for Phase 13 and beyond
 
@@ -426,9 +428,9 @@ truncated by an interrupted write; corrupt state produces a `.corrupt-*` sidecar
   roughly three times as long, so the budget can be exhausted sooner and later pages reported as
   `skipped` with reason `budget-exhausted`.
 - Cache scope and limitation: state is persisted across CI runs via `actions/cache@v4` on the same
-  branch. `data/locator_store.json` is deliberately not cached to preserve the integrity of CI healing
-  behavior. A pull request's first run on a branch has no cached history; it can use `--repeat` to
-  produce a verdict, or inherit history from the base branch via `restore-keys`.
+  `ref_name` (branch or PR). `data/locator_store.json` is deliberately not cached to preserve the
+  integrity of CI healing behavior. A pull request's first run has no prior CI history to restore;
+  `--repeat` is the mechanism to produce a same-run verdict on that first run.
 - Known limitation carried to Phase 13: if eviction cannot bring the total under the cap because too
   many entries are protected by quarantine decisions, the protected pool itself becomes unbounded
   (D7 scope).
