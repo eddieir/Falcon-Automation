@@ -48,6 +48,18 @@ for (const [statuses, result, exit] of [
   [["failed", "deduped"], "FAILED", 1],
   [["passed", "failed", "deduped"], "PARTIAL", 1],
   [["passed", "failed", "skipped", "quarantined", "deduped"], "PARTIAL", 1],
+  // Phase 12 — "unavailable" (a target the healing chain could not resolve
+  // at all) behaves like "failed" for gating: it counts toward `verified`
+  // (this run genuinely reached a verdict), and a nonzero count means the
+  // run cannot report PASSED. An only-unavailable run must be FAILED, not a
+  // false PASSED and not NO_TESTS_RUN (unlike skipped/deduped, this run
+  // actually verified something and found it broken).
+  [["unavailable"], "FAILED", 1],
+  [["unavailable", "unavailable"], "FAILED", 1],
+  [["passed", "unavailable"], "PARTIAL", 1],
+  [["failed", "unavailable"], "FAILED", 1],
+  [["quarantined", "unavailable"], "FAILED", 1],
+  [["passed", "failed", "quarantined", "deduped", "unavailable"], "PARTIAL", 1],
 ]) {
   test(`report tallies ${statuses.join("/") || "empty"} accurately`, (t) => {
     const cwd = process.cwd(),
@@ -91,6 +103,7 @@ for (const [statuses, result, exit] of [
       "skipped",
       "quarantined",
       "deduped",
+      "unavailable",
     ])
       assert.equal(
         report.summary[status],
@@ -126,7 +139,7 @@ const inTempDir = (fn) => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 };
-for (const status of ["quarantined", "deduped"])
+for (const status of ["quarantined", "deduped", "unavailable"])
   test(`report rejects a genuinely invalid status, but accepts '${status}' as valid`, () => {
     const manager = new Report();
     assert.throws(
@@ -139,6 +152,57 @@ for (const status of ["quarantined", "deduped"])
       ),
     );
   });
+// Phase 12 false-positive trap (QA plan #4): a test that only checks
+// "doesn't throw" for the new status is a false positive — it must also
+// assert the exit code and overallResult, not just the absence of a
+// TypeError.
+test("an only-unavailable run reports FAILED (not PASSED) and sets a nonzero exit code", (t) => {
+  const dir = temp();
+  const cwd = process.cwd();
+  const oldCode = process.exitCode;
+  const log = console.log;
+  process.chdir(dir);
+  console.log = () => {};
+  t.after(() => {
+    console.log = log;
+    process.chdir(cwd);
+    process.exitCode = oldCode;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const manager = new Report();
+  manager.startRun();
+  const report = manager.generateReport({
+    tests: [{ name: "a", status: "unavailable", error: "chain exhausted" }],
+  });
+  assert.notEqual(report.result, "PASSED");
+  assert.equal(report.result, "FAILED");
+  assert.equal(process.exitCode, 1);
+  assert.equal(report.summary.unavailable, 1);
+});
+test("the stdout summary line prints Unavailable only when nonzero", (t) => {
+  const dir = temp();
+  const cwd = process.cwd();
+  const oldCode = process.exitCode;
+  const log = console.log;
+  const lines = [];
+  process.chdir(dir);
+  console.log = (line) => lines.push(String(line));
+  t.after(() => {
+    console.log = log;
+    process.chdir(cwd);
+    process.exitCode = oldCode;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const manager = new Report();
+  manager.startRun();
+  manager.generateReport({
+    tests: [
+      { name: "a", status: "passed" },
+      { name: "b", status: "unavailable" },
+    ],
+  });
+  assert.match(lines.join("\n"), /Unavailable: 1/);
+});
 test("report persists the sweep's coverage block and per-page breakdown", () => {
   const coverage = {
     pagesDiscovered: 13,

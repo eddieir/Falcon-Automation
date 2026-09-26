@@ -358,6 +358,219 @@ test("Phase 11: a failed return to the plan URL is logged as a warning and does 
   assert.ok(warnings.some((w) => /Could not return/.test(w)));
 });
 
+// ── Phase 12: AC-05 "unavailable" outcome ──
+//
+// AIHealer marks its two "chain exhausted" throws with error.code ===
+// "TARGET_UNAVAILABLE" (a plain additive property, not a new exception type
+// — see AIHealer.js). These tests simulate that marker directly on the
+// healer double, exactly as the real AIHealer would set it, to prove
+// TestRunner's own branch logic without pulling in the full healing chain
+// (that integration is covered by tests/regression/browser.spec.js against
+// real Chromium, where a fake page can't model a genuinely missing element).
+
+function unavailableError(message) {
+  const err = new Error(message);
+  err.code = "TARGET_UNAVAILABLE";
+  return err;
+}
+
+for (const [action, method] of [
+  ["type", "healAndType"],
+  ["select", "healAndSelect"],
+]) {
+  test(`Phase 12: a ${action} target the healing chain could not resolve reports status "unavailable", not "failed"`, async () => {
+    const { instance, flakyCalls } = runner();
+    instance.healer[method] = async () => {
+      throw unavailableError(`AI-Healer could not resolve Field (#gone): element not found after healing`);
+    };
+    instance.testPlan.url = "https://example.com/page";
+    await instance.runScenario({ action, locator: "#gone", value: "x", description: "Field" });
+    assert.equal(instance.results.length, 1);
+    assert.equal(instance.results[0].status, "unavailable");
+    assert.notEqual(instance.results[0].status, "failed");
+    assert.notEqual(instance.results[0].status, "skipped");
+    assert.equal(instance.results[0].reason, instance.results[0].error);
+    // FlakinessTracker still only ever sees status "failed" (unavailable is
+    // a sub-classification carried via `outcome`), so classify()'s pass/fail
+    // window and MAX_HISTORY_PER_SCENARIO slicing keep working unmodified.
+    assert.equal(flakyCalls.length, 1);
+    assert.equal(flakyCalls[0].status, "failed");
+    assert.equal(flakyCalls[0].outcome, "unavailable");
+  });
+}
+
+test("Phase 12: an unsupported action still reports 'skipped', never conflated with 'unavailable'", async () => {
+  const { instance, flakyCalls } = runner();
+  await instance.runScenario({ action: "hover", locator: "#x", description: "Hover" });
+  assert.equal(instance.results[0].status, "skipped");
+  assert.equal(flakyCalls.length, 0);
+});
+
+test("Phase 12: a quarantined scenario whose underlying outcome is unavailable reports status 'quarantined' with outcome 'unavailable', not a new compound status", async () => {
+  const quarantinedKeys = new Set(["https://example.com/page::type::#gone"]);
+  const { instance, flakyCalls } = runner(
+    {},
+    {
+      flaky: {
+        record: (opts) => {
+          flakyCalls.push(opts);
+          return null;
+        },
+        isQuarantined: (key) => quarantinedKeys.has(key),
+        keyFor: ({ url, action, locator }) => `${url}::${action}::${locator}`,
+      },
+    },
+  );
+  instance.healer.healAndType = async () => {
+    throw unavailableError("AI-Healer could not resolve Field (#gone): element not found after healing");
+  };
+  instance.testPlan.url = "https://example.com/page";
+  await instance.runScenario({ action: "type", locator: "#gone", value: "x", description: "Field" });
+  assert.equal(instance.results[0].status, "quarantined");
+  assert.equal(instance.results[0].outcome, "unavailable");
+  assert.equal(flakyCalls[0].status, "failed");
+  assert.equal(flakyCalls[0].outcome, "unavailable");
+});
+
+test("Phase 12: an ordinary (non-chain-exhausted) failure still reports 'failed' with no outcome field", async () => {
+  const { instance, flakyCalls } = runner({
+    fill: async () => {
+      throw Error("invalid selector");
+    },
+  });
+  await instance.runScenario({ action: "type", locator: "#field", value: "x", description: "Field" });
+  assert.equal(instance.results[0].status, "failed");
+  assert.equal(instance.results[0].outcome, undefined);
+  assert.equal(flakyCalls[0].outcome, null);
+});
+
+// ── Phase 12: runRepeatedTestPlan (AC-02/AC-03) ──
+
+test("Phase 12: runRepeatedTestPlan with repeatCount=1 is byte-identical to executeTest() apart from the added repetition field", async () => {
+  const { instance } = runner({ evaluate: async () => false });
+  const RealTestRunner = load("src/core/TestRunner.js", {
+    "../../utils/Logger": silent,
+    "./AIHealer/AIHealer": class {
+      constructor(page) { this.page = page; }
+      async healAndClick() {}
+    },
+    "./AIHealer/HealingReport": { log() {} },
+    "./FlakinessTracker": { record: () => null, isQuarantined: () => false, keyFor: () => "key" },
+    "./SiteSweep": siteSweepDouble,
+  });
+  const page = { evaluate: async () => false };
+  const testPlan = {
+    url: "https://example.com/page",
+    test_scenarios: [{ action: "click", locator: "#save", description: "Save" }],
+  };
+  const results = await RealTestRunner.runRepeatedTestPlan(page, testPlan, 1);
+  assert.equal(results.length, 1);
+  assert.equal(results[0].name, "Save");
+  assert.equal(results[0].status, "passed");
+  assert.equal(results[0].repetition, 1);
+});
+
+test("Phase 12: runRepeatedTestPlan executes N times, tags each row with its repetition, and never mutates name", async () => {
+  const gotoCalls = [];
+  let currentUrl = "https://example.com/page";
+  const RealTestRunner = load("src/core/TestRunner.js", {
+    "../../utils/Logger": silent,
+    "./AIHealer/AIHealer": class {
+      constructor(page) { this.page = page; }
+      async healAndClick() {}
+    },
+    "./AIHealer/HealingReport": { log() {} },
+    "./FlakinessTracker": { record: () => null, isQuarantined: () => false, keyFor: () => "key" },
+    "./SiteSweep": siteSweepDouble,
+  });
+  const page = {
+    url: () => currentUrl,
+    goto: async (url) => {
+      gotoCalls.push(url);
+      currentUrl = url;
+    },
+  };
+  const testPlan = {
+    url: "https://example.com/page",
+    test_scenarios: [{ action: "click", locator: "#save", description: "Save" }],
+  };
+  const results = await RealTestRunner.runRepeatedTestPlan(page, testPlan, 3);
+  assert.equal(results.length, 3);
+  assert.deepEqual(results.map((r) => r.repetition), [1, 2, 3]);
+  assert.ok(results.every((r) => r.name === "Save"));
+  // Unconditional navigation back to testPlan.url before every repetition
+  // after the first — stronger than the between-scenario drift check.
+  assert.deepEqual(gotoCalls, ["https://example.com/page", "https://example.com/page"]);
+});
+
+test("Phase 12: runRepeatedTestPlan constructs a new TestRunner per iteration so .results never accumulates", async () => {
+  const seenInstanceResultLengths = [];
+  const RealTestRunner = load("src/core/TestRunner.js", {
+    "../../utils/Logger": silent,
+    "./AIHealer/AIHealer": class {
+      constructor(page) { this.page = page; }
+      async healAndClick() {}
+    },
+    "./AIHealer/HealingReport": { log() {} },
+    "./FlakinessTracker": { record: () => null, isQuarantined: () => false, keyFor: () => "key" },
+    "./SiteSweep": siteSweepDouble,
+  });
+  const originalExecuteTest = RealTestRunner.prototype.executeTest;
+  RealTestRunner.prototype.executeTest = async function (...args) {
+    const result = await originalExecuteTest.apply(this, args);
+    seenInstanceResultLengths.push(this.results.length);
+    return result;
+  };
+  const page = { evaluate: async () => false };
+  const testPlan = {
+    url: "https://example.com/page",
+    test_scenarios: [
+      { action: "click", locator: "#a", description: "A" },
+      { action: "click", locator: "#b", description: "B" },
+    ],
+  };
+  await RealTestRunner.runRepeatedTestPlan(page, testPlan, 3);
+  // Each iteration's own instance ends with exactly 2 results (its own
+  // scenarios), never 2, 4, 6 — proof .results doesn't accumulate across a
+  // shared TestRunner instance.
+  assert.deepEqual(seenInstanceResultLengths, [2, 2, 2]);
+  RealTestRunner.prototype.executeTest = originalExecuteTest;
+});
+
+test("Phase 12: a failed navigation between repetitions is a Logger.warning and does not abort the remaining repetitions", async () => {
+  const warnings = [];
+  let calls = 0;
+  const RealTestRunner = load("src/core/TestRunner.js", {
+    "../../utils/Logger": {
+      info() {},
+      warning: (m) => warnings.push(m),
+      error() {},
+      async flush() {},
+    },
+    "./AIHealer/AIHealer": class {
+      constructor(page) { this.page = page; }
+      async healAndClick() { calls++; }
+    },
+    "./AIHealer/HealingReport": { log() {} },
+    "./FlakinessTracker": { record: () => null, isQuarantined: () => false, keyFor: () => "key" },
+    "./SiteSweep": siteSweepDouble,
+  });
+  const page = {
+    url: () => "https://example.com/page",
+    goto: async () => {
+      throw Error("navigation failed");
+    },
+  };
+  const testPlan = {
+    url: "https://example.com/page",
+    test_scenarios: [{ action: "click", locator: "#save", description: "Save" }],
+  };
+  const results = await RealTestRunner.runRepeatedTestPlan(page, testPlan, 3);
+  assert.equal(results.length, 3);
+  assert.equal(calls, 3);
+  assert.ok(warnings.some((w) => /Could not return/.test(w)));
+});
+
 for (const [raw, expected] of [
   ["", {}],
   [

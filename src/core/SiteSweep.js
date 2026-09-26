@@ -10,6 +10,7 @@ const DEFAULTS = {
     budgetMs: 600_000,
     pageTimeoutMs: 20_000,
     dedupe: true,
+    repeat: 1,
 };
 
 /**
@@ -33,6 +34,7 @@ class SiteSweep {
      * @param {number}  [opts.budgetMs=600000]      Total wall-clock budget for the sweep
      * @param {number}  [opts.pageTimeoutMs=20000]  Per-page navigation timeout
      * @param {boolean} [opts.dedupe=true]          Skip scenarios already run on an earlier page
+     * @param {number}  [opts.repeat=1]             Times to re-execute each page's generated plan
      * @param {Function}[opts.onEvent]              (name, payload) => void, for dashboard streaming
      */
     constructor(context, opts = {}) {
@@ -42,6 +44,7 @@ class SiteSweep {
         this.budgetMs = Number.isFinite(opts.budgetMs) ? opts.budgetMs : DEFAULTS.budgetMs;
         this.pageTimeoutMs = Number.isFinite(opts.pageTimeoutMs) ? opts.pageTimeoutMs : DEFAULTS.pageTimeoutMs;
         this.dedupe = opts.dedupe !== false;
+        this.repeat = Number.isFinite(opts.repeat) ? opts.repeat : DEFAULTS.repeat;
         this.onEvent = typeof opts.onEvent === "function" ? opts.onEvent : null;
 
         // Signature → the URL that first ran it. Lives on the instance, not on
@@ -355,12 +358,12 @@ class SiteSweep {
             return;
         }
 
-        // Hoisted so the catch below can salvage whatever was collected before
-        // the throw. TestRunner accumulates into `this.results` as it goes, so a
-        // crash on scenario 13 of 30 must not discard the 12 verdicts already
-        // reached — losing a real failure that way would hand back a green exit
-        // code for a page that genuinely broke.
-        let runner = null;
+        // `deduped`/`kept` are hoisted so the catch below can release dedupe
+        // claims. Salvaging whatever verdicts were already reached before a
+        // mid-plan throw comes from `error.partialResults`, which
+        // TestRunner.runRepeatedTestPlan attaches to the error it rethrows —
+        // a crash partway through must not discard verdicts already reached,
+        // or a page that genuinely broke could hand back a green exit code.
         let deduped = [];
         let kept = [];
 
@@ -376,8 +379,8 @@ class SiteSweep {
             kept = applied.kept;
             record.scenariosDeduplicated = deduped.length;
 
-            runner = new TestRunner(page, { ...testPlan, test_scenarios: kept });
-            const results = await runner.executeTest();
+            const repeatedPlan = { ...testPlan, test_scenarios: kept };
+            const results = await TestRunner.runRepeatedTestPlan(page, repeatedPlan, this.repeat);
 
             // Deduped scenarios are appended, never executed — that is what keeps
             // them out of FlakinessTracker, which TestRunner feeds from inside
@@ -391,7 +394,7 @@ class SiteSweep {
             // reached, then record the breakage itself as a failed scenario so
             // it reaches the report and the exit code instead of being visible
             // only as a page-level status nothing tallies.
-            const salvaged = Array.isArray(runner?.results) ? runner.results : [];
+            const salvaged = Array.isArray(error?.partialResults) ? error.partialResults : [];
 
             // Release the dedupe claims this page made but never honoured, so a
             // later page runs those scenarios itself instead of reporting them
@@ -501,7 +504,7 @@ class SiteSweep {
 
     /** The per-page payload carried by `pageComplete`. */
     static _summaryOf(record) {
-        const tally = { passed: 0, failed: 0, skipped: 0, quarantined: 0, deduped: 0 };
+        const tally = { passed: 0, failed: 0, skipped: 0, quarantined: 0, deduped: 0, unavailable: 0 };
         for (const result of record.results) {
             if (Object.hasOwn(tally, result.status)) tally[result.status]++;
         }

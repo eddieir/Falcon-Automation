@@ -37,7 +37,8 @@ const path = require("path");
  *     "failed":      <n>,
  *     "skipped":     <n>,
  *     "quarantined": <n>,
- *     "deduped":     <n>
+ *     "deduped":     <n>,
+ *     "unavailable": <n>
  *   },
  *   "result":  "PASSED" | "FAILED" | "PARTIAL" | "NO_TESTS_RUN",
  *   "tests":   [ { name, status, duration, error? }, … ],
@@ -77,6 +78,19 @@ const path = require("path");
  * occurred — everything `skipped` and/or `deduped` — verified nothing and
  * must report NO_TESTS_RUN and exit 1 exactly as an empty run does, even
  * though `total` is nonzero.
+ *
+ * Phase 12 — "unavailable" is a sixth valid status: a target the AI-healing
+ * chain could not resolve at all (AIHealer's chain-exhausted throws, marked
+ * `error.code === "TARGET_UNAVAILABLE"`), as distinct from "skipped" (a
+ * genuinely unknown action, never attempted) and from an ordinary "failed"
+ * (resolved but the interaction itself broke). It behaves like "failed" for
+ * gating — `unavailable` counts toward `verified` and a nonzero count means
+ * the run cannot report PASSED — but is tallied and printed in its own
+ * bucket so the two failure kinds stay distinguishable. A quarantined
+ * scenario whose underlying outcome was "unavailable" still reports status
+ * "quarantined" (unchanged); the underlying detail rides along as a
+ * `outcome: "unavailable"` field on that row rather than a new compound
+ * status.
  *
  * `coverage` and `pages` are persisted verbatim as the sweep reported them
  * (see the SweepResult shape in docs/PHASE-PLANS.md). Nothing here derives or
@@ -128,7 +142,7 @@ class ReportManager {
      * @param {Object} opts
      * @param {Array}  opts.tests        - Array of { name, status, duration?, error? }
      *                                     status must be one of: "passed" | "failed" |
-     *                                     "skipped" | "quarantined" | "deduped"
+     *                                     "skipped" | "quarantined" | "deduped" | "unavailable"
      * @param {Array}  [opts.uiIssues]   - Issues detected by ExploratoryAI (optional)
      * @param {Array}  [opts.healingEvents] - Events from HealingReport (optional)
      * @param {Object} [opts.coverage]   - SweepResult.coverage from SiteSweep (optional)
@@ -141,7 +155,7 @@ class ReportManager {
         if (coverage !== null && (typeof coverage !== "object" || Array.isArray(coverage))) {
             throw new TypeError("Report coverage must be an object or null");
         }
-        if (tests.some(result => !result || !["passed", "failed", "skipped", "quarantined", "deduped"].includes(result.status))) {
+        if (tests.some(result => !result || !["passed", "failed", "skipped", "quarantined", "deduped", "unavailable"].includes(result.status))) {
             throw new TypeError("Each test result must have a valid status");
         }
         const endTime = Date.now();
@@ -155,6 +169,7 @@ class ReportManager {
         const skipped     = tests.filter((t) => t.status === "skipped").length;
         const quarantined = tests.filter((t) => t.status === "quarantined").length;
         const deduped     = tests.filter((t) => t.status === "deduped").length;
+        const unavailable = tests.filter((t) => t.status === "unavailable").length;
         const total        = tests.length;
 
         // `deduped` and (as of Phase 11) `skipped` are the statuses that
@@ -168,24 +183,31 @@ class ReportManager {
         // and must stay NO_TESTS_RUN (exit 1) exactly as an empty run does.
         // Gating on `total` would hand back a green exit code for a run
         // that verified not one scenario.
-        const verified = passed + failed + quarantined;
+        //
+        // Phase 12 — "unavailable" (a target the healing chain could not
+        // resolve at all) joins `passed`/`failed`/`quarantined` in `verified`:
+        // it is a real verdict this run reached, not a claim it never tested.
+        // It behaves like `failed` for the PASSED/FAILED/PARTIAL branches
+        // below (a nonzero `unavailable` count is a failure), so an
+        // only-unavailable run reports FAILED rather than a false PASSED.
+        const verified = passed + failed + quarantined + unavailable;
 
         // Top-level result: PASSED only if every executed test passed
         let overallResult;
         if (verified === 0) {
             overallResult = "NO_TESTS_RUN";
-        } else if (failed === 0) {
+        } else if (failed === 0 && unavailable === 0) {
             overallResult = "PASSED";
         } else if (passed === 0) {
             overallResult = "FAILED";
         } else {
-            overallResult = "PARTIAL"; // some passed, some failed
+            overallResult = "PARTIAL"; // some passed, some failed/unavailable
         }
 
         const report = {
             runId: new Date().toISOString(),
             duration: `${durationSeconds}s`,
-            summary: { total, passed, failed, skipped, quarantined, deduped },
+            summary: { total, passed, failed, skipped, quarantined, deduped, unavailable },
             result: overallResult,
             tests,
             uiIssues,
@@ -209,7 +231,8 @@ class ReportManager {
         console.log(
             `   Total: ${total}  |  Passed: ${passed}  |  Failed: ${failed}  |  Skipped: ${skipped}` +
             (quarantined > 0 ? `  |  Quarantined: ${quarantined}` : "") +
-            (deduped > 0 ? `  |  Deduped: ${deduped}` : "")
+            (deduped > 0 ? `  |  Deduped: ${deduped}` : "") +
+            (unavailable > 0 ? `  |  Unavailable: ${unavailable}` : "")
         );
         if (coverage) {
             console.log(`   ${ReportManager.coverageLine(coverage, pages)}`);
