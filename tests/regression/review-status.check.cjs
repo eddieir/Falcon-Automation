@@ -220,12 +220,23 @@ test("status.js: occurrences and tier3Invocations print as two separately labell
 });
 
 test("status.js: previouslyRejected with count > 0 is printed distinctly", (t) => {
+  // previouslyRejected is derived fresh from the decisions ledger on every
+  // read (list()/approve()/reject()/unreviewedStale()), never echoed back
+  // from the value cached on the pending entry — see HealingTrust.js. The
+  // cached value here is deliberately wrong (count: 99, by "nobody") so this
+  // test only passes if the printed "3 time(s), last by carol" actually came
+  // from the three genuine "rejected" rows below, not from the cache.
   const now = Date.now();
   const { child } = runStatus(t, {
-    pending: healingPendingFixture(now, { previouslyRejected: { count: 3, lastRejectedAt: isoDaysAgo(now, 2), lastRejectedBy: "carol" } }),
+    pending: healingPendingFixture(now, { previouslyRejected: { count: 99, lastRejectedAt: isoDaysAgo(now, 200), lastRejectedBy: "nobody" } }),
+    healingDecisions: [
+      { original: "#old", suggested: "#new", decision: "rejected", decidedAt: isoDaysAgo(now, 10), decidedBy: "alice" },
+      { original: "#old", suggested: "#new", decision: "rejected", decidedAt: isoDaysAgo(now, 5), decidedBy: "bob" },
+      { original: "#old", suggested: "#new", decision: "rejected", decidedAt: isoDaysAgo(now, 2), decidedBy: "carol" },
+    ],
     scenarios: {},
   });
-  assert.match(child.stdout, /previously rejected 3 time\(s\), last by carol/);
+  assert.match(child.stdout, /previously rejected 3 time\(s\), last by carol/, child.stdout + child.stderr);
 });
 
 test("status.js: a quarantined flaky scenario that is decided (not stale, not a rehab candidate) does not get falsely reported as no tracked flaky scenarios", (t) => {
