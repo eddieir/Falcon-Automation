@@ -26,31 +26,31 @@ const Logger = require("../../../utils/Logger");
  *   - `previouslyRejected` on every pending entry, so a reviewer sees
  *     up-front whether the exact same (original, suggested) pair was already
  *     turned down before, rather than only discovering that by digging
- *     through the raw decision ledger.
- *   - `tier3Invocations`, counted from the moment the LLM call is *made*
- *     (recordTier3Invocation), not from when it happens to succeed — so an
- *     original selector that burns five LLM calls before one finally
- *     resolves shows 5, not 1.
+ *     through the raw decision ledger. It is derived fresh from the
+ *     decision ledger on every read (see `_hydratePreviouslyRejected`) — the
+ *     copy persisted on the pending entry is a debug/forensic cache only and
+ *     is never treated as authoritative, so it can't go stale when a later
+ *     decision changes the picture or an old rejection ages out of the
+ *     capped ledger.
+ *   - `tier3Invocations` — model requests actually issued for this selector
+ *     since `firstSeen`, counted from the moment the LLM call is *made*
+ *     (`recordTier3Invocation`, called from `AIHealer.getAlternativeSelector`
+ *     immediately before the request goes out), not from when it happens to
+ *     succeed — so an original selector that burns five LLM calls before one
+ *     finally resolves shows 5, not 1. A request that throws, returns null,
+ *     resolves ambiguously, or is followed by a healed action that later
+ *     fails still counts: the model was genuinely asked.
  *   - both ledgers (pending, decisions) are bounded, so neither grows
  *     forever on a long-lived install.
  */
 const PENDING_MAX_ENTRIES        = 200;
 const HEALING_DECISIONS_MAX_ROWS = 500;
-const TIER3_TALLY_CAP            = 200;
 
 class HealingTrust {
     constructor() {
         this.pendingPath   = path.join(__dirname, "..", "..", "..", "data", "healing_pending.json");
         this.decisionsPath = path.join(__dirname, "..", "..", "..", "data", "healing_decisions.json");
         this._queue = Promise.resolve();
-        // Selectors whose Tier 3 LLM call has been *made* but haven't (yet,
-        // or ever) produced a pending entry — e.g. the LLM returned null, or
-        // the resulting locator turned out ambiguous. Folded into
-        // `tier3Invocations` the moment a pending entry for that selector is
-        // first created. Bounded (TIER3_TALLY_CAP) with LRU-by-touch
-        // eviction so a flood of never-successful selectors can't grow this
-        // forever.
-        this._tier3Tally = new Map();
         // Logs the *first* ledger rotation (mutation-time cap) per process,
         // then stays silent — never a warning per push forever.
         this._decisionsRotationLogged = false;
@@ -62,11 +62,18 @@ class HealingTrust {
      * after construction.
      *
      * The decisions ledger is capped on load (oldest rows dropped, one
-     * warning naming the count and the cap). The pending queue is loaded
-     * whole and never truncated on load — only mutation-time recordPending()
-     * enforces PENDING_MAX_ENTRIES — but a warning fires if it's already
-     * over cap, since that can only mean the cap was lowered or entries were
-     * added outside this process.
+     * warning naming the count and the cap). The pending queue is capped on
+     * load too, via the same `_evictPendingIfNeeded()` selection/logging used
+     * by the mutation-time path — PENDING_MAX_ENTRIES must be a genuine
+     * invariant, not merely a mutation-time behaviour, so a 10,000-entry
+     * `healing_pending.json` on a read-only/read-mostly install is trimmed
+     * (and every eviction logged, never silently) the moment it's loaded, not
+     * left oversized until the next `recordPending()` happens to fire. The
+     * trimmed result is persisted through the normal `_queue`/
+     * `writeJsonAtomic` chain — `_reload()` itself stays synchronous; only
+     * that write is queued — and the write is only queued when something was
+     * actually evicted, so a file already at or under the cap is left
+     * completely untouched on disk.
      */
     _reload() {
         this.pending   = AtomicJsonStore.readJsonSync(this.pendingPath, {});
@@ -82,12 +89,12 @@ class HealingTrust {
             );
         }
 
-        const pendingCount = Object.keys(this.pending).length;
-        if (pendingCount > PENDING_MAX_ENTRIES) {
-            Logger.warning(
-                `HealingTrust: loaded pending queue has ${pendingCount} entries, exceeding `
-                + `PENDING_MAX_ENTRIES (${PENDING_MAX_ENTRIES}); the excess will be trimmed on the next recorded fix.`,
-            );
+        const evictedCount = this._evictPendingIfNeeded();
+        if (evictedCount > 0) {
+            // writeJsonAtomic never rejects by design (see AtomicJsonStore),
+            // so this can't poison `_queue` — no `.catch` needed, same as
+            // every other write queued in this file.
+            this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending));
         }
 
         this._buildRejectionIndex();
@@ -167,19 +174,34 @@ class HealingTrust {
 
     /**
      * Keep at most PENDING_MAX_ENTRIES pending entries, evicting the ones
-     * with the oldest `lastSeen` first. Mutation-time only — `list()` never
-     * updates recency and never triggers eviction. Every eviction is logged,
-     * naming the evicted selector(s) and their `occurrences` counts (never
-     * the description, never the whole entry — security condition 8).
+     * with the oldest `lastSeen` first. Called both at mutation-time
+     * (`recordPending()`) and from `_reload()` on load, so PENDING_MAX_ENTRIES
+     * is a genuine invariant rather than something only enforced when a fix
+     * happens to be recorded. Neither caller queues a write from inside this
+     * method — `_reload()` and `recordPending()` each decide separately
+     * whether/when to queue one — so this stays a pure in-memory selection +
+     * log + delete.
+     *
+     * Determinism: an entry whose `lastSeen` is missing or unparseable can't
+     * be shown to be recent, so it's treated as having recency 0 (the oldest
+     * possible) and is evicted before any entry with a valid, more recent
+     * timestamp. Ties (including ties between multiple missing-`lastSeen`
+     * entries) are broken by ascending selector key, so the outcome is
+     * stable across runs regardless of object key insertion order.
+     *
+     * Every eviction is logged, naming the evicted selector(s) and their
+     * `occurrences` counts (never the description, never the whole entry —
+     * security condition 8). Returns the number of entries evicted (0 if
+     * none), so callers can tell whether anything actually changed.
      */
     _evictPendingIfNeeded() {
         const keys = Object.keys(this.pending);
         const overflow = keys.length - PENDING_MAX_ENTRIES;
-        if (overflow <= 0) return;
+        if (overflow <= 0) return 0;
 
         const toEvict = keys
             .map((key) => ({ key, lastSeenMs: Date.parse(this._getPending(key)?.lastSeen) || 0 }))
-            .sort((a, b) => a.lastSeenMs - b.lastSeenMs)
+            .sort((a, b) => a.lastSeenMs - b.lastSeenMs || a.key.localeCompare(b.key))
             .slice(0, overflow);
 
         const details = toEvict.map(({ key }) => {
@@ -191,6 +213,7 @@ class HealingTrust {
             + `${toEvict.length} least-recently-seen entr${toEvict.length === 1 ? "y" : "ies"}: ${details.join(", ")}.`,
         );
         for (const { key } of toEvict) delete this.pending[key];
+        return toEvict.length;
     }
 
     /**
@@ -203,15 +226,20 @@ class HealingTrust {
      * `previouslyRejected` is always present (never omitted) and is always
      * recomputed fresh from `_rejectionIndex` for the (original, suggested)
      * pair of THIS call — never carried forward from an existing entry — so
-     * a legacy entry self-heals the moment it's touched again.
+     * a legacy entry self-heals the moment it's touched again. This is still
+     * only a snapshot at creation/update time, though: it is NOT the
+     * authoritative value for reads — see `list()`/`_hydratePreviouslyRejected`,
+     * which recompute it again from the live index on every read, so a
+     * rejection recorded (or evicted from the ledger) *after* this call
+     * still shows up correctly later.
      *
-     * `tier3Invocations`: if a pending entry already exists, its count was
-     * already bumped in place by `recordTier3Invocation()` before this call
-     * (the LLM call that produced this very success), so it's carried
-     * through unchanged. If there's no existing entry, the tally recorded by
-     * that same invocation lives in `_tier3Tally` under `original` — pull it
-     * (defaulting to 0 for the vanishingly unlikely case this was somehow
-     * never invoked) and clear it, since it's now folded into the entry.
+     * `tier3Invocations`: a pending entry only ever exists because a Tier 3
+     * request was actually issued and succeeded, so a brand-new entry is
+     * seeded at 1 — that request, by definition the first at/after
+     * `firstSeen`. If a pending entry already exists, its count was already
+     * bumped in place by `recordTier3Invocation()` before this call (the
+     * request that produced this very success), so it's carried through
+     * unchanged here — never read from any separate tally.
      *
      * @param {Object} opts
      * @param {string} opts.original    - The selector that no longer matched
@@ -225,13 +253,7 @@ class HealingTrust {
         const rejection = this._rejectionIndex.get(rejectionKey)
             ?? { count: 0, lastRejectedAt: null, lastRejectedBy: null };
 
-        let tier3Invocations;
-        if (existing) {
-            tier3Invocations = existing.tier3Invocations ?? 0;
-        } else {
-            tier3Invocations = this._tier3Tally.get(original) ?? 0;
-            this._tier3Tally.delete(original);
-        }
+        const tier3Invocations = existing ? (existing.tier3Invocations ?? 0) : 1;
 
         const entry = {
             original,
@@ -261,37 +283,60 @@ class HealingTrust {
      * invocation boundary, counted regardless of whether the call returns
      * null, resolves ambiguously, or the healed action later fails.
      *
-     * If a pending entry already exists for `original`, its
-     * `tier3Invocations` is bumped in place (through `_setPending`,
-     * preserving the same prototype-safety as every other pending
-     * mutation) and a write is queued. Otherwise the count accrues in
-     * `_tier3Tally` — a bounded (TIER3_TALLY_CAP), LRU-by-touch map — until
-     * `recordPending()` eventually creates the entry and folds the tally in.
+     * Called from `AIHealer.getAlternativeSelector()` immediately before the
+     * model request is issued — i.e. before it's known whether this attempt
+     * will produce a pending entry at all. If a pending entry already exists
+     * for `original`, its `tier3Invocations` is bumped in place (through
+     * `_setPending`, preserving the same prototype-safety as every other
+     * pending mutation) and a write is queued. If none exists yet, this is a
+     * no-op: there is nothing to bump, and nothing is tallied on the side —
+     * if this same request goes on to succeed, `recordPending()` seeds the
+     * brand-new entry's `tier3Invocations` at 1 for exactly that request.
      */
     recordTier3Invocation(original) {
         const existing = this._getPending(original);
-        if (existing) {
-            this._setPending(original, { ...existing, tier3Invocations: (existing.tier3Invocations ?? 0) + 1 });
-            this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending));
-            return;
-        }
-
-        if (this._tier3Tally.has(original)) {
-            const count = this._tier3Tally.get(original);
-            this._tier3Tally.delete(original);
-            this._tier3Tally.set(original, count + 1);
-        } else {
-            if (this._tier3Tally.size >= TIER3_TALLY_CAP) {
-                const oldestKey = this._tier3Tally.keys().next().value;
-                this._tier3Tally.delete(oldestKey);
-            }
-            this._tier3Tally.set(original, 1);
-        }
+        if (!existing) return;
+        this._setPending(original, { ...existing, tier3Invocations: (existing.tier3Invocations ?? 0) + 1 });
+        this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending));
     }
 
-    /** All fixes currently awaiting review. Never updates recency. */
+    /**
+     * Recompute `previouslyRejected` for one entry from the live
+     * `_rejectionIndex`, ignoring whatever value is on the stored entry.
+     * Returns a new object (shallow copy) — never the same reference, and
+     * never mutates `entry` or anything reachable from `this.pending`.
+     */
+    _hydratePreviouslyRejected(entry) {
+        const rejectionKey = JSON.stringify([entry.original, entry.suggested]);
+        const rejection = this._rejectionIndex.get(rejectionKey)
+            ?? { count: 0, lastRejectedAt: null, lastRejectedBy: null };
+        return {
+            ...entry,
+            previouslyRejected: {
+                count: rejection.count,
+                lastRejectedAt: rejection.lastRejectedAt,
+                lastRejectedBy: rejection.lastRejectedBy,
+            },
+        };
+    }
+
+    /**
+     * All fixes currently awaiting review. Never updates recency, never
+     * mutates `this.pending`.
+     *
+     * `previouslyRejected` on the entries returned here is not read from
+     * whatever was persisted on disk — it is recomputed fresh from the
+     * current `_rejectionIndex` for each entry's own (original, suggested)
+     * pair. A value is written into the persisted pending entry (by
+     * `recordPending()`) purely as a debug/forensic cache; it is never
+     * authoritative, so a rejection that later ages out of the capped
+     * decisions ledger — or one recorded after this entry was created — is
+     * always reflected correctly here, in both directions, without ever
+     * needing to touch the pending entry again. Every entry returned is a
+     * fresh copy, never a reference into `this.pending`.
+     */
     list() {
-        return Object.values(this.pending);
+        return Object.values(this.pending).map((entry) => this._hydratePreviouslyRejected(entry));
     }
 
     /**
@@ -323,10 +368,17 @@ class HealingTrust {
      * Approve a pending fix. It becomes a trusted Tier 2 alternative
      * (written into LocatorStore) and is removed from the pending queue.
      * Returns null if there is no pending entry for that selector.
+     *
+     * The decision row is built from a hydrated copy of the entry (see
+     * `_hydratePreviouslyRejected`), not the raw `this.pending` value — the
+     * raw entry's `previouslyRejected` is only a cache and could be stale,
+     * and that field would otherwise be baked into the decision ledger
+     * verbatim via the `{...entry}` spread below.
      */
     approve(original, { approvedBy = "dashboard" } = {}) {
-        const entry = this._getPending(original);
-        if (!entry) return null;
+        const raw = this._getPending(original);
+        if (!raw) return null;
+        const entry = this._hydratePreviouslyRejected(raw);
 
         LocatorStore.addLocator(entry.original, entry.suggested);
         delete this.pending[original];
@@ -343,10 +395,15 @@ class HealingTrust {
      * kept in the decision ledger so a rejected guess doesn't quietly get
      * re-suggested with no record of it having been turned down before.
      * Returns null if there is no pending entry for that selector.
+     *
+     * As with `approve()`, the decision row is built from a hydrated copy so
+     * a stale cached `previouslyRejected` on the raw pending entry never
+     * leaks into the ledger.
      */
     reject(original, { rejectedBy = "dashboard" } = {}) {
-        const entry = this._getPending(original);
-        if (!entry) return null;
+        const raw = this._getPending(original);
+        if (!raw) return null;
+        const entry = this._hydratePreviouslyRejected(raw);
 
         delete this.pending[original];
         this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending));
@@ -365,11 +422,23 @@ class HealingTrust {
      * boundary is NOT stale. An entry whose `firstSeen` is missing or
      * unparseable is treated as notStale rather than crashing or being
      * silently dropped.
+     *
+     * As with `list()`, `previouslyRejected` on every returned entry (stale
+     * and notStale alike) is recomputed fresh from the live
+     * `_rejectionIndex` via `_hydratePreviouslyRejected`, never echoed from
+     * whatever is persisted on the pending entry — this is the surface
+     * `scripts/review/status.js` and `GET /healing/pending/stale` read, so a
+     * rejection that has aged out of the capped decisions ledger must not be
+     * reported as still outstanding here either. Hydration also means every
+     * returned object is a fresh copy, never `===` an entry in
+     * `this.pending` — this stays a pure read that never mutates
+     * `this.pending`, never touches recency, and never queues a write.
      */
     unreviewedStale({ thresholdDays, now = Date.now() }) {
         const stale = [];
         const notStale = [];
-        for (const entry of Object.values(this.pending)) {
+        for (const rawEntry of Object.values(this.pending)) {
+            const entry = this._hydratePreviouslyRejected(rawEntry);
             const firstSeenMs = Date.parse(entry?.firstSeen);
             if (Number.isNaN(firstSeenMs)) {
                 notStale.push(entry);

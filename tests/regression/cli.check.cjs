@@ -222,7 +222,7 @@ test("duplicate identical --repeat values are accepted (not a conflict)", (t) =>
 // redirects both HealingTrust and FlakinessTracker to FALCON_TEST_* paths, so
 // it's reused here rather than adding a second near-identical fixture file.
 
-function healingReviewCLI(t, pending, args) {
+function healingReviewCLI(t, pending, args, { healingDecisions } = {}) {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const pendingPath = path.join(dir, "healing_pending.json");
@@ -230,6 +230,9 @@ function healingReviewCLI(t, pending, args) {
   const historyPath = path.join(dir, "scenario_history.json");
   const quarantineDecisionsPath = path.join(dir, "quarantine_decisions.json");
   fs.writeFileSync(pendingPath, JSON.stringify(pending));
+  if (healingDecisions !== undefined) {
+    fs.writeFileSync(healingDecisionsPath, JSON.stringify(healingDecisions));
+  }
 
   const child = spawnSync(
     process.execPath,
@@ -256,7 +259,56 @@ function healingReviewCLI(t, pending, args) {
   return { child };
 }
 
+// scripts/review/status.js reads the SAME HealingTrust.unreviewedStale() read
+// path that the dashboard's GET /healing/pending/stale route does, so its
+// output is the CI/dashboard-visible surface P13-21 FIX A is about. Mirrors
+// tests/regression/review-status.check.cjs's own runStatus() helper (that
+// file is outside this task's allowlist, so it's not reused directly here).
+function reviewStatusCLI(t, { pending, healingDecisions, args = [] } = {}) {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const pendingPath = path.join(dir, "healing_pending.json");
+  const healingDecisionsPath = path.join(dir, "healing_decisions.json");
+  const historyPath = path.join(dir, "scenario_history.json");
+  const quarantineDecisionsPath = path.join(dir, "quarantine_decisions.json");
+  if (pending !== undefined) fs.writeFileSync(pendingPath, JSON.stringify(pending));
+  if (healingDecisions !== undefined) fs.writeFileSync(healingDecisionsPath, JSON.stringify(healingDecisions));
+
+  const child = spawnSync(
+    process.execPath,
+    [
+      "--require",
+      path.join(root, "tests/fixtures/review-status-cli-preload.cjs"),
+      path.join(root, "scripts/review/status.js"),
+      ...args,
+    ],
+    {
+      cwd: dir,
+      env: {
+        ...process.env,
+        FALCON_TEST_PENDING_PATH: pendingPath,
+        FALCON_TEST_HEALING_DECISIONS_PATH: healingDecisionsPath,
+        FALCON_TEST_HISTORY_PATH: historyPath,
+        FALCON_TEST_DECISIONS_PATH: quarantineDecisionsPath,
+      },
+      encoding: "utf8",
+      timeout: 10000,
+    },
+  );
+  assert.equal(child.error, undefined);
+  return { child };
+}
+
+function isoDaysAgo(now, days) {
+  return new Date(now - days * 86400000).toISOString();
+}
+
 test("healing review CLI: list renders previouslyRejected distinctly when count > 0", (t) => {
+  // previouslyRejected is derived fresh from the decisions ledger (see
+  // HealingTrust._hydratePreviouslyRejected), never echoed from whatever is
+  // persisted on the pending entry — so this fixture must seed genuine
+  // "rejected" rows in healing_decisions.json whose (original, suggested)
+  // pair matches exactly, or the assertion below proves nothing real.
   const { child } = healingReviewCLI(t, {
     "#old": {
       original: "#old",
@@ -266,9 +318,16 @@ test("healing review CLI: list renders previouslyRejected distinctly when count 
       lastSeen: new Date().toISOString(),
       occurrences: 4,
       tier3Invocations: 5,
-      previouslyRejected: { count: 2, lastRejectedAt: "2024-01-01T00:00:00.000Z", lastRejectedBy: "dana" },
+      // Stale cache on the pending entry itself — deliberately wrong (count:
+      // 99) to prove the printed value comes from the ledger below, not this.
+      previouslyRejected: { count: 99, lastRejectedAt: "2020-01-01T00:00:00.000Z", lastRejectedBy: "nobody" },
     },
-  }, ["list"]);
+  }, ["list"], {
+    healingDecisions: [
+      { original: "#old", suggested: "#new", decision: "rejected", decidedAt: "2024-01-01T00:00:00.000Z", decidedBy: "dana" },
+      { original: "#old", suggested: "#new", decision: "rejected", decidedAt: "2024-02-01T00:00:00.000Z", decidedBy: "dana" },
+    ],
+  });
   assert.equal(child.status ?? 0, 0, child.stdout + child.stderr);
   assert.match(child.stdout, /Tier 3 invocations: 5/);
   assert.match(child.stdout, /previously rejected 2 time\(s\), last by dana/);
@@ -292,6 +351,10 @@ test("healing review CLI: list tolerates a legacy entry with no previouslyReject
 });
 
 test("healing review CLI: list tolerates a null lastRejectedBy without crashing", (t) => {
+  // A rejected row with an absent/non-string decidedBy is well-formed (not
+  // malformed) and still counts — it's what legitimately produces
+  // lastRejectedBy: null while count stays > 0. Seed exactly that shape in
+  // the ledger rather than baking the null straight into the pending fixture.
   const { child } = healingReviewCLI(t, {
     "#anon": {
       original: "#anon",
@@ -301,11 +364,80 @@ test("healing review CLI: list tolerates a null lastRejectedBy without crashing"
       lastSeen: new Date().toISOString(),
       occurrences: 1,
       tier3Invocations: 1,
-      previouslyRejected: { count: 1, lastRejectedAt: "2024-01-01T00:00:00.000Z", lastRejectedBy: null },
+      previouslyRejected: { count: 0, lastRejectedAt: null, lastRejectedBy: null },
     },
-  }, ["list"]);
+  }, ["list"], {
+    healingDecisions: [
+      { original: "#anon", suggested: "#fixed", decision: "rejected", decidedAt: "2024-01-01T00:00:00.000Z" },
+    ],
+  });
   assert.equal(child.status ?? 0, 0, child.stdout + child.stderr);
   assert.match(child.stdout, /previously rejected 1 time\(s\), last by \(unknown\)/);
+});
+
+// ── scripts/review/status.js: unreviewedStale() must hydrate previouslyRejected
+// too, not just list() (Phase 13, P13-21 FIX A) ──
+//
+// status.js and GET /healing/pending/stale both read HealingTrust.unreviewedStale(),
+// a SEPARATE read path from list()/approve()/reject() that pushed raw pending
+// entries straight out of this.pending. A pending entry's own cached
+// previouslyRejected is only a debug snapshot from whenever it was last
+// written — it goes stale the moment a rejection ages out of the capped
+// decisions ledger, or is created before the ledger even sees it. Only the
+// live decisions ledger is authoritative.
+
+test("status.js: a pending fix whose rejection has been evicted from the ledger does NOT print a previously rejected line", (t) => {
+  const now = Date.now();
+  const { child } = reviewStatusCLI(t, {
+    pending: {
+      "#old": {
+        original: "#old",
+        suggested: "#new",
+        description: "Save button",
+        // 20 days old so it lands in the printed "stale" section (default
+        // threshold is 14 days).
+        firstSeen: isoDaysAgo(now, 20),
+        lastSeen: isoDaysAgo(now, 20),
+        occurrences: 3,
+        tier3Invocations: 3,
+        // Stale cache baked onto the pending entry itself, as if written
+        // before the matching decision row rotated out of the capped
+        // decisions ledger. If unreviewedStale() still echoed this instead
+        // of re-deriving it, this assertion would wrongly pass.
+        previouslyRejected: { count: 5, lastRejectedAt: "2020-01-01T00:00:00.000Z", lastRejectedBy: "dana" },
+      },
+    },
+    // No matching "rejected" row for (#old, #new) at all — simulates the
+    // rejection having aged out of HEALING_DECISIONS_MAX_ROWS.
+    healingDecisions: [],
+  });
+  assert.equal(child.status ?? 0, 0, child.stdout + child.stderr);
+  assert.match(child.stdout, /#old/);
+  assert.doesNotMatch(child.stdout, /previously rejected/, child.stdout + child.stderr);
+});
+
+test("status.js: a pending fix whose rejection IS still in the ledger DOES print it, with the right count", (t) => {
+  const now = Date.now();
+  const { child } = reviewStatusCLI(t, {
+    pending: {
+      "#old": {
+        original: "#old",
+        suggested: "#new",
+        description: "Save button",
+        firstSeen: isoDaysAgo(now, 20),
+        lastSeen: isoDaysAgo(now, 20),
+        occurrences: 3,
+        tier3Invocations: 3,
+        previouslyRejected: { count: 0, lastRejectedAt: null, lastRejectedBy: null },
+      },
+    },
+    healingDecisions: [
+      { original: "#old", suggested: "#new", decision: "rejected", decidedAt: "2024-01-01T00:00:00.000Z", decidedBy: "dana" },
+      { original: "#old", suggested: "#new", decision: "rejected", decidedAt: "2024-02-01T00:00:00.000Z", decidedBy: "erin" },
+    ],
+  });
+  assert.equal(child.status ?? 0, 0, child.stdout + child.stderr);
+  assert.match(child.stdout, /previously rejected 2 time\(s\), last by erin/, child.stdout + child.stderr);
 });
 
 // ── scripts/flakiness/review.js: rehab subcommand (Phase 13) ──
