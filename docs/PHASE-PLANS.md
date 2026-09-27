@@ -533,9 +533,10 @@ healed action fails. Displayed by the CLI and dashboard. **Terminology is bindin
 cost.** No dollar figure, token count, or pricing data is captured or displayed.
 
 **7. Bounded state (closes D7).** Both decision ledgers are newest-N ring buffers at 500 rows; pending
-healing entries are LRU-capped at 200 by `lastSeen`. Eviction is logged. Ledgers are capped on load
-as well as on mutation (migration for existing oversized files); pending queue loads whole and warns
-if it exceeds the cap, because pending entries are live human work.
+healing entries are LRU-capped at 200 by `lastSeen`. Eviction is logged. Ledgers and pending queue are
+capped on load and persisted to disk, so an already-oversized file is genuinely repaired rather than
+re-trimmed on every start. Newest 200 pending entries by `lastSeen` survive; entries without usable
+`lastSeen` sort oldest (deterministic). Every eviction is logged by selector identity.
 
 **8. D12.** Already fixed before this phase (decision ledger double-writes and description resets); now
 protected by explicit regression tests. Do NOT describe D12 as newly fixed in Phase 13.

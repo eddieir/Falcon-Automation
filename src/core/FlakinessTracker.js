@@ -105,6 +105,19 @@ class FlakinessTracker {
                 `FlakinessTracker: loaded quarantine ledger had ${totalFound} rows, exceeding `
                 + `QUARANTINE_DECISIONS_MAX_ROWS (${QUARANTINE_DECISIONS_MAX_ROWS}); dropped ${dropped} oldest row(s).`,
             );
+            // Persist the trim — a capped-in-memory-only ledger leaves a
+            // 10,000-row file on disk forever on a read-mostly install,
+            // reparsing all 10,000 rows synchronously on every future
+            // restart. Queued through the normal _queue/writeJsonAtomic
+            // chain (no `.catch` needed — writeJsonAtomic never rejects), and
+            // only reached when the ledger was actually over cap, so a file
+            // already at or under QUARANTINE_DECISIONS_MAX_ROWS is left
+            // completely untouched on disk. This runs after reconciliation
+            // above (which folds the FULL loaded ledger, before this trim,
+            // into `scenarios[key].quarantined`) so persisting the capped
+            // array here can never undo that reconciliation — reconciliation
+            // writes land on the scenario entries, not on `this.decisions`.
+            this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
         }
     }
 
