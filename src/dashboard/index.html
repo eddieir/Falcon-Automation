@@ -263,6 +263,19 @@
     word-break: break-all;
   }
 
+  /* Phase 13 — a fix that was already turned down for this exact pair must
+     not blend in with the routine detail lines above it. */
+  .pending-rejected-warning {
+    color: var(--fail);
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--fail);
+    border-radius: 4px;
+    word-break: break-all;
+  }
+
   .pending-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
   .btn {
@@ -342,6 +355,13 @@
   }
 
   .flaky-row.classification-broken { border-left-color: var(--fail); }
+  .flaky-row.rehab-candidate { border-left-color: var(--pass); }
+
+  .flaky-rehab-badge {
+    color: var(--pass);
+    font-size: 12px;
+    font-weight: 600;
+  }
 
   .flaky-body { flex: 1; min-width: 200px; }
 
@@ -700,11 +720,20 @@
     list.replaceChildren(...entries.map((entry) => {
       const row = document.createElement("div");
       row.className = "pending-row";
+      const previouslyRejected = entry.previouslyRejected;
+      // Numeric counts interpolate raw, matching the existing entry.occurrences
+      // precedent; lastRejectedBy is untrusted free text and goes through
+      // escapeHtml() like every other operator-influenced string here.
+      const rejectedWarning = previouslyRejected && previouslyRejected.count > 0
+        ? `<div class="pending-rejected-warning">⚠ previously rejected ${previouslyRejected.count} time(s), last by ${escapeHtml(previouslyRejected.lastRejectedBy ?? "(unknown)")} at ${escapeHtml(previouslyRejected.lastRejectedAt ?? "")}</div>`
+        : "";
       row.innerHTML = `
         <div class="pending-body">
           <div class="pending-selector">${escapeHtml(entry.original)}</div>
           <div class="pending-detail">→ ${escapeHtml(entry.suggested)}${entry.description ? ` — ${escapeHtml(entry.description)}` : ""}</div>
           <div class="pending-detail">seen ${entry.occurrences}× · last ${fmt(new Date(entry.lastSeen).getTime())}</div>
+          <div class="pending-detail">Tier 3 invocations: ${entry.tier3Invocations ?? 0}</div>
+          ${rejectedWarning}
         </div>
         <div class="pending-actions">
           <button class="btn btn-approve" data-action="approve" data-selector="${escapeHtml(entry.original)}">Approve</button>
@@ -820,16 +849,24 @@
 
     list.replaceChildren(...entries.map((entry) => {
       const row = document.createElement("div");
-      row.className = `flaky-row classification-${entry.classification}`;
+      const isRehabCandidate = entry.rehabilitationCandidate === true;
+      row.className = `flaky-row classification-${entry.classification}${isRehabCandidate ? " rehab-candidate" : ""}`;
       const rateLabel = entry.classification === "broken"
         ? "always fails"
         : `${Math.round(entry.flakeRate * 100)}% fail rate`;
+      const flakySinceLabel = entry.flakySince
+        ? ` · flaky since ${escapeHtml(entry.flakySince)}`
+        : "";
+      const rehabBadge = isRehabCandidate
+        ? `<div class="flaky-detail flaky-rehab-badge">⭐ rehabilitation candidate — recent runs while quarantined all passed</div>`
+        : "";
       row.innerHTML = `
         <div class="flaky-body">
           <div class="flaky-selector">${escapeHtml(entry.description || entry.locator)}</div>
           <div class="flaky-detail">${escapeHtml(entry.locator)} on ${escapeHtml(entry.url)}</div>
-          <div class="flaky-detail">${entry.classification} · ${rateLabel} · ${entry.sampleSize} recent run(s) ${entry.quarantined ? "· 🧯 quarantined" : ""}</div>
+          <div class="flaky-detail">${entry.classification} · ${rateLabel} · ${entry.sampleSize} recent run(s) ${entry.quarantined ? "· 🧯 quarantined" : ""}${flakySinceLabel}</div>
           <div class="flaky-detail flaky-history">${historyDots(entry.history)}</div>
+          ${rehabBadge}
         </div>
         <div class="flaky-actions">
           ${entry.quarantined

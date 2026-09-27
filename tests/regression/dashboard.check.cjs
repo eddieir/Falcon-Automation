@@ -11,6 +11,7 @@ const Middleware = require("../../src/core/Middleware");
 const HealingTrust = require("../../src/core/AIHealer/HealingTrust");
 const HealingReport = require("../../src/core/AIHealer/HealingReport");
 const FlakinessTracker = require("../../src/core/FlakinessTracker");
+const { root } = require("./helpers.cjs");
 // Logger.info/.warning write straight to console.log/console.warn (see
 // utils/Logger.js) — useful for a human running a file directly, but
 // node:test's own TAP-like reporter is also reading this process's stdout
@@ -662,4 +663,225 @@ test("coverage: pageStart/pageComplete are broadcast live to a connected socket"
   const [completeEvt] = await completed;
   assert.equal(completeEvt.name, "pageComplete");
   assert.equal(completeEvt.payload.summary.status, "tested");
+});
+
+// ── Phase 13 — "decisions can't rot": the three new staleness/rehab routes ──
+//
+// Same auth gate and rate limiter as every other route above; the only new
+// thing worth proving per route is: 401 with zero side effects, a correct
+// authenticated payload, that nothing here can be reached with a mutating
+// verb, and that an invalid setting answers 500 (naming the setting) rather
+// than crashing the whole process.
+
+function withEnv(t, vars) {
+  const previous = {};
+  for (const key of Object.keys(vars)) previous[key] = process.env[key];
+  Object.assign(process.env, vars);
+  t.after(() => {
+    for (const key of Object.keys(vars)) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  });
+}
+
+test("GET /healing/pending/stale: 401 unauthenticated, 200 with the staleness split when authenticated", async (t) => {
+  isolateHealingSingletons(t);
+  const d = setup(t, "fixture-token");
+  await d.start();
+
+  const oldFirstSeen = new Date(Date.now() - 30 * 86400000).toISOString();
+  HealingTrust.recordPending({ original: "#stale-h", suggested: "#fix" });
+  HealingTrust.pending["#stale-h"].firstSeen = oldFirstSeen;
+
+  const unauth = await httpJSON(d.port, "GET", "/healing/pending/stale");
+  assert.equal(unauth.statusCode, 401);
+  assert.equal(Object.keys(HealingTrust.pending).length, 1, "an unauthenticated read must not mutate anything");
+
+  const auth = await httpJSON(d.port, "GET", "/healing/pending/stale", { "X-Dashboard-Token": "fixture-token" });
+  assert.equal(auth.statusCode, 200);
+  assert.equal(auth.body.thresholdDays, 14);
+  assert.equal(auth.body.stale.length, 1);
+  assert.equal(auth.body.stale[0].original, "#stale-h");
+});
+
+test("GET /flakiness/unreviewed/stale: 401 unauthenticated, 200 with the staleness split when authenticated", async (t) => {
+  isolateFlakinessSingleton(t);
+  const d = setup(t, "fixture-token");
+  await d.start();
+
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#stale-f", status: "passed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#stale-f", status: "failed" });
+  const entry = FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#stale-f", status: "passed" });
+  assert.equal(entry.classification, "flaky");
+  entry.flakySince = new Date(Date.now() - 30 * 86400000).toISOString();
+  FlakinessTracker._setScenario(entry.key, entry);
+
+  const unauth = await httpJSON(d.port, "GET", "/flakiness/unreviewed/stale");
+  assert.equal(unauth.statusCode, 401);
+
+  const auth = await httpJSON(d.port, "GET", "/flakiness/unreviewed/stale", { "X-Dashboard-Token": "fixture-token" });
+  assert.equal(auth.statusCode, 200);
+  assert.equal(auth.body.thresholdDays, 14);
+  assert.equal(auth.body.stale.length, 1);
+  assert.equal(auth.body.stale[0].key, entry.key);
+});
+
+test("GET /flakiness/rehabilitation: 401 unauthenticated with zero side effects, 200 with candidates when authenticated, and a POST is refused without mutating state", async (t) => {
+  isolateFlakinessSingleton(t);
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const auth = { "X-Dashboard-Token": "fixture-token" };
+
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#rehab", status: "passed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#rehab", status: "failed" });
+  FlakinessTracker.quarantine("https://x.com::click::#rehab", { by: "test" });
+  for (let i = 0; i < 5; i++) {
+    FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#rehab", status: "passed" });
+  }
+  await FlakinessTracker._queue;
+  const beforeState = fs.readFileSync(FlakinessTracker.historyPath, "utf8");
+
+  const unauth = await httpJSON(d.port, "GET", "/flakiness/rehabilitation");
+  assert.equal(unauth.statusCode, 401);
+
+  const res = await httpJSON(d.port, "GET", "/flakiness/rehabilitation", auth);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.length, 1);
+  assert.equal(res.body[0].key, "https://x.com::click::#rehab");
+  assert.equal(res.body[0].allPassedInWindow, true);
+
+  // Express 404s an unregistered verb on a registered path — either way, the
+  // point is that nothing about this route can mutate tracked state.
+  const posted = await httpJSON(d.port, "POST", "/flakiness/rehabilitation", auth, { key: "https://x.com::click::#rehab" });
+  assert.equal(posted.statusCode, 404);
+  await FlakinessTracker._queue;
+  assert.equal(fs.readFileSync(FlakinessTracker.historyPath, "utf8"), beforeState);
+});
+
+test("GET /healing/pending/stale with an invalid HEALING_PENDING_STALE_DAYS returns 500 naming the setting, not a crash", async (t) => {
+  isolateHealingSingletons(t);
+  withEnv(t, { HEALING_PENDING_STALE_DAYS: "not-a-number" });
+  const d = setup(t, "fixture-token");
+  await d.start();
+
+  const res = await httpJSON(d.port, "GET", "/healing/pending/stale", { "X-Dashboard-Token": "fixture-token" });
+  assert.equal(res.statusCode, 500);
+  assert.equal(res.body.setting, "HEALING_PENDING_STALE_DAYS");
+  assert.match(res.body.error, /HEALING_PENDING_STALE_DAYS/);
+
+  // The process/server itself must have survived — prove it by making a
+  // normal, valid request right after.
+  const stillUp = await httpJSON(d.port, "GET", "/coverage", { "X-Dashboard-Token": "fixture-token" });
+  assert.equal(stillUp.statusCode, 200);
+});
+
+test("GET /flakiness/scenarios: rehabilitationCandidate is an additive field, existing fields untouched", async (t) => {
+  isolateFlakinessSingleton(t);
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const auth = { "X-Dashboard-Token": "fixture-token" };
+
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#plain", status: "passed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#plain", status: "failed" });
+  FlakinessTracker.record({ url: "https://x.com", action: "click", locator: "#plain", status: "passed" });
+
+  const res = await httpJSON(d.port, "GET", "/flakiness/scenarios", auth);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.length, 1);
+  assert.equal(res.body[0].key, "https://x.com::click::#plain");
+  assert.equal(res.body[0].rehabilitationCandidate, false);
+  assert.equal(res.body[0].classification, "flaky");
+});
+
+test("GET /flakiness/scenarios with an invalid REHAB_CANDIDATE_WINDOW returns 500 naming the setting", async (t) => {
+  isolateFlakinessSingleton(t);
+  withEnv(t, { REHAB_CANDIDATE_WINDOW: "0" });
+  const d = setup(t, "fixture-token");
+  await d.start();
+
+  const res = await httpJSON(d.port, "GET", "/flakiness/scenarios", { "X-Dashboard-Token": "fixture-token" });
+  assert.equal(res.statusCode, 500);
+  assert.equal(res.body.setting, "REHAB_CANDIDATE_WINDOW");
+});
+
+// ── Phase 13 — dashboard UI escaping for the new pending fields (XSS) ──
+//
+// Mirrors how tests/regression/dashboard-ui.check.cjs exercises the shipped
+// client script in a minimal fake DOM: loads the real <script> from
+// src/dashboard/index.html into a fresh V8 context so this proves the actual
+// production JavaScript escapes untrusted text, not a reimplementation of it.
+
+test("dashboard UI: a pending entry's previouslyRejected.lastRejectedBy renders escaped, never as markup", () => {
+  const vm = require("node:vm");
+  const html = fs.readFileSync(path.join(root, "src/dashboard/index.html"), "utf8");
+  const source = html.match(/<script>\s*([\s\S]*?)<\/script>/i)[1];
+
+  const nodes = new Map();
+  const rows = [];
+  const makeNode = () => ({
+    textContent: "",
+    style: {},
+    classList: { add() {}, remove() {} },
+    dataset: {},
+    disabled: false,
+    innerHTML: "",
+    children: [],
+    _listeners: {},
+    remove() {},
+    addEventListener(evt, fn) {
+      (this._listeners[evt] ||= []).push(fn);
+    },
+    prepend(row) {
+      rows.unshift(row);
+    },
+    replaceChildren(...kids) {
+      rows.length = 0;
+      this.children = kids;
+    },
+  });
+  const document = {
+    getElementById: (id) => {
+      if (!nodes.has(id)) nodes.set(id, makeNode());
+      return nodes.get(id);
+    },
+    createElement: () => makeNode(),
+  };
+
+  const handlers = {};
+  vm.runInNewContext(source, {
+    document,
+    io: () => ({ on: (name, fn) => (handlers[name] = fn) }),
+    setInterval() {},
+    URL,
+    URLSearchParams,
+    location: { search: "", href: "http://localhost/" },
+    localStorage: { getItem: () => null, setItem() {} },
+    history: { replaceState() {} },
+    fetch: async () => ({ ok: true, json: async () => [] }),
+    alert() {},
+  });
+
+  handlers.event({
+    name: "healingPending",
+    payload: {
+      original: "#old",
+      suggested: "#new",
+      description: "Save",
+      occurrences: 1,
+      tier3Invocations: 1,
+      lastSeen: new Date().toISOString(),
+      previouslyRejected: {
+        count: 1,
+        lastRejectedAt: "2024-01-01T00:00:00.000Z",
+        lastRejectedBy: "<img src=x onerror=alert(1)>",
+      },
+    },
+    timestamp: Date.now(),
+  });
+
+  const html2 = nodes.get("healing-pending-list").children[0].innerHTML;
+  assert.ok(!html2.includes("<img"));
+  assert.match(html2, /&lt;img/);
+  assert.match(html2, /previously rejected/);
 });
