@@ -1139,7 +1139,7 @@ test("quarantine ledger ring-buffers at QUARANTINE_DECISIONS_MAX_ROWS (500) at m
   assert.equal(rotationWarningsAfter.length, 1, "only the first rotation per process is logged");
 });
 
-test("quarantine ledger: a 10,000-row ledger is capped to QUARANTINE_DECISIONS_MAX_ROWS (500) on load, newest retained, exactly one warning", (t) => {
+test("quarantine ledger: a 10,000-row ledger is capped to QUARANTINE_DECISIONS_MAX_ROWS (500) on load AND the trim is persisted to disk, newest retained, exactly one warning, no rewrite on a second reload", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const decisions = Array.from({ length: 10000 }, (_, i) => ({
@@ -1155,10 +1155,103 @@ test("quarantine ledger: a 10,000-row ledger is capped to QUARANTINE_DECISIONS_M
   Tracker.historyPath = path.join(dir, "history.json");
   Tracker.decisionsPath = decisionsPath;
   Tracker._reload();
-  assert.equal(Tracker.decisions.length, 500);
-  assert.equal(Tracker.decisions[0].key, "#s9500");
-  assert.equal(Tracker.decisions[499].key, "#s9999");
+  assert.equal(Tracker.decisions.length, 500, "in-memory array is capped immediately on load");
+  assert.equal(Tracker.decisions[0].key, "#s9500", "first retained row is original row 9500");
+  assert.equal(Tracker.decisions[499].key, "#s9999", "last retained row is original row 9999");
   assert.equal(warnings.length, 1);
+
+  // The trim must be PERSISTED, not just held in memory — a read-only or
+  // read-mostly install that never calls quarantine()/unquarantine() again
+  // must still end up with a bounded file on disk.
+  await Tracker._queue;
+  const onDisk = JSON.parse(fs.readFileSync(decisionsPath, "utf8"));
+  assert.equal(onDisk.length, 500, "the persisted file must also be capped, not left at 10,000");
+  assert.equal(onDisk[0].key, "#s9500");
+  assert.equal(onDisk[499].key, "#s9999");
+
+  // A second _reload() over the now-capped, already-persisted file must
+  // stay at 500 and must NOT emit a second oversized-load warning.
+  Tracker._reload();
+  assert.equal(Tracker.decisions.length, 500);
+  assert.equal(warnings.length, 1, "reloading an already-capped file must not warn again");
+});
+
+test("quarantine ledger: a decisions file containing exactly QUARANTINE_DECISIONS_MAX_ROWS (500) rows is not rewritten on load", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const decisions = Array.from({ length: 500 }, (_, i) => ({
+    key: `#s${i}`, action: "quarantine", by: "seed", at: new Date(i).toISOString(),
+  }));
+  const decisionsPath = path.join(dir, "decisions.json");
+  fs.writeFileSync(decisionsPath, JSON.stringify(decisions));
+  const warnings = [];
+  let writeCalls = 0;
+  const RealAtomicJsonStore = require(path.join(root, "src", "core", "util", "AtomicJsonStore.js"));
+  const Tracker = load("src/core/FlakinessTracker.js", {
+    "./Middleware": { emit: () => {} },
+    "../../utils/Logger": { info() {}, error() {}, async flush() {}, warning: (m) => warnings.push(m) },
+    "./util/AtomicJsonStore": {
+      readJsonSync: RealAtomicJsonStore.readJsonSync,
+      writeJsonAtomic: (...args) => {
+        writeCalls++;
+        return RealAtomicJsonStore.writeJsonAtomic(...args);
+      },
+    },
+  });
+  Tracker.historyPath = path.join(dir, "history.json");
+  Tracker.decisionsPath = decisionsPath;
+  Tracker._reload();
+
+  assert.equal(Tracker.decisions.length, 500, "load at exactly the cap is unchanged");
+  assert.equal(warnings.length, 0, "no oversized-load warning fires when nothing is over cap");
+  await Tracker._queue;
+  assert.equal(writeCalls, 0, "no rewrite is queued when the decisions ledger was not over cap");
+});
+
+test("quarantine ledger: reconciliation still sees the FULL 10,000-row ledger before this load-time cap persists the trimmed 500, protecting a key whose only quarantine row would otherwise be dropped", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const targetKey = "https://example.com::click::#save";
+
+  const scenarios = {
+    [targetKey]: {
+      key: targetKey, url: "https://example.com", action: "click", locator: "#save",
+      history: [{ status: "passed" }], classification: "new", flakeRate: 0, sampleSize: 1,
+      lastUsed: 1, quarantined: false, quarantinedAt: null, quarantinedBy: null,
+    },
+  };
+  const historyPath = path.join(dir, "history.json");
+  fs.writeFileSync(historyPath, JSON.stringify(scenarios));
+
+  // The target's only "quarantine" row is the very oldest of 10,001 total
+  // rows, so a naive cap-then-reconcile would drop it before reconciliation
+  // ever saw it.
+  const decisions = [
+    { key: targetKey, action: "quarantine", by: "peyman", at: new Date(0).toISOString() },
+  ];
+  for (let i = 0; i < 10000; i++) {
+    decisions.push({ key: `#pad${i}`, action: "quarantine", by: "seed", at: new Date(i + 1).toISOString() });
+  }
+  const decisionsPath = path.join(dir, "decisions.json");
+  fs.writeFileSync(decisionsPath, JSON.stringify(decisions));
+
+  const Tracker = load("src/core/FlakinessTracker.js", {
+    "./Middleware": { emit: () => {} },
+    "../../utils/Logger": { info() {}, warning() {}, error() {}, async flush() {} },
+  });
+  Tracker.historyPath = historyPath;
+  Tracker.decisionsPath = decisionsPath;
+  Tracker._reload();
+
+  assert.equal(Tracker.decisions.length, 500, "ledger is capped after reconciliation");
+  assert.equal(Tracker.decisions.some((d) => d.key === targetKey), false, "the target's own row was the one dropped");
+  assert.equal(Tracker._getScenario(targetKey).quarantined, true, "reconciliation saw the full pre-cap ledger and set quarantined:true before the cap (and its persisted write) ran");
+
+  await Tracker._queue;
+  const decisionsOnDisk = JSON.parse(fs.readFileSync(decisionsPath, "utf8"));
+  assert.equal(decisionsOnDisk.length, 500, "the persisted decisions file is capped");
+  const historyOnDisk = JSON.parse(fs.readFileSync(historyPath, "utf8"));
+  assert.equal(historyOnDisk[targetKey].quarantined, false, "reconciliation is in-memory only — it is not written back to the history file by _reload()");
 });
 
 test("tolerates a write failure (ENOTDIR — path points inside an existing file) without poisoning the queue; a subsequent write still succeeds", async (t) => {

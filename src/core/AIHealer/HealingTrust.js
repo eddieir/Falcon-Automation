@@ -61,19 +61,29 @@ class HealingTrust {
      * (Re)load both files from disk. Exposed for tests that swap the paths
      * after construction.
      *
-     * The decisions ledger is capped on load (oldest rows dropped, one
-     * warning naming the count and the cap). The pending queue is capped on
-     * load too, via the same `_evictPendingIfNeeded()` selection/logging used
-     * by the mutation-time path — PENDING_MAX_ENTRIES must be a genuine
-     * invariant, not merely a mutation-time behaviour, so a 10,000-entry
-     * `healing_pending.json` on a read-only/read-mostly install is trimmed
-     * (and every eviction logged, never silently) the moment it's loaded, not
-     * left oversized until the next `recordPending()` happens to fire. The
-     * trimmed result is persisted through the normal `_queue`/
+     * Both the decisions ledger and the pending queue are capped on load,
+     * and both trims are persisted, not merely held in memory:
+     *   - decisions: oldest rows dropped (one warning naming the count and
+     *     the cap), same as the mutation-time cap in `_pushDecision()` —
+     *     PENDING_MAX_ROWS-style invariants must hold on a read-mostly
+     *     install too, not just after the next `approve()`/`reject()`.
+     *   - pending: capped via the same `_evictPendingIfNeeded()`
+     *     selection/logging used by the mutation-time path — PENDING_MAX_ENTRIES
+     *     must be a genuine invariant, not merely a mutation-time behaviour,
+     *     so a 10,000-entry `healing_pending.json` on a read-only/read-mostly
+     *     install is trimmed (and every eviction logged, never silently) the
+     *     moment it's loaded, not left oversized until the next
+     *     `recordPending()` happens to fire.
+     * Each trimmed result is persisted through the normal `_queue`/
      * `writeJsonAtomic` chain — `_reload()` itself stays synchronous; only
-     * that write is queued — and the write is only queued when something was
-     * actually evicted, so a file already at or under the cap is left
-     * completely untouched on disk.
+     * the writes are queued — and a write is only queued for a ledger that
+     * was actually over its cap, so a file already at or under the cap is
+     * left completely untouched on disk. When BOTH files are oversized in
+     * the same `_reload()` call, two writes get queued, to two different
+     * paths (decisionsPath then pendingPath, in that call order) — since
+     * each `_queue = _queue.then(...)` appends to the same serialized chain,
+     * they run one after the other and neither can skip or overwrite the
+     * other.
      */
     _reload() {
         this.pending   = AtomicJsonStore.readJsonSync(this.pendingPath, {});
@@ -87,6 +97,18 @@ class HealingTrust {
                 `HealingTrust: loaded decisions ledger had ${totalFound} rows, exceeding `
                 + `HEALING_DECISIONS_MAX_ROWS (${HEALING_DECISIONS_MAX_ROWS}); dropped ${dropped} oldest row(s).`,
             );
+            // Same rationale as the pending trim below: a capped-in-memory-only
+            // ledger leaves a 10,000-row file on disk forever on a read-mostly
+            // install, reparsing all 10,000 rows synchronously on every future
+            // restart. Queue the trimmed array through the normal _queue/
+            // writeJsonAtomic chain — never a synchronous write — same as
+            // every other persistence in this file. This can queue alongside
+            // the pending write below (each _queue = _queue.then(...) append
+            // independently, in call order), so a single _reload() that finds
+            // BOTH files oversized queues two writes, to two different paths,
+            // one after the other on the same serialized chain — neither
+            // skips nor overwrites the other.
+            this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
         }
 
         const evictedCount = this._evictPendingIfNeeded();
@@ -193,6 +215,18 @@ class HealingTrust {
      * `occurrences` counts (never the description, never the whole entry —
      * security condition 8). Returns the number of entries evicted (0 if
      * none), so callers can tell whether anything actually changed.
+     *
+     * The log message enumerates at most `LOGGED_EVICTION_SAMPLE` identities
+     * — the first that many in eviction order (i.e. the least-recently-seen
+     * ones, the same deterministic tie-break used for eviction itself), so
+     * the message is stable across runs regardless of how many entries were
+     * actually evicted. This exists because evicting thousands of entries at
+     * once (a 10,000-entry pending file trimmed on load, for instance) would
+     * otherwise produce a single log line hundreds of kilobytes long — a
+     * flood in its own right, and unreadable in CI output. When more were
+     * evicted than were listed, the message says so explicitly (e.g. "...
+     * and 9,793 more") rather than silently truncating; eviction must stay
+     * observable, just not one line per entry.
      */
     _evictPendingIfNeeded() {
         const keys = Object.keys(this.pending);
@@ -204,13 +238,18 @@ class HealingTrust {
             .sort((a, b) => a.lastSeenMs - b.lastSeenMs || a.key.localeCompare(b.key))
             .slice(0, overflow);
 
-        const details = toEvict.map(({ key }) => {
+        const LOGGED_EVICTION_SAMPLE = 10;
+        const shown = toEvict.slice(0, LOGGED_EVICTION_SAMPLE);
+        const remaining = toEvict.length - shown.length;
+
+        const details = shown.map(({ key }) => {
             const entry = this._getPending(key);
             return `"${key}" (occurrences: ${entry?.occurrences ?? "unknown"})`;
         });
+        const suffix = remaining > 0 ? `, ... and ${remaining} more` : "";
         Logger.warning(
             `HealingTrust pending cap reached (PENDING_MAX_ENTRIES=${PENDING_MAX_ENTRIES}); evicted `
-            + `${toEvict.length} least-recently-seen entr${toEvict.length === 1 ? "y" : "ies"}: ${details.join(", ")}.`,
+            + `${toEvict.length} least-recently-seen entr${toEvict.length === 1 ? "y" : "ies"}: ${details.join(", ")}${suffix}.`,
         );
         for (const { key } of toEvict) delete this.pending[key];
         return toEvict.length;

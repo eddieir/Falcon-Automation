@@ -7,9 +7,9 @@
 
 ---
 
-## 0. This file is not committed — a note on why it disappeared once
+## 0. This file is tracked and ships with the repository
 
-`HANDOFF.md` is intentionally untracked (added to `.gitignore` in Phase 6 — this repo is public, and this doc has internal notes that shouldn't be). It lives only on disk. At the start of Phase 7 this file was found missing entirely from the working tree, with no trace in git (expected, since it was never tracked) — most likely local environment state didn't persist across a session boundary. A stale pre-Phase-4 copy turned up in `~/Downloads/Claude outputs/HANDOFF.md`, but rather than patch a nine-phases-stale draft, this is a full rewrite verified fresh against the current repo, same approach as the original Phase 4 rewrite. If you're reading this because it happened again: check `~/Downloads/Claude outputs/` for the last thing the user was handed, but verify everything in it before trusting it — don't assume it's current.
+`HANDOFF.md` is committed and tracked in git, so it is part of the repository shipped to all clones. It must not carry anything that should stay private. This file is regenerated and reviewed at phase transitions; when in doubt, verify its content against the current repository state rather than relying on a stale local copy.
 
 ---
 
@@ -23,7 +23,7 @@ Falcon is a Node.js test automation framework built on Playwright. Its different
 
 | Item | Value |
 |---|---|
-| `main` | Phases 1–12 merged (at ac27825). Phase 13 ("Decisions that can't rot") is committed on branch `phase-13/decisions-cant-rot`, not yet pushed, reviewed, or merged. |
+| `main` | Phases 1–12 merged (at ac27825). Phase 13 ("Decisions that can't rot") is committed on branch `phase-13/decisions-cant-rot`, pushed, open as PR #27, reviewed with changes requested and corrections in progress, not merged. |
 | Node version | 24 in CI (`node-version: "24"` in `ci.yml`, bumped in Phase 6). **Node 20.19+ required locally** — `package.json` declares `engines.node`, since `test:regression`/`test:coverage` use `node:test` flags that don't exist on older Node. |
 | Test target | https://www.saucedemo.com (UI/DB scenarios), https://jsonplaceholder.typicode.com (API scenarios), https://www.google.com (GoogleSearchTest — not run in CI, see §9), plus inline HTML fixtures for `tests/regression/*` suite (no real target site, deterministic) |
 

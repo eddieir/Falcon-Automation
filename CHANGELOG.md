@@ -783,7 +783,7 @@ A scenario needs at least N outcomes to be a candidate. Any failure resets the c
 
 **Fix:** Both decision ledgers are now newest-N ring buffers at 500 rows. The pending healing queue is LRU-capped at 200 entries by `lastSeen`. Eviction is logged at info level.
 
-Ledgers are capped on load as well as on mutation (migration for existing oversized files). The pending queue loads whole and logs a warning if it exceeds the cap, because pending entries are live human work nobody has acted on yet; they're only trimmed when a new fix arrives.
+Both ledgers and the pending queue are capped on load and persisted to disk, so an already-oversized file is genuinely repaired rather than re-trimmed on every start. The pending queue keeps the newest 200 entries by `lastSeen`; entries with no usable `lastSeen` sort oldest with ties broken by key (deterministic). Every eviction is logged by selector identity so nothing disappears silently.
 
 ### CI integration: soft-warning mode, not a hard gate
 

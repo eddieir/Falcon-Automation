@@ -1029,7 +1029,7 @@ test("healing trust: recordTier3Invocation for a selector with no pending entry 
   assert.equal(entry.tier3Invocations, 1);
 });
 
-test("healing trust: 10,000-row decisions ledger is capped to HEALING_DECISIONS_MAX_ROWS (500) on load, newest retained, exactly one warning", (t) => {
+test("healing trust: 10,000-row decisions ledger is capped to HEALING_DECISIONS_MAX_ROWS (500) on load AND the trim is persisted to disk, newest retained, exactly one warning, no rewrite on a second reload", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const decisions = Array.from({ length: 10000 }, (_, i) => ({
@@ -1047,10 +1047,119 @@ test("healing trust: 10,000-row decisions ledger is capped to HEALING_DECISIONS_
   Trust.pendingPath = path.join(dir, "healing_pending.json");
   Trust.decisionsPath = decisionsPath;
   Trust._reload();
-  assert.equal(Trust.decisions.length, 500);
-  assert.equal(Trust.decisions[0].original, "#s9500");
-  assert.equal(Trust.decisions[499].original, "#s9999");
+  assert.equal(Trust.decisions.length, 500, "in-memory array is capped immediately on load");
+  assert.equal(Trust.decisions[0].original, "#s9500", "first retained row is original row 9500");
+  assert.equal(Trust.decisions[499].original, "#s9999", "last retained row is original row 9999");
   assert.equal(warnings.length, 1);
+
+  // The trim must be PERSISTED, not just held in memory — a read-only or
+  // read-mostly install that never calls approve()/reject() again must
+  // still end up with a bounded file on disk.
+  await Trust._queue;
+  const onDisk = JSON.parse(fs.readFileSync(decisionsPath, "utf8"));
+  assert.equal(onDisk.length, 500, "the persisted file must also be capped, not left at 10,000");
+  assert.equal(onDisk[0].original, "#s9500");
+  assert.equal(onDisk[499].original, "#s9999");
+
+  // A second _reload() over the now-capped, already-persisted file must
+  // stay at 500 and must NOT emit a second oversized-load warning.
+  Trust._reload();
+  assert.equal(Trust.decisions.length, 500);
+  assert.equal(warnings.length, 1, "reloading an already-capped file must not warn again");
+});
+
+test("healing trust: a decisions file containing exactly HEALING_DECISIONS_MAX_ROWS (500) rows is not rewritten on load", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const decisions = Array.from({ length: 500 }, (_, i) => ({
+    original: `#s${i}`, suggested: `#f${i}`, decision: "rejected",
+    decidedAt: new Date(i).toISOString(), decidedBy: "seed",
+  }));
+  const decisionsPath = path.join(dir, "healing_decisions.json");
+  fs.writeFileSync(decisionsPath, JSON.stringify(decisions));
+  const warnings = [];
+  let writeCalls = 0;
+  const RealAtomicJsonStore = require(path.join(root, "src", "core", "util", "AtomicJsonStore.js"));
+  const Trust = load("src/core/AIHealer/HealingTrust.js", {
+    "./LocatorStore": { addLocator: () => {} },
+    "../Middleware": { emit: () => {} },
+    "../../../utils/Logger": { info() {}, error() {}, async flush() {}, warning: (m) => warnings.push(m) },
+    "../util/AtomicJsonStore": {
+      readJsonSync: RealAtomicJsonStore.readJsonSync,
+      writeJsonAtomic: (...args) => {
+        writeCalls++;
+        return RealAtomicJsonStore.writeJsonAtomic(...args);
+      },
+    },
+  });
+  Trust.pendingPath = path.join(dir, "healing_pending.json");
+  Trust.decisionsPath = decisionsPath;
+  Trust._reload();
+
+  assert.equal(Trust.decisions.length, 500, "load at exactly the cap is unchanged");
+  assert.equal(warnings.length, 0, "no oversized-load warning fires when nothing is over cap");
+  await Trust._queue;
+  assert.equal(writeCalls, 0, "no rewrite is queued when the decisions ledger was not over cap");
+});
+
+test("healing trust: a single _reload() with BOTH pending (>200) and decisions (>500) oversized queues two writes to two different paths, and both land correctly capped", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const pendingObj = {};
+  for (let i = 0; i < 10000; i++) {
+    pendingObj[`#p${i}`] = {
+      original: `#p${i}`, suggested: `#pf${i}`, description: "",
+      firstSeen: new Date(i).toISOString(), lastSeen: new Date(i).toISOString(), occurrences: 1,
+    };
+  }
+  const pendingPath = path.join(dir, "healing_pending.json");
+  fs.writeFileSync(pendingPath, JSON.stringify(pendingObj));
+
+  const decisions = Array.from({ length: 10000 }, (_, i) => ({
+    original: `#d${i}`, suggested: `#df${i}`, decision: "rejected",
+    decidedAt: new Date(i).toISOString(), decidedBy: "seed",
+  }));
+  const decisionsPath = path.join(dir, "healing_decisions.json");
+  fs.writeFileSync(decisionsPath, JSON.stringify(decisions));
+
+  const warnings = [];
+  const Trust = load("src/core/AIHealer/HealingTrust.js", {
+    "./LocatorStore": { addLocator: () => {} },
+    "../Middleware": { emit: () => {} },
+    "../../../utils/Logger": { info() {}, error() {}, async flush() {}, warning: (m) => warnings.push(m) },
+  });
+  Trust.pendingPath = pendingPath;
+  Trust.decisionsPath = decisionsPath;
+  Trust._reload();
+
+  // Both ledgers capped in memory immediately.
+  assert.equal(Object.keys(Trust.pending).length, 200);
+  assert.equal(Trust.decisions.length, 500);
+  // Two distinct oversized-load warnings, one per ledger.
+  assert.equal(warnings.filter((w) => w.includes("PENDING_MAX_ENTRIES")).length, 1);
+  assert.equal(warnings.filter((w) => w.includes("HEALING_DECISIONS_MAX_ROWS")).length, 1);
+
+  await Trust._queue;
+
+  const pendingOnDisk = JSON.parse(fs.readFileSync(pendingPath, "utf8"));
+  assert.equal(Object.keys(pendingOnDisk).length, 200, "pending file is capped on disk");
+  assert.ok(Object.hasOwn(pendingOnDisk, "#p9999"), "newest pending entry survives");
+  assert.ok(!Object.hasOwn(pendingOnDisk, "#p0"), "oldest pending entry is evicted");
+
+  const decisionsOnDisk = JSON.parse(fs.readFileSync(decisionsPath, "utf8"));
+  assert.equal(decisionsOnDisk.length, 500, "decisions file is capped on disk");
+  assert.equal(decisionsOnDisk[0].original, "#d9500");
+  assert.equal(decisionsOnDisk[499].original, "#d9999");
+
+  // Neither write skipped nor overwrote the other: pendingPath still holds
+  // only pending-shaped data (an object keyed by selector) and decisionsPath
+  // still holds only decisions-shaped data (an array of decision rows) —
+  // if the two writes had landed on the wrong path, one file would contain
+  // the other's shape/content instead.
+  assert.equal(typeof pendingOnDisk, "object");
+  assert.equal(Array.isArray(pendingOnDisk), false);
+  assert.ok(Array.isArray(decisionsOnDisk));
 });
 
 test("healing trust: pending queue never exceeds PENDING_MAX_ENTRIES (200) after mutation, evicting the oldest lastSeen first, and logs it", (t) => {
@@ -1067,7 +1176,12 @@ test("healing trust: pending queue never exceeds PENDING_MAX_ENTRIES (200) after
   assert.equal(trust._hasPending("#s0"), false, "oldest lastSeen must be evicted first");
   assert.equal(trust._hasPending("#s1"), true);
   assert.equal(trust._hasPending("#newest"), true);
-  assert.ok(warnings.some((w) => w.includes("PENDING_MAX_ENTRIES") && w.includes("#s0")));
+  const evictionWarning = warnings.find((w) => w.includes("PENDING_MAX_ENTRIES"));
+  assert.ok(evictionWarning && evictionWarning.includes("#s0"));
+  // A small eviction (here, exactly 1 entry — well under the 10-identity
+  // sample) must list it in full and must NOT append a misleading "and N
+  // more" when nothing was actually left out.
+  assert.ok(!evictionWarning.includes("more"), "must not claim more were evicted than actually were");
 });
 
 test("healing trust: an oversized pending file (10,000 entries) is trimmed to PENDING_MAX_ENTRIES on load AND the trim is persisted to disk, newest by lastSeen retained, eviction logged without leaking descriptions", async (t) => {
@@ -1104,8 +1218,33 @@ test("healing trust: an oversized pending file (10,000 entries) is trimmed to PE
 
   // Every eviction is logged, naming a real evicted identity, and the
   // operator-supplied description text must never appear in the log.
-  assert.ok(warnings.some((w) => w.includes("PENDING_MAX_ENTRIES") && w.includes("#s0")));
+  const evictionWarning = warnings.find((w) => w.includes("PENDING_MAX_ENTRIES"));
+  assert.ok(evictionWarning && evictionWarning.includes("#s0"));
   assert.ok(!warnings.some((w) => w.includes("SECRETDESC")), "eviction warning must never leak description text");
+
+  // 9,800 entries were evicted (10,000 - 200 kept). The message must stay
+  // bounded — at most 10 identities enumerated, plus an explicit statement
+  // of how many further entries were evicted — never the old one-line-per-
+  // evicted-entry flood (previously measured at 273,491 characters for this
+  // exact scenario).
+  assert.ok(
+    evictionWarning.length < 2000,
+    `eviction warning must be bounded, was ${evictionWarning.length} chars`,
+  );
+  const listedIdentities = evictionWarning.match(/"#s\d+"/g) ?? [];
+  assert.equal(listedIdentities.length, 10, "at most 10 identities are enumerated");
+  // The 10 listed must be the first 10 in eviction order (oldest lastSeen
+  // first, i.e. #s0..#s9) so the message is deterministic across runs.
+  for (let i = 0; i < 10; i++) {
+    assert.ok(evictionWarning.includes(`"#s${i}"`), `#s${i} must be among the first 10 listed`);
+  }
+  assert.ok(
+    evictionWarning.includes("9790 more"),
+    "message must explicitly state how many further entries were evicted beyond the listed 10",
+  );
+  assert.ok(evictionWarning.includes("9800"), "message still states the correct total evicted count");
+  assert.ok(evictionWarning.includes("PENDING_MAX_ENTRIES=200"), "message still names the cap constant and value");
+  assert.ok(evictionWarning.includes("occurrences:"), "occurrences count is still shown alongside listed identities");
 
   // The trim must be PERSISTED, not just held in memory — a read-only or
   // read-mostly install that never calls recordPending() again must still
