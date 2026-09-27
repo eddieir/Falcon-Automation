@@ -724,7 +724,9 @@ The check accepts exactly one flag, `--fail-on-stale`, and deliberately no flag 
 
 ### Quarantine rehabilitation
 
-A quarantined scenario whose most recent `REHAB_CANDIDATE_WINDOW` recorded outcomes have all passed is surfaced as a rehabilitation candidate. It remains quarantined (never auto-unquarantined — lifting a quarantine stays an explicit human action), but the candidate shows up:
+A quarantined scenario is surfaced as a rehabilitation candidate once its most recent `REHAB_CANDIDATE_WINDOW` recorded outcomes **from after it was quarantined** have all passed. Only results timestamped at or after `quarantinedAt` count, so passes the scenario accumulated *before* being quarantined can never make it look recovered — the point is evidence of good behaviour since the quarantine, not before it. A scenario with fewer than that many post-quarantine results is not a candidate, and a legacy quarantine with no usable `quarantinedAt` is conservatively never a candidate rather than being judged on guessed timing.
+
+It remains quarantined (never auto-unquarantined — lifting a quarantine stays an explicit human action), but the candidate shows up:
 
 - In `npm run review:status` output
 - In the `flaky:list` command, filtered or unfiltered
@@ -781,7 +783,7 @@ node scripts/flakiness/review.js rehab                       # read-only: rehabi
 
 Quarantining a scenario changes only how a subsequent failure is *reported*: `TestRunner` reports it as `quarantined` instead of `failed`, a status `ReportManager` deliberately excludes from both the "does this run pass" and "is this a real regression" checks, so a quarantined failure never flips a green build red, never merges silently into `passed` either, and always stays visible in the run summary (`Total: 5 | Passed: 3 | Failed: 0 | Skipped: 0 | Quarantined: 2`). The quarantined interaction is still run, still recorded, and still contributes to its own classification going forward. Quarantining is a CI-blocking decision, not a coverage decision.
 
-**Phase 13 — Rehabilitation candidates:** A quarantined scenario that has passed its last `REHAB_CANDIDATE_WINDOW` consecutive runs (default 5) is surfaced as a rehabilitation candidate, in the CLI, the API routes, and the dashboard panel. It remains quarantined until a human explicitly unquarantines it — nothing is auto-promoted. If it fails again, it drops out of candidacy and the counter resets.
+**Phase 13 — Rehabilitation candidates:** A quarantined scenario that has passed its last `REHAB_CANDIDATE_WINDOW` consecutive runs **since being quarantined** (default 5) is surfaced as a rehabilitation candidate, in the CLI, the API routes, and the dashboard panel. Pre-quarantine passes do not count. It remains quarantined until a human explicitly unquarantines it — nothing is auto-promoted. If it fails again, it drops out of candidacy and the counter resets.
 
 `GET /flakiness/scenarios`, `GET /flakiness/scenarios?classification=flaky`, `POST /flakiness/quarantine`, and `POST /flakiness/unquarantine` back the dashboard panel, gated by the same `DASHBOARD_TOKEN` and rate limiter as every other dashboard route. `data/scenario_history.json` (bounded to 500 tracked scenarios, LRU-evicted, 20 outcomes kept per scenario) and `data/quarantine_decisions.json` (the audit ledger) are both gitignored, the same as the Phase 8 healing files.
 
