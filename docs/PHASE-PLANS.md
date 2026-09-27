@@ -511,7 +511,8 @@ step itself may not yet be present — the choice is documented here; if absent,
 owner's responsibility.
 
 **4. Quarantine rehabilitation.** A quarantined scenario whose most recent `REHAB_CANDIDATE_WINDOW`
-recorded outcomes have all passed surfaces as a rehabilitation candidate in:
+recorded outcomes **from after it was quarantined** (timestamp at or after `quarantinedAt`) have all
+passed surfaces as a rehabilitation candidate in:
 - `scripts/flakiness/review.js rehab` (read-only subcommand)
 - `GET /flakiness/rehabilitation` dashboard route
 - Dashboard "Flaky tests" panel

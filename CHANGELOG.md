@@ -753,7 +753,7 @@ Npm scripts `review:status` and `review:status:strict` are wired to these modes.
 
 **Problem:** A quarantined scenario that has genuinely stabilised (passed its last N runs) is still hidden from the build forever, because the quarantine decision was made and forgotten.
 
-**Fix:** A quarantined scenario whose most recent `REHAB_CANDIDATE_WINDOW` recorded outcomes have all passed surfaces as a rehabilitation candidate in:
+**Fix:** A quarantined scenario whose most recent `REHAB_CANDIDATE_WINDOW` recorded outcomes *from after it was quarantined* have all passed surfaces as a rehabilitation candidate in:
 - `npm run review:status` output
 - `node scripts/flakiness/review.js rehab` (read-only subcommand, lists candidates)
 - `GET /flakiness/rehabilitation` dashboard route
