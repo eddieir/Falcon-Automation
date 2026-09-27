@@ -1,6 +1,6 @@
 # Falcon-Automation: Self-Healing Test Automation with AI-Assisted Locator Recovery
 
-> **Status:** Active development · Phases 1–12 merged. Phase 10 covers every page of an app in one run; Phase 11 heals every action type; Phase 12 makes healing state and flaky decisions survive CI via cached state files. Phase 13 ("Decisions that can't rot") is in progress on branch `phase-13/decisions-cant-rot`. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
+> **Status:** Active development · Phases 1–12 merged. Phase 10 covers every page of an app in one run; Phase 11 heals every action type; Phase 12 makes healing state and flaky decisions survive CI via cached state files. Phase 13 ("Decisions that can't rot") is complete on branch `phase-13/decisions-cant-rot` and open as PR #27, not yet merged. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
 
 ---
 
