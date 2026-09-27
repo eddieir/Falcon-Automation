@@ -23,6 +23,20 @@ function fixture(overrides = {}) {
   return { url: "https://example.com", action: "click", locator: "#save", description: "Save", ...overrides };
 }
 
+// Push every currently-recorded history timestamp for `key` back by `ms`,
+// so it is unambiguously BEFORE a `quarantine()` call made immediately
+// afterward — real wall-clock timestamps recorded microseconds apart can
+// otherwise tie at millisecond resolution, which would make a "predates
+// quarantine" test flaky rather than deterministic.
+function backdateHistory(tracker, key, ms) {
+  const entry = tracker._getScenario(key);
+  const history = entry.history.map((h) => ({
+    ...h,
+    timestamp: h.timestamp == null ? h.timestamp : new Date(Date.parse(h.timestamp) - ms).toISOString(),
+  }));
+  tracker._setScenario(key, { ...entry, history });
+}
+
 // ── classify(): pure function, no I/O ──
 
 test("classify: fewer than 3 samples is 'new' regardless of outcome mix", () => {
@@ -832,6 +846,41 @@ test("record: flakySince gets a fresh timestamp on each new transition into flak
   assert.notEqual(enter2.flakySince, backdated);
 });
 
+test("record: a legacy entry that is already flaky with no flakySince gains one on its next record() (migration stamp), never staying clockless while it keeps being recorded", (t) => {
+  const { tracker } = trackerAt(t);
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "passed" });
+  const flaky = tracker.record({ ...fixture(), status: "failed" }); // -> flaky, flakySince set
+  assert.equal(flaky.classification, "flaky");
+  assert.ok(flaky.flakySince);
+
+  // Simulate a legacy record: already flaky, but flakySince absent, as if
+  // this scenario had been flaky since before the field existed.
+  const stripped = { ...flaky };
+  delete stripped.flakySince;
+  tracker._setScenario(flaky.key, stripped);
+  assert.equal(tracker._getScenario(flaky.key).flakySince, undefined);
+
+  // The next recorded outcome (still flaky) must stamp a first-observation
+  // flakySince rather than leaving it clockless forever.
+  const next = tracker.record({ ...fixture(), status: "failed" });
+  assert.equal(next.classification, "flaky");
+  assert.ok(next.flakySince, "a legacy flaky record with no flakySince must be stamped with one on its next record()");
+});
+
+test("record: an already-flaky entry that HAS a valid flakySince keeps the original value untouched on the next record()", (t) => {
+  const { tracker } = trackerAt(t);
+  tracker.record({ ...fixture(), status: "passed" });
+  tracker.record({ ...fixture(), status: "passed" });
+  const flaky = tracker.record({ ...fixture(), status: "failed" }); // -> flaky
+  const original = flaky.flakySince;
+  assert.ok(original);
+
+  const again = tracker.record({ ...fixture(), status: "failed" }); // still flaky
+  assert.equal(again.classification, "flaky");
+  assert.equal(again.flakySince, original, "an existing valid flakySince must be preserved, not overwritten");
+});
+
 test("unquarantine: restarts flakySince's clock when the scenario is currently classified flaky", async (t) => {
   const { tracker } = trackerAt(t);
   const key = "https://example.com::click::#save";
@@ -924,14 +973,18 @@ test("rehabilitationCandidates: fewer than N passing results is not a candidate;
   const { tracker } = trackerAt(t);
   const key = "https://example.com::click::#save";
   tracker.record({ ...fixture(), status: "passed" }); // eligible: at least one pass
+  backdateHistory(tracker, key, 86400000); // pushed a day into the past, unambiguously pre-quarantine
   tracker.quarantine(key);
 
-  // history so far: [passed]. Add 3 more so the (passed/failed-filtered)
-  // history length is 4 — still short of windowSize 5.
+  // 3 passes recorded AFTER quarantine — still short of windowSize 5. The
+  // pre-quarantine pass above must not be borrowed to make up the count.
   for (let i = 0; i < 3; i++) tracker.record({ ...fixture(), status: "passed" });
-  assert.deepEqual(tracker.rehabilitationCandidates({ windowSize: 5 }), [], "history.length < windowSize is never a candidate");
+  assert.deepEqual(tracker.rehabilitationCandidates({ windowSize: 5 }), [], "fewer than windowSize post-quarantine passes is never a candidate");
 
-  tracker.record({ ...fixture(), status: "passed" }); // history length now 5, all passed
+  tracker.record({ ...fixture(), status: "passed" }); // 4 post-quarantine passes — still short
+  assert.deepEqual(tracker.rehabilitationCandidates({ windowSize: 5 }), [], "4 post-quarantine passes is still short of 5");
+
+  tracker.record({ ...fixture(), status: "passed" }); // 5th post-quarantine pass — now qualifies
   const candidates = tracker.rehabilitationCandidates({ windowSize: 5 });
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].key, key);
@@ -940,6 +993,70 @@ test("rehabilitationCandidates: fewer than N passing results is not a candidate;
   assert.equal(candidates[0].recentHistory.length, 5);
   assert.ok(candidates[0].recentHistory.every((h) => h.status === "passed"));
   assert.match(candidates[0].reason, /passed/);
+});
+
+test("rehabilitationCandidates: N passes that ALL predate quarantinedAt is not a candidate (regression: passes before quarantine must never count)", (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  for (let i = 0; i < 5; i++) tracker.record({ ...fixture(), status: "passed" });
+  backdateHistory(tracker, key, 86400000); // all 5 pushed a day into the past
+  tracker.quarantine(key);
+  // No records since quarantine at all — the 5 passes above all predate it.
+  assert.deepEqual(
+    tracker.rehabilitationCandidates({ windowSize: 5 }),
+    [],
+    "passes recorded before quarantine must never be reported as evidence of good behaviour since quarantine",
+  );
+});
+
+test("rehabilitationCandidates: N-1 post-quarantine passes plus earlier pre-quarantine passes is not a candidate", (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  for (let i = 0; i < 5; i++) tracker.record({ ...fixture(), status: "passed" });
+  backdateHistory(tracker, key, 86400000);
+  tracker.quarantine(key);
+  for (let i = 0; i < 4; i++) tracker.record({ ...fixture(), status: "passed" });
+  assert.deepEqual(
+    tracker.rehabilitationCandidates({ windowSize: 5 }),
+    [],
+    "the pre-quarantine passes must not be borrowed to reach windowSize",
+  );
+});
+
+test("rehabilitationCandidates: missing/unparseable quarantinedAt is not a candidate", (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  tracker.record({ ...fixture(), status: "passed" });
+  backdateHistory(tracker, key, 86400000);
+  tracker.quarantine(key);
+  for (let i = 0; i < 5; i++) tracker.record({ ...fixture(), status: "passed" });
+  assert.equal(tracker.rehabilitationCandidates({ windowSize: 5 }).length, 1, "sanity: candidate before corrupting quarantinedAt");
+
+  const entry = tracker._getScenario(key);
+  tracker._setScenario(key, { ...entry, quarantinedAt: null });
+  assert.deepEqual(tracker.rehabilitationCandidates({ windowSize: 5 }), [], "null quarantinedAt must fail conservatively");
+
+  tracker._setScenario(key, { ...entry, quarantinedAt: "not-a-date" });
+  assert.deepEqual(tracker.rehabilitationCandidates({ windowSize: 5 }), [], "unparseable quarantinedAt must fail conservatively");
+});
+
+test("rehabilitationCandidates: a history entry with a missing/unparseable timestamp does not count toward the window", (t) => {
+  const { tracker } = trackerAt(t);
+  const key = "https://example.com::click::#save";
+  tracker.record({ ...fixture(), status: "passed" });
+  backdateHistory(tracker, key, 86400000);
+  tracker.quarantine(key);
+  for (let i = 0; i < 5; i++) tracker.record({ ...fixture(), status: "passed" });
+  assert.equal(tracker.rehabilitationCandidates({ windowSize: 5 }).length, 1, "sanity: candidate before corrupting a timestamp");
+
+  const entry = tracker._getScenario(key);
+  const corrupted = entry.history.map((h, i) => (i === entry.history.length - 1 ? { ...h, timestamp: null } : h));
+  tracker._setScenario(key, { ...entry, history: corrupted });
+  assert.deepEqual(
+    tracker.rehabilitationCandidates({ windowSize: 5 }),
+    [],
+    "an entry with no parseable timestamp cannot be proven post-quarantine and must not count",
+  );
 });
 
 test("rehabilitationCandidates: a later failure removes candidacy", (t) => {
