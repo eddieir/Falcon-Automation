@@ -6,6 +6,12 @@ const Logger = require("../../utils/Logger");
 const HealingTrust  = require("./AIHealer/HealingTrust");
 const HealingReport = require("./AIHealer/HealingReport");
 const FlakinessTracker = require("./FlakinessTracker");
+const ConfigManager = require("./ConfigManager");
+const { validateIntSetting } = require("./util/ConfigValidation");
+
+const HEALING_PENDING_STALE_DAYS_DEFAULT = 14;
+const FLAKY_UNREVIEWED_STALE_DAYS_DEFAULT = 14;
+const REHAB_CANDIDATE_WINDOW_DEFAULT = 5;
 
 /**
  * Dashboard — real-time test execution monitor.
@@ -90,6 +96,18 @@ class Dashboard {
     static _num(value) {
         const n = Number(value);
         return Number.isFinite(n) ? n : undefined;
+    }
+
+    /**
+     * Resolve a small integer setting via ConfigManager, validated by
+     * ConfigValidation.validateIntSetting — `null`/`undefined` (not set)
+     * falls back to `fallback`; anything else must be a valid integer in
+     * `bounds` or this throws (`.code === "INVALID_CONFIG"`), which every
+     * caller turns into a 500 naming the offending setting rather than a
+     * crashed process.
+     */
+    static _resolveIntSetting(name, bounds, fallback) {
+        return validateIntSetting(name, ConfigManager.get(name), bounds) ?? fallback;
     }
 
     /**
@@ -355,7 +373,18 @@ class Dashboard {
                 return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
             }
             const classification = typeof req.query?.classification === "string" ? req.query.classification : undefined;
-            res.json(FlakinessTracker.list({ classification }));
+            const entries = FlakinessTracker.list({ classification });
+            // Phase 13 — additive field only: never rename/remove anything an
+            // existing consumer of this route already relies on.
+            let rehabWindow;
+            try {
+                rehabWindow = Dashboard._resolveIntSetting("REHAB_CANDIDATE_WINDOW", { min: 1, max: 20 }, REHAB_CANDIDATE_WINDOW_DEFAULT);
+            } catch (error) {
+                if (error.code !== "INVALID_CONFIG") throw error;
+                return res.status(500).json({ error: error.message, setting: error.setting });
+            }
+            const rehabKeys = new Set(FlakinessTracker.rehabilitationCandidates({ windowSize: rehabWindow }).map((c) => c.key));
+            res.json(entries.map((entry) => ({ ...entry, rehabilitationCandidate: rehabKeys.has(entry.key) })));
         });
 
         app.post("/flakiness/quarantine", authLimiter, (req, res) => {
@@ -390,6 +419,56 @@ class Dashboard {
             const entry = typeof key === "string" ? FlakinessTracker.unquarantine(key, { by: "dashboard" }) : null;
             if (!entry) return res.status(404).json({ error: "That scenario isn't currently quarantined." });
             res.json(entry);
+        });
+
+        // Phase 13 — "decisions can't rot". Three read-only routes exposing
+        // the same staleness/rehabilitation views as scripts/review/status.js,
+        // for a dashboard viewer rather than a CI job. Thresholds/window are
+        // resolved server-side from ConfigManager on EVERY request, never
+        // taken from a query parameter — a client must not be able to forge
+        // a lax threshold to hide staleness (security condition: no
+        // query-param override). An invalid setting answers 500 naming the
+        // setting rather than crashing the whole dashboard process.
+        app.get("/healing/pending/stale", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            let thresholdDays;
+            try {
+                thresholdDays = Dashboard._resolveIntSetting("HEALING_PENDING_STALE_DAYS", { min: 1, max: 3650 }, HEALING_PENDING_STALE_DAYS_DEFAULT);
+            } catch (error) {
+                if (error.code !== "INVALID_CONFIG") throw error;
+                return res.status(500).json({ error: error.message, setting: error.setting });
+            }
+            res.json(HealingTrust.unreviewedStale({ thresholdDays }));
+        });
+
+        app.get("/flakiness/unreviewed/stale", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            let thresholdDays;
+            try {
+                thresholdDays = Dashboard._resolveIntSetting("FLAKY_UNREVIEWED_STALE_DAYS", { min: 1, max: 3650 }, FLAKY_UNREVIEWED_STALE_DAYS_DEFAULT);
+            } catch (error) {
+                if (error.code !== "INVALID_CONFIG") throw error;
+                return res.status(500).json({ error: error.message, setting: error.setting });
+            }
+            res.json(FlakinessTracker.unreviewedFlakyStale({ thresholdDays }));
+        });
+
+        app.get("/flakiness/rehabilitation", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            let windowSize;
+            try {
+                windowSize = Dashboard._resolveIntSetting("REHAB_CANDIDATE_WINDOW", { min: 1, max: 20 }, REHAB_CANDIDATE_WINDOW_DEFAULT);
+            } catch (error) {
+                if (error.code !== "INVALID_CONFIG") throw error;
+                return res.status(500).json({ error: error.message, setting: error.setting });
+            }
+            res.json(FlakinessTracker.rehabilitationCandidates({ windowSize }));
         });
 
         // Phase 10 — whole-app coverage. Read-only view of the current sweep,

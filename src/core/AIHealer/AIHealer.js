@@ -148,6 +148,12 @@ class AIHealer {
 
         // --- Tier 3: LLM inference ---
         Logger.info(`🤖 Asking AI to infer locator for: ${selector}`);
+        // Tier 3 invocation is recorded inside getAlternativeSelector(),
+        // immediately before the model request is actually issued — not
+        // here. Recording it at this call site would count every attempt
+        // that never reached OpenAI at all (missing API key, a DOM snapshot
+        // that throws), inflating a counter labelled "Tier 3 invocations"
+        // with calls where no model was ever invoked.
         const aiSuggestedLocator = await this.getAlternativeSelector(selector);
 
         if (aiSuggestedLocator) {
@@ -282,6 +288,14 @@ class AIHealer {
                 `- If you cannot determine a confident match, output: null`,
             ].join("\n");
 
+            // Boundary for "Tier 3 invocation": the client initialised and
+            // the DOM snapshot/prompt were built successfully, so a model
+            // request is genuinely about to be issued. Counted here — and
+            // only here — regardless of what happens next: the request can
+            // still throw, return null, resolve ambiguously, or the healed
+            // action can later fail; all of those still count, because the
+            // model was actually asked.
+            HealingTrust.recordTier3Invocation(originalSelector);
             const response = await openai.chat.completions.create({
                 model: "gpt-4o-mini",
                 messages: [{ role: "user", content: prompt }],
