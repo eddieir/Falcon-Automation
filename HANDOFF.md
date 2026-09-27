@@ -2,7 +2,7 @@
 
 > **For:** Any engineer or Claude Code session continuing this work
 > **Author:** Peyman Iravani — QA Manager / Tech Lead
-> **Last updated:** post-Phase-12. Phase 13 ("Decisions that can't rot") implementation in progress on branch `phase-13/decisions-cant-rot`, pending review and merge authorization.
+> **Last updated:** post-Phase-12. Phase 13 ("Decisions that can't rot") is complete on branch `phase-13/decisions-cant-rot` and open as PR #27, awaiting merge authorization.
 > **Repo:** https://github.com/eddieir/Falcon-Automation
 
 ---
@@ -23,7 +23,7 @@ Falcon is a Node.js test automation framework built on Playwright. Its different
 
 | Item | Value |
 |---|---|
-| `main` | Phases 1–12 merged (at ac27825). Phase 13 ("Decisions that can't rot") is committed on branch `phase-13/decisions-cant-rot`, pushed, open as PR #27, reviewed with changes requested and corrections in progress, not merged. |
+| `main` | Phases 1–12 merged (at ac27825). Phase 13 ("Decisions that can't rot") is committed on branch `phase-13/decisions-cant-rot`, pushed and open as PR #27; the requested corrections have been applied and verified; not merged. |
 | Node version | 24 in CI (`node-version: "24"` in `ci.yml`, bumped in Phase 6). **Node 20.19+ required locally** — `package.json` declares `engines.node`, since `test:regression`/`test:coverage` use `node:test` flags that don't exist on older Node. |
 | Test target | https://www.saucedemo.com (UI/DB scenarios), https://jsonplaceholder.typicode.com (API scenarios), https://www.google.com (GoogleSearchTest — not run in CI, see §9), plus inline HTML fixtures for `tests/regression/*` suite (no real target site, deterministic) |
 
