@@ -226,15 +226,26 @@ class FlakinessTracker {
 
         const { classification, flakeRate, sampleSize } = this.classify(history);
         const wasFlaky = existing?.classification === "flaky";
-        // Same boolean gates both the flakySince reset below and the
-        // flakyDetected emit, so the two can never drift apart.
+        // enteringFlaky still gates the flakyDetected emit below, so the two
+        // can never drift apart.
         const enteringFlaky = classification === "flaky" && !wasFlaky;
         const leavingFlaky = wasFlaky && classification !== "flaky";
-        const flakySince = enteringFlaky
-            ? new Date().toISOString()
-            : leavingFlaky
-                ? null
-                : (existing?.flakySince ?? null);
+        // flakySince migration: a record classified "flaky" that carries no
+        // usable flakySince — either because it is entering flaky right now,
+        // or because it was ALREADY flaky before this field existed and
+        // simply never went through a transition that would have set it
+        // (the legacy case) — is stamped with a first-observation timestamp
+        // of "now". This is deliberately conservative: "now" is necessarily
+        // later than the scenario's true first-flaky date, so it can only
+        // ever UNDER-report how stale the review is, never over-report it —
+        // it can never cause a legacy record to fail --fail-on-stale
+        // spuriously. An already-flaky entry that DOES have a valid
+        // flakySince is left untouched.
+        const existingFlakySinceMs = existing?.flakySince == null ? NaN : Date.parse(existing.flakySince);
+        const hasValidFlakySince = existing?.flakySince != null && !Number.isNaN(existingFlakySinceMs);
+        const flakySince = classification === "flaky"
+            ? (hasValidFlakySince ? existing.flakySince : new Date().toISOString())
+            : (leavingFlaky ? null : (existing?.flakySince ?? null));
 
         const entry = {
             key, url, action, locator,
@@ -470,21 +481,42 @@ class FlakinessTracker {
     /**
      * Pure read, no writes, and — critically — no mutation of any reachable
      * state (security condition 3): a quarantined scenario is a
-     * rehabilitation candidate iff its history (filtered to "passed"/"failed"
-     * entries only, matching record()'s own signal rule — "unavailable" is
-     * stored as "failed", so it correctly disqualifies) has at least
-     * `windowSize` such entries AND the most recent `windowSize` of them are
-     * ALL "passed". `recentHistory` on the result is a fresh copy, never a
+     * rehabilitation candidate iff, of the history entries recorded AT OR
+     * AFTER `quarantinedAt` (inclusive boundary — a result timestamped the
+     * same instant as the quarantine counts as post-quarantine), filtered to
+     * "passed"/"failed" only (matching record()'s own signal rule —
+     * "unavailable" is stored as "failed", so it correctly disqualifies),
+     * there are at least `windowSize` such entries AND the most recent
+     * `windowSize` of them are ALL "passed". Quarantine exists because a
+     * scenario was unreliable; rehabilitation must be evidence it has
+     * behaved SINCE being quarantined, never passes that merely predate the
+     * quarantine. `recentHistory` on the result is a fresh copy, never a
      * reference into `this.scenarios`.
+     *
+     * Legacy/invalid timestamps fail CONSERVATIVELY, i.e. NOT a candidate:
+     * if `quarantinedAt` is missing or not a parseable date, no history
+     * entry can be proven post-quarantine, so the scenario yields no
+     * candidate at all until it is re-quarantined with a valid timestamp.
+     * Likewise a history entry whose own `timestamp` is missing or
+     * unparseable can't be shown to be post-quarantine either, so it never
+     * counts toward the window. Nothing here is guessed.
      */
     rehabilitationCandidates({ windowSize, now = Date.now() } = {}) {
         void now; // no age-based logic here (yet) — accepted for signature symmetry with the other pure reads.
         const candidates = [];
         for (const entry of Object.values(this.scenarios)) {
             if (!entry || entry.quarantined !== true) continue;
+
+            const quarantinedAtMs = entry.quarantinedAt == null ? NaN : Date.parse(entry.quarantinedAt);
+            if (entry.quarantinedAt == null || Number.isNaN(quarantinedAtMs)) continue;
+
             const relevant = (entry.history ?? []).filter((h) => h?.status === "passed" || h?.status === "failed");
-            if (relevant.length < windowSize) continue;
-            const recent = relevant.slice(-windowSize);
+            const postQuarantine = relevant.filter((h) => {
+                const ts = h?.timestamp == null ? NaN : Date.parse(h.timestamp);
+                return !Number.isNaN(ts) && ts >= quarantinedAtMs;
+            });
+            if (postQuarantine.length < windowSize) continue;
+            const recent = postQuarantine.slice(-windowSize);
             if (!recent.every((h) => h.status === "passed")) continue;
 
             candidates.push({
@@ -498,7 +530,7 @@ class FlakinessTracker {
                 windowSize,
                 recentHistory: recent.map((h) => ({ ...h })),
                 allPassedInWindow: true,
-                reason: `The last ${windowSize} recorded outcome(s) while quarantined all passed — a candidate for a human to review and lift quarantine.`,
+                reason: `The last ${windowSize} recorded outcome(s) since quarantine all passed — a candidate for a human to review and lift quarantine.`,
             });
         }
         return candidates;
