@@ -814,7 +814,7 @@ test("SelectorBuilder escapes quotes/backslashes safely when interpolating", () 
 test("SelectorBuilder rejects control characters outright", () => {
   const result = SelectorBuilder.build({
     tagName: "input",
-    attributes: { "data-testid": "abc def", name: "email" },
+    attributes: { "data-testid": "abc\x00def", name: "email" },
   });
   assert.notEqual(result.tier, "data-testid");
 });
