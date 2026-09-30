@@ -108,8 +108,39 @@ test("locator cache migrates legacy data", (t) => {
   assert.deepEqual(store.getAlternatives("#old"), ["#new"]);
   assert.equal(typeof store.data["#old"].lastUsed, "number");
 });
-test("locator cache recovers from corrupt JSON", (t) =>
-  assert.deepEqual(storeAt(t, "{").data, {}));
+// Phase 14 (AC-07): LocatorStore's corrupt-file recovery used to be
+// completely silent (`catch { /* Corrupt store — start fresh */ }`) — this
+// test previously asserted only `.data` came back as `{}`, which passed
+// *because* recovery was silent. That is no longer sufficient: recovery
+// must now also be visible (a Logger.warning naming the path and failure)
+// and the corrupt bytes must be preserved as a sidecar for inspection, per
+// AtomicJsonStore's existing readJsonSync contract that LocatorStore now
+// shares. This is a required, intended behaviour change (silent -> visible
+// recovery) — the assertion is strictly stronger than before, not weakened.
+test("locator cache recovers from corrupt JSON, logging a warning and preserving a sidecar", (t) => {
+  const RealLogger = require(path.join(root, "utils", "Logger.js"));
+  const realWarning = RealLogger.warning;
+  const warnings = [];
+  RealLogger.warning = (m) => warnings.push(m);
+  t.after(() => { RealLogger.warning = realWarning; });
+
+  const store = storeAt(t, "{");
+  assert.deepEqual(store.data, {}, "functional recovery to {} still happens");
+
+  assert.ok(
+    warnings.some((w) => w.includes(store.storePath) && w.toLowerCase().includes("invalid json")),
+    "a warning naming the store path and the failure kind must fire",
+  );
+  // Never log the parser's own message or the file contents — V8's
+  // JSON.parse error quotes a snippet of the offending input.
+  assert.ok(!warnings.some((w) => w.includes("{") && !w.includes("locator_store") && !w.includes(path.basename(store.storePath))),
+    "the corrupt file's raw content must never appear in the warning");
+
+  const dir = path.dirname(store.storePath);
+  const sidecars = fs.readdirSync(dir).filter((f) => f.includes(".corrupt-"));
+  assert.equal(sidecars.length, 1, "exactly one corrupt sidecar must be preserved");
+  assert.equal(fs.readFileSync(path.join(dir, sidecars[0]), "utf8"), "{", "the sidecar preserves the original corrupt bytes");
+});
 test("locator cache evicts least recently used entry at 500 keys", async (t) => {
   const store = storeAt(t);
   for (let i = 0; i < 500; i++)
@@ -1090,6 +1121,7 @@ test("healing trust: a decisions file containing exactly HEALING_DECISIONS_MAX_R
         writeCalls++;
         return RealAtomicJsonStore.writeJsonAtomic(...args);
       },
+      WriteFailureTracker: RealAtomicJsonStore.WriteFailureTracker,
     },
   });
   Trust.pendingPath = path.join(dir, "healing_pending.json");
@@ -1319,6 +1351,7 @@ test("healing trust: a pending file at or under PENDING_MAX_ENTRIES is left comp
         writeCalls++;
         return RealAtomicJsonStore.writeJsonAtomic(...args);
       },
+      WriteFailureTracker: RealAtomicJsonStore.WriteFailureTracker,
     },
   });
   Trust.pendingPath = pendingPath;
