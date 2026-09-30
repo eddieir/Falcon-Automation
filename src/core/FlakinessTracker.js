@@ -43,6 +43,15 @@ class FlakinessTracker {
         this.historyPath   = path.join(__dirname, "..", "..", "data", "scenario_history.json");
         this.decisionsPath = path.join(__dirname, "..", "..", "data", "quarantine_decisions.json");
         this._queue = Promise.resolve();
+        // AC-08: per-path write-failure visibility, shared with HealingTrust.
+        // This is the store where a naive single `_lastWriteFailure` slot
+        // would actually bite: quarantine()/unquarantine() chain a
+        // historyPath write followed by a decisionsPath write in the same
+        // promise chain, and a failed historyPath write must stay visible
+        // even when the following decisionsPath write succeeds. Keying by
+        // path (see AtomicJsonStore.WriteFailureTracker) makes that true
+        // without any special-casing here.
+        this._writeFailures = new AtomicJsonStore.WriteFailureTracker();
         // Logs the *first* ledger rotation (mutation-time cap) per process,
         // then stays silent — never a warning per push forever.
         this._decisionsRotationLogged = false;
@@ -117,7 +126,9 @@ class FlakinessTracker {
             // into `scenarios[key].quarantined`) so persisting the capped
             // array here can never undo that reconciliation — reconciliation
             // writes land on the scenario entries, not on `this.decisions`.
-            this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
+            this._queue = this._queue
+                .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions))
+                .then((result) => this._writeFailures.record(this.decisionsPath, result));
         }
     }
 
@@ -273,7 +284,9 @@ class FlakinessTracker {
         };
         this._setScenario(key, entry);
         this._evictLeastRecentlyUsed();
-        this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.historyPath, this.scenarios));
+        this._queue = this._queue
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.historyPath, this.scenarios))
+            .then((result) => this._writeFailures.record(this.historyPath, result));
 
         // Only fire on the transition into "flaky" — re-recording an
         // already-flaky scenario every run would flood the dashboard/CLI
@@ -362,7 +375,9 @@ class FlakinessTracker {
         this._capDecisionsLedger();
         this._queue = this._queue
             .then(() => AtomicJsonStore.writeJsonAtomic(this.historyPath, this.scenarios))
-            .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
+            .then((result) => this._writeFailures.record(this.historyPath, result))
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions))
+            .then((result) => this._writeFailures.record(this.decisionsPath, result));
         Middleware.emit("scenarioQuarantined", entry);
         return entry;
     }
@@ -391,7 +406,9 @@ class FlakinessTracker {
         this._capDecisionsLedger();
         this._queue = this._queue
             .then(() => AtomicJsonStore.writeJsonAtomic(this.historyPath, this.scenarios))
-            .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
+            .then((result) => this._writeFailures.record(this.historyPath, result))
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions))
+            .then((result) => this._writeFailures.record(this.decisionsPath, result));
         Middleware.emit("scenarioUnquarantined", entry);
         return entry;
     }
@@ -547,6 +564,26 @@ class FlakinessTracker {
             });
         }
         return candidates;
+    }
+
+    /**
+     * AC-08: true if any of this store's tracked paths (historyPath,
+     * decisionsPath) currently has a write that did not durably land on
+     * disk. Per-path, so a failed historyPath write in the same chain as a
+     * successful decisionsPath write (quarantine()/unquarantine()) still
+     * reports true.
+     */
+    hasUnpersistedWriteFailure() {
+        return this._writeFailures.hasUnpersistedWriteFailure();
+    }
+
+    /**
+     * AC-08: the most recent unpersisted write failure across this store's
+     * tracked paths (`{path, error, at}`), or `null` if none is currently
+     * outstanding.
+     */
+    lastWriteError() {
+        return this._writeFailures.lastWriteError();
     }
 }
 

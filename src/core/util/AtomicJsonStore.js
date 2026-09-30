@@ -38,6 +38,23 @@ const Logger = require("../../../utils/Logger");
  *     `.catch`, so a rejection here would poison the chain and silently stop
  *     every later save in the process from ever running. It therefore must
  *     never reject.
+ *
+ * Phase 14 (AC-08) — writeJsonAtomic's resolved value changes from
+ * `undefined` to `{ ok: boolean, error?: string }`. This is purely additive:
+ * every existing call site discards the resolved value today, so widening
+ * what it resolves with is a zero-behaviour-change signature widening, not a
+ * breaking one. The never-reject guarantee is untouched.
+ *
+ * `WriteFailureTracker` is a small, reusable, per-path failure ledger any
+ * store can compose in. The reason it exists — rather than each store
+ * keeping one `_lastWriteFailure` slot — is that a store chaining more than
+ * one `writeJsonAtomic` call in the same promise chain (e.g. writing a
+ * history file, then a decisions file) must not let the second write's
+ * result clobber the first's: a failed first write followed by a successful
+ * second write must still report as failed. Keying failures by path, not by
+ * call order, makes that true automatically for any number of chained
+ * writes to any number of files, without each caller having to hand-roll
+ * aggregation logic.
  */
 
 function _sidecarPath(filePath) {
@@ -110,10 +127,15 @@ function readJsonSync(filePath, fallback) {
  * Durably write `data` as JSON to `filePath`: write to a unique temp file in
  * the same directory, then atomically rename it into place. Never rejects —
  * any failure is logged (path + error, never data contents) and the exact
- * temp file this call created is cleaned up (ENOENT ignored).
+ * temp file this call created is cleaned up (ENOENT ignored). Resolves
+ * `{ok: true}` on success and `{ok: false, error: <message>}` on failure —
+ * this is the only change from the pre-Phase-14 contract (which resolved
+ * `undefined` in both cases); it is additive only, so it cannot change the
+ * behaviour of any caller that still discards the resolved value.
  *
  * @param {string} filePath
  * @param {object|Array} data
+ * @returns {Promise<{ok: boolean, error?: string}>}
  */
 async function writeJsonAtomic(filePath, data) {
     const dir     = path.dirname(filePath);
@@ -122,6 +144,7 @@ async function writeJsonAtomic(filePath, data) {
         await fs.promises.mkdir(dir, { recursive: true });
         await fs.promises.writeFile(tmpPath, JSON.stringify(data, null, 2), "utf8");
         await fs.promises.rename(tmpPath, filePath);
+        return { ok: true };
     } catch (error) {
         Logger.warning(`AtomicJsonStore write failure: failed to durably write ${filePath} — ${error.message}`);
         try {
@@ -131,7 +154,69 @@ async function writeJsonAtomic(filePath, data) {
                 Logger.warning(`AtomicJsonStore write failure: failed to clean up temp file ${tmpPath} — ${unlinkError.message}`);
             }
         }
+        return { ok: false, error: error.message };
     }
 }
 
-module.exports = { readJsonSync, writeJsonAtomic };
+/**
+ * Reusable, per-path write-failure ledger (AC-08). A store composes one
+ * instance (`this._writeFailures = new WriteFailureTracker()`) and calls
+ * `record(path, result)` after every `writeJsonAtomic(path, data)` settles,
+ * chained in the same `.then()` — e.g.:
+ *
+ *   this._queue = this._queue
+ *     .then(() => writeJsonAtomic(path, data))
+ *     .then((result) => this._writeFailures.record(path, result));
+ *
+ * Failures are keyed by `path`, not by call order, so a store that chains
+ * writes to two different files in one promise chain (history then
+ * decisions, pending then decisions, …) cannot have a failed write to one
+ * path masked by a successful write to another — each path's status is
+ * independent and a success only clears that same path's own prior failure.
+ * `hasUnpersistedWriteFailure()` / `lastWriteError()` never throw and never
+ * read from disk — they report only what `record()` has been told.
+ */
+class WriteFailureTracker {
+    constructor() {
+        /** @type {Map<string, {path: string, error: string, at: string}>} */
+        this._failures = new Map();
+    }
+
+    /**
+     * @param {string} filePath
+     * @param {{ok: boolean, error?: string}} result
+     */
+    record(filePath, result) {
+        if (result && result.ok) {
+            this._failures.delete(filePath);
+        } else {
+            this._failures.set(filePath, {
+                path: filePath,
+                error: (result && result.error) || "unknown error",
+                at: new Date().toISOString(),
+            });
+        }
+    }
+
+    /** True if any tracked path currently has an unpersisted write failure. */
+    hasUnpersistedWriteFailure() {
+        return this._failures.size > 0;
+    }
+
+    /**
+     * The most recently recorded failure across all tracked paths, or
+     * `null` if none is currently outstanding. "Most recent" is by the
+     * failure's own recorded timestamp, not by which path happened to be
+     * written last — a currently-failing path is never displaced by a
+     * different path's unrelated success.
+     */
+    lastWriteError() {
+        let latest = null;
+        for (const failure of this._failures.values()) {
+            if (!latest || failure.at > latest.at) latest = failure;
+        }
+        return latest;
+    }
+}
+
+module.exports = { readJsonSync, writeJsonAtomic, WriteFailureTracker };
