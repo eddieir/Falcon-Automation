@@ -301,6 +301,15 @@ async function runFixture(page, fixture, { salt = DEFAULT_SALT, config = {} } = 
     matcherReason: matcherResult.reason || null,
     margin: matcherResult.margin,
     winnerSelector: matcherResult.winner ? matcherResult.winner.selector : null,
+    // Full per-dimension contribution breakdowns (P14-23 round 3 addendum):
+    // persisted so the published artifact alone is sufficient evidence for
+    // the phase's full-output determinism claim (rankings AND explanations
+    // identical, not just the accept/refuse verdict) — without this, that
+    // property could only be verified by re-running CandidateMatcher
+    // directly against the same inputs, outside the artifact itself.
+    winnerContributions: matcherResult.winner ? matcherResult.winner.contributions : null,
+    runnerUpContributions: matcherResult.runnerUp ? matcherResult.runnerUp.contributions : null,
+    alternativesConsidered: matcherResult.alternativesConsidered,
     outcome,
     refusalReason: outcome === "refused" ? reason : null,
     collectMs,

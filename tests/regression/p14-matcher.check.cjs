@@ -307,36 +307,60 @@ test("total just below a configured MIN_CONFIDENCE refuses below_threshold", () 
 // Margin boundary and ties
 // ---------------------------------------------------------------------------
 
+// NOTE (P14-23 round 3): the runnerUp in these two margin-boundary tests no
+// longer shares `id`/`data-testid` with the stored signature. Under the
+// pre-round-3 matcher it did (candidate()'s default attributes equal
+// storedSignature()'s), which was harmless then — but after round 3's
+// `_ambiguousStableIdentityKey` structural gate, TWO eligible candidates
+// both exactly matching stored's `id` (or `data-testid`) is now itself a
+// refusal (reason "ambiguous_stable_identity"), independent of score. These
+// tests exist to probe WINNER_MARGIN's own boundary, not that gate, so the
+// runnerUp here keeps only a non-stable attribute (`type`) in common with
+// stored — enough for a real, partial attribute contribution without
+// tripping the new ambiguity check — and the target margin is recomputed
+// for that shape (0.366666667, not the old 0.10).
 test("margin exactly at WINNER_MARGIN is accepted (boundary is inclusive)", () => {
   const winner = candidate("#a");
-  const runnerUp = candidate("#b", { attributes: { id: "submit-btn", "data-testid": "submit-order", type: "submit" }, textApprox: null });
-  // winner total = 1.0 (identical); runnerUp loses exactly the text weight
-  // (0.10) relative to winner => margin = 0.10. Use a configured margin of
-  // 0.10 to hit the exact boundary deterministically regardless of default.
+  const runnerUp = candidate("#b", { attributes: { type: "submit" }, textApprox: null });
+  // winner total = 1.0 (identical); runnerUp's attribute dimension drops to
+  // 1/3 of its weight (only `type` matches of id/data-testid/type) and it
+  // also loses the text weight => margin = 0.366666667. Configure
+  // WINNER_MARGIN to that exact value to hit the boundary deterministically.
   const result = CandidateMatcher.evaluate(
     { storedSignature: storedSignature(), liveCandidates: [winner, runnerUp], action: "click" },
-    { WINNER_MARGIN: 0.1 },
+    { WINNER_MARGIN: 0.366666667 },
   );
   assert.equal(result.status, "accepted");
-  assert.ok(Math.abs(result.margin - 0.1) < 1e-9);
+  assert.ok(Math.abs(result.margin - 0.366666667) < 1e-9);
 });
 
 test("margin just under the configured WINNER_MARGIN refuses insufficient_margin", () => {
   const winner = candidate("#a");
-  const runnerUp = candidate("#b", { textApprox: null });
+  const runnerUp = candidate("#b", { attributes: { type: "submit" }, textApprox: null });
   const result = CandidateMatcher.evaluate(
     { storedSignature: storedSignature(), liveCandidates: [winner, runnerUp], action: "click" },
-    { WINNER_MARGIN: 0.1000001 },
+    { WINNER_MARGIN: 0.3666667 },
   );
   assert.equal(result.status, "refused");
   assert.equal(result.reason, "insufficient_margin");
 });
 
+// NOTE (P14-23 round 3): stored's `attributes` is narrowed to `{ type:
+// "submit" }` here — `type` is in ATTRIBUTE_MATCH_KEYS (so it still earns a
+// full attribute-dimension contribution when both candidates match it) but
+// is NOT in STABLE_IDENTITY_KEYS (id/data-testid/data-test), so two
+// candidates both matching it can never trip the new structural ambiguity
+// gate (that gate only ever fires on a STABLE key stored has a value for).
+// This test is specifically about the plain margin===0 tie path, which
+// `_ambiguousStableIdentityKey` intentionally does not own.
+// `duplicate-test-id-f1` / the dedicated "THE FALSE-HEAL VECTOR" tests above
+// cover the case where stored DOES have a stable-key value two candidates
+// both share.
 test("exact tie refuses as insufficient_margin (margin === 0)", () => {
-  const a = candidate("#a");
-  const b = candidate("#b");
+  const a = candidate("#a", { attributes: { type: "submit" } });
+  const b = candidate("#b", { attributes: { type: "submit" } });
   const result = CandidateMatcher.evaluate({
-    storedSignature: storedSignature(),
+    storedSignature: storedSignature({ attributes: { type: "submit" } }),
     liveCandidates: [a, b],
     action: "click",
   });
@@ -658,15 +682,20 @@ test("P14-23 round 2: when every stable key present on both sides conflicts, the
   assert.equal(result.status, "no_candidate", "no exact stable-key match anywhere means the gate's original behaviour is unchanged");
 });
 
-test("P14-23 round 2: THE FALSE-HEAL VECTOR — duplicate data-testid across two distinct elements must never be accepted", () => {
+test("P14-23 round 2/3: THE FALSE-HEAL VECTOR (exact tie) — duplicate data-testid across two distinct elements must never be accepted", () => {
   // Two genuinely different elements share an authored data-testid (a
   // duplicate test id — common in real apps: a repeated component, a list
   // row, a modal duplicating a toolbar). Both differ from the stored id.
-  // Before the narrowing, a differing id excluded BOTH outright, so this
-  // scenario could never reach an accept. After narrowing, both candidates
-  // now reach scoring — the required outcome is a refusal (ambiguity/
-  // insufficient margin), NEVER an accept of either one, and above all
-  // never an accept of the wrong node.
+  // Before round 2's narrowing, a differing id excluded BOTH outright, so
+  // this scenario could never reach an accept. After narrowing, both
+  // candidates reach scoring — round 3 adds a dedicated structural check
+  // (`_ambiguousStableIdentityKey`) that refuses with its OWN reason
+  // ("ambiguous_stable_identity") whenever two or more eligible candidates
+  // share a stable-key value that also matches stored, independent of
+  // score. This exact-tie case is caught there, before margin is even
+  // consulted. See the test below for the harder, ASYMMETRIC case a
+  // security review found this alone would have missed (round 2's margin-
+  // only defence failed when the candidates' scores are not tied).
   const salt = "matcher-integration-salt";
   // `type` is included (identical on all three) specifically to push the
   // attribute dimension high enough that total evidence clears
@@ -697,12 +726,205 @@ test("P14-23 round 2: THE FALSE-HEAL VECTOR — duplicate data-testid across two
 
   // Both candidates clear MIN_CONFIDENCE individually (0.867 >= 0.85) —
   // proving this isn't a threshold accident — but with both candidates
-  // indistinguishable on every signal this signature schema carries, the
-  // margin gate must refuse rather than let either one be guessed.
-  assert.ok(result.winner.total >= MIN_CONFIDENCE, "both candidates must individually clear the confidence bar for this to be a real margin test");
+  // sharing the same data-testid value as stored, the structural ambiguity
+  // gate must refuse rather than let either one be guessed, named by its
+  // own specific reason rather than folded into below_threshold/
+  // insufficient_margin.
+  assert.ok(result.winner.total >= MIN_CONFIDENCE, "both candidates must individually clear the confidence bar for this to be a real test of the ambiguity gate, not a threshold accident");
   assert.notEqual(result.status, "accepted", "indistinguishable duplicate-data-testid candidates must never be accepted");
-  assert.equal(result.reason, "insufficient_margin");
-  assert.equal(result.margin, 0, "a perfect tie between the true match and the decoy must produce zero margin");
+  assert.equal(result.reason, "ambiguous_stable_identity");
+  assert.equal(result.margin, 0, "a perfect tie between the true match and the decoy must still produce zero margin, even though margin is no longer why this refuses");
+});
+
+test("P14-23 round 3: THE FALSIFICATION CASE (asymmetric) — a plain copy change on the correct element must not let a duplicate-data-testid decoy win outright", () => {
+  // The security-review finding that triggered round 3: round 2's only
+  // defence against a duplicate data-testid was the margin/threshold gates,
+  // which only help when the two candidates happen to score close to each
+  // other. An ORDINARY copy change on the correct element (its accessible
+  // name/text legitimately redesigned, independent of a decoy existing at
+  // all) lowers the correct element's own score — nothing contrived about
+  // it — and a decoy that still reads the OLD copy can end up scoring
+  // *higher* than the real element. Margin and threshold do not catch a
+  // decoy outscoring the truth; only a structural, score-independent rule
+  // can. Reproduces the exact shape from the review: stored evidence reads
+  // "Submit" under data-testid "row-action"; the correct element's copy was
+  // redesigned to "Proceed to Payment" (id regenerated too); a second,
+  // wrong row of the same component still reads "Submit" and still carries
+  // the same data-testid.
+  const salt = "matcher-integration-salt";
+  const stored = ElementSignature.capture(
+    { tagName: "button", accessibleName: "Submit", attributes: { id: "btn-123", "data-testid": "row-action" }, ownText: "Submit" },
+    { salt }
+  );
+  const correctElementAfterCopyChange = ElementSignature.capture(
+    { tagName: "button", accessibleName: "Proceed to Payment", attributes: { id: "btn-123-v2", "data-testid": "row-action" }, ownText: "Proceed to Payment" },
+    { salt }
+  );
+  const wrongElementStillReadsOldCopy = ElementSignature.capture(
+    { tagName: "button", accessibleName: "Submit", attributes: { id: "btn-999", "data-testid": "row-action" }, ownText: "Submit" },
+    { salt }
+  );
+
+  const result = CandidateMatcher.evaluate({
+    storedSignature: stored,
+    liveCandidates: [
+      { selector: "#btn-123-v2", signature: correctElementAfterCopyChange },
+      { selector: "#btn-999-other-row", signature: wrongElementStillReadsOldCopy },
+    ],
+    action: "click",
+  });
+
+  // Sanity: confirm the wrong element really would have outscored the
+  // correct one on the old (round-2-only) logic, so this test is proven to
+  // exercise the actual falsification shape rather than a scenario that
+  // happened to be safe anyway.
+  const wrongScore = result.alternativesConsidered.find((a) => a.selector === "#btn-999-other-row").total;
+  const correctScore = result.alternativesConsidered.find((a) => a.selector === "#btn-123-v2").total;
+  assert.ok(wrongScore > correctScore, "this test must reproduce a case where the decoy genuinely outscores the correct element");
+
+  assert.notEqual(result.status, "accepted", "the duplicate data-testid must never let the higher-scoring wrong element win");
+  assert.equal(result.reason, "ambiguous_stable_identity");
+});
+
+test("P14-23 round 3: order independence — shuffling the candidate array never changes the verdict", () => {
+  const salt = "matcher-integration-salt";
+  const stored = ElementSignature.capture(
+    { tagName: "button", accessibleName: "Submit", attributes: { id: "btn-123", "data-testid": "row-action" }, ownText: "Submit" },
+    { salt }
+  );
+  const correct = ElementSignature.capture(
+    { tagName: "button", accessibleName: "Proceed to Payment", attributes: { id: "btn-123-v2", "data-testid": "row-action" }, ownText: "Proceed to Payment" },
+    { salt }
+  );
+  const wrong = ElementSignature.capture(
+    { tagName: "button", accessibleName: "Submit", attributes: { id: "btn-999", "data-testid": "row-action" }, ownText: "Submit" },
+    { salt }
+  );
+  const correctCandidate = { selector: "#btn-123-v2", signature: correct };
+  const wrongCandidate = { selector: "#btn-999-other-row", signature: wrong };
+
+  const forward = CandidateMatcher.evaluate({ storedSignature: stored, liveCandidates: [correctCandidate, wrongCandidate], action: "click" });
+  const reversed = CandidateMatcher.evaluate({ storedSignature: stored, liveCandidates: [wrongCandidate, correctCandidate], action: "click" });
+
+  assert.deepEqual(forward, reversed, "the full result — not just status — must be identical regardless of input candidate order");
+  assert.equal(forward.reason, "ambiguous_stable_identity");
+});
+
+test("P14-23 round 3: the round-2 single-candidate regenerated-id heal still works (this fix must not regress it)", () => {
+  // Exactly one live candidate matches stored's data-testid; nothing to be
+  // ambiguous with. The structural gate must never fire here, and the
+  // candidate must still be a CORRECT heal (not merely an accept) — same
+  // shape as the id-only-change-f1 benchmark fixture.
+  const salt = "matcher-integration-salt";
+  const stored = ElementSignature.capture(
+    {
+      tagName: "button",
+      accessibleName: "Submit Order",
+      attributes: { id: "submit-btn-7f2a", "data-testid": "submit-order-btn", name: "submitOrder", type: "submit" },
+      structuralPath: ["form", "div"],
+      ownText: "Submit Order",
+      boundingBoxBucket: "top-left:small",
+    },
+    { salt }
+  );
+  const regeneratedIdCandidate = ElementSignature.capture(
+    {
+      tagName: "button",
+      accessibleName: "Submit Order",
+      attributes: { id: "submit-btn-c91e", "data-testid": "submit-order-btn", name: "submitOrder", type: "submit" },
+      structuralPath: ["form", "div"],
+      ownText: "Submit Order",
+      boundingBoxBucket: "top-left:small",
+    },
+    { salt }
+  );
+
+  const result = CandidateMatcher.evaluate({
+    storedSignature: stored,
+    liveCandidates: [{ selector: "#new-id", signature: regeneratedIdCandidate }],
+    action: "click",
+  });
+
+  assert.equal(result.status, "accepted");
+  assert.notEqual(result.reason, "ambiguous_stable_identity");
+  assert.equal(result.winner.selector, "#new-id");
+});
+
+test("P14-23 round 3 addendum: VARIANT 2 — duplicate data-testid with NO id conflict anywhere is still refused by the same structural rule", () => {
+  // An independent QA review found a second variant of the same false-heal
+  // vector, with a DIFFERENT cause: no `id` is present at all (so no
+  // stable-key CONFLICT is ever involved — the pre-narrowing gate would not
+  // have excluded this candidate either; this hole predates round 2). Two
+  // candidates simply share the matching `data-testid`, and the correct
+  // element has drifted (copy/structure/position changed) while the
+  // unrelated duplicate still matches the OLD stored evidence byte-for-byte
+  // and so outscores the real element outright (1.0 vs a lower score, a
+  // real margin, not a tie). `_ambiguousStableIdentityKey` must catch this
+  // on the SAME basis as variant 1 — "two-or-more candidates share a
+  // stable-key value that matches stored" — with no dependency on a
+  // conflicting id anywhere. This test exists specifically to prove the
+  // rule is not keyed too narrowly (e.g. "only when a conflict is also
+  // present").
+  const salt = "variant-2-salt";
+  const stored = ElementSignature.capture(
+    {
+      tagName: "button",
+      accessibleName: "Pay Now",
+      attributes: { "data-testid": "checkout-cta" },
+      structuralPath: ["section", "form"],
+      ownText: "Pay Now",
+      boundingBoxBucket: "bottom-right:small",
+    },
+    { salt }
+  );
+  // The real, correct element: copy and structure have genuinely drifted
+  // (an ordinary redesign), still carries the same data-testid, no id at
+  // all on either side.
+  const driftedCorrectElement = ElementSignature.capture(
+    {
+      tagName: "button",
+      accessibleName: "Continue to Payment",
+      attributes: { "data-testid": "checkout-cta" },
+      structuralPath: ["section", "div", "form"],
+      ownText: "Continue to Payment",
+      boundingBoxBucket: "bottom-left:medium",
+    },
+    { salt }
+  );
+  // An unrelated duplicate that happens to still read exactly like the old
+  // evidence — no id anywhere, so nothing here would ever have conflicted.
+  const stillMatchesOldEvidence = ElementSignature.capture(
+    {
+      tagName: "button",
+      accessibleName: "Pay Now",
+      attributes: { "data-testid": "checkout-cta" },
+      structuralPath: ["section", "form"],
+      ownText: "Pay Now",
+      boundingBoxBucket: "bottom-right:small",
+    },
+    { salt }
+  );
+
+  const result = CandidateMatcher.evaluate({
+    storedSignature: stored,
+    liveCandidates: [
+      { selector: "#correct-drifted", signature: driftedCorrectElement },
+      { selector: "#decoy-stale-match", signature: stillMatchesOldEvidence },
+    ],
+    action: "click",
+  });
+
+  // Sanity: confirm the decoy really does outscore the correct element by a
+  // real margin (not a tie), proving this reproduces variant 2's actual
+  // shape rather than collapsing back into variant 1's degenerate case.
+  const decoyScore = result.alternativesConsidered.find((a) => a.selector === "#decoy-stale-match").total;
+  const correctScore = result.alternativesConsidered.find((a) => a.selector === "#correct-drifted").total;
+  assert.equal(decoyScore, 1, "the stale-matching decoy must score the maximum, exactly like the old (correct) evidence used to");
+  assert.ok(decoyScore > correctScore, "the decoy must genuinely outscore the drifted correct element, not tie with it");
+  assert.ok(decoyScore - correctScore >= CandidateMatcher.DEFAULTS.WINNER_MARGIN, "the margin alone would have been sufficient to accept the decoy outright without this rule");
+
+  assert.notEqual(result.status, "accepted", "no id ever conflicted here, yet the duplicate data-testid must still be refused");
+  assert.equal(result.reason, "ambiguous_stable_identity", "must be keyed on the shared stable-key match itself, not on any id conflict");
 });
 
 test("P14-18: comparing signatures hashed with two DIFFERENT salts silently scores as non-matching (documented caller obligation, not a matcher bug)", () => {
