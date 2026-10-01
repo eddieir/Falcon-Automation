@@ -47,6 +47,15 @@
       "description": "The archive control keeps its data-testid but is re-rendered as a link with role=link where the stored evidence recorded role=button; the attribute match alone must not be enough to accept."
     },
     {
+      "id": "duplicate-test-id-f1",
+      "mutationClass": "duplicate-test-id",
+      "action": "click",
+      "groundTruthId": "duplicate-test-id-f1",
+      "dir": "duplicate-test-id/f1",
+      "mustRefuse": true,
+      "description": "The P14-23 round 2 false-heal vector: narrowing the conflicting-stable-identity gate (an exact data-testid match now outweighs a differing id) means a second, genuinely different row with the same duplicated data-testid must still never be accepted over the real target."
+    },
+    {
       "id": "element-removed-f1",
       "mutationClass": "element-removed",
       "action": "click",
