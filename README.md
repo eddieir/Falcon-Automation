@@ -1,6 +1,6 @@
 # Falcon-Automation: Self-Healing Test Automation with AI-Assisted Locator Recovery
 
-> **Status:** Active development · Phases 1–13 merged. Phase 10 covers every page of an app in one run; Phase 11 heals every action type; Phase 12 makes healing state and flaky decisions survive CI via cached state files. Phase 13 ("Decisions that can't rot") is complete and verified on `main` at `3465e8c`. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
+> **Status:** Active development · Phases 1–13 merged and verified on `main` at `11657cb`. Phase 10 covers every page of an app in one run; Phase 11 heals every action type; Phase 12 makes healing state and flaky decisions survive CI via cached state files; Phase 13 ("Decisions that can't rot") keeps review decisions from going stale. Phase 14 ("Evidence-based locator matching") adds a deterministic local healing tier that needs no model and no network, and is open for review. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
 
 ---
 
@@ -27,18 +27,19 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 **What that looks like in practice:**
 
 - **UI automation** via Playwright — Chromium is continuously validated in CI; Firefox and WebKit are supported at the `BrowserManager` level but not covered by CI
-- **Three-tier self-healing, on every action:** direct attempt (AdaptiveRetry) → LocatorStore → LLM inference (gpt-4o-mini), for clicks, form fills and dropdown selections alike
+- **Layered self-healing, on every action:** direct attempt (AdaptiveRetry) → LocatorStore replay → deterministic local evidence matching → LLM inference (gpt-4o-mini), for clicks, form fills and dropdown selections alike
 - **Whole-app coverage:** one command sweeps every page it discovers, bounded by a page cap and a time budget, deduplicating shared navigation and reporting every page it did *not* cover, with a reason
 - **Autonomous UI exploration:** recursive crawler (ClickExplorer) + rule-based DOM issue scanning (DOMIssueScanner)
 - **DOM-driven interaction generation:** PageAnalyser maps the DOM; TestGenerator creates scenarios; TestRunner executes them with full healing
-- **AI-assisted locator recovery:** when an interaction's selector fails, Tier 3 (gpt-4o-mini) infers a replacement and a human approves it before reuse
+- **Locator recovery without a model:** when a selector fails and no approved replacement exists, Falcon scores live candidates against the element's stored signature locally — no network, no model, no randomness — and refuses rather than guess when the evidence is weak or ambiguous
+- **AI-assisted locator recovery:** if local matching refuses too, Tier 3 (gpt-4o-mini) infers a replacement and a human approves it before reuse
 - **Visual regression testing:** pixel-level screenshot comparison with diff images and cumulative summary
 - **Real-time live dashboard:** express + socket.io stream every test event to a browser UI at `localhost:3000`
 - **Accurate reporting:** structured pass/fail/skip tallying + Allure HTML report via `allure-playwright`
 - **Database testing:** PostgreSQL via `pg` Pool with full mTLS support
 - **CI/CD ready:** GitHub Actions pipeline with Allure report upload
 
-**Delivered so far:** core healing + reporting foundation → a stability audit (14 defects fixed) → visual regression, live dashboard, DOM-driven test generation, and Allure reporting → repository hygiene → a single consolidated self-healing engine with a bounded LocatorStore → real Postgres coverage in CI → a token-gated dashboard → a comprehensive regression layer (491 `node:test` cases and 43 Playwright browser tests across two CI jobs) and a real selector-anchoring fix in `PageAnalyser` → an approval gate for AI-inferred selector fixes, so a Tier 3 guess is reviewed by a human before it's ever trusted again → flaky-test detection and quarantine, so a genuinely unreliable interaction stops blocking CI without ever being silently hidden → whole-app coverage, so one run sweeps every page it finds instead of only the one you named → healing state and flaky decisions that survive CI via cached state files. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md). See [Roadmap](#roadmap) for what's next.
+**Delivered so far:** core healing + reporting foundation → a stability audit (14 defects fixed) → visual regression, live dashboard, DOM-driven test generation, and Allure reporting → repository hygiene → a single consolidated self-healing engine with a bounded LocatorStore → real Postgres coverage in CI → a token-gated dashboard → a comprehensive regression layer (491 `node:test` cases and 43 Playwright browser tests across two CI jobs) and a real selector-anchoring fix in `PageAnalyser` → an approval gate for AI-inferred selector fixes, so a Tier 3 guess is reviewed by a human before it's ever trusted again → flaky-test detection and quarantine, so a genuinely unreliable interaction stops blocking CI without ever being silently hidden → whole-app coverage, so one run sweeps every page it finds instead of only the one you named → healing state and flaky decisions that survive CI via cached state files → review decisions that can't go stale → a deterministic local healing tier that works with no model and no network, and refuses rather than guess. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md). See [Roadmap](#roadmap) for what's next.
 
 ---
 
@@ -220,6 +221,70 @@ node scripts/healing/review.js reject  "<original-selector>"
 ```
 
 Reproduce the demo above yourself: `node docs/demo/healing-trust-axonradar-demo.js`.
+
+### Healing without a model, and refusing when the evidence is thin
+
+Tier 2 only helps when the exact replacement has already been approved. Tier 3 needs a key, a
+network, and a willingness to send DOM to a third party. Between them sits the common case: the
+element is plainly still there and recognisable to a human — its id was regenerated by the build, a
+wrapper appeared, the copy was reworded — but nothing has taught Falcon the new selector yet.
+
+That tier is deterministic and entirely local. It scores each live candidate against the signature
+of the element Falcon last interacted with successfully: tag, role, an allow-listed set of stable
+attributes, accessible name, own text, structural path and a coarse geometry bucket. No model, no
+network, no randomness. `CandidateMatcher` has no `require` statement at all, so its verdict is
+reproducible from its inputs alone, and it reports the per-dimension contributions behind that
+verdict rather than only the result.
+
+**It refuses, and the reason is part of the output.** Below the confidence floor, inside the
+required margin between the best and second-best candidate, incompatible with the action,
+contradictory role, or an ambiguous stable identity — each is reported distinctly, written to the
+healing log, and falls through to Tier 3 exactly as an empty cache would. A refusal is never a run
+failure.
+
+That last reason is worth spelling out, because it was found by this phase's own benchmark rather
+than by review. A `data-testid` is written by hand to identify one element, so an exact match on it
+is allowed to outweigh an id the build regenerated. But when two candidates carry the same
+`data-testid`, it identifies neither — and a stale duplicate elsewhere on the page can match the
+old evidence *better* than the real element does once the real element's copy has legitimately
+changed. Falcon refuses outright in that case, by a structural rule that reads neither the
+confidence floor nor the margin, so it cannot be tuned away later.
+
+**A candidate accepted here is not trusted.** It is recorded as a proposal and only becomes trusted
+evidence when a human approves it, through the dashboard's locator panel or
+`node scripts/healing/review.js locator-list`. Trusted evidence comes from one place only: an
+element Falcon actually interacted with successfully, using the selector the developer wrote, with
+no score involved. Rolling an entry back marks it revoked with an attributed audit record and keeps
+the prior signature; it earns trust again only by passing for real, never by re-approving the
+evidence that was rejected.
+
+**What's stored, and what isn't.** Identity-bearing attribute values are salted HMAC-SHA256 hashes,
+so the dashboard and CLI name *which* field matched, never the value. Accessible name and own text
+stay as bounded plaintext because similarity cannot run on a hash, passed through redaction
+patterns first. Never stored: input or textarea values, passwords, hidden tokens, cookies, storage,
+authorization data, raw `outerHTML`, full DOM, scripts, complete forms, URL credentials, raw
+queries, unrestricted `data-*`, or unbounded text.
+
+Two honest caveats. Unless you set `FALCON_LOCATOR_SALT`, the salt is generated and stored in the
+same file as the hashes it protects, so low-entropy values stay brute-forceable offline by anyone
+who can read that file — Falcon warns you once, on first use, and the hashed values are **not**
+irrecoverable. And redaction of accessible name and text is a shape heuristic, not a guarantee: a
+short one-time-code-style secret is not caught by it.
+
+**Locator memory is local-only.** `data/locator_memory.json` lives on the machine that produced it.
+It is gitignored, and it is deliberately **not** restored or saved by CI — the state cache's exact
+key can never hit, so every restore falls back to a branch prefix, and caching this file would let
+one branch inherit evidence another branch's reviewer approved. Nothing here is uploaded anywhere.
+
+Measured on an eight-fixture mutation corpus, one fixture per class of change
+(`npm run healing:benchmark`): **3 correct heals, 4 refusals, 1 no-candidate, 0 false heals**, with
+identical results across separate process invocations. "Correct" means the accepted candidate
+resolves to the element the fixture declares as ground truth, checked against the DOM — not that a
+click didn't throw. Those numbers describe this corpus and nothing else; on a page nobody authored
+ground truth for, correctness isn't measurable this way, and Falcon doesn't claim a healing rate for
+applications in general. Half the corpus refuses, which is the intended posture and also why Tier 3
+still earns its place. The confidence and margin thresholds are provisional and uncalibrated; the
+benchmark exists to calibrate them, and it already changed the matcher twice during this phase.
 
 ### What Tier 3 sends to OpenAI
 
@@ -903,6 +968,7 @@ Falcon's differentiator is genuine self-healing, not a hardcoded selector list, 
 Detailed plans for the phases ahead, with implementation specifications and acceptance criteria, are in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md).
 
 ✅ Shipped since the last update:
+- **Healing that needs no model, and refuses rather than guess.** Between a locator cache that only replays an already-approved selector and an LLM tier that needs a key and a network, there was nothing — so an evaluator without `OPENAI_API_KEY` effectively had two tiers, the second of which only fired when the exact replacement had been approved earlier. Falcon now scores live candidates against the stored signature of the element it last interacted with, deterministically and entirely locally, and treats refusal as a first-class outcome that carries its reason. A candidate it accepts is a proposal, not trusted evidence: only a human approval, or a real successful interaction with the developer's own selector, creates trust. Identity values are stored as salted hashes, locator memory never leaves the machine, and the published mutation benchmark reports the cases Falcon gets wrong alongside the ones it gets right.
 - **Healing that covers every action, and a run that can't go green having verified nothing.** Healing used to apply to clicks alone: a renamed input was marked `skipped` before the healer was ever consulted, and because a skip isn't a failure, two skips beside one pass reported PASSED and exited 0. A renamed field quietly cost coverage and the build stayed green over it. `type` and `select` now go through the same three tiers a click does, with the same approval gate; an unresolvable target fails instead of skipping; and `passed`, `failed` and `quarantined` are the only statuses that count as a verdict, so a run without one of them exits 1 like an empty run. A scenario that navigates away also no longer leaves the rest of its plan running against the page it landed on.
 - **Coverage of the whole app, not just the page you pointed at.** Falcon used to crawl a site, discard every page it found, and generate tests for the entry URL alone. A run now sweeps every page it discovers, bounded by a page cap and a wall-clock budget, deduplicating the navigation that repeats on every page, and reporting each page it didn't cover along with why. Against a real 11-page site that's the difference between 1 page and 4 scenarios, and 6 pages and 91 scenarios, from the same command.
 - **Flaky-test detection and quarantine.** `FlakinessTracker` classifies every scenario (`new`/`stable`/`broken`/`flaky`) from its real pass/fail history, so a genuinely unreliable interaction is told apart from a real regression instead of both just being "failed." A human quarantines a flaky scenario, from the dashboard's "Flaky tests" panel or `scripts/flakiness/review.js`; a quarantined failure is reported as `quarantined`, not `failed`, still visible in every report, and never silently merged into a passing result either.
