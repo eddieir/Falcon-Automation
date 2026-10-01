@@ -33,8 +33,9 @@ Falcon's structural advantages, which every phase must compound rather than dilu
    objection to AI-assisted QA, and Falcon answers it by design.
 2. **Coverage without authorship.** Falcon crawls a live app and generates the suite. No recording
    session, no production traffic, no test authoring.
-3. **You own it.** Open source, self-hostable, no per-seat billing, no DOM leaving your network
-   (Phase 14 closes the last dependency here).
+3. **You own it.** Open source, self-hostable, no per-seat billing, no DOM leaving your network.
+   Phase 14 closed the dependency on an external call for healing itself; Phase 17 covers the case
+   where a team wants an LLM tier but not a vendor-hosted one.
 4. **Results that are true.** Real exit codes, real tallies, quarantine as its own visible bucket —
    not a green check that means "didn't crash" (Phases 6 and 9).
 
@@ -543,7 +544,126 @@ protected by explicit regression tests. Do NOT describe D12 as newly fixed in Ph
 
 ---
 
-## Phase 14 — Run history and trend
+## Phase 14 — Evidence-based locator matching and scoped memory — DELIVERED
+
+Promoted ahead of run history, and ahead of the provider-adapter work it was originally bundled
+with, because the healing chain's weakest link was not its reporting: between a locator cache that
+only replays a selector it was handed and an LLM tier that needs a key and a network, there was
+nothing. An evaluator without `OPENAI_API_KEY` got two tiers, and the second only worked if the
+exact replacement had been approved earlier.
+
+### What shipped
+
+A deterministic local tier between the cache and the model. No model, no network and no randomness
+in the decision path — `CandidateMatcher` has no `require` statement at all, which is enforced as a
+structural property rather than a convention.
+
+- **Scoped identity.** An entry is keyed by application, origin, pathname, action and the original
+  selector, serialised through `JSON.stringify` so no delimiter can be smuggled through a selector
+  to collide two identities. A selector on one page therefore cannot authorise a repair on another.
+  `about:`, `data:` and `file:` are refused outright, because their origin is the literal string
+  `"null"` and every such page would otherwise share one scope.
+- **Signatures that are not the DOM.** Identity-bearing attribute values are stored as salted
+  HMAC-SHA256 hashes from a fixed allow-list. Accessible name and own text stay as bounded
+  plaintext, because fuzzy similarity cannot run on a hash. Never stored: input or textarea values,
+  passwords, hidden tokens, cookies, storage, authorization data, raw `outerHTML`, full DOM,
+  scripts, complete forms, URL credentials, raw queries, unrestricted `data-*`, unbounded text.
+- **Three trust states.** `trusted` evidence comes only from direct observation — the developer's
+  own selector resolved and the action succeeded — with no score involved anywhere. A candidate the
+  matcher accepts becomes `unproven` and is promoted solely by an explicit `approve()`. `revoked`
+  stops reuse immediately while keeping the prior signature and an attributed revocation history,
+  and regains trust only through a fresh ground-truth pass, never by re-approving the evidence that
+  was rejected.
+- **Refusal as a first-class result, carrying its reason.** Below the confidence floor, inside the
+  margin, action-incompatible, contradictory role, ambiguous stable identity: each is reported
+  distinctly and persisted to the healing log, and each falls through to the LLM exactly as an empty
+  cache would. A refusal never fails a run.
+- **A published mutation benchmark**, scored against ground truth authored into each fixture rather
+  than against whether a click threw.
+
+### Acceptance criteria — met
+
+A locator that previously only the LLM tier could resolve is resolved locally with no network call;
+ambiguous matches are refused; repeated identical inputs produce identical rankings and identical
+score contributions across separate process invocations.
+
+### Measured results, including the unflattering ones
+
+Eight fixtures, one per mutation class, `npm run healing:benchmark`:
+
+| Outcome | Count | Rate |
+|---|---|---|
+| Correct heal (resolves to the fixture's declared ground-truth node) | 3 | 37.5% |
+| Refused | 4 | 50.0% |
+| No candidate | 1 | 12.5% |
+| False heal | 0 | 0.0% |
+
+The four outcomes partition the corpus exactly once per fixture, so the rates sum to 100% and no
+case can be dropped or double-counted. Every fixture appears in the per-case log, not only the ones
+that heal. Deterministic repeat agreement: 8/8 across separate processes, compared over full score
+contributions.
+
+**What those numbers do and do not support.** They describe this corpus, authored here, and nothing
+else. "Correct" is measurable only because each fixture carries an author-declared ground-truth
+attribute present in both its pre- and post-mutation HTML; on a scraped or customer page no such
+ground truth exists, and correctness would become unmeasurable rather than inferable from an action
+that did not throw. Half the corpus refuses — that is the intended posture, not a shortfall, but it
+is also why no claim here is stated as a healing rate for applications in general.
+
+Matching cost on a 5,000-node, 200-interactive-element DOM measured 67–129ms across runs on a
+loaded development machine. That is reported as measured, not as a guarantee.
+
+### ADR — why a deterministic tier rather than a stronger Tier 3
+
+**Context.** Tier 2 replays a stored selector gated on it resolving exactly one element; Tier 3 asks
+a model. Between them sat the whole class of change where the element is plainly still present and
+recognisable — a regenerated id, an inserted wrapper, reworded copy — but no approved replacement
+exists yet.
+
+**Decision.** Insert a deterministic, local, evidence-based tier, and give it the authority to
+refuse. Keep it free of I/O so its verdict is reproducible from its inputs alone, and expose per-
+dimension score contributions so a human can see why a candidate won rather than being told that it
+did.
+
+**Alternatives rejected.** Tuning Tier 3's request to the model leaves the key and the network on
+the critical path, and a model's answer is not reproducible evidence. Auto-persisting any candidate
+above a confidence threshold was rejected outright: it is the one design that converts a scoring
+mistake into permanent trust, and it contradicts the approval gate Phase 8 exists to provide.
+Lowering Tier 2's uniqueness requirement would have widened an existing tier by weakening the only
+check it has.
+
+**Consequences, accepted.** `MIN_CONFIDENCE` 0.85 and `WINNER_MARGIN` 0.15 are provisional and
+uncalibrated; the benchmark is the instrument for calibrating them, and it already caused two
+changes to the matcher during this phase. Half this corpus refuses, which means the LLM tier still
+earns its place. Scoring sits behind a structural rule — a stable key shared by two candidates
+identifies neither, so that case refuses regardless of score or margin — specifically so the
+protection survives any later recalibration of those two constants.
+
+### Honest limitations
+
+- **The salt sits with the hashes it protects** unless `FALCON_LOCATOR_SALT` is set. Low-entropy
+  values therefore remain brute-forceable offline by anyone who can read the file. The runtime says
+  so on first use. Hashed values are **not** irrecoverable, and nothing in this project may claim
+  they are.
+- **Redaction of accessible name and text is a shape heuristic, not a guarantee.** A short
+  OTP-style secret is not caught by it, and matches are replaced in place, so a meaningful prefix
+  can survive (`SUPER-SECRET-…` becomes `SUPER-[REDACTED]`). The phase's own tests assert this
+  rather than hiding it.
+- **No coordination between concurrent writers.** Temp-file-and-rename gives crash safety and no
+  torn reads. Within one process the healing chain and the dashboard share a single store instance.
+  Across processes, each holds its own copy, exactly as every other state file in this project
+  does. Multi-process safety is not implemented and is not claimed.
+- **Locator memory is local-only.** `data/locator_memory.json` is gitignored and is deliberately
+  **not** cached by CI, so it never crosses a branch boundary. The exact-key cache entry can never
+  hit on restore, so every restore falls back to a branch prefix — which would let one branch
+  inherit another's approved evidence. Revisit only alongside a same-branch-provenance check inside
+  the store itself, never as a CI configuration change.
+- **This is matching, not comprehension.** Scores compare captured signals. No general DOM
+  understanding is involved.
+
+---
+
+## Phase 15 — Run history and trend
 
 ### Why
 
@@ -575,41 +695,33 @@ Ten consecutive runs produce a readable trend; a deliberately induced heal-rate 
 
 ---
 
-## Phase 15 — Healing without a third party
+## Phase 17 — Pluggable LLM providers
+
+Renumbered and reduced. This was "Healing without a third party", and the larger half of it — a
+deterministic local tier that heals with no external call — shipped as Phase 14. What remains is the
+provider question, which is a procurement blocker rather than a capability gap, so it no longer
+needs to sit ahead of run history or parallel execution.
 
 ### Why
 
-Falcon's own flagship demo honestly discloses that 7 of its 8 failures went unhealed for want of an
-`OPENAI_API_KEY`. For any evaluator who doesn't set one, the headline feature is inert — and for many
-organisations, sending DOM snapshots to a third party is a procurement blocker that ends the
-evaluation regardless of how good the tool is.
-
-### Competitive angle
-
-This is the phase with the largest commercial consequence. Testim, Mabl, Functionize and Autify are
-all SaaS: your DOM goes to their cloud, full stop. A Falcon that heals well with **no external call
-at all**, and can optionally use a self-hosted or Azure-tenanted model when you want the LLM tier, is
-deployable inside organisations that cannot legally evaluate any of them.
+For many organisations, sending DOM snapshots to a third party ends an evaluation regardless of how
+good the tool is. Phase 14 means such an organisation now gets three working tiers with no external
+call at all, rather than two. This phase is about the remaining case: teams that *do* want an LLM
+tier but cannot use a vendor-hosted one.
 
 ### Implementation specification
 
-- **Tier 2.5, a deterministic local matcher**, between the locator cache and the LLM. Score every
-  candidate element against the failed selector's last-known signature: normalized text, ARIA role,
-  accessible name, tag, stable attributes (`data-testid`, `name`, `type`), DOM-path distance and
-  geometric proximity. Require a configurable confidence margin between the best and second-best
-  candidate, and refuse to act on an ambiguous match — the same "ambiguity is a failure, not a guess"
-  rule the existing healer already applies.
-- Capture and persist the signature of every element Falcon successfully interacts with, so Tier 2.5
-  has something to match against on a later run.
-- **Route Tier 2.5 results through the Phase 8 approval gate.** A heuristic guess is still a guess.
-- **Pluggable LLM providers**: an adapter interface with OpenAI, Azure OpenAI, and
-  OpenAI-compatible/self-hosted endpoints, selected by config. No provider hardwired.
-- Publish measured healing rates with and without a key, so the demo numbers stay honest.
+- An adapter interface with OpenAI, Azure OpenAI, and OpenAI-compatible/self-hosted endpoints,
+  selected by config. No provider hardwired.
+- Keep the Phase 8 approval gate unchanged: whichever provider answers, an inferred selector is
+  still a guess and is still reviewed before reuse.
+- Publish measured healing rates with and without a key, so the demo numbers stay honest. Phase 14's
+  benchmark is the mechanism; this phase adds the provider dimension to it.
 
 ### Acceptance criteria
 
-A locator that only Tier 3 could previously resolve is resolved by Tier 2.5 with no network call;
-ambiguous matches are refused; the provider adapter passes the same suite against a mock endpoint.
+The adapter passes the same suite against a mock endpoint; no provider is reachable except the one
+configuration selects.
 
 ---
 
@@ -649,19 +761,24 @@ concurrent workers; a sharded CI run and a single-runner run produce identical a
 ## Sequencing
 
 ```
-Phase 10 ── Phase 11 ──┬── Phase 12 ──┬── Phase 13
-                       │              ├── Phase 14
+Phase 10 ── Phase 11 ──┬── Phase 12 ──┬── Phase 13 ── Phase 14 (delivered)
+                       │              ├── Phase 15
                        │              └── Phase 16
-                       └── (Phase 15 is independent and can run in parallel)
+                       └── (Phase 17 is independent and can run in parallel)
 ```
 
 Phase 10 first: it is the largest gap between what Falcon promises and what it ships, and it
 multiplies the data volume every later phase must survive. Phase 11 next, and ahead of everything
 else, because it is the only item on this list that can currently produce a green build over lost
 coverage — no amount of later work is worth building on top of a run that can report PASSED without
-having verified anything. Phase 12 before 13, 14 and 16: staleness signals, trend history and
-parallel workers are all only worth building on state guarantees that actually hold. Phase 15
-touches only the healing chain and can proceed independently at any point.
+having verified anything. Phase 12 before 13, 15 and 16: staleness signals, trend history and
+parallel workers are all only worth building on state guarantees that actually hold.
+
+Phase 14 was then taken out of order, ahead of run history, because the gap it closed was in the
+healing chain rather than in the reporting on top of it: an evaluator with no `OPENAI_API_KEY` had
+two usable tiers, and the second only fired when an approved replacement already existed. Phase 17
+is what remains of the phase Tier 2.5 was originally bundled with, and it is a procurement concern
+rather than a capability gap, so it can proceed independently at any point.
 
 ---
 

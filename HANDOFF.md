@@ -2,7 +2,7 @@
 
 > **For:** Any engineer or Claude Code session continuing this work
 > **Author:** Peyman Iravani — QA Manager / Tech Lead
-> **Last updated:** Phase 13 ("Decisions that can't rot") merged through PR #27 and verified on `main` at `3465e8c`.
+> **Last updated:** Phase 14 ("Evidence-based locator matching and scoped memory") implemented on `phase-14/evidence-based-locator-memory` and open for review. Phases 1–13 are merged and verified on `main` at `11657cb`.
 > **Repo:** https://github.com/eddieir/Falcon-Automation
 
 ---
@@ -15,7 +15,7 @@
 
 ## 1. Project in One Paragraph
 
-Falcon is a Node.js test automation framework built on Playwright. Its differentiator is a genuine three-tier self-healing engine: when a selector fails, it retries with smart backoff (Tier 1), consults a persisted locator cache (Tier 2), and finally calls an OpenAI LLM to infer a working alternative selector at runtime (Tier 3). The framework also runs an autonomous crawl of any web app, generates its own test scenarios from the live DOM, compares screenshots pixel-by-pixel for visual regression, streams all of this to a real-time browser dashboard, and (as of Phase 6) runs its DB test suite against a real Postgres in CI with results that actually gate merges.
+Falcon is a Node.js test automation framework built on Playwright. Its differentiator is a genuine layered self-healing engine: when a selector fails, it retries with smart backoff (Tier 1), replays a persisted locator cache (Tier 2), scores live candidates against the element's stored signature using a deterministic local matcher with no model and no network (Tier 2.5, added in Phase 14), and finally calls an OpenAI LLM to infer a working alternative selector at runtime (Tier 3). The framework also runs an autonomous crawl of any web app, generates its own test scenarios from the live DOM, compares screenshots pixel-by-pixel for visual regression, streams all of this to a real-time browser dashboard, and (as of Phase 6) runs its DB test suite against a real Postgres in CI with results that actually gate merges.
 
 ---
 
@@ -23,7 +23,7 @@ Falcon is a Node.js test automation framework built on Playwright. Its different
 
 | Item | Value |
 |---|---|
-| `main` | Phases 1–13 merged. Phase 13 was merged through PR #27 and verified at `3465e8c`. |
+| `main` | Phases 1–13 merged and verified at `11657cb`. Phase 14 is implemented on `phase-14/evidence-based-locator-memory` and is open for review, not merged. |
 | Node version | 24 in CI (`node-version: "24"` in `ci.yml`, bumped in Phase 6). **Node 20.19+ required locally** — `package.json` declares `engines.node`, since `test:regression`/`test:coverage` use `node:test` flags that don't exist on older Node. |
 | Test target | https://www.saucedemo.com (UI/DB scenarios), https://jsonplaceholder.typicode.com (API scenarios), https://www.google.com (GoogleSearchTest — not run in CI, see §9), plus inline HTML fixtures for `tests/regression/*` suite (no real target site, deterministic) |
 
@@ -60,6 +60,28 @@ DASHBOARD_TOKEN=                      # required on POST /emit, GET /events, and
 DASHBOARD_ALLOWED_ORIGIN=             # socket.io CORS origin; defaults to the
                                        # dashboard's own localhost origin
 
+# Phase 14 — Tier 2.5 locator memory, both optional and blank by default.
+# Deliberately absent from src/config/testConfig.json: ConfigManager.get()
+# resolves this.config[key] ?? process.env[key], so a key present in that
+# file would permanently and silently beat the environment variable.
+FALCON_APPLICATION_ID=                # scopes locator identities to a chosen
+                                       # application name instead of the page
+                                       # origin; use when one app is served
+                                       # from several hostnames. Validated;
+                                       # falls back to the normalised origin.
+FALCON_LOCATOR_SALT=                  # HMAC salt for identity-bearing
+                                       # attribute values. Leave blank and a
+                                       # salt is generated and persisted in
+                                       # data/locator_memory.json's own
+                                       # header — i.e. in the same file as the
+                                       # hashes it protects, so low-entropy
+                                       # values stay brute-forceable offline
+                                       # by anyone who can read it. Setting
+                                       # this keeps the salt out of the file.
+                                       # Changing it invalidates every stored
+                                       # signature (they simply stop matching
+                                       # and fall through to Tier 3).
+
 # ── PostgreSQL — required only for DB tests ────────────────────────────────
 DB_HOST=                     # blank = tests/db/*.js skip cleanly (exit 0). See QA-hardening
 DB_PORT=5432                 # note below — do NOT put placeholder text like "your_db_host"
@@ -81,6 +103,25 @@ DB_SSL=false                 # set true only if your Postgres actually requires 
 ---
 
 ## 4. File Map (recent changes only — see `.env.example` and `src/` for the full picture)
+
+**Phase 14 — `src/core/locator/` (new subsystem). No OpenAI reference anywhere inside it.**
+- `LocatorIdentity.js` — builds and serialises the scoped identity (application, origin, pathname, action, original selector) via `JSON.stringify`, so no delimiter can be smuggled through a selector to collide two identities. Refuses `about:`, `data:` and `file:`, whose `.origin` is the literal string `"null"` and would otherwise share one scope. Never touches branch, credentials or query string.
+- `ElementSignature.js` — bounded capture. `capture(descriptor, { salt })` **throws without a salt**, deliberately: falling back to unsalted hashing or to plaintext would be a silent privacy regression. Identity-bearing attribute values become salted HMAC-SHA256 hashes from a fixed allow-list; accessible name and own text stay bounded plaintext behind redaction patterns because similarity cannot run on a hash. Descriptor keys are `accessibleName`, `ownText` and `boundingBoxBucket` — that last one a validated string such as `"top-right:small"`, **not** an object; passing the wrong shape silently yields null fields and makes a healthy matcher look broken.
+- `CandidateMatcher.js` — pure scoring. **Zero `require` statements**, enforced as a structural property so the verdict is reproducible from its inputs alone. Gates before scoring (action compatibility, state, contradictory role, conflicting stable identity), then a structural ambiguity rule, then the confidence floor and winner margin. `MIN_CONFIDENCE` 0.85 and `WINNER_MARGIN` 0.15 are **provisional and uncalibrated**.
+- `SelectorBuilder.js` — synthesises and validates the winner's concrete selector. Also zero requires.
+- `LocatorMemory.js` — the store behind `data/locator_memory.json`. Trust is `trusted | unproven | revoked`. `entries`, `legacy` and the rejection index are all `Map`-backed, so a key like `"__proto__"` cannot reach `Object.prototype`. Caps on load **and** on mutation, LRU by `lastSeen` with ascending-key tie-breaks for determinism.
+- `ElementFactsCollector.js` — the only DOM-facing module. One bounded `page.evaluate` over the interactive-element query Tier 3 already uses, capped at 200 candidates truncated in document order. Degrades quietly to "no facts" when `page.evaluate` is absent or throws — which happens for real during navigation races, observed repeatedly in `test:browser`.
+- `HealingBenchmark.js` — the mutation-corpus harness. Imports `CandidateMatcher`; **never imported by the runtime healing path**. `npm run healing:benchmark`.
+- `sharedLocatorMemory.js` — the process-wide instance both `AIHealer` and `Dashboard` default to. This exists because two instances over one file each held their own copy and never reloaded, so a single dashboard approval serialised its stale map and destroyed evidence written during the run. Injection is still supported for tests.
+
+**Phase 14 — modified existing files**
+- `src/core/AIHealer/AIHealer.js` — Tier 2.5 inserted between Tier 2 and Tier 3. With no trusted evidence for the identity it falls through immediately, performing **zero DOM query**, which is the dominant cost saver since most identities never reach this point. Tier 1 and Tier 2 successes record ground-truth evidence fire-and-forget, so a slow or failing capture cannot add latency or a new failure mode to Tier 1.
+- `src/core/AIHealer/HealingReport.js` — `_log()` now persists `status` and `reason` additively. They were being accepted and silently dropped, which left a refusal's reason absent from the very audit log that is supposed to show it.
+- `src/core/util/AtomicJsonStore.js` — `writeJsonAtomic` resolves `{ok, error?}` instead of `undefined` and still **never rejects by design**, so the serialised write chain cannot be poisoned. Adds `WriteFailureTracker`, a per-path failure ledger: a later successful write to a different path must not mask an earlier failure.
+- `src/core/AIHealer/LocatorStore.js` — migrated onto `AtomicJsonStore`. It had never used it: `_save()` called `fs.promises.writeFile` directly and swallowed errors in a bare catch, and the corrupt-file path emitted **nothing**. External API unchanged.
+- `src/core/util/OutputSafe.js` (new) — the terminal render boundary. `stripControlChars` for output genuinely allowed to span lines, `sanitizeField` for a value rendered as one line in a per-entry listing. The second exists because a raw newline in a page-derived field forges an extra listing row that reads as a legitimate trusted entry.
+- `scripts/healing/review.js`, `scripts/review/status.js`, `scripts/flakiness/review.js`, `utils/Logger.js` — every page-derived string printed to a terminal now goes through `sanitizeField`. `review.js` also gains `locator-list`, `locator-show`, `locator-approve`, `locator-reject`, `locator-rollback`.
+- `src/core/Dashboard.js`, `src/dashboard/index.html` — six `/locator/*` routes behind the same token gate and rate limiter as every other route, plus a panel for the same decisions. Hashed values are never rendered; the surfaces name *which* field matched.
 
 - `src/core/Dashboard.js` — **Phase 7**: `POST /emit`, `GET /events`, and the socket.io handshake all now require `DASHBOARD_TOKEN` when it's set (header `X-Dashboard-Token`, query param `?token=`, or socket `auth: { token }`). Unauthorized socket connections are rejected outright (`connect_error`), not silently allowed through. CORS restricted from `origin: "*"` to `DASHBOARD_ALLOWED_ORIGIN` (default: the dashboard's own localhost origin). When `DASHBOARD_TOKEN` is unset, behavior is unchanged from Phase 3–6, but `start()` now logs a loud warning. Also fixed: `this.port` wasn't updated after `listen(0)` (ephemeral port), so `dashboard.url` printed the wrong port when port 0 was used (only matters for the regression test, which uses ephemeral ports to avoid colliding with a real dashboard).
 - `src/core/Middleware.js` — **Phase 7**: `emit()`'s HTTP `POST /emit` fallback now sends `X-Dashboard-Token` when `DASHBOARD_TOKEN` is set, so a standalone test process (`DASHBOARD_URL=...`) can still report into a token-protected dashboard. No token configured → no header sent → unchanged from before.
