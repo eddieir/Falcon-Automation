@@ -404,16 +404,42 @@ function _gateReason(storedSignature, candidate, action) {
   // Conflicting stable identity: a strong identity attribute present on
   // both sides but with different values — this candidate claims to BE a
   // different, already-identified element.
+  //
+  // NARROWED (P14-23 round 2, owner-authorised): a differing stable key no
+  // longer disqualifies a candidate outright if some OTHER stable key
+  // present on both sides matches EXACTLY. Rationale: `data-testid`/
+  // `data-test` are authored deliberately to identify an element for
+  // testing, while `id` is routinely machine-generated and regenerated per
+  // build — so an exact authored-key match is stronger positive evidence
+  // than an `id` difference is negative evidence. This is a NARROWING, not
+  // a removal: if every stable key present on both sides differs (no exact
+  // match anywhere among them), the candidate is still excluded exactly as
+  // before. A single stable key present on both sides that differs, with no
+  // other stable key to vouch for the candidate, also still excludes it —
+  // unchanged from the prior behaviour.
+  //
+  // SAFETY NOTE: this does widen a real false-heal surface — two distinct
+  // elements that happen to share an authored `data-testid` (a duplicate
+  // test id, not uncommon in real apps: a repeated component, a list row, a
+  // modal duplicating a toolbar) no longer gate each other out purely on a
+  // differing `id`. Disambiguating that case is left entirely to ordinary
+  // scoring (MIN_CONFIDENCE / WINNER_MARGIN below) — this gate was never
+  // the only line of defence, and the margin/threshold gates still apply to
+  // every candidate that survives this one.
+  let stableConflict = false;
+  let stableExactMatch = false;
   for (const key of STABLE_IDENTITY_KEYS) {
     const storedValue = _safeGet(storedAttrs, key);
     const candidateValue = _safeGet(candidateAttrs, key);
-    if (
-      _isNonEmptyString(storedValue) &&
-      _isNonEmptyString(candidateValue) &&
-      storedValue !== candidateValue
-    ) {
-      return "conflicting_identity";
+    if (!_isNonEmptyString(storedValue) || !_isNonEmptyString(candidateValue)) continue;
+    if (storedValue === candidateValue) {
+      stableExactMatch = true;
+    } else {
+      stableConflict = true;
     }
+  }
+  if (stableConflict && !stableExactMatch) {
+    return "conflicting_identity";
   }
 
   // Selector validity/uniqueness, only if the caller supplied the facts —

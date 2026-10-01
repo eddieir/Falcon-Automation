@@ -591,7 +591,7 @@ test("P14-18: ElementSignature.capture() output plugs straight into CandidateMat
   assert.ok(result.winner.contributions.attribute > 0);
 });
 
-test("P14-18: a different underlying attribute value still produces a different hash and is correctly scored as non-matching", () => {
+test("P14-18/P14-23 round 2: a different underlying id hash no longer excludes the candidate when data-testid matches exactly, but weak remaining evidence still refuses it", () => {
   const salt = "matcher-integration-salt";
   const stored = ElementSignature.capture(
     { tagName: "button", attributes: { id: "submit-btn", "data-testid": "submit-order", type: "submit" } },
@@ -608,10 +608,101 @@ test("P14-18: a different underlying attribute value still produces a different 
     action: "click",
   });
 
-  // "id" is also a STABLE_IDENTITY_KEY: a hashed id that differs from the
-  // stored hashed id must still trip the conflicting-identity gate exactly
-  // as a differing plaintext id would have.
-  assert.equal(result.status, "no_candidate");
+  // Pre-P14-23-round-2 behaviour: "id" is a STABLE_IDENTITY_KEY, so a hashed
+  // id that differs from the stored hashed id used to trip the
+  // conflicting-identity gate unconditionally and the candidate never
+  // reached scoring at all (status "no_candidate", no winner).
+  //
+  // Post-narrowing: the gate no longer fires here because another stable
+  // key (data-testid) present on both sides matches EXACTLY (hash equality
+  // — see the HASH CONTRACT note at the top of this file; equality on
+  // hashes is exactly as meaningful as equality on plaintext for this
+  // purpose) — so the candidate now reaches scoring. It is correctly
+  // REFUSED anyway, not accepted: with only accessibleName/structural/text/
+  // boundingBox absent from both signatures, attribute evidence alone
+  // (2 of 3 present keys matching: data-testid and type, id conflicting)
+  // tops out at 0.267, well below MIN_CONFIDENCE (0.85). The narrowing
+  // changes WHETHER this candidate is scored, not whether weak evidence can
+  // authorise a repair.
+  assert.equal(result.status, "refused");
+  assert.equal(result.reason, "below_threshold");
+  assert.ok(result.winner, "the candidate must have reached scoring, unlike before the gate was narrowed");
+  assert.ok(result.winner.contributions.attribute > 0 && result.winner.contributions.attribute < 0.4, "attribute evidence must be partial, reflecting the conflicting id alongside the matching data-testid/type");
+});
+
+test("P14-23 round 2: a candidate with no OTHER matching stable key is still excluded by a conflicting id (gate narrowed, not removed)", () => {
+  const salt = "matcher-integration-salt";
+  const stored = ElementSignature.capture({ tagName: "button", attributes: { id: "submit-btn" } }, { salt });
+  const differentElement = ElementSignature.capture({ tagName: "button", attributes: { id: "totally-different" } }, { salt });
+
+  const result = CandidateMatcher.evaluate({
+    storedSignature: stored,
+    liveCandidates: [{ selector: "#a", signature: differentElement }],
+    action: "click",
+  });
+
+  assert.equal(result.status, "no_candidate", "with no other stable key to vouch for it, a conflicting id must still exclude the candidate entirely");
+});
+
+test("P14-23 round 2: when every stable key present on both sides conflicts, the candidate is still excluded", () => {
+  const salt = "matcher-integration-salt";
+  const stored = ElementSignature.capture({ tagName: "button", attributes: { id: "submit-btn", "data-testid": "submit-order" } }, { salt });
+  const differentElement = ElementSignature.capture({ tagName: "button", attributes: { id: "totally-different", "data-testid": "totally-different-too" } }, { salt });
+
+  const result = CandidateMatcher.evaluate({
+    storedSignature: stored,
+    liveCandidates: [{ selector: "#a", signature: differentElement }],
+    action: "click",
+  });
+
+  assert.equal(result.status, "no_candidate", "no exact stable-key match anywhere means the gate's original behaviour is unchanged");
+});
+
+test("P14-23 round 2: THE FALSE-HEAL VECTOR — duplicate data-testid across two distinct elements must never be accepted", () => {
+  // Two genuinely different elements share an authored data-testid (a
+  // duplicate test id — common in real apps: a repeated component, a list
+  // row, a modal duplicating a toolbar). Both differ from the stored id.
+  // Before the narrowing, a differing id excluded BOTH outright, so this
+  // scenario could never reach an accept. After narrowing, both candidates
+  // now reach scoring — the required outcome is a refusal (ambiguity/
+  // insufficient margin), NEVER an accept of either one, and above all
+  // never an accept of the wrong node.
+  const salt = "matcher-integration-salt";
+  // `type` is included (identical on all three) specifically to push the
+  // attribute dimension high enough that total evidence clears
+  // MIN_CONFIDENCE on its own — so this test proves the margin gate catches
+  // the ambiguity, not an accidental threshold shortfall.
+  const descriptorFor = (id) => ({
+    tagName: "button",
+    accessibleName: "Remove",
+    attributes: { id, "data-testid": "remove-btn", type: "button" },
+    structuralPath: ["ul", "li"],
+    ownText: "Remove",
+    boundingBoxBucket: "top-left:small",
+  });
+  const stored = ElementSignature.capture(descriptorFor("row-item-42"), { salt });
+  // The true ground-truth element, same row, regenerated id.
+  const trueMatch = ElementSignature.capture(descriptorFor("row-item-91"), { salt });
+  // A completely different row that happens to share the same data-testid.
+  const duplicateTestIdDecoy = ElementSignature.capture(descriptorFor("row-item-77"), { salt });
+
+  const result = CandidateMatcher.evaluate({
+    storedSignature: stored,
+    liveCandidates: [
+      { selector: "#true-match", signature: trueMatch },
+      { selector: "#decoy", signature: duplicateTestIdDecoy },
+    ],
+    action: "click",
+  });
+
+  // Both candidates clear MIN_CONFIDENCE individually (0.867 >= 0.85) —
+  // proving this isn't a threshold accident — but with both candidates
+  // indistinguishable on every signal this signature schema carries, the
+  // margin gate must refuse rather than let either one be guessed.
+  assert.ok(result.winner.total >= MIN_CONFIDENCE, "both candidates must individually clear the confidence bar for this to be a real margin test");
+  assert.notEqual(result.status, "accepted", "indistinguishable duplicate-data-testid candidates must never be accepted");
+  assert.equal(result.reason, "insufficient_margin");
+  assert.equal(result.margin, 0, "a perfect tie between the true match and the decoy must produce zero margin");
 });
 
 test("P14-18: comparing signatures hashed with two DIFFERENT salts silently scores as non-matching (documented caller obligation, not a matcher bug)", () => {

@@ -47,7 +47,7 @@ const TEST_SALT = "p14-benchmark-test-salt-v1";
 
 test("loadCorpus: the published manifest loads, is deterministically ordered, and covers every required class", async () => {
   const { fixtures } = await HealingBenchmark.loadCorpus();
-  assert.ok(fixtures.length >= 5, "at least one fixture per required mutation class");
+  assert.ok(fixtures.length >= 6, "at least one fixture per required mutation class");
 
   const classes = new Set(fixtures.map((f) => f.mutationClass));
   for (const required of [
@@ -56,6 +56,7 @@ test("loadCorpus: the published manifest loads, is deterministically ordered, an
     "controlled-text-change",
     "two-equally-plausible-targets",
     "contradictory-role-action",
+    "duplicate-test-id",
   ]) {
     assert.ok(classes.has(required), `manifest must include a fixture for mutation class "${required}"`);
   }
@@ -172,6 +173,42 @@ test("runBenchmark: both ambiguous/adversarial fixtures are refused, never accep
     assert.notEqual(row.outcome, "false_heal", `${row.id} must never be accepted at all`);
     assert.equal(row.outcome, "refused", `${row.id} (ambiguous/adversarial) must be refused`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// P14-23 round 2: the conflicting-stable-identity gate was narrowed (an
+// exact data-testid/data-test match now outweighs a differing id). These
+// two tests pin down the before/after of that change against the real
+// corpus, end to end through a real browser — not just at the
+// CandidateMatcher unit level (see p14-matcher.check.cjs for that).
+// ---------------------------------------------------------------------------
+
+test("P14-23 round 2: id-only-change-f1 now correctly heals instead of refusing (gate narrowing changed this outcome)", async () => {
+  const report = await getReport();
+  const row = report.perCase.find((r) => r.id === "id-only-change-f1");
+  assert.ok(row, "id-only-change-f1 must still be in the corpus");
+  // BEFORE round 2: the regenerated id (present on both sides, differing)
+  // unconditionally excluded the real button, and the matcher fell back to
+  // an unrelated decoy (a form label) scoring below MIN_CONFIDENCE — status
+  // "refused"/"below_threshold". AFTER: the matching data-testid vouches
+  // for the candidate despite the differing id, attribute evidence is
+  // strong enough to clear both the confidence and margin bars, and the
+  // winner resolves to the TRUE ground-truth node — a CORRECT heal, not
+  // merely an accept.
+  assert.equal(row.matcherStatus, "accepted");
+  assert.equal(row.outcome, "correct_heal", "the healed candidate must resolve to the ground-truth node, not merely be accepted");
+});
+
+test("P14-23 round 2: THE FALSE-HEAL VECTOR — duplicate-test-id-f1 (two distinct elements sharing a data-testid) is refused, never accepted", async () => {
+  const report = await getReport();
+  const row = report.perCase.find((r) => r.id === "duplicate-test-id-f1");
+  assert.ok(row, "the duplicate-test-id adversarial fixture must be present in the corpus");
+  assert.equal(row.mustRefuse, true);
+  assert.notEqual(row.matcherStatus, "accepted", "narrowing the gate must not let a duplicated data-testid resolve ambiguity by accident");
+  assert.equal(row.outcome, "refused");
+  // The false-heal rate across the WHOLE corpus, reported prominently: the
+  // narrowing did not introduce any false heal in this published run.
+  assert.equal(report.counts.false_heal, 0, "if this ever goes nonzero, report it — do not adjust thresholds to force it back to zero");
 });
 
 test("runBenchmark: correctness is decided by ground-truth DOM identity, never by action success alone", async () => {
