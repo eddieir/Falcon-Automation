@@ -34,6 +34,7 @@ const ConfigManager = require(path.join("..", "..", "src", "core", "ConfigManage
 const { validateIntSetting } = require(path.join("..", "..", "src", "core", "util", "ConfigValidation"));
 const HealingTrust = require(path.join("..", "..", "src", "core", "AIHealer", "HealingTrust"));
 const FlakinessTracker = require(path.join("..", "..", "src", "core", "FlakinessTracker"));
+const { sanitizeField } = require(path.join("..", "..", "src", "core", "util", "OutputSafe"));
 
 const HEALING_PENDING_STALE_DAYS_DEFAULT = 14;
 const FLAKY_UNREVIEWED_STALE_DAYS_DEFAULT = 14;
@@ -53,14 +54,14 @@ function printHealingStale(stale, now) {
     }
     for (const entry of stale) {
         const age = ageDays(entry.firstSeen, now);
-        console.log(`  ${entry.original}`);
-        console.log(`    -> ${entry.suggested}`);
+        console.log(`  ${sanitizeField(entry.original)}`);
+        console.log(`    -> ${sanitizeField(entry.suggested)}`);
         console.log(`    age: ${age === null ? "unknown" : `${age} day(s)`}`);
         console.log(`    occurrences: ${entry.occurrences}`);
         console.log(`    Tier 3 invocations: ${entry.tier3Invocations ?? 0}`);
         const previouslyRejected = entry.previouslyRejected;
         if (previouslyRejected && previouslyRejected.count > 0) {
-            const lastBy = previouslyRejected.lastRejectedBy ?? "(unknown)";
+            const lastBy = sanitizeField(previouslyRejected.lastRejectedBy ?? "(unknown)");
             console.log(`    ⚠ previously rejected ${previouslyRejected.count} time(s), last by ${lastBy} at ${previouslyRejected.lastRejectedAt}`);
         }
     }
@@ -73,7 +74,7 @@ function printFlakyStale(stale, unknownAge, now) {
     } else {
         for (const entry of stale) {
             const age = ageDays(entry.flakySince, now);
-            console.log(`  ${entry.key}`);
+            console.log(`  ${sanitizeField(entry.key)}`);
             console.log(`    age: ${age === null ? "unknown" : `${age} day(s)`}`);
         }
     }
@@ -82,7 +83,7 @@ function printFlakyStale(stale, unknownAge, now) {
         console.log("  (none)");
     } else {
         for (const entry of unknownAge) {
-            console.log(`  ${entry.key} (unknown-age, excluded from staleness)`);
+            console.log(`  ${sanitizeField(entry.key)} (unknown-age, excluded from staleness)`);
         }
     }
 }
@@ -94,8 +95,8 @@ function printRehab(candidates) {
         return;
     }
     for (const candidate of candidates) {
-        console.log(`  ${candidate.key}`);
-        console.log(`    ${candidate.reason}`);
+        console.log(`  ${sanitizeField(candidate.key)}`);
+        console.log(`    ${sanitizeField(candidate.reason)}`);
     }
 }
 

@@ -12,6 +12,7 @@
  */
 const path = require("path");
 const HealingTrust = require(path.join("..", "..", "src", "core", "AIHealer", "HealingTrust"));
+const { sanitizeField } = require(path.join("..", "..", "src", "core", "util", "OutputSafe"));
 
 function printList(entries) {
     if (entries.length === 0) {
@@ -20,16 +21,16 @@ function printList(entries) {
     }
     console.log(`${entries.length} healing fix(es) awaiting review:\n`);
     for (const entry of entries) {
-        console.log(`  ${entry.original}`);
-        console.log(`    -> ${entry.suggested}`);
-        console.log(`    description: ${entry.description || "(none)"}`);
+        console.log(`  ${sanitizeField(entry.original)}`);
+        console.log(`    -> ${sanitizeField(entry.suggested)}`);
+        console.log(`    description: ${sanitizeField(entry.description || "(none)")}`);
         console.log(`    seen ${entry.occurrences}x, last ${entry.lastSeen}`);
         console.log(`    Tier 3 invocations: ${entry.tier3Invocations ?? 0}`);
         // A legacy entry recorded before Phase 13 has no `previouslyRejected`
         // field at all — treat that the same as count 0, never crash on it.
         const previouslyRejected = entry.previouslyRejected;
         if (previouslyRejected && previouslyRejected.count > 0) {
-            const lastBy = previouslyRejected.lastRejectedBy ?? "(unknown)";
+            const lastBy = sanitizeField(previouslyRejected.lastRejectedBy ?? "(unknown)");
             console.log(`    ⚠ previously rejected ${previouslyRejected.count} time(s), last by ${lastBy} at ${previouslyRejected.lastRejectedAt}`);
         }
         console.log("");
@@ -58,7 +59,7 @@ async function main() {
                 process.exitCode = 1;
                 return;
             }
-            console.log(`Approved "${arg}" -> "${decision.suggested}". LocatorStore will use it for Tier 2 from now on.`);
+            console.log(`Approved "${sanitizeField(arg)}" -> "${sanitizeField(decision.suggested)}". LocatorStore will use it for Tier 2 from now on.`);
             return;
         }
 
@@ -75,7 +76,7 @@ async function main() {
                 process.exitCode = 1;
                 return;
             }
-            console.log(`Rejected "${arg}" -> "${decision.suggested}". Discarded; not written to LocatorStore.`);
+            console.log(`Rejected "${sanitizeField(arg)}" -> "${sanitizeField(decision.suggested)}". Discarded; not written to LocatorStore.`);
             return;
         }
 
