@@ -12,7 +12,7 @@
  *
  * evaluate({ storedSignature, liveCandidates, action }, config) -> {
  *   status: "accepted" | "refused" | "no_candidate",
- *   reason?: "below_threshold" | "insufficient_margin" | "action_incompatible" | "weak_evidence_only",
+ *   reason?: "below_threshold" | "insufficient_margin" | "action_incompatible" | "weak_evidence_only" | "ambiguous_stable_identity",
  *   winner?: { selector, contributions, total },
  *   runnerUp?: { selector, contributions, total } | null,
  *   margin: number,
@@ -453,6 +453,64 @@ function _gateReason(storedSignature, candidate, action) {
   return null;
 }
 
+/**
+ * Structural, score/threshold-INDEPENDENT ambiguity check (P14-23 round 3).
+ *
+ * BACKGROUND: round 2 narrowed the conflicting-stable-identity gate on the
+ * reasoning that an exact authored-key match (`data-testid`/`data-test`)
+ * vouches for identity strongly enough to outweigh a differing, routinely
+ * regenerated `id`. A security review falsified the safety argument that
+ * was resting on that narrowing alone: varying the CORRECT element's own
+ * score downward (an ordinary copy change, not a contrived tie) let a
+ * duplicate-`data-testid` decoy win outright at high confidence — margin
+ * and threshold gates do not help when the wrong candidate scores higher
+ * than the right one, only when they score close to each other.
+ *
+ * THE FIX: the exact reasoning that licensed the narrowing is precisely
+ * what must trigger a refusal here. An exact authored-key match vouches for
+ * identity ONLY when it is unique. If two or more ELIGIBLE candidates (i.e.
+ * already past every other gate) carry the SAME value for a stable key,
+ * and that value also matches the stored evidence's value for that key,
+ * the key cannot discriminate between them — neither candidate's match on
+ * that key is evidence of being the real element rather than a duplicate,
+ * no matter how every other dimension happens to score. This is checked
+ * BEFORE the floor/threshold/margin cascade and does not read
+ * `MIN_CONFIDENCE`/`WINNER_MARGIN` or any per-candidate score at all —
+ * deliberately, so it can never be recalibrated away by a future change to
+ * those provisional constants (EP-3 §11 / EP-5 §5 are explicit that those
+ * are starting hypotheses, not safety boundaries).
+ *
+ * Returns the first colliding stable key (for the `reason`/explainability
+ * surfaces), or `null` if no stable key is ambiguous. A pure multiset count
+ * per key — iteration order of `candidates` never affects the result, only
+ * which VALUES repeat, so the same candidate set in a different order
+ * always produces the same verdict (AC-68's determinism extended to this
+ * gate).
+ *
+ * Does NOT regress the round-2 single-candidate case: with only one
+ * candidate matching a stored stable-key value, the per-key match count
+ * never reaches 2, so this never fires for an ordinary regenerated-`id`
+ * heal where exactly one live candidate carries the matching `data-testid`.
+ */
+function _ambiguousStableIdentityKey(storedSignature, candidates) {
+  const storedAttrs = _attributesOf(storedSignature);
+  for (const key of STABLE_IDENTITY_KEYS) {
+    const storedValue = _safeGet(storedAttrs, key);
+    if (!_isNonEmptyString(storedValue)) continue;
+    let matchingCount = 0;
+    for (const candidate of candidates) {
+      const candidateAttrs = _attributesOf(_safeGet(candidate, "signature"));
+      const candidateValue = _safeGet(candidateAttrs, key);
+      if (_isNonEmptyString(candidateValue) && candidateValue === storedValue) {
+        matchingCount++;
+        if (matchingCount >= 2) break;
+      }
+    }
+    if (matchingCount >= 2) return key;
+  }
+  return null;
+}
+
 function _alternativeEntry(selector, scored, maxSelectorLen) {
   return {
     selector: _boundString(typeof selector === "string" ? selector : "", maxSelectorLen),
@@ -546,6 +604,25 @@ function evaluate(input, config = {}) {
   const runnerUp = runnerUpEntry
     ? _alternativeEntry(runnerUpEntry.selector, runnerUpEntry.scored, cfg.MAX_SELECTOR_LENGTH)
     : null;
+
+  // Structural ambiguity (P14-23 round 3) is checked FIRST, ahead of the
+  // floor/threshold/margin cascade below and independent of it — see
+  // `_ambiguousStableIdentityKey`'s header comment. This is what stops a
+  // duplicate-`data-testid` decoy from ever outscoring the real element
+  // into an outright accept; the margin gate further down only catches
+  // candidates that happen to score close together, which a plain copy
+  // change on the correct element is not guaranteed to produce.
+  const ambiguousKey = _ambiguousStableIdentityKey(storedSignature, eligible);
+  if (ambiguousKey) {
+    return {
+      status: "refused",
+      reason: "ambiguous_stable_identity",
+      winner,
+      runnerUp,
+      margin,
+      alternativesConsidered,
+    };
+  }
 
   if (winnerEntry.scored.contributions.floorApplied) {
     return {

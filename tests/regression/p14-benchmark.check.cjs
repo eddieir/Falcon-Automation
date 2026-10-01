@@ -47,7 +47,7 @@ const TEST_SALT = "p14-benchmark-test-salt-v1";
 
 test("loadCorpus: the published manifest loads, is deterministically ordered, and covers every required class", async () => {
   const { fixtures } = await HealingBenchmark.loadCorpus();
-  assert.ok(fixtures.length >= 6, "at least one fixture per required mutation class");
+  assert.ok(fixtures.length >= 7, "at least one fixture per required mutation class");
 
   const classes = new Set(fixtures.map((f) => f.mutationClass));
   for (const required of [
@@ -57,6 +57,7 @@ test("loadCorpus: the published manifest loads, is deterministically ordered, an
     "two-equally-plausible-targets",
     "contradictory-role-action",
     "duplicate-test-id",
+    "duplicate-test-id-asymmetric",
   ]) {
     assert.ok(classes.has(required), `manifest must include a fixture for mutation class "${required}"`);
   }
@@ -199,15 +200,43 @@ test("P14-23 round 2: id-only-change-f1 now correctly heals instead of refusing 
   assert.equal(row.outcome, "correct_heal", "the healed candidate must resolve to the ground-truth node, not merely be accepted");
 });
 
-test("P14-23 round 2: THE FALSE-HEAL VECTOR — duplicate-test-id-f1 (two distinct elements sharing a data-testid) is refused, never accepted", async () => {
+test("P14-23 round 2/3: THE FALSE-HEAL VECTOR (exact tie) — duplicate-test-id-f1 (two distinct elements sharing a data-testid) is refused, never accepted", async () => {
   const report = await getReport();
   const row = report.perCase.find((r) => r.id === "duplicate-test-id-f1");
   assert.ok(row, "the duplicate-test-id adversarial fixture must be present in the corpus");
   assert.equal(row.mustRefuse, true);
   assert.notEqual(row.matcherStatus, "accepted", "narrowing the gate must not let a duplicated data-testid resolve ambiguity by accident");
   assert.equal(row.outcome, "refused");
-  // The false-heal rate across the WHOLE corpus, reported prominently: the
-  // narrowing did not introduce any false heal in this published run.
+  // Round 3: this exact-tie case is now caught by the dedicated structural
+  // ambiguity gate, named by its own reason — not folded into
+  // insufficient_margin.
+  assert.equal(row.refusalReason, "ambiguous_stable_identity");
+});
+
+test("P14-23 round 3: THE FALSE-HEAL VECTOR (asymmetric, the real falsification case) — duplicate-test-id-asymmetric-f1 is refused even though the decoy genuinely outscores the ground truth", async () => {
+  const report = await getReport();
+  const row = report.perCase.find((r) => r.id === "duplicate-test-id-asymmetric-f1");
+  assert.ok(row, "the asymmetric duplicate-test-id fixture must be present in the corpus");
+  assert.equal(row.mustRefuse, true);
+  assert.notEqual(row.matcherStatus, "accepted", "a genuinely higher-scoring duplicate-data-testid decoy must still never be accepted");
+  assert.equal(row.outcome, "refused");
+  assert.equal(row.refusalReason, "ambiguous_stable_identity");
+
+  // Prove this is the HARDER, non-degenerate case: the two candidates must
+  // NOT be tied — the ground-truth row's own evidence has genuinely
+  // drifted, which is what defeated round 2's margin-only defence in the
+  // first place (a tie is caught by insufficient_margin regardless; an
+  // outright higher-scoring decoy is not, unless something else catches it).
+  assert.ok(row.winnerContributions, "a winner must still have been computed for explainability even though it is refused");
+  assert.ok(row.runnerUpContributions, "two candidates must have been scored");
+  const totals = row.alternativesConsidered.map((a) => a.total);
+  assert.equal(new Set(totals).size, totals.length, "the two candidates' totals must differ — this is not a tie, unlike duplicate-test-id-f1");
+});
+
+test("P14-23 round 2/3: the false-heal rate across the whole corpus is reported prominently", async () => {
+  const report = await getReport();
+  // The narrowing (round 2) plus the structural ambiguity gate (round 3)
+  // together must not introduce any false heal in this published run.
   assert.equal(report.counts.false_heal, 0, "if this ever goes nonzero, report it — do not adjust thresholds to force it back to zero");
 });
 
@@ -279,9 +308,17 @@ test("runBenchmark: identical rankings and full explanations across two separate
       winnerSelector: row.winnerSelector,
       outcome: row.outcome,
       refusalReason: row.refusalReason,
+      // Full per-dimension explanations, not just the verdict — these are
+      // now persisted on every row (P14-23 round 3 addendum) specifically
+      // so the published artifact is self-sufficient evidence for this
+      // exact property, rather than requiring a separate direct
+      // CandidateMatcher comparison to verify it.
+      winnerContributions: row.winnerContributions,
+      runnerUpContributions: row.runnerUpContributions,
+      alternativesConsidered: row.alternativesConsidered,
     }));
 
-  assert.deepEqual(strip(report1), strip(report2), "two separate process invocations over the same corpus must produce identical rankings and explanations");
+  assert.deepEqual(strip(report1), strip(report2), "two separate process invocations over the same corpus must produce identical rankings and FULL explanations (contributions included)");
   assert.deepEqual(report1.counts, report2.counts);
   assert.deepEqual(report1.rates, report2.rates);
   assert.equal(report1.partitionValid, true);

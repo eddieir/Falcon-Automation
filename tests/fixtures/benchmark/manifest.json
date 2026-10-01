@@ -56,6 +56,15 @@
       "description": "The P14-23 round 2 false-heal vector: narrowing the conflicting-stable-identity gate (an exact data-testid match now outweighs a differing id) means a second, genuinely different row with the same duplicated data-testid must still never be accepted over the real target."
     },
     {
+      "id": "duplicate-test-id-asymmetric-f1",
+      "mutationClass": "duplicate-test-id-asymmetric",
+      "action": "click",
+      "groundTruthId": "duplicate-test-id-asymmetric-f1",
+      "dir": "duplicate-test-id-asymmetric/f1",
+      "mustRefuse": true,
+      "description": "The realistic shape of the P14-23 round 3 false-heal vector, not the degenerate exact-tie: the ground-truth row's own copy and structure genuinely drift (wrapped, reworded) while an unrelated duplicate row keeps the SAME data-testid and still matches the OLD evidence byte-for-byte — so the decoy would outscore the real element outright without the structural ambiguity gate. Must refuse, never accept the higher-scoring decoy."
+    },
+    {
       "id": "element-removed-f1",
       "mutationClass": "element-removed",
       "action": "click",
