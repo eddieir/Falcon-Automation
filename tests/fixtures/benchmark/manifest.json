@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "id": "id-only-change-f1",
+      "mutationClass": "id-only-change",
+      "action": "click",
+      "groundTruthId": "id-only-change-f1",
+      "dir": "id-only-change/f1",
+      "mustRefuse": false,
+      "description": "The submit button's id attribute churns between deploys; data-testid, name, type, accessible name, structure, and text all stay the same."
+    },
+    {
+      "id": "wrapper-insertion-f1",
+      "mutationClass": "wrapper-insertion",
+      "action": "click",
+      "groundTruthId": "wrapper-insertion-f1",
+      "dir": "wrapper-insertion/f1",
+      "mustRefuse": false,
+      "description": "The checkout button gains two new wrapping div layers (a sticky-footer redesign) while every attribute and the visible text stay identical."
+    },
+    {
+      "id": "controlled-text-change-f1",
+      "mutationClass": "controlled-text-change",
+      "action": "click",
+      "groundTruthId": "controlled-text-change-f1",
+      "dir": "controlled-text-change/f1",
+      "mustRefuse": false,
+      "description": "Button copy changes from Add to Cart to Add to Bag; id, data-testid, and structure stay identical."
+    },
+    {
+      "id": "two-equally-plausible-targets-f1",
+      "mutationClass": "two-equally-plausible-targets",
+      "action": "click",
+      "groundTruthId": "two-equally-plausible-targets-f1",
+      "dir": "two-equally-plausible-targets/f1",
+      "mustRefuse": true,
+      "description": "A second cart row with an identical Remove button (no distinguishing attributes) appears alongside the original; nothing in the candidate set can disambiguate them, so Tier 2.5 must refuse rather than guess."
+    },
+    {
+      "id": "contradictory-role-action-f1",
+      "mutationClass": "contradictory-role-action",
+      "action": "click",
+      "groundTruthId": "contradictory-role-action-f1",
+      "dir": "contradictory-role-action/f1",
+      "mustRefuse": true,
+      "description": "The archive control keeps its data-testid but is re-rendered as a link with role=link where the stored evidence recorded role=button; the attribute match alone must not be enough to accept."
+    },
+    {
+      "id": "element-removed-f1",
+      "mutationClass": "element-removed",
+      "action": "click",
+      "groundTruthId": "element-removed-f1",
+      "dir": "element-removed/f1",
+      "mustRefuse": false,
+      "description": "The dismissible promo banner (and its close button) is removed from the page entirely; no interactive elements remain for collection to find."
+    }
+  ]
+}
