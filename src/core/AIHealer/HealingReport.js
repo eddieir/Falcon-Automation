@@ -48,12 +48,21 @@ class HealingReport {
      * @param {string}      [opts.trust]     - "pending" when a Tier 3 fix is awaiting review (Phase 8)
      * @param {string}      [opts.action]    - "click" | "type" | "select" (Phase 11) — which
      *                                          interaction was healed
+     * @param {string}      [opts.status]    - Phase 14 Tier 2.5 outcome, e.g. "no_candidate" |
+     *                                          "refused" | "accepted" | "failed"
+     * @param {string}      [opts.reason]    - Phase 14 Tier 2.5 refusal reason (e.g.
+     *                                          "below_threshold", "insufficient_margin").
+     *                                          Page-influenced text in some paths — stored
+     *                                          verbatim here (the audit record holds what
+     *                                          actually happened); sanitise only at a render
+     *                                          boundary (OutputSafe.sanitizeField for the CLI,
+     *                                          escapeHtml for the dashboard UI), never at capture.
      */
     static log(opts = {}) {
         HealingReport._instance._log(opts);
     }
 
-    _log({ original, resolved, tier, description = "", error = null, trust = null, action = null }) {
+    _log({ original, resolved, tier, description = "", error = null, trust = null, action = null, status = null, reason = null }) {
         const entry = {
             timestamp:   new Date().toISOString(),
             original,
@@ -63,6 +72,8 @@ class HealingReport {
             ...(error ? { error } : {}),
             ...(trust ? { trust } : {}),
             ...(action ? { action } : {}),
+            ...(status ? { status } : {}),
+            ...(reason ? { reason } : {}),
         };
 
         this.logs.push(entry);
