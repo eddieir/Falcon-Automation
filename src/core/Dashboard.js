@@ -6,6 +6,7 @@ const Logger = require("../../utils/Logger");
 const HealingTrust  = require("./AIHealer/HealingTrust");
 const HealingReport = require("./AIHealer/HealingReport");
 const FlakinessTracker = require("./FlakinessTracker");
+const SharedLocatorMemory = require("./locator/sharedLocatorMemory");
 const ConfigManager = require("./ConfigManager");
 const { validateIntSetting } = require("./util/ConfigValidation");
 
@@ -59,7 +60,7 @@ class Dashboard {
      * @param {Object} opts
      * @param {number} [opts.port=3000] - HTTP port to listen on
      */
-    constructor({ port = 3000 } = {}) {
+    constructor({ port = 3000, locatorMemory } = {}) {
         this.port    = port;
         this._events = []; // full history so late-joining tabs get replay
         this._io     = null;
@@ -67,6 +68,17 @@ class Dashboard {
         this._token  = process.env.DASHBOARD_TOKEN || null;
         this._socketConnectAttempts = new Map(); // ip → recent connection-attempt timestamps
         this._sweep  = Dashboard._emptySweep();
+        // Phase 14 — Tier 2.5 scoped locator evidence. Defaults to the SAME
+        // process-wide instance AIHealer defaults to (`sharedLocatorMemory
+        // .shared()`), not a private per-Dashboard copy: `falcon.js` runs the
+        // dashboard and the test run in the same process, so two independent
+        // `new LocatorMemory()` defaults here and in AIHealer silently raced
+        // two in-memory copies of one on-disk file — a dashboard approval
+        // could serialise a stale map over the file and destroy evidence the
+        // run had just recorded through the other copy. `locatorMemory` is
+        // still injectable (every test does this, for isolation against a
+        // temp path, instead of relying on this constructor default).
+        this._locatorMemory = locatorMemory !== undefined ? locatorMemory : SharedLocatorMemory.shared();
     }
 
     /**
@@ -481,6 +493,84 @@ class Dashboard {
                 return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
             }
             res.json(this.coverageSnapshot());
+        });
+
+        // Phase 14 — Tier 2.5 scoped locator evidence review surfaces, kept
+        // in their own `/locator/...` namespace rather than folded into
+        // `/healing/...` above: Tier 2.5 entries are keyed by SCOPED
+        // identity (application/origin/pathname/action/selector) and carry
+        // their own three-state trust (trusted/unproven/revoked), which is
+        // a structurally different thing from Tier 3's flat
+        // original->suggested pending list. Keeping the namespace separate
+        // means a reviewer can never mistake one listing for the other.
+        // Same token gate and rate limiter as every route above: these
+        // read and act on what the framework will trust as a locator
+        // repair, which is exactly the class of state this dashboard's
+        // auth exists to protect.
+        app.get("/locator/entries", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            // Keyed object (not an array) — mirrors LocatorMemory.list()
+            // directly so a key an operator picks from this listing can be
+            // passed straight back to approve/reject/rollback below.
+            res.json(this._locatorMemory.list());
+        });
+
+        app.get("/locator/legacy", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            // Read-only by design: a legacy row is quarantined because it
+            // failed basic shape/schema validation on load, is never read by
+            // the matcher, and the only route that ever touches it again is
+            // the explicit delete below — nothing here ever promotes one
+            // back into `entries`.
+            res.json(this._locatorMemory.listLegacy());
+        });
+
+        app.post("/locator/approve", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            const { key } = req.body || {};
+            const entry = typeof key === "string" ? this._locatorMemory.approve(key, { approvedBy: "dashboard" }) : null;
+            if (!entry) {
+                return res.status(404).json({ error: "No pending candidate for that identity (missing, or the identity is revoked)." });
+            }
+            res.json(entry);
+        });
+
+        app.post("/locator/reject", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            const { key } = req.body || {};
+            const entry = typeof key === "string" ? this._locatorMemory.reject(key, { rejectedBy: "dashboard" }) : null;
+            if (!entry) return res.status(404).json({ error: "No pending candidate for that identity." });
+            res.json(entry);
+        });
+
+        app.post("/locator/rollback", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            const { key, note } = req.body || {};
+            const entry = typeof key === "string"
+                ? this._locatorMemory.rollback(key, { actor: "dashboard", note: typeof note === "string" ? note : undefined })
+                : null;
+            if (!entry) return res.status(404).json({ error: "No tracked identity for that key." });
+            res.json(entry);
+        });
+
+        app.post("/locator/legacy/delete", authLimiter, (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            const { id } = req.body || {};
+            const deleted = typeof id === "string" ? this._locatorMemory.deleteLegacy(id, { actor: "dashboard" }) : false;
+            if (!deleted) return res.status(404).json({ error: "No legacy row for that id." });
+            res.json({ deleted: true });
         });
 
         const allowedOrigin = process.env.DASHBOARD_ALLOWED_ORIGIN || `http://localhost:${this.port}`;
