@@ -97,7 +97,7 @@ const CSS_IDENT_START_RE = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
 
 // Control characters and CSS string-context breakers. NUL and other control
 // bytes are rejected outright rather than escaped.
-const UNSAFE_CHAR_RE = /[\x00-\x1f]/;
+const UNSAFE_CHAR_RE = /[\x00-\x1f\x7f]/;
 
 // Values shaped like secrets: long base64/hex blobs, JWTs, and common
 // vendor key prefixes. Conservative — false positives just skip a tier.

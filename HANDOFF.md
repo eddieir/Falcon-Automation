@@ -168,8 +168,8 @@ node tests/db/OrderDBTest.js
 
 npm run test:unit                 # 3 fast regression checks, no browser, no DB
 
-npm run test:regression           # 183 node:test cases (needs Node 20.19+)
-npm run test:browser              # 30 Playwright specs against inline fixtures
+npm run test:regression           # 850 node:test cases (needs Node 20.19+)
+npm run test:browser              # 43 Playwright specs against inline fixtures
 npm run test:coverage             # same as test:regression, with coverage
 
 node falcon.js                    # autonomous pipeline, live dashboard at :3000
@@ -279,8 +279,8 @@ Runs on push/PR to `main`, `New_era_Falcon`, `feat/**`. **Two independent jobs s
 
 **`regression` job** (~1 min, no Postgres needed):
 1. Checkout → `actions/setup-node@v4` (Node 24, npm cache) → `npm ci` → `npx playwright install --with-deps chromium`
-2. `npm run test:coverage` — 183 `node:test` cases, `tests/regression/*.check.cjs`
-3. `npm run test:browser` — 30 Playwright specs, `tests/regression/browser.spec.js`, against inline HTML fixtures (no real target site)
+2. `npm run test:coverage` — 850 `node:test` cases across 25 `tests/regression/*.check.cjs` files
+3. `npm run test:browser` — 43 Playwright specs, `tests/regression/browser.spec.js`, against inline HTML fixtures (no real target site)
 4. Upload `reports/` as the `regression-reports` artifact
 
 **`test` job** (~1.5 min, the original scenario/E2E pipeline):
