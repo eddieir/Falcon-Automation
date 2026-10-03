@@ -47,7 +47,7 @@ const TEST_SALT = "p14-benchmark-test-salt-v1";
 
 test("loadCorpus: the published manifest loads, is deterministically ordered, and covers every required class", async () => {
   const { fixtures } = await HealingBenchmark.loadCorpus();
-  assert.ok(fixtures.length >= 7, "at least one fixture per required mutation class");
+  assert.ok(fixtures.length >= 8, "at least one fixture per required mutation class");
 
   const classes = new Set(fixtures.map((f) => f.mutationClass));
   for (const required of [
@@ -58,6 +58,7 @@ test("loadCorpus: the published manifest loads, is deterministically ordered, an
     "contradictory-role-action",
     "duplicate-test-id",
     "duplicate-test-id-asymmetric",
+    "stable-key-absent",
   ]) {
     assert.ok(classes.has(required), `manifest must include a fixture for mutation class "${required}"`);
   }
@@ -176,6 +177,22 @@ test("runBenchmark: both ambiguous/adversarial fixtures are refused, never accep
   }
 });
 
+test("P14-23 round 4: two-equally-plausible-targets-f1 now refuses via insufficient_identity_evidence, not insufficient_margin (authorised reason change)", async () => {
+  const report = await getReport();
+  const row = report.perCase.find((r) => r.id === "two-equally-plausible-targets-f1");
+  assert.ok(row, "two-equally-plausible-targets-f1 must still be in the corpus");
+  assert.equal(row.outcome, "refused");
+  // This fixture's target is identified only by aria-label — no id,
+  // data-testid, or data-test on either side. Before round 4, that reached
+  // scoring and refused on insufficient_margin (margin === 0, a genuine
+  // tie). Round 4's precondition now refuses it BEFORE scoring, for a more
+  // fundamental reason: stored never carried any stable-key evidence to
+  // begin with. The headline rate for this fixture is unchanged (still
+  // refused, still counted once) — only which specific reason is reported.
+  assert.equal(row.refusalReason, "insufficient_identity_evidence");
+  assert.equal(row.matcherStatus, "refused");
+});
+
 // ---------------------------------------------------------------------------
 // P14-23 round 2: the conflicting-stable-identity gate was narrowed (an
 // exact data-testid/data-test match now outweighs a differing id). These
@@ -233,7 +250,22 @@ test("P14-23 round 3: THE FALSE-HEAL VECTOR (asymmetric, the real falsification 
   assert.equal(new Set(totals).size, totals.length, "the two candidates' totals must differ — this is not a tie, unlike duplicate-test-id-f1");
 });
 
-test("P14-23 round 2/3: the false-heal rate across the whole corpus is reported prominently", async () => {
+test("P14-23 round 4: THE FALSIFICATION CASE — stable-key-absent-f1 (no id/data-testid/data-test anywhere) is refused via insufficient_identity_evidence, never accepted", async () => {
+  const report = await getReport();
+  const row = report.perCase.find((r) => r.id === "stable-key-absent-f1");
+  assert.ok(row, "the stable-key-absent fixture must be present in the corpus");
+  assert.equal(row.mustRefuse, true);
+  assert.notEqual(row.matcherStatus, "accepted", "an element identified only by name/type must never let a stale duplicate be accepted");
+  assert.equal(row.outcome, "refused");
+  assert.equal(row.refusalReason, "insufficient_identity_evidence");
+  // This is a precondition on stored alone — no scoring occurs, unlike
+  // every other refusal reason in this corpus.
+  assert.equal(row.winnerSelector, null);
+  assert.equal(row.winnerContributions, null);
+  assert.equal(row.margin, 0);
+});
+
+test("P14-23 round 2/3/4: the false-heal rate across the whole corpus is reported prominently", async () => {
   const report = await getReport();
   // The narrowing (round 2) plus the structural ambiguity gate (round 3)
   // together must not introduce any false heal in this published run.

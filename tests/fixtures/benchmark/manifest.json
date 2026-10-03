@@ -65,6 +65,15 @@
       "description": "The realistic shape of the P14-23 round 3 false-heal vector, not the degenerate exact-tie: the ground-truth row's own copy and structure genuinely drift (wrapped, reworded) while an unrelated duplicate row keeps the SAME data-testid and still matches the OLD evidence byte-for-byte — so the decoy would outscore the real element outright without the structural ambiguity gate. Must refuse, never accept the higher-scoring decoy."
     },
     {
+      "id": "stable-key-absent-f1",
+      "mutationClass": "stable-key-absent",
+      "action": "type",
+      "groundTruthId": "stable-key-absent-f1",
+      "dir": "stable-key-absent/f1",
+      "mustRefuse": true,
+      "description": "The P14-23 round 4 false-heal vector: an email field identified only by name/type (no id, no data-testid, no data-test anywhere) whose own evidence has genuinely drifted (reworded aria-label, wrapped, repositioned), while an unrelated duplicate field still matches the OLD stale evidence byte-for-byte. Without a stable key, nothing in the stored snapshot can distinguish 'the real field drifted' from 'a different field still matches the old snapshot' — must refuse."
+    },
+    {
       "id": "element-removed-f1",
       "mutationClass": "element-removed",
       "action": "click",

@@ -12,7 +12,7 @@
  *
  * evaluate({ storedSignature, liveCandidates, action }, config) -> {
  *   status: "accepted" | "refused" | "no_candidate",
- *   reason?: "below_threshold" | "insufficient_margin" | "action_incompatible" | "weak_evidence_only" | "ambiguous_stable_identity",
+ *   reason?: "below_threshold" | "insufficient_margin" | "action_incompatible" | "weak_evidence_only" | "ambiguous_stable_identity" | "insufficient_identity_evidence",
  *   winner?: { selector, contributions, total },
  *   runnerUp?: { selector, contributions, total } | null,
  *   margin: number,
@@ -511,6 +511,51 @@ function _ambiguousStableIdentityKey(storedSignature, candidates) {
   return null;
 }
 
+/**
+ * Precondition on the STORED evidence alone (P14-23 round 4): true if the
+ * stored signature carries a value for at least one `STABLE_IDENTITY_KEYS`
+ * entry (`id`/`data-testid`/`data-test`).
+ *
+ * BACKGROUND: round 3's `_ambiguousStableIdentityKey` closes the duplicate-
+ * key false-heal vector, but it only ever LOOKS at stable keys — when
+ * stored carries none of them, its loop's `continue` fires on every
+ * iteration and it returns `null` (nothing to disambiguate), leaving the
+ * floor/threshold/margin cascade as the only remaining defence. Two
+ * reviewers have now shown that cascade is not a safety net on its own: a
+ * wrong element that still matches a stale snapshot can legitimately
+ * outscore a correct element that has drifted, with a real, non-trivial
+ * margin, whenever nothing stable anchors the comparison (an email input
+ * identified only by `name`/`type`, no `id`, no `data-testid` anywhere).
+ *
+ * THE FIX: without a stable key, the stored snapshot structurally cannot
+ * distinguish "the real element drifted" from "a different element still
+ * matches the old snapshot" — accessibleName/structural/text/boundingBox
+ * all describe what an element LOOKS like right now, which a decoy can
+ * replicate by construction, never WHICH element it provably is. So Tier
+ * 2.5 must refuse outright whenever stored has no stable-key evidence at
+ * all, rather than let the other four dimensions alone decide.
+ *
+ * Deliberately checked as a precondition on `storedSignature` ONLY — never
+ * on `candidates` — for two reasons: (1) it is cheaper, since it can run
+ * before any gating/scoring work happens rather than after; (2) it makes
+ * the refusal reason unambiguous. `_ambiguousStableIdentityKey` legitimately
+ * needs the candidate set, because "ambiguous" is a relationship between
+ * two OR MORE candidates and stored; this check is not relational at all —
+ * it is purely a property of what stored does or does not carry, so it
+ * can be, and is, answered before a single candidate is even looked at.
+ *
+ * Does NOT read `MIN_CONFIDENCE`/`WINNER_MARGIN` or any config value, and
+ * does not compute any score — independent of both by construction, not
+ * merely by the order it happens to run in.
+ */
+function _hasStableIdentityEvidence(storedSignature) {
+  const storedAttrs = _attributesOf(storedSignature);
+  for (const key of STABLE_IDENTITY_KEYS) {
+    if (_isNonEmptyString(_safeGet(storedAttrs, key))) return true;
+  }
+  return false;
+}
+
 function _alternativeEntry(selector, scored, maxSelectorLen) {
   return {
     selector: _boundString(typeof selector === "string" ? selector : "", maxSelectorLen),
@@ -530,6 +575,19 @@ function evaluate(input, config = {}) {
   if (rawCandidates.length === 0) {
     return {
       status: "no_candidate",
+      margin: 0,
+      alternativesConsidered: [],
+    };
+  }
+
+  // Precondition on the stored evidence alone (P14-23 round 4) — checked
+  // before any gating/scoring work, and before the ambiguity check below,
+  // since it needs no candidate to evaluate at all. See
+  // `_hasStableIdentityEvidence`'s header comment.
+  if (!_hasStableIdentityEvidence(storedSignature)) {
+    return {
+      status: "refused",
+      reason: "insufficient_identity_evidence",
       margin: 0,
       alternativesConsidered: [],
     };
