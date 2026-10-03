@@ -100,20 +100,33 @@ test("attribute-only evidence contributes a nonzero amount capped at its 0.40 we
   assert.ok(result.winner.contributions.attribute > 0);
 });
 
+// NOTE (P14-23 round 4): these two tests (and the floor/weak-evidence group
+// below) isolate ONE non-identity dimension by zeroing `attributes` on BOTH
+// sides, as they did before round 4. Round 4 added a precondition that
+// refuses outright whenever STORED carries no stable-identity-key value at
+// all (`_hasStableIdentityEvidence`) — so `attributes: {}` on stored alone
+// would now short-circuit before scoring ever runs, which is not what these
+// tests are probing. The fix: stored gets exactly one stable key
+// (`id: "anchor-id"`) to satisfy that precondition, while the candidate
+// does NOT carry that key at all (absent, not conflicting — `_gateReason`'s
+// narrowed conflicting-identity check only fires on a value present on
+// BOTH sides that differs, so an absent key is silently skipped) — so the
+// attribute dimension still scores exactly 0, keeping the isolation intact.
 test("accessible-name-only evidence never authorises alone (below threshold)", () => {
   const result = CandidateMatcher.evaluate({
-    storedSignature: storedSignature({ attributes: {}, structuralPath: null, textApprox: null, boundingBoxBucket: null }),
+    storedSignature: storedSignature({ attributes: { id: "anchor-id" }, structuralPath: null, textApprox: null, boundingBoxBucket: null }),
     liveCandidates: [candidate("#a", { attributes: {}, structuralPath: null, textApprox: null, boundingBoxBucket: null })],
     action: "click",
   });
   // accessibleName alone maxes at 0.25, well under MIN_CONFIDENCE.
   assert.equal(result.status, "refused");
   assert.equal(result.reason, "below_threshold");
+  assert.equal(result.winner.contributions.attribute, 0, "the stable-key anchor on stored alone must not itself contribute — the candidate never matches it");
 });
 
 test("structural-path evidence contributes a nonzero, bounded amount", () => {
   const result = CandidateMatcher.evaluate({
-    storedSignature: storedSignature({ attributes: {}, accessibleNameApprox: null, textApprox: null, boundingBoxBucket: null }),
+    storedSignature: storedSignature({ attributes: { id: "anchor-id" }, accessibleNameApprox: null, textApprox: null, boundingBoxBucket: null }),
     liveCandidates: [candidate("#a", { attributes: {}, accessibleNameApprox: null, textApprox: null, boundingBoxBucket: null })],
     action: "click",
   });
@@ -230,9 +243,11 @@ test("non-unique selector (caller-flagged match count) excludes the candidate", 
 // Pure geometry / weak text refusal (structural safety floor)
 // ---------------------------------------------------------------------------
 
+// Same stable-key-anchor-on-stored-only pattern as above — see the NOTE
+// before "accessible-name-only evidence never authorises alone".
 test("pure geometry alone cannot authorise a repair", () => {
   const result = CandidateMatcher.evaluate({
-    storedSignature: storedSignature({ attributes: {}, accessibleNameApprox: null, structuralPath: null, textApprox: null }),
+    storedSignature: storedSignature({ attributes: { id: "anchor-id" }, accessibleNameApprox: null, structuralPath: null, textApprox: null }),
     liveCandidates: [candidate("#a", { attributes: {}, accessibleNameApprox: null, structuralPath: null, textApprox: null })],
     action: "click",
   });
@@ -245,7 +260,7 @@ test("pure geometry alone cannot authorise a repair", () => {
 
 test("weak text alone cannot authorise a repair", () => {
   const result = CandidateMatcher.evaluate({
-    storedSignature: storedSignature({ attributes: {}, accessibleNameApprox: null, structuralPath: null, boundingBoxBucket: null }),
+    storedSignature: storedSignature({ attributes: { id: "anchor-id" }, accessibleNameApprox: null, structuralPath: null, boundingBoxBucket: null }),
     liveCandidates: [candidate("#a", { attributes: {}, accessibleNameApprox: null, structuralPath: null, boundingBoxBucket: null })],
     action: "click",
   });
@@ -257,7 +272,7 @@ test("weak text alone cannot authorise a repair", () => {
 
 test("geometry + text combined still cannot authorise (floor, not additive escape)", () => {
   const result = CandidateMatcher.evaluate({
-    storedSignature: storedSignature({ attributes: {}, accessibleNameApprox: null, structuralPath: null }),
+    storedSignature: storedSignature({ attributes: { id: "anchor-id" }, accessibleNameApprox: null, structuralPath: null }),
     liveCandidates: [candidate("#a", { attributes: {}, accessibleNameApprox: null, structuralPath: null })],
     action: "click",
   });
@@ -345,27 +360,32 @@ test("margin just under the configured WINNER_MARGIN refuses insufficient_margin
   assert.equal(result.reason, "insufficient_margin");
 });
 
-// NOTE (P14-23 round 3): stored's `attributes` is narrowed to `{ type:
-// "submit" }` here — `type` is in ATTRIBUTE_MATCH_KEYS (so it still earns a
-// full attribute-dimension contribution when both candidates match it) but
-// is NOT in STABLE_IDENTITY_KEYS (id/data-testid/data-test), so two
-// candidates both matching it can never trip the new structural ambiguity
-// gate (that gate only ever fires on a STABLE key stored has a value for).
-// This test is specifically about the plain margin===0 tie path, which
-// `_ambiguousStableIdentityKey` intentionally does not own.
-// `duplicate-test-id-f1` / the dedicated "THE FALSE-HEAL VECTOR" tests above
-// cover the case where stored DOES have a stable-key value two candidates
-// both share.
+// NOTE (P14-23 round 3, updated round 4): stored carries exactly one stable
+// key (`id: "anchor-id"`) — required since round 4's
+// `_hasStableIdentityEvidence` precondition now refuses outright if stored
+// has NONE at all. Neither candidate carries that `id` (absent, not
+// conflicting), so it contributes nothing to either candidate's score and
+// — critically — the round-3 ambiguity gate only fires when two or more
+// candidates MATCH a stable value stored has, which neither does here, so
+// it stays silent too. Both candidates match the non-stable `type` key
+// instead (present in ATTRIBUTE_MATCH_KEYS but not in
+// STABLE_IDENTITY_KEYS), plus `name`, which is enough attribute credit for
+// the tied total to clear MIN_CONFIDENCE — so this test is proven to
+// exercise the margin gate specifically, not an accidental threshold
+// shortfall. `duplicate-test-id-f1` / the dedicated "THE FALSE-HEAL VECTOR"
+// tests above cover the case where stored's stable key IS what two
+// candidates share.
 test("exact tie refuses as insufficient_margin (margin === 0)", () => {
-  const a = candidate("#a", { attributes: { type: "submit" } });
-  const b = candidate("#b", { attributes: { type: "submit" } });
+  const a = candidate("#a", { attributes: { type: "submit", name: "submitOrder" } });
+  const b = candidate("#b", { attributes: { type: "submit", name: "submitOrder" } });
   const result = CandidateMatcher.evaluate({
-    storedSignature: storedSignature({ attributes: { type: "submit" } }),
+    storedSignature: storedSignature({ attributes: { id: "anchor-id", type: "submit", name: "submitOrder" } }),
     liveCandidates: [a, b],
     action: "click",
   });
   assert.equal(result.status, "refused");
   assert.equal(result.reason, "insufficient_margin");
+  assert.ok(result.winner.total >= MIN_CONFIDENCE, "both candidates must clear the confidence bar for this to be a real margin test");
   assert.equal(result.margin, 0);
   // Deterministic tie-break ordering: selector ascending.
   assert.equal(result.winner.selector, "#a");
@@ -447,7 +467,14 @@ test("missing storedSignature fields never inflate confidence", () => {
     liveCandidates: [candidate("#a")],
     action: "click",
   });
-  assert.equal(result.winner.total, 0);
+  // P14-23 round 4: an entirely empty storedSignature carries no stable
+  // identity evidence at all, so it is now refused by the precondition
+  // before any score is even computed — a STRONGER guarantee against
+  // confidence inflation than the previous "total === 0" check (there is
+  // no winner, no total, nothing to inflate).
+  assert.equal(result.status, "refused");
+  assert.equal(result.reason, "insufficient_identity_evidence");
+  assert.equal(result.winner, undefined, "no scoring must occur at all when stored carries no stable-key evidence");
 });
 
 test("null storedSignature is handled defensively without throwing", () => {
@@ -511,8 +538,10 @@ test("__proto__ as a storedSignature key does not throw or pollute", () => {
 
 test("very long hostile text values are bounded, not rejected outright", () => {
   const huge = "x".repeat(100000);
+  // Stable-key anchor on stored only (round 4) — see the NOTE near
+  // "accessible-name-only evidence never authorises alone" above.
   const result = CandidateMatcher.evaluate({
-    storedSignature: storedSignature({ textApprox: huge, attributes: {}, accessibleNameApprox: null, structuralPath: null, boundingBoxBucket: null }),
+    storedSignature: storedSignature({ textApprox: huge, attributes: { id: "anchor-id" }, accessibleNameApprox: null, structuralPath: null, boundingBoxBucket: null }),
     liveCandidates: [candidate("#a", { textApprox: huge, attributes: {}, accessibleNameApprox: null, structuralPath: null, boundingBoxBucket: null })],
     action: "click",
   });
@@ -925,6 +954,156 @@ test("P14-23 round 3 addendum: VARIANT 2 — duplicate data-testid with NO id co
 
   assert.notEqual(result.status, "accepted", "no id ever conflicted here, yet the duplicate data-testid must still be refused");
   assert.equal(result.reason, "ambiguous_stable_identity", "must be keyed on the shared stable-key match itself, not on any id conflict");
+});
+
+// ---------------------------------------------------------------------------
+// P14-23 round 4: `_hasStableIdentityEvidence` — a precondition on STORED
+// alone. When stored carries no value for id/data-testid/data-test,
+// `_ambiguousStableIdentityKey` (round 3) can never fire — its loop's
+// `continue` runs on every iteration and it returns `null`, since there is
+// no stable key to compare in the first place. That left the floor/
+// threshold/margin cascade as the ONLY remaining defence, and two
+// reviewers independently showed that cascade is not a safety net: a wrong
+// element that still matches a stale snapshot can legitimately outscore a
+// correct, drifted element by a real margin when nothing stable anchors
+// the comparison (e.g. an email input identified only by `name`/`type`).
+// ---------------------------------------------------------------------------
+
+test("P14-23 round 4: THE FALSIFICATION CASE — no stable key anywhere lets a stale decoy outscore the drifted correct element without this rule", () => {
+  const salt = "round-4-salt";
+  // Identified only by name/type — no id, no data-testid, no data-test on
+  // either side at all.
+  const stored = ElementSignature.capture(
+    { tagName: "input", accessibleName: "Email", attributes: { name: "email", type: "email" }, structuralPath: ["form", "div"], boundingBoxBucket: "top-left:small" },
+    { salt }
+  );
+  // The wrong element: an unrelated newsletter field that still matches
+  // the stale evidence byte-for-byte.
+  const wrongStillMatchesStaleEvidence = ElementSignature.capture(
+    { tagName: "input", accessibleName: "Email", attributes: { name: "email", type: "email" }, structuralPath: ["form", "div"], boundingBoxBucket: "top-left:small" },
+    { salt }
+  );
+  // The real element: legitimately drifted copy/structure/position.
+  const correctButDrifted = ElementSignature.capture(
+    { tagName: "input", accessibleName: "Work email address", attributes: { name: "email", type: "email" }, structuralPath: ["form", "section", "div"], boundingBoxBucket: "bottom-right:medium" },
+    { salt }
+  );
+
+  const result = CandidateMatcher.evaluate({
+    storedSignature: stored,
+    liveCandidates: [
+      { selector: "#newsletter", signature: wrongStillMatchesStaleEvidence },
+      { selector: "#real", signature: correctButDrifted },
+    ],
+    action: "type",
+  });
+
+  assert.equal(result.status, "refused");
+  assert.equal(result.reason, "insufficient_identity_evidence");
+  assert.equal(result.winner, undefined, "this is a precondition on stored alone — it must refuse before any candidate is even scored");
+  assert.deepEqual(result.alternativesConsidered, []);
+  assert.equal(result.margin, 0);
+});
+
+test("P14-23 round 4: CONTROL — the identical shape WITH a shared data-testid refuses via the round-3 rule instead, proving the gap is specifically the absence of a stable key", () => {
+  const salt = "round-4-salt";
+  const descriptorWithTestId = (accessibleName, structuralPath, boundingBoxBucket) => ({
+    tagName: "input",
+    accessibleName,
+    attributes: { name: "email", type: "email", "data-testid": "email-field" },
+    structuralPath,
+    boundingBoxBucket,
+  });
+  const stored = ElementSignature.capture(descriptorWithTestId("Email", ["form", "div"], "top-left:small"), { salt });
+  const wrong = ElementSignature.capture(descriptorWithTestId("Email", ["form", "div"], "top-left:small"), { salt });
+  const correct = ElementSignature.capture(descriptorWithTestId("Work email address", ["form", "section", "div"], "bottom-right:medium"), { salt });
+
+  const result = CandidateMatcher.evaluate({
+    storedSignature: stored,
+    liveCandidates: [
+      { selector: "#newsletter", signature: wrong },
+      { selector: "#real", signature: correct },
+    ],
+    action: "type",
+  });
+
+  assert.equal(result.status, "refused");
+  assert.equal(result.reason, "ambiguous_stable_identity", "with a stable key present, round 3's rule — not round 4's precondition — is what catches this");
+  assert.ok(result.winner, "round 3's rule scores before refusing, unlike round 4's precondition");
+});
+
+test("P14-23 round 4: order independence — the precondition does not even look at candidates, so order can never matter", () => {
+  const salt = "round-4-salt";
+  const stored = ElementSignature.capture({ tagName: "input", attributes: { name: "email", type: "email" } }, { salt });
+  const a = { selector: "#a", signature: ElementSignature.capture({ tagName: "input", attributes: { name: "email", type: "email" } }, { salt }) };
+  const b = { selector: "#b", signature: ElementSignature.capture({ tagName: "input", attributes: { name: "other", type: "text" } }, { salt }) };
+
+  const forward = CandidateMatcher.evaluate({ storedSignature: stored, liveCandidates: [a, b], action: "type" });
+  const reversed = CandidateMatcher.evaluate({ storedSignature: stored, liveCandidates: [b, a], action: "type" });
+
+  assert.deepEqual(forward, reversed);
+  assert.equal(forward.reason, "insufficient_identity_evidence");
+});
+
+test("P14-23 round 4: independence from MIN_CONFIDENCE/WINNER_MARGIN — sweeps {0,0} through {1,1} and a pathological negative config", () => {
+  const salt = "round-4-salt";
+  const stored = ElementSignature.capture({ tagName: "input", accessibleName: "Email", attributes: { name: "email", type: "email" } }, { salt });
+  const live = ElementSignature.capture({ tagName: "input", accessibleName: "Email", attributes: { name: "email", type: "email" } }, { salt });
+  const liveCandidates = [{ selector: "#a", signature: live }];
+
+  const configs = [
+    { MIN_CONFIDENCE: 0, WINNER_MARGIN: 0 },
+    { MIN_CONFIDENCE: 1, WINNER_MARGIN: 1 },
+    { MIN_CONFIDENCE: 0.5, WINNER_MARGIN: 0.5 },
+    { MIN_CONFIDENCE: -100, WINNER_MARGIN: -100 }, // pathological negative config
+    { MIN_CONFIDENCE: 1000, WINNER_MARGIN: 1000 }, // pathological large config
+  ];
+
+  for (const config of configs) {
+    const result = CandidateMatcher.evaluate({ storedSignature: stored, liveCandidates, action: "type" }, config);
+    assert.equal(result.status, "refused", `config ${JSON.stringify(config)} must not change the verdict`);
+    assert.equal(result.reason, "insufficient_identity_evidence", `config ${JSON.stringify(config)} must not change the reason`);
+  }
+});
+
+test("P14-23 round 4: over-refusal check — a stored signature that DOES carry a stable key is entirely unaffected (round 2/3 protections still hold)", () => {
+  // Round 2: single candidate, regenerated id, data-testid matches ->
+  // correct heal.
+  const salt = "round-4-over-refusal-salt";
+  const stored1 = ElementSignature.capture(
+    { tagName: "button", accessibleName: "Submit Order", attributes: { id: "submit-btn-7f2a", "data-testid": "submit-order-btn", name: "submitOrder", type: "submit" }, structuralPath: ["form", "div"], ownText: "Submit Order", boundingBoxBucket: "top-left:small" },
+    { salt }
+  );
+  const live1 = ElementSignature.capture(
+    { tagName: "button", accessibleName: "Submit Order", attributes: { id: "submit-btn-c91e", "data-testid": "submit-order-btn", name: "submitOrder", type: "submit" }, structuralPath: ["form", "div"], ownText: "Submit Order", boundingBoxBucket: "top-left:small" },
+    { salt }
+  );
+  const result1 = CandidateMatcher.evaluate({ storedSignature: stored1, liveCandidates: [{ selector: "#new-id", signature: live1 }], action: "click" });
+  assert.equal(result1.status, "accepted");
+  assert.notEqual(result1.reason, "insufficient_identity_evidence");
+
+  // Round 3: duplicate data-testid, exact tie -> still refused via
+  // ambiguous_stable_identity, not reclassified as insufficient_identity_evidence.
+  const stored2 = ElementSignature.capture(
+    { tagName: "button", accessibleName: "Remove", attributes: { id: "row-item-42", "data-testid": "remove-btn", type: "button" }, structuralPath: ["ul", "li"], ownText: "Remove", boundingBoxBucket: "top-left:small" },
+    { salt }
+  );
+  const trueMatch2 = ElementSignature.capture(
+    { tagName: "button", accessibleName: "Remove", attributes: { id: "row-item-91", "data-testid": "remove-btn", type: "button" }, structuralPath: ["ul", "li"], ownText: "Remove", boundingBoxBucket: "top-left:small" },
+    { salt }
+  );
+  const decoy2 = ElementSignature.capture(
+    { tagName: "button", accessibleName: "Remove", attributes: { id: "row-item-77", "data-testid": "remove-btn", type: "button" }, structuralPath: ["ul", "li"], ownText: "Remove", boundingBoxBucket: "top-left:small" },
+    { salt }
+  );
+  const result2 = CandidateMatcher.evaluate({
+    storedSignature: stored2,
+    liveCandidates: [{ selector: "#true-match", signature: trueMatch2 }, { selector: "#decoy", signature: decoy2 }],
+    action: "click",
+  });
+  assert.equal(result2.status, "refused");
+  assert.equal(result2.reason, "ambiguous_stable_identity");
+  assert.notEqual(result2.reason, "insufficient_identity_evidence", "round 4's precondition must stay silent whenever stored carries a stable key — round 3's own rule, not round 4's, must be what fires");
 });
 
 test("P14-18: comparing signatures hashed with two DIFFERENT salts silently scores as non-matching (documented caller obligation, not a matcher bug)", () => {
