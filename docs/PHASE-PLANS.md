@@ -589,26 +589,30 @@ score contributions across separate process invocations.
 
 ### Measured results, including the unflattering ones
 
-Eight fixtures, one per mutation class, `npm run healing:benchmark`:
+Nine fixtures, one per mutation class, `npm run healing:benchmark`:
 
 | Outcome | Count | Rate |
 |---|---|---|
-| Correct heal (resolves to the fixture's declared ground-truth node) | 3 | 37.5% |
-| Refused | 4 | 50.0% |
-| No candidate | 1 | 12.5% |
+| Correct heal (resolves to the fixture's declared ground-truth node) | 3 | 33.3% |
+| Refused | 5 | 55.6% |
+| No candidate | 1 | 11.1% |
 | False heal | 0 | 0.0% |
 
 The four outcomes partition the corpus exactly once per fixture, so the rates sum to 100% and no
 case can be dropped or double-counted. Every fixture appears in the per-case log, not only the ones
-that heal. Deterministic repeat agreement: 8/8 across separate processes, compared over full score
+that heal. Deterministic repeat agreement: 9/9 across separate processes, compared over full score
 contributions.
+
+Two of the five refusals exist because a review found a wrong-element match the tests had not
+covered, and the corpus now carries a fixture for each. That is the benchmark doing the job it was
+built for, and the reason the refusal share rose rather than the heal share.
 
 **What those numbers do and do not support.** They describe this corpus, authored here, and nothing
 else. "Correct" is measurable only because each fixture carries an author-declared ground-truth
 attribute present in both its pre- and post-mutation HTML; on a scraped or customer page no such
 ground truth exists, and correctness would become unmeasurable rather than inferable from an action
-that did not throw. Half the corpus refuses — that is the intended posture, not a shortfall, but it
-is also why no claim here is stated as a healing rate for applications in general.
+that did not throw. More of the corpus refuses than heals — that is the intended posture, not a
+shortfall, but it is also why no claim here is stated as a healing rate for applications in general.
 
 Matching cost on a 5,000-node, 200-interactive-element DOM measured 67–129ms across runs on a
 loaded development machine. That is reported as measured, not as a guarantee.
@@ -658,6 +662,19 @@ protection survives any later recalibration of those two constants.
   hit on restore, so every restore falls back to a branch prefix — which would let one branch
   inherit another's approved evidence. Revisit only alongside a same-branch-provenance check inside
   the store itself, never as a CI configuration change.
+- **It acts only on elements carrying a stable identifier.** With no `id`, `data-testid` or
+  `data-test` in the stored evidence it refuses with `insufficient_identity_evidence` before
+  scoring. This is a limit of the evidence model, not an omission: with no identifier in the stored
+  snapshot nothing can separate "the real element changed" from "a different element still matches
+  the old snapshot," and attempting it produced a wrong-element action on ordinary markup during
+  review. Applications without test ids will see this tier decline and Tier 3 do the work.
+- **Refusing on ambiguity is a suppression channel.** A second element sharing the stored
+  `data-testid` forces a refusal regardless of how well the real element scores, so anyone able to
+  inject a visible, action-compatible element into the page under test can disable this tier at
+  will. Assessed as an acceptable trade: the outcome is a refusal that falls through to Tier 3,
+  never a wrong-element action, and arbitrary DOM injection into the application under test is a
+  far larger problem on its own. Recorded so that "no fix needed" is not mistaken for "not
+  considered."
 - **This is matching, not comprehension.** Scores compare captured signals. No general DOM
   understanding is involved.
 

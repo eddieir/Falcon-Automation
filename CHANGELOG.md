@@ -1010,3 +1010,52 @@ panel carried no such note.
 including *why* — the cache's exact key can never hit on restore, so every restore falls back to a
 branch prefix, and caching the file would let one branch inherit evidence another branch's reviewer
 approved. Found by the DevOps review holding itself to its own prior condition.
+
+### A wrong element could still be matched when the stored evidence had no stable identifier
+
+**Problem:** The ambiguity rule above counts how many candidates match the stored value for a stable
+key. When the stored signature carried none of `id`, `data-testid` or `data-test`, there was nothing
+to count — the scan returned early on every key and only the score cascade remained, which two
+independent reviews had already shown is not a safety net. Reproduced on ordinary markup: an email
+input identified by `name` and `type` alone, where the real field had drifted the way real fields do
+(label reworded, position moved) while an unrelated newsletter field elsewhere on the page still
+matched the stored snapshot exactly. The wrong field won at 0.90 against 0.707 and would have been
+typed into. Adding a shared test id to the identical shape produced a refusal, which is how the
+diagnosis was confirmed rather than guessed: the gap was the absence of an identifier, not anything
+about the scores.
+
+Not a regression from either earlier matcher change — neither touched this path, because nothing
+here ever conflicted on a stable key. It is the limit of what the evidence model can do: nothing can
+separate "the real element changed" from "a different element still matches the old snapshot" when
+the snapshot is all there is and it carries no identifier.
+
+**Fix:** The matcher now declines the question. With no stable key in the stored signature,
+`evaluate` refuses with `insufficient_identity_evidence` before any gating or scoring runs, and the
+chain falls through to the LLM tier as it would for any other refusal. The check reads the stored
+signature alone and never the candidates, so it needs no candidate to decide. Like the ambiguity
+rule it ignores the confidence floor and the margin, verified across both extremes and two
+pathological configurations. The corpus gained a fixture for the case, because a protection no
+fixture exercises is how both preceding defects reached review in the first place.
+
+Eight assertions moved, and the reason is worth recording. Six isolated a single scoring dimension by
+zeroing attributes on both sides, which now trips the precondition; they carry one stable key on the
+stored side only, absent rather than conflicting on the candidate, which satisfies it while leaving
+the attribute dimension at zero and the arithmetic unchanged. Their force was then confirmed by
+mutation rather than assumed: with the structural safety floor disabled, the three weak-evidence
+tests and the contribution-accounting test fail. They were not softened to pass.
+
+### Refusing on ambiguity is itself a suppression channel
+
+**Problem:** Found by the security review of the ambiguity rule, and disclosed rather than left
+implicit. Because a second element sharing the stored `data-testid` forces a refusal regardless of
+how well the real element scores, anyone able to inject a visible, action-compatible element into the
+page under test can disable this tier at will. Before the stable-identity gate was narrowed, such a
+duplicate would have been excluded on its differing `id` and the real element would have healed.
+
+**Resolution:** Accepted as a trade, with the reasoning recorded. The outcome is a refusal that falls
+through to Tier 3, never a wrong-element action, so it trades an availability surface to close a
+wrong-execution surface — the correct direction. The precondition, arbitrary DOM injection into the
+application under test, is already a far larger problem than suppressed self-healing. It also fires
+on honest applications that have accidentally duplicated a test id, which is the feature working as
+designed. Documented in the README and the phase plan so that "no fix needed" is not read as "not
+considered."

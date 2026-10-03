@@ -242,7 +242,15 @@ contradictory role, or an ambiguous stable identity — each is reported distinc
 healing log, and falls through to Tier 3 exactly as an empty cache would. A refusal is never a run
 failure.
 
-That last reason is worth spelling out, because it was found by this phase's own benchmark rather
+**It will only act on an element that carries a stable identifier.** If the stored evidence has no
+`id`, `data-testid` or `data-test`, Falcon refuses with `insufficient_identity_evidence` before it
+scores anything, and the chain falls through to Tier 3. That is a deliberate limit rather than a
+missing feature: with no identifier in the stored snapshot, nothing can separate "the real element
+changed" from "a different element still matches the old snapshot," and attempting it produced a
+wrong-element click on ordinary markup during this phase's own review. If your application doesn't
+use test ids, this tier will mostly decline and the LLM tier will do the work.
+
+The ambiguity reason is worth spelling out, because it was found by this phase's own benchmark rather
 than by review. A `data-testid` is written by hand to identify one element, so an exact match on it
 is allowed to outweigh an id the build regenerated. But when two candidates carry the same
 `data-testid`, it identifies neither — and a stale duplicate elsewhere on the page can match the
@@ -276,15 +284,25 @@ It is gitignored, and it is deliberately **not** restored or saved by CI — the
 key can never hit, so every restore falls back to a branch prefix, and caching this file would let
 one branch inherit evidence another branch's reviewer approved. Nothing here is uploaded anywhere.
 
-Measured on an eight-fixture mutation corpus, one fixture per class of change
-(`npm run healing:benchmark`): **3 correct heals, 4 refusals, 1 no-candidate, 0 false heals**, with
+Measured on a nine-fixture mutation corpus, one fixture per class of change
+(`npm run healing:benchmark`): **3 correct heals, 5 refusals, 1 no-candidate, 0 false heals**, with
 identical results across separate process invocations. "Correct" means the accepted candidate
 resolves to the element the fixture declares as ground truth, checked against the DOM — not that a
 click didn't throw. Those numbers describe this corpus and nothing else; on a page nobody authored
 ground truth for, correctness isn't measurable this way, and Falcon doesn't claim a healing rate for
-applications in general. Half the corpus refuses, which is the intended posture and also why Tier 3
-still earns its place. The confidence and margin thresholds are provisional and uncalibrated; the
-benchmark exists to calibrate them, and it already changed the matcher twice during this phase.
+applications in general. More of the corpus refuses than heals, which is the intended posture and
+also why Tier 3 still earns its place. The confidence and margin thresholds are provisional and
+uncalibrated; the benchmark exists to calibrate them, and it changed the matcher three times during
+this phase — twice after finding a wrong-element match that the tests had not covered.
+
+One consequence of refusing on ambiguity is worth stating rather than leaving for someone to
+discover. Because a second element sharing the stored `data-testid` forces a refusal regardless of
+how well the real element scores, anyone able to inject a visible, action-compatible element into
+the page under test can suppress this tier at will. The security review that found it rated it an
+acceptable trade and so do we: the result is a refusal that falls through to Tier 3, never a
+wrong-element action, and the ability to inject arbitrary DOM into your application under test is
+already a far larger problem than suppressed self-healing. It is recorded here so that "no fix
+needed" is not mistaken for "not considered."
 
 ### What Tier 3 sends to OpenAI
 
