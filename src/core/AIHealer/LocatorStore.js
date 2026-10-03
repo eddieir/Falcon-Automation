@@ -1,5 +1,5 @@
-const fs   = require("fs");
 const path = require("path");
+const AtomicJsonStore = require("../util/AtomicJsonStore");
 
 /**
  * LocatorStore — persistent cache of alternative selectors (Tier 2 healing).
@@ -32,6 +32,31 @@ const path = require("path");
  *    evicted. A legacy store (plain `{ original: [alt, ...] }`, no
  *    `lastUsed`) is migrated in place on load rather than treated as
  *    corrupt.
+ *
+ * Phase 14 fix (AC-06/AC-07/AC-08) — atomic writes and visible corruption
+ * recovery.
+ *    `_save()` used to call `fs.promises.writeFile` directly on the live
+ *    path and swallow every error in a bare `catch`, so the store was never
+ *    actually atomic despite living next to `AtomicJsonStore`, and a crash
+ *    mid-write could leave a truncated `locator_store.json` behind.
+ *    `_loadSync()`'s catch was `catch { }` with no warning and no
+ *    preservation of the corrupt bytes, so recovery from a corrupt or
+ *    truncated file was completely silent. Both now route through the
+ *    shared `AtomicJsonStore` primitive: `_save()` uses
+ *    `writeJsonAtomic()` (temp-file-plus-rename, so a reader can never
+ *    observe a partial write, and the `{ok,error}` result feeds a per-path
+ *    `hasUnpersistedWriteFailure()`/`lastWriteError()` surface), and
+ *    `_loadSync()` uses `readJsonSync()`, which preserves any corrupt or
+ *    wrong-shaped file as a `.corrupt-<timestamp>-<pid>-<uuid>` sidecar and
+ *    logs a warning naming the path and the failure kind (never the file's
+ *    contents or the parser's own message) before falling back to `{}`. A
+ *    pre-Phase-14 installation with a half-written legacy file (a real risk,
+ *    since the old `_save()` was never atomic) is simply invalid JSON from
+ *    `readJsonSync`'s point of view: preserved as a sidecar, warned about,
+ *    and the store starts fresh from `{}` — the same "start fresh" outcome
+ *    as before, now visible instead of silent, with the corrupt bytes still
+ *    recoverable from the sidecar. The on-disk path and shape are
+ *    unchanged.
  */
 const MAX_ALTERNATIVES_PER_SELECTOR = 5;
 const MAX_TRACKED_SELECTORS         = 500;
@@ -39,34 +64,27 @@ const MAX_TRACKED_SELECTORS         = 500;
 class LocatorStore {
     constructor() {
         this.storePath = path.join(__dirname, "..", "..", "..", "data", "locator_store.json");
+        this._writeFailures = new AtomicJsonStore.WriteFailureTracker();
         this.data      = this._loadSync(); // synchronous once at startup is fine
         this._queue    = Promise.resolve();
     }
 
     _loadSync() {
-        try {
-            if (fs.existsSync(this.storePath)) {
-                const raw = JSON.parse(fs.readFileSync(this.storePath, "utf8"));
-                if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-                const migrated = {};
-                for (const [original, entry] of Object.entries(raw)) {
-                    const alternatives = Array.isArray(entry) ? entry : entry?.alternatives;
-                    if (!Array.isArray(alternatives)) continue;
-                    Object.defineProperty(migrated, original, {
-                        value: {
-                            alternatives: [...new Set(alternatives.filter(value => typeof value === "string" && value.trim()))]
-                                .slice(-MAX_ALTERNATIVES_PER_SELECTOR),
-                            lastUsed: Number.isFinite(entry?.lastUsed) ? entry.lastUsed : Date.now(),
-                        },
-                        enumerable: true, configurable: true, writable: true,
-                    });
-                }
-                return migrated;
-            }
-        } catch {
-            // Corrupt store — start fresh
+        const raw = AtomicJsonStore.readJsonSync(this.storePath, {});
+        const migrated = {};
+        for (const [original, entry] of Object.entries(raw)) {
+            const alternatives = Array.isArray(entry) ? entry : entry?.alternatives;
+            if (!Array.isArray(alternatives)) continue;
+            Object.defineProperty(migrated, original, {
+                value: {
+                    alternatives: [...new Set(alternatives.filter(value => typeof value === "string" && value.trim()))]
+                        .slice(-MAX_ALTERNATIVES_PER_SELECTOR),
+                    lastUsed: Number.isFinite(entry?.lastUsed) ? entry.lastUsed : Date.now(),
+                },
+                enumerable: true, configurable: true, writable: true,
+            });
         }
-        return {};
+        return migrated;
     }
 
     addLocator(original, alternative) {
@@ -110,16 +128,28 @@ class LocatorStore {
     }
 
     async _save() {
-        try {
-            await fs.promises.mkdir(path.dirname(this.storePath), { recursive: true });
-            await fs.promises.writeFile(
-                this.storePath,
-                JSON.stringify(this.data, null, 2),
-                "utf8"
-            );
-        } catch {
-            // Swallow — a failed cache write must never abort the test run
-        }
+        // AtomicJsonStore.writeJsonAtomic never rejects (temp-file-plus-
+        // rename, mkdir handled internally) and its resolved {ok,error}
+        // feeds the per-path failure tracker — a failed cache write still
+        // never aborts the test run, but is no longer silently swallowed.
+        const result = await AtomicJsonStore.writeJsonAtomic(this.storePath, this.data);
+        this._writeFailures.record(this.storePath, result);
+    }
+
+    /**
+     * AC-08: true if the last write to `storePath` did not durably land on
+     * disk.
+     */
+    hasUnpersistedWriteFailure() {
+        return this._writeFailures.hasUnpersistedWriteFailure();
+    }
+
+    /**
+     * AC-08: the most recent unpersisted write failure for `storePath`
+     * (`{path, error, at}`), or `null` if none is currently outstanding.
+     */
+    lastWriteError() {
+        return this._writeFailures.lastWriteError();
     }
 }
 

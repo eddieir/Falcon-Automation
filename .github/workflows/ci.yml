@@ -160,6 +160,23 @@ jobs:
       # reads/writes; NOT the whole data/ dir — data/locator_store.json is
       # Phase 8's approved Tier-2 selector cache and must not be restored
       # here, or Phase 8 healing behavior in CI would silently change.
+      #
+      # data/locator_memory.json (Phase 14's evidence-based locator store) is
+      # deliberately excluded here too, for a sharper reason than "scope
+      # creep": entries land in it as "trusted" via the ground-truth path
+      # with no approval gate at read time (only a Tier 2.5 PROPOSAL needs
+      # human approval; recordEvidence() does not), and the restore-keys
+      # above always fall back to the branch-prefix key
+      # (falcon-state-<branch>-) because the exact run_id key can never hit
+      # on a restore. If this file were added to that same restore/save
+      # pair, a PR branch could silently inherit another branch's already-
+      # approved locator memory — trusted ("trusted"), unproven
+      # ("unproven"), or previously revoked ("revoked") evidence all follow
+      # the restore key the same way, so a revocation recorded on one branch
+      # would not protect a PR branch that restores stale state from before
+      # it. This should be revisited only alongside a same-branch-provenance
+      # check inside LocatorMemory itself (e.g. binding entries to the
+      # branch/ref they were approved on), never as a CI-config-only change.
       - name: Restore Falcon state (flakiness/quarantine/healing)
         id: restore-falcon-state
         uses: actions/cache/restore@v4
