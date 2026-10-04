@@ -442,4 +442,151 @@ test("AC-56 negative control: the SAME check catches data/locator_memory.json th
   });
 });
 
+// ---------------------------------------------------------------------------
+// The acceptance-criteria register.
+//
+// The 70 criteria were stated in the phase brief and recorded nowhere in the
+// repository, so nothing could check whether any given criterion had an
+// implementation or a test. AC-18 ("for destructive/navigation actions,
+// capture occurs before action") had neither, and that went unnoticed for the
+// whole phase: evidence was captured after the interaction, so a click that
+// navigated recorded a trusted fact about an element on the landing page.
+//
+// These tests make the register answerable. They do not judge whether a test
+// is a GOOD test for its criterion — that is a review question. They
+// establish the weaker property whose absence hid AC-18: every criterion is
+// present, and every file and test it points at genuinely exists.
+// ---------------------------------------------------------------------------
+
+const REGISTER_PATH = path.join(root, "docs", "phase-14-acceptance-criteria.json");
+const VERIFIED_BY = new Set(["test", "platform", "review"]);
+
+function loadRegister() {
+  return JSON.parse(fs.readFileSync(REGISTER_PATH, "utf8"));
+}
+
+/** Cache of test-file contents, so 70 rows don't re-read the same few files. */
+const fileCache = new Map();
+function readTestFile(relPath) {
+  if (!fileCache.has(relPath)) {
+    const abs = path.join(root, relPath);
+    fileCache.set(relPath, fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : null);
+  }
+  return fileCache.get(relPath);
+}
+
+test("AC register: all 70 criteria are present exactly once, numbered AC-01 to AC-70 with no gaps", () => {
+  const { criteria } = loadRegister();
+  assert.equal(criteria.length, 70, "the brief states 70 acceptance criteria");
+
+  const expected = Array.from({ length: 70 }, (_, i) => `AC-${String(i + 1).padStart(2, "0")}`);
+  assert.deepEqual(
+    criteria.map((c) => c.id),
+    expected,
+    "ids must run AC-01..AC-70 in order, with no gaps, duplicates or renumbering"
+  );
+});
+
+test("AC register: every criterion carries its text, section and a known verification mode", () => {
+  for (const c of loadRegister().criteria) {
+    assert.ok(c.text && c.text.trim().length > 10, `${c.id} must carry the criterion text`);
+    assert.ok(c.section && c.section.trim(), `${c.id} must name its brief section`);
+    assert.ok(VERIFIED_BY.has(c.verifiedBy), `${c.id} has an unknown verifiedBy: ${c.verifiedBy}`);
+  }
+});
+
+test("AC register: every implementation path a criterion points at exists on disk", () => {
+  for (const c of loadRegister().criteria) {
+    for (const rel of c.implementation || []) {
+      assert.ok(fs.existsSync(path.join(root, rel)), `${c.id} points at a missing implementation path: ${rel}`);
+    }
+  }
+});
+
+test("AC register: every test-verified criterion names at least one test that really exists", () => {
+  const missing = [];
+  for (const c of loadRegister().criteria) {
+    if (c.verifiedBy !== "test") continue;
+    assert.ok(
+      Array.isArray(c.tests) && c.tests.length > 0,
+      `${c.id} claims verifiedBy "test" but names no test`
+    );
+    for (const ref of c.tests) {
+      const contents = readTestFile(ref.file);
+      if (contents === null) {
+        missing.push(`${c.id}: test file does not exist — ${ref.file}`);
+        continue;
+      }
+      // The name must appear literally in the file that claims to hold it.
+      if (!contents.includes(ref.name)) {
+        missing.push(`${c.id}: no such test in ${ref.file} — "${ref.name}"`);
+      }
+    }
+  }
+  assert.deepEqual(missing, [], `register rows point at tests that do not exist:\n  ${missing.join("\n  ")}`);
+});
+
+test("AC register: a criterion not verified by a test states why, in its own words", () => {
+  for (const c of loadRegister().criteria) {
+    if (c.verifiedBy === "test") continue;
+    assert.ok(
+      c.justification && c.justification.trim().length > 80,
+      `${c.id} is verified by "${c.verifiedBy}" and must carry a substantive justification`
+    );
+    if (c.verifiedBy === "review") {
+      assert.deepEqual(c.tests, [], `${c.id} is a process criterion, so it must not claim test coverage`);
+    }
+  }
+});
+
+test("AC register: no criterion is left unaccounted for — every row resolves to a test, a platform note or a review record", () => {
+  const byMode = { test: 0, platform: 0, review: 0 };
+  for (const c of loadRegister().criteria) byMode[c.verifiedBy] += 1;
+
+  assert.equal(
+    byMode.test + byMode.platform + byMode.review,
+    70,
+    "every criterion must carry exactly one disposition"
+  );
+  // The register is only meaningful if the overwhelming majority is carried
+  // by executing tests rather than by prose. If this ever inverts, the
+  // register has become a place to park criteria instead of covering them.
+  assert.ok(
+    byMode.test >= 65,
+    `at least 65 of 70 criteria should be test-verified, found ${byMode.test} (platform: ${byMode.platform}, review: ${byMode.review})`
+  );
+});
+
+test("AC register negative control: the same check catches a test name that does not exist (proves the gate can fail)", () => {
+  const register = loadRegister();
+  // Tamper with a copy in memory: point AC-01 at a test nobody wrote.
+  const tampered = JSON.parse(JSON.stringify(register));
+  const victim = tampered.criteria.find((c) => c.id === "AC-01");
+  victim.tests = [{ file: "tests/regression/p14-identity.check.cjs", name: "a test that was never written anywhere" }];
+
+  const missing = [];
+  for (const c of tampered.criteria) {
+    if (c.verifiedBy !== "test") continue;
+    for (const ref of c.tests) {
+      const contents = readTestFile(ref.file);
+      if (contents === null || !contents.includes(ref.name)) {
+        missing.push(`${c.id}: ${ref.name}`);
+      }
+    }
+  }
+  assert.equal(missing.length, 1, "the tampered row must be the one and only failure");
+  assert.match(missing[0], /^AC-01: a test that was never written anywhere$/);
+
+  // And the real register still passes the identical walk.
+  const realMissing = [];
+  for (const c of register.criteria) {
+    if (c.verifiedBy !== "test") continue;
+    for (const ref of c.tests) {
+      const contents = readTestFile(ref.file);
+      if (contents === null || !contents.includes(ref.name)) realMissing.push(c.id);
+    }
+  }
+  assert.deepEqual(realMissing, [], "the real register must pass the same check the tampered one fails");
+});
+
 module.exports = { walkRequireGraph, extractRequireSpecifiers, extractCacheStepPathList };

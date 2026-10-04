@@ -651,6 +651,23 @@ earns its place. Scoring sits behind a structural rule — a stable key shared b
 identifies neither, so that case refuses regardless of score or margin — specifically so the
 protection survives any later recalibration of those two constants.
 
+### Acceptance criteria
+
+The phase's 70 acceptance criteria are registered in
+`docs/phase-14-acceptance-criteria.json`, each with the file that implements it and the test that
+asserts it. `tests/regression/p14-traceability.check.cjs` checks the register itself: all 70 ids
+present with no gaps, every implementation path resolving to a real file, and every named test
+genuinely existing in the file that claims to hold it, with a negative control proving the check
+can fail. 68 are carried by executing tests. Two are not, and say why in their own words: AC-57
+is a property of GitHub Actions' restore-step semantics rather than of anything this project
+decides, and AC-63 ("no P0/P1 remains") is a process criterion evidenced by review verdicts.
+
+The register exists because its absence hid a real defect. The criteria lived only in the phase
+brief, so nothing could check whether any one of them had an implementation at all, and AC-18 did
+not — evidence was captured after the interaction, which for a click that navigates described an
+element on the page the browser had already moved to. Writing the register down is what surfaced
+it.
+
 ### Honest limitations
 
 - **The salt sits with the hashes it protects** unless `FALCON_LOCATOR_SALT` is set. Low-entropy

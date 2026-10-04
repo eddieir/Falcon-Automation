@@ -398,6 +398,55 @@ test("AC-49/AC-18: a hanging collector delays Tier 1 by at most the documented p
   }));
 
 // ---------------------------------------------------------------------------
+// AC-19: click, type and select share one signature policy. They share it by
+// construction — all three route through _healAndPerform — but "by
+// construction" is a claim about today's code, so each is asserted directly,
+// including that each is scoped to its own action rather than collapsing.
+// ---------------------------------------------------------------------------
+
+/**
+ * One Tier 1 interaction of the given action against a clean page, asserting
+ * it records evidence under its OWN action scope and under no other. Spelled
+ * out as three named tests rather than a generated loop so each criterion's
+ * test name is a literal string the AC register can point at.
+ */
+function assertActionCapturesOwnScope(action, method, value) {
+  return withTempDir(async (dir) => {
+    const memory = makeMemory(dir);
+    const { AIHealer } = loadAIHealer();
+    const collector = {
+      collect: async () => [],
+      collectOne: async (_p, selector) => liveCandidateFacts(selector),
+    };
+    const healer = new AIHealer(makePage(), { locatorMemory: memory, elementFactsCollector: collector });
+
+    await healer[method]("#field", value, "Field");
+    await flush(memory);
+
+    const own = memory.getTrusted(identityFor("#field", action).identity);
+    assert.ok(own, `${action} must record evidence under its own action scope`);
+    assert.equal(own.signature.tagName, "button");
+
+    // The other two actions must not have been written by this one.
+    for (const other of ["click", "type", "select"].filter((a) => a !== action)) {
+      assert.ok(
+        !memory.getTrusted(identityFor("#field", other).identity),
+        `${action} must not write evidence under the ${other} scope`
+      );
+    }
+  });
+}
+
+test("AC-19: a Tier 1 click success captures evidence under its own action scope", () =>
+  assertActionCapturesOwnScope("click", "healAndClick", undefined));
+
+test("AC-19: a Tier 1 type success captures evidence under its own action scope", () =>
+  assertActionCapturesOwnScope("type", "healAndType", "hello"));
+
+test("AC-19: a Tier 1 select success captures evidence under its own action scope", () =>
+  assertActionCapturesOwnScope("select", "healAndSelect", "option-1"));
+
+// ---------------------------------------------------------------------------
 // AC-18: for navigating/destructive actions, the element is read BEFORE the
 // interaction and persisted only after it succeeds.
 //
