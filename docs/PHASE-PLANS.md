@@ -685,6 +685,15 @@ protection survives any later recalibration of those two constants.
   considered."
 - **This is matching, not comprehension.** Scores compare captured signals. No general DOM
   understanding is involved.
+- **Evidence capture is bounded, so it can be skipped.** The element is read before the interaction
+  it describes, because a click that navigates has already replaced the document by the time it
+  returns — reading afterwards described whatever the landing page put behind the same selector and
+  keyed it to the landing page's URL, which recorded a trusted fact about an element nobody had
+  interacted with and left the page the click happened on with no evidence at all. Reading first
+  puts that query in front of the interaction, so it is capped (150 ms) and every failure resolves
+  to "no evidence": on a slow page an interaction can legitimately produce no evidence at all,
+  and this tier then declines later for want of a stored signature. Losing evidence is always
+  preferred to delaying the interaction or recording a fact about the wrong element.
 - **This phase makes an existing `node --test` flake much likelier on single-file runs.** The
   runner intermittently dies with `Unable to deserialize cloned data due to invalid or unsupported
   version.`, with a stack entirely inside `node:internal/test_runner`'s IPC frame parser; the
