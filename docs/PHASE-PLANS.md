@@ -685,6 +685,21 @@ protection survives any later recalibration of those two constants.
   considered."
 - **This is matching, not comprehension.** Scores compare captured signals. No general DOM
   understanding is involved.
+- **This phase makes an existing `node --test` flake much likelier on single-file runs.** The
+  runner intermittently dies with `Unable to deserialize cloned data due to invalid or unsupported
+  version.`, with a stack entirely inside `node:internal/test_runner`'s IPC frame parser; the
+  signature is a varying total test count. It is pre-existing and reproduces on this phase's base
+  commit. Measured on `tests/regression/core.check.cjs`, which this phase does not modify:
+  2/10 runs failed at base `11657cb`, 9/10 at `b333584`. The cause is not output volume — that file
+  emits byte-for-byte the same 246 lines on both commits — and is unexplained; do not repeat the
+  Phase 8 console-silencing remedy here on the assumption that it is. Two things bound the impact.
+  Run under plain `node` instead of `node --test` and the same file passed 10/10, so the tests and
+  the code under them are sound and the fault is in the runner's IPC layer. CI never invokes a
+  single file: `test:coverage` runs the whole directory in one process, and on that measure this
+  phase is no worse than its base (2 failures in 4 full-suite runs at base, 1 in 4 at `b333584`,
+  both consistent with the pre-existing rate). So the practical cost is local iteration on one
+  file, with a working alternative. Investigating the runner itself was out of scope for this phase
+  and is not claimed to be done.
 
 ---
 
