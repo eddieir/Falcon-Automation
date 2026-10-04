@@ -28,9 +28,15 @@ The competitive landscape as it actually stands:
 
 Falcon's structural advantages, which every phase must compound rather than dilute:
 
-1. **Auditable healing.** Falcon is the only one of these where an AI-inferred locator is *quarantined
-   pending human approval* rather than silently trusted (Phase 8). That is the single most common
-   objection to AI-assisted QA, and Falcon answers it by design.
+1. **Auditable healing.** An AI-inferred locator is *quarantined pending human approval* rather than
+   silently trusted (Phase 8). Requiring approval before reuse is **not** a differentiator — Phase
+   14's competitive research verified that Katalon and Testsigma both document an approval step of
+   their own, so this is table stakes and this file previously claimed otherwise. What Phase 14's
+   research did leave standing is narrower and checkable: the decision is deterministic and local
+   with no model or network in its path, refusal is a first-class outcome that carries its reason,
+   evidence is stored as privacy-safe signatures the operator owns, scope prevents a selector on one
+   page authorising a repair on another, and the healing rates are published from a reproducible
+   corpus that includes the cases Falcon gets wrong.
 2. **Coverage without authorship.** Falcon crawls a live app and generates the suite. No recording
    session, no production traffic, no test authoring.
 3. **You own it.** Open source, self-hostable, no per-seat billing, no DOM leaving your network.
@@ -452,10 +458,12 @@ Both ledgers grow without bound.
 
 ### Competitive angle
 
-This is the phase that turns "human-in-the-loop" from a feature into a discipline. No competitor has
-this because no competitor exposes the decision at all — but a review queue nobody empties is exactly
-how good governance features die in practice, and Falcon should be the tool that refuses to let that
-happen quietly.
+This is the phase that turns "human-in-the-loop" from a feature into a discipline. Whether any
+competitor surfaces queue staleness was **not** established by the reviewed public documentation, so
+nothing here claims they do not — absence of evidence in a vendor's docs is not evidence the vendor
+lacks the capability. The defensible point stands on its own: a review queue nobody empties is
+exactly how good governance features die in practice, and Falcon should be the tool that refuses to
+let that happen quietly.
 
 ### Implementation specification
 
@@ -700,10 +708,11 @@ with no vendor holding the history hostage.
   SHA and branch, pages tested, scenario counts by status, heal counts by tier, pending-review depth,
   quarantine count, total duration.
 - A trend view in the dashboard that outlives the run, served from the ledger.
-- **Trend-level regression detection**, which is the genuinely differentiated part: a rising heal
-  rate means the application is drifting underneath the suite. That is a finding about the product,
-  not about the tests, and no competitor surfaces it as such. Also flag duration regressions and
-  pass-rate decay.
+- **Trend-level regression detection**, which is the most valuable part: a rising heal rate means
+  the application is drifting underneath the suite. That is a finding about the product, not about
+  the tests. Whether a competitor surfaces it that way was not established by the reviewed public
+  documentation, so this is stated as useful rather than as unique. Also flag duration regressions
+  and pass-rate decay.
 - Export (JSON + CSV) for the reporting a QA lead already has to produce.
 
 ### Acceptance criteria
