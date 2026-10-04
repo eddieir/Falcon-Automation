@@ -293,4 +293,153 @@ test("AC-53 negative control: the ESM-syntax regex actually catches an import st
   assert.ok(!ESM_SYNTAX_RE.test('const Foo = require("./Foo.js");\nmodule.exports = Foo;\n'));
 });
 
-module.exports = { walkRequireGraph, extractRequireSpecifiers };
+// ---------------------------------------------------------------------------
+// AC-54 / AC-55 / AC-56 — CI state-persistence policy.
+//
+// QA classified these as "implemented, not independently test-covered"
+// because the policy lives in `.github/workflows/ci.yml` comments rather
+// than an executable assertion. The coordinator's round-2 note is right
+// that a real regression gate is available for three of the four: the
+// restore/save steps' `path:` lists are plain text in a file this test can
+// read, and the hazard (someone later "tidies up" by adding the new
+// locator-memory store to the same cache pair, letting one branch inherit
+// another branch's approved evidence) is exactly what a text-level
+// assertion catches the moment it happens.
+//
+// AC-57 (cache failure cannot hide test results) is deliberately NOT
+// covered here — it is a property of GitHub Actions' own restore-step
+// semantics (a failed restore does not fail the job), not of anything
+// Falcon's own code or config decides. Asserting that would mean asserting
+// someone else's platform behaviour, which is a worse gap than an honest
+// omission.
+// ---------------------------------------------------------------------------
+
+const CI_YML_PATH = path.join(root, ".github", "workflows", "ci.yml");
+
+const APPROVED_STATE_FILES = [
+  "data/scenario_history.json",
+  "data/quarantine_decisions.json",
+  "data/healing_pending.json",
+  "data/healing_decisions.json",
+];
+
+const RESTORE_STEP_HEADING = "- name: Restore Falcon state (flakiness/quarantine/healing)";
+const SAVE_STEP_HEADING = "- name: Save Falcon state (flakiness/quarantine/healing)";
+
+/**
+ * Pull the YAML block-scalar list of `data/*.json` paths out of the named
+ * step's `path: |` block in `text`, starting the search from `fromIndex`
+ * (so the restore step and the save step, which share an identical file
+ * list, are each located unambiguously rather than both matching the first
+ * `path: |` in the document). Returns `null` if the heading isn't found at
+ * all, so a caller can distinguish "the step is missing" from "the step
+ * exists with an empty list" rather than treating both as the same failure.
+ */
+function extractCacheStepPathList(text, stepHeading, fromIndex = 0) {
+  const headingIndex = text.indexOf(stepHeading, fromIndex);
+  if (headingIndex === -1) return null;
+
+  const afterHeading = text.slice(headingIndex);
+  const pathMarker = "path: |";
+  const pathIndex = afterHeading.indexOf(pathMarker);
+  assert.ok(pathIndex !== -1, `found step heading "${stepHeading}" but no "path: |" block after it`);
+
+  const afterPathMarker = afterHeading.slice(pathIndex + pathMarker.length);
+  const lines = afterPathMarker.split("\n");
+  const files = [];
+  for (let i = 1; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed === "") continue;
+    if (!trimmed.startsWith("data/")) break; // first non-"data/..." line ends the block-scalar list
+    files.push(trimmed);
+  }
+  return { files, headingIndex };
+}
+
+test("AC-54/AC-55: the CI cache restore step's path list is exactly the four approved Falcon state files, and carries the explanatory comment", () => {
+  const text = fs.readFileSync(CI_YML_PATH, "utf8");
+  const restore = extractCacheStepPathList(text, RESTORE_STEP_HEADING);
+  assert.ok(restore, `could not find the "${RESTORE_STEP_HEADING}" step in ci.yml at all`);
+  assert.deepEqual(
+    restore.files,
+    APPROVED_STATE_FILES,
+    "the restore step's cached path list must be exactly the four approved state files, in order, nothing added and nothing missing"
+  );
+
+  // AC-54: an explicit, explanatory, human-readable policy must actually be
+  // present near the step, not just a path list with no stated rationale.
+  const commentWindow = text.slice(Math.max(0, restore.headingIndex - 1500), restore.headingIndex);
+  assert.match(
+    commentWindow,
+    /data\/locator_memory\.json[\s\S]{0,400}(deliberately excluded|must not be restored)/i,
+    "the explanatory comment documenting the approved persistence policy must be present immediately above the restore step"
+  );
+});
+
+test("AC-54/AC-55: the CI cache SAVE step's path list is exactly the four approved Falcon state files (restore and save stay in lockstep)", () => {
+  const text = fs.readFileSync(CI_YML_PATH, "utf8");
+  const restore = extractCacheStepPathList(text, RESTORE_STEP_HEADING);
+  const save = extractCacheStepPathList(text, SAVE_STEP_HEADING, restore.headingIndex + 1);
+  assert.ok(save, `could not find the "${SAVE_STEP_HEADING}" step in ci.yml at all`);
+  assert.deepEqual(
+    save.files,
+    APPROVED_STATE_FILES,
+    "the save step's cached path list must be exactly the four approved state files, in order — a drift between restore and save is itself a bug this test must catch"
+  );
+});
+
+test("AC-56: data/locator_memory.json (Phase 14's evidence-based store) appears in NEITHER the restore nor the save cache path list", () => {
+  const text = fs.readFileSync(CI_YML_PATH, "utf8");
+  const restore = extractCacheStepPathList(text, RESTORE_STEP_HEADING);
+  const save = extractCacheStepPathList(text, SAVE_STEP_HEADING, restore.headingIndex + 1);
+
+  for (const file of [...restore.files, ...save.files]) {
+    assert.notEqual(
+      file,
+      "data/locator_memory.json",
+      "data/locator_memory.json must never be cached — a PR branch could otherwise silently inherit another branch's approved/revoked locator evidence"
+    );
+  }
+  // data/locator_store.json (Phase 8's approved Tier-2 selector cache) is
+  // excluded for an older, independently-documented reason and must stay
+  // excluded too, though that is not this test's own AC.
+  for (const file of [...restore.files, ...save.files]) {
+    assert.notEqual(file, "data/locator_store.json");
+  }
+});
+
+test("AC-56 negative control: the SAME check catches data/locator_memory.json the moment it is added to a scratch copy of the restore list (proves the gate can fail)", () => {
+  const realText = fs.readFileSync(CI_YML_PATH, "utf8");
+
+  // Build a scratch copy with the hazard the coordinator described: someone
+  // "tidies up" by adding the new store into the restore step's path list.
+  const restore = extractCacheStepPathList(realText, RESTORE_STEP_HEADING);
+  const headingIndex = restore.headingIndex;
+  const pathMarkerIndex = realText.indexOf("path: |", headingIndex);
+  const insertAt = realText.indexOf("\n", pathMarkerIndex) + 1;
+  const indentMatch = /^( +)data\//.exec(realText.slice(insertAt));
+  const indent = indentMatch ? indentMatch[1] : "            ";
+  const tampered = realText.slice(0, insertAt) + `${indent}data/locator_memory.json\n` + realText.slice(insertAt);
+
+  const tamperedRestore = extractCacheStepPathList(tampered, RESTORE_STEP_HEADING);
+  assert.ok(
+    tamperedRestore.files.includes("data/locator_memory.json"),
+    "sanity: the scratch copy must actually contain the injected line, or this negative control proves nothing"
+  );
+
+  assert.throws(() => {
+    for (const file of tamperedRestore.files) {
+      assert.notEqual(file, "data/locator_memory.json", "data/locator_memory.json must never be cached");
+    }
+  }, /data\/locator_memory\.json must never be cached/);
+
+  // And the real, untampered file must still pass the identical check —
+  // proving this isn't a gate that merely always fails or always passes.
+  assert.doesNotThrow(() => {
+    for (const file of restore.files) {
+      assert.notEqual(file, "data/locator_memory.json");
+    }
+  });
+});
+
+module.exports = { walkRequireGraph, extractRequireSpecifiers, extractCacheStepPathList };

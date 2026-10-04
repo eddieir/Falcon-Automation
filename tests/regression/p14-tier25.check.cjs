@@ -317,7 +317,7 @@ test("Tier 2.5: an accepted verbatim-identical selector refreshes trust", () =>
 // Tier 1 success -> fire-and-forget evidence capture, zero added latency.
 // ---------------------------------------------------------------------------
 
-test("Tier 1 success: evidence capture never blocks or delays the Tier 1 return", () =>
+test("AC-49: Tier 1 success: evidence capture never blocks or delays the Tier 1 return", () =>
   withTempDir(async (dir) => {
     const memory = makeMemory(dir);
     const { AIHealer } = loadAIHealer();
@@ -339,7 +339,7 @@ test("Tier 1 success: evidence capture never blocks or delays the Tier 1 return"
     assert.equal(result, "resolved", "Tier 1 must resolve without waiting on evidence capture");
   }));
 
-test("Tier 1 success: evidence is recorded in the background without changing the return value", () =>
+test("AC-49: Tier 1 success: evidence is recorded in the background without changing the return value", () =>
   withTempDir(async (dir) => {
     const memory = makeMemory(dir);
     const { AIHealer } = loadAIHealer();

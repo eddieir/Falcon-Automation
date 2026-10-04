@@ -930,13 +930,20 @@ test("AC-10: mutating the object returned by getEntry()/getTrusted() across TWO 
 });
 
 // ---------------------------------------------------------------------------
-// AC-15: migration/classification is deterministic and recoverable — the
-// same on-disk file, parsed and classified by two completely separate
-// LocatorMemory instances, lands every row in the same place (entries vs.
-// legacy, same legacy reason) every time.
+// AC-14 / AC-15: this single test genuinely proves two criteria at once, so
+// both are named rather than splitting it artificially —
+//   AC-14: an unscoped legacy row (no identity/scope at all, or one that
+//          claims "trusted" with no signature) is never silently treated as
+//          fully-scoped usable trust — it is quarantined into `legacy`,
+//          never loaded into `entries`, so `getTrusted()` can never return
+//          it.
+//   AC-15: migration/classification is deterministic and recoverable — the
+//          same on-disk file, parsed and classified by completely separate
+//          LocatorMemory instances, lands every row in the same place
+//          (entries vs. legacy, same legacy reason) every time.
 // ---------------------------------------------------------------------------
 
-test("AC-15: the same mixed-validity file classifies identically across two independent LocatorMemory instances", (t) => {
+test("AC-14/AC-15: unscoped legacy rows are quarantined, never silently trusted, and that classification is deterministic across independent LocatorMemory instances", (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);
@@ -1004,6 +1011,17 @@ test("AC-15: the same mixed-validity file classifies identically across two inde
   assert.deepEqual(first.entryKeys, [goodKey], "only the one genuinely well-formed row must land in entries");
   assert.equal(first.legacyCount, 2, "both malformed rows must be quarantined, never dropped silently and never promoted");
   assert.deepEqual(first.legacyReasons, ["missing_identity", "trusted_without_signature"]);
+
+  // AC-14, made explicit rather than only inferred from entries' contents:
+  // an unscoped/malformed legacy row must never be reachable as usable
+  // trust through the store's own trust-reading API, even though its raw
+  // row claimed `trust: "trusted"`.
+  const liveMemory = new LocatorMemory({ memoryPath, env: {} });
+  assert.equal(
+    liveMemory.getTrusted(claimsTrustedIdentity),
+    null,
+    "a quarantined row claiming trust must never be returned as usable evidence by getTrusted()"
+  );
 });
 
 test("AC-15: reloading the SAME already-open instance via _reload() reproduces the identical classification as a fresh instance", (t) => {
