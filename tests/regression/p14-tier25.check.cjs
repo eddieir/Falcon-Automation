@@ -636,3 +636,176 @@ test("AIHealer and Dashboard share one LocatorMemory instance; nothing written i
   assert.equal(approvedEntry.trust, "trusted", "the approved candidate must now be trusted");
   assert.equal(approvedEntry.pendingCandidate, null);
 });
+
+// ---------------------------------------------------------------------------
+// AC-17: a success against an already-trusted STORED ALTERNATIVE (Tier 2 /
+// LocatorStore) refreshes its evidence. This is distinct from the Tier 2.5
+// "accepted verbatim-identical selector refreshes trust" test above — that
+// one exercises the Tier 2.5 matcher path; this one exercises the plain
+// Tier 2 replay path (a selector LocatorStore already hands back, with no
+// matching/scoring involved at all) and proves it feeds the SAME
+// fire-and-forget evidence capture (`_recordTrustedEvidence`).
+// ---------------------------------------------------------------------------
+
+function loadAIHealerWithStoredAlternatives(alternatives, logs = []) {
+  const AdaptiveRetryFake = class {
+    constructor() {}
+    async execute(fn) {
+      return fn();
+    }
+  };
+  const AIHealer = load("src/core/AIHealer/AIHealer.js", {
+    "../../../utils/Logger": silent,
+    "./LocatorStore": { getAlternatives: () => alternatives },
+    "./HealingReport": { log: (opts) => logs.push(opts) },
+    "./HealingTrust": { recordPending() {}, recordTier3Invocation() {} },
+    "./AdaptiveRetry": AdaptiveRetryFake,
+  });
+  return { AIHealer, logs };
+}
+
+test("AC-17: a Tier 2 (LocatorStore) success against an already-trusted identity refreshes its evidence, preserving firstSeen", () =>
+  withTempDir(async (dir) => {
+    const memory = makeMemory(dir);
+    const identity = identityFor("#broken-selector").identity;
+    const originalSignature = ElementSignature.capture(BUTTON_DESCRIPTOR, { salt: memory.salt });
+    const before = memory.recordEvidence(identity, originalSignature);
+
+    const logs = [];
+    const { AIHealer } = loadAIHealerWithStoredAlternatives(["#stored-alternative"], logs);
+
+    // The live element has moved on slightly since the original evidence
+    // was captured (a real, honest "refresh" scenario — not byte-identical).
+    const EVOLVED_DESCRIPTOR = { ...BUTTON_DESCRIPTOR, accessibleName: "Submit order now" };
+    const collector = {
+      collect: async () => [],
+      collectOne: async (page, selector) => liveCandidateFacts(selector, EVOLVED_DESCRIPTOR),
+    };
+    const page = makePage();
+    const healer = new AIHealer(page, { locatorMemory: memory, elementFactsCollector: collector });
+
+    await healer.healSelector("#broken-selector", "Submit", "click");
+    await flush(memory);
+
+    const tier2Logs = logs.filter((l) => l.tier === "LocatorStore");
+    assert.equal(tier2Logs.length, 1, "the Tier 2 success must be logged exactly once");
+    assert.equal(tier2Logs[0].resolved, "#stored-alternative");
+
+    const after = memory.getTrusted(identity);
+    assert.ok(after, "the identity must still carry usable trusted evidence after the refresh");
+    assert.equal(after.firstSeen, before.firstSeen, "a refresh must preserve the original firstSeen, never reset it");
+    assert.notEqual(
+      after.signature.accessibleNameApprox,
+      before.signature.accessibleNameApprox,
+      "the refreshed signature must reflect what the live element looks like NOW, not the stale original capture"
+    );
+    assert.equal(after.signature.accessibleNameApprox, "Submit order now");
+  }));
+
+test("AC-17 negative control: without a Tier 2 success, evidence is never refreshed at all (proves the refresh is caused by the success, not a timer)", () =>
+  withTempDir(async (dir) => {
+    const memory = makeMemory(dir);
+    const identity = identityFor("#broken-selector").identity;
+    const originalSignature = ElementSignature.capture(BUTTON_DESCRIPTOR, { salt: memory.salt });
+    const before = memory.recordEvidence(identity, originalSignature);
+
+    // No stored alternatives at all, and Tier 3 is stubbed to return null —
+    // nothing can succeed, so nothing should ever call recordEvidence again.
+    const { AIHealer } = loadAIHealerWithStoredAlternatives([]);
+    const collector = { collect: async () => [], collectOne: async () => null };
+    const healer = new AIHealer(makePage(), { locatorMemory: memory, elementFactsCollector: collector });
+    healer.getAlternativeSelector = async () => null;
+
+    await assert.rejects(() => healer.healSelector("#broken-selector", "Submit", "click"));
+    await flush(memory);
+
+    const after = memory.getTrusted(identity);
+    assert.deepEqual(after.signature, before.signature, "with no success at all, the stored evidence must be untouched");
+    assert.equal(after.lastSeen, before.lastSeen);
+  }));
+
+// ---------------------------------------------------------------------------
+// AC-38: Tier 3's existing trust behaviour (HealingTrust's pending/decision
+// ledgers) is untouched by this phase. Tier 2.5 running — whether it
+// accepts, refuses, or finds no candidate — must never call ANY HealingTrust
+// method. The mock below exposes recordPending/recordTier3Invocation as
+// SPIES (not just no-ops, as the shared loadAIHealer() helper uses) so a
+// Tier 2.5 success that incorrectly touched HealingTrust would be caught
+// here, not just silently tolerated by a no-op.
+// ---------------------------------------------------------------------------
+
+test("AC-38: an accepted Tier 2.5 match never calls any HealingTrust method — only Tier 3 does", () =>
+  withTempDir(async (dir) => {
+    const memory = makeMemory(dir);
+    const identity = identityFor("#broken-button").identity;
+    const storedSignature = ElementSignature.capture(BUTTON_DESCRIPTOR, { salt: memory.salt });
+    memory.recordEvidence(identity, storedSignature);
+
+    const recordPendingCalls = [];
+    const recordTier3Calls = [];
+    const AdaptiveRetryFake = class {
+      constructor() {}
+      async execute(fn) {
+        return fn();
+      }
+    };
+    const AIHealer = load("src/core/AIHealer/AIHealer.js", {
+      "../../../utils/Logger": silent,
+      "./LocatorStore": { getAlternatives: () => [] },
+      "./HealingReport": { log() {} },
+      "./HealingTrust": {
+        recordPending: (...args) => recordPendingCalls.push(args),
+        recordTier3Invocation: (...args) => recordTier3Calls.push(args),
+      },
+      "./AdaptiveRetry": AdaptiveRetryFake,
+    });
+
+    const collector = {
+      collect: async () => [liveCandidateFacts("#live-1")],
+      collectOne: async () => null,
+    };
+    const healer = new AIHealer(makePage(), { locatorMemory: memory, elementFactsCollector: collector });
+
+    await healer.healSelector("#broken-button", "Submit", "click");
+    await flush(memory);
+
+    assert.deepEqual(recordPendingCalls, [], "Tier 2.5 acceptance must never call HealingTrust.recordPending");
+    assert.deepEqual(recordTier3Calls, [], "Tier 2.5 acceptance must never call HealingTrust.recordTier3Invocation — it never reached Tier 3");
+  }));
+
+test("AC-38: Tier 2.5 refusal falls through to Tier 3, and ONLY THEN does HealingTrust see the call — proves the spy itself is wired correctly", () =>
+  withTempDir(async (dir) => {
+    const memory = makeMemory(dir);
+    const identity = identityFor("#broken-weak").identity;
+    // Weak evidence only (no stable identity signal) — Tier 2.5 must refuse.
+    memory.recordEvidence(identity, { schemaVersion: 1, tagName: "button", role: null, accessibleNameApprox: null, attributes: {}, structuralPath: null, textApprox: null, boundingBoxBucket: null });
+
+    const recordTier3Calls = [];
+    const AdaptiveRetryFake = class {
+      constructor() {}
+      async execute(fn) {
+        return fn();
+      }
+    };
+    const AIHealer = load("src/core/AIHealer/AIHealer.js", {
+      "../../../utils/Logger": silent,
+      "./LocatorStore": { getAlternatives: () => [] },
+      "./HealingReport": { log() {} },
+      "./HealingTrust": {
+        recordPending() {},
+        recordTier3Invocation: (...args) => recordTier3Calls.push(args),
+      },
+      "./AdaptiveRetry": AdaptiveRetryFake,
+    });
+
+    const collector = { collect: async () => [], collectOne: async (page, selector) => liveCandidateFacts(selector) };
+    const healer = new AIHealer(makePage(), { locatorMemory: memory, elementFactsCollector: collector });
+    let tier3Calls = 0;
+    healer.getAlternativeSelector = async () => {
+      tier3Calls++;
+      return null;
+    };
+
+    await assert.rejects(() => healer.healSelector("#broken-weak", "Submit", "click"));
+    assert.equal(tier3Calls, 1, "a Tier 2.5 refusal must fall through to Tier 3, not abort the run");
+  }));

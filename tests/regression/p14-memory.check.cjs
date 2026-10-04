@@ -863,3 +863,181 @@ test("S-Q7: the composed WriteFailureTracker reports a failed FIRST write even a
     "a failed first write must remain visible even though a later write to a different path succeeded");
   assert.equal(memory.lastWriteError().path, pathA, "the reported failure must name the path that actually failed");
 });
+
+// ---------------------------------------------------------------------------
+// AC-10: reads return defensive copies — a caller mutating a returned entry
+// cannot corrupt the store's own internal state.
+// ---------------------------------------------------------------------------
+
+test("AC-10: mutating the object returned by recordEvidence does not corrupt the store's internal state", (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const LocatorMemory = loadLocatorMemory();
+  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+
+  const identity = identityFor("#checkout-button");
+  const entry = memory.recordEvidence(identity, signatureFor("Checkout"));
+
+  entry.trust = "revoked";
+  entry.signature.tagName = "TAMPERED";
+  entry.revocationHistory.push({ actor: "attacker", at: "1970-01-01T00:00:00.000Z" });
+
+  const trusted = memory.getTrusted(identity);
+  assert.equal(trusted.signature.tagName, "button", "mutating the returned signature must not reach the stored entry");
+
+  const key = LocatorIdentity.serialiseIdentity(identity);
+  const internal = memory.getEntry(key);
+  assert.equal(internal.trust, "trusted", "mutating the returned entry's trust must not affect the stored trust state");
+  assert.deepEqual(internal.revocationHistory, [], "pushing onto the returned revocationHistory array must not append to the stored one");
+});
+
+test("AC-10: mutating the object returned by list() does not corrupt the store's internal state", (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const LocatorMemory = loadLocatorMemory();
+  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+
+  const identity = identityFor("#checkout-button");
+  memory.recordEvidence(identity, signatureFor("Checkout"));
+  const key = LocatorIdentity.serialiseIdentity(identity);
+
+  const listed = memory.list();
+  listed[key].trust = "revoked";
+  listed[key].signature.tagName = "TAMPERED";
+  delete listed[key];
+
+  const stillThere = memory.list();
+  assert.ok(stillThere[key], "deleting a key from the returned list() object must not delete it from the store");
+  assert.equal(stillThere[key].trust, "trusted");
+  assert.equal(stillThere[key].signature.tagName, "button");
+});
+
+test("AC-10: mutating the object returned by getEntry()/getTrusted() across TWO separate calls never lets one call's mutation leak into the next", (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const LocatorMemory = loadLocatorMemory();
+  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+
+  const identity = identityFor("#checkout-button");
+  memory.recordEvidence(identity, signatureFor("Checkout"));
+
+  const first = memory.getTrusted(identity);
+  const originalTagName = first.signature.tagName;
+  first.signature.tagName = "TAMPERED";
+  const second = memory.getTrusted(identity);
+  assert.equal(second.signature.tagName, originalTagName, "each call must return an independent copy, not a shared reference");
+  assert.notEqual(first, second, "two calls must never return the identical object reference");
+});
+
+// ---------------------------------------------------------------------------
+// AC-15: migration/classification is deterministic and recoverable — the
+// same on-disk file, parsed and classified by two completely separate
+// LocatorMemory instances, lands every row in the same place (entries vs.
+// legacy, same legacy reason) every time.
+// ---------------------------------------------------------------------------
+
+test("AC-15: the same mixed-validity file classifies identically across two independent LocatorMemory instances", (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const memoryPath = makeMemoryPath(dir);
+  const LocatorMemory = loadLocatorMemory();
+
+  const goodIdentity = identityFor("#good-selector");
+  const goodKey = LocatorIdentity.serialiseIdentity(goodIdentity);
+  const claimsTrustedIdentity = identityFor("#claims-trusted");
+  const claimsTrustedKey = LocatorIdentity.serialiseIdentity(claimsTrustedIdentity);
+
+  const onDisk = {
+    schemaVersion: 1,
+    salt: TEST_SALT,
+    entries: {
+      [goodKey]: {
+        identity: goodIdentity,
+        trust: "trusted",
+        signature: signatureFor("Good"),
+        pendingCandidate: null,
+        firstSeen: "2024-01-01T00:00:00.000Z",
+        lastSeen: "2024-01-01T00:00:00.000Z",
+        revocationHistory: [],
+      },
+      "legacy-bare-selector": {
+        // Pre-Phase-14 shaped row: no identity object at all. Must always
+        // be quarantined, never promoted, and always for the SAME reason.
+        selector: "#legacy-bare-selector",
+        alternatives: ["#legacy-alt"],
+      },
+      [claimsTrustedKey]: {
+        identity: claimsTrustedIdentity,
+        trust: "trusted",
+        // No signature at all despite claiming "trusted" — must always be
+        // quarantined for "trusted_without_signature", never silently
+        // treated as usable trust.
+        signature: null,
+        pendingCandidate: null,
+        firstSeen: "2024-01-01T00:00:00.000Z",
+        lastSeen: "2024-01-01T00:00:00.000Z",
+        revocationHistory: [],
+      },
+    },
+    legacy: {},
+    rejections: [],
+  };
+  fs.writeFileSync(memoryPath, JSON.stringify(onDisk));
+
+  function classify() {
+    const memory = new LocatorMemory({ memoryPath, env: {} });
+    const legacyReasons = [...memory.legacy.values()].map((row) => row.reason).sort();
+    return {
+      entryKeys: [...memory.entries.keys()].sort(),
+      legacyCount: memory.legacy.size,
+      legacyReasons,
+    };
+  }
+
+  const first = classify();
+  const second = classify();
+  const third = classify();
+
+  assert.deepEqual(first, second, "two independent instances loading the same file must classify every row identically");
+  assert.deepEqual(second, third, "a third independent load must still match — this is not a two-run fluke");
+
+  assert.deepEqual(first.entryKeys, [goodKey], "only the one genuinely well-formed row must land in entries");
+  assert.equal(first.legacyCount, 2, "both malformed rows must be quarantined, never dropped silently and never promoted");
+  assert.deepEqual(first.legacyReasons, ["missing_identity", "trusted_without_signature"]);
+});
+
+test("AC-15: reloading the SAME already-open instance via _reload() reproduces the identical classification as a fresh instance", (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const memoryPath = makeMemoryPath(dir);
+  const LocatorMemory = loadLocatorMemory();
+
+  const identity = identityFor("#reload-me");
+  const key = LocatorIdentity.serialiseIdentity(identity);
+  fs.writeFileSync(memoryPath, JSON.stringify({
+    schemaVersion: 1,
+    salt: TEST_SALT,
+    entries: {
+      [key]: {
+        identity,
+        trust: "trusted",
+        signature: signatureFor("Reload"),
+        pendingCandidate: null,
+        firstSeen: "2024-01-01T00:00:00.000Z",
+        lastSeen: "2024-01-01T00:00:00.000Z",
+        revocationHistory: [],
+      },
+      "bad-row": { not: "a valid entry shape" },
+    },
+    legacy: {},
+    rejections: [],
+  }));
+
+  const memory = new LocatorMemory({ memoryPath, env: {} });
+  const freshInstance = new LocatorMemory({ memoryPath, env: {} });
+
+  memory._reload();
+
+  assert.deepEqual([...memory.entries.keys()].sort(), [...freshInstance.entries.keys()].sort());
+  assert.equal(memory.legacy.size, freshInstance.legacy.size);
+});
