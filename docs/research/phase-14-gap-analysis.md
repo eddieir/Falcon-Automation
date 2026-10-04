@@ -332,7 +332,8 @@ multi-year production adoption and maturity signal (created 2021, 167 stars, sus
 against a brand-new Falcon feature. Any direct quantitative accuracy comparison against a real
 competitor number — this is not a "not yet" limitation but a permanent one under protected-replay
 option (C): Falcon has no controlled, reproducible access to any competitor's actual accuracy,
-and CLAUDE.md forbids uncontrolled third-party access in CI regardless of phase. Unqualified
+and this project's engineering rules forbid uncontrolled third-party access in CI regardless of
+phase. Unqualified
 marketing-scale numbers (BrowserStack's 40%, mabl's 95%) cannot be "beaten" with a Falcon number,
 because the comparison itself is invalid — different, undisclosed methodology and population.
 
@@ -371,7 +372,8 @@ view, not only a testability one:
 
 - Options (A) full protected replay and (B) bounded local validation subset both require some
   execution surface against a competitor's actual product. That is by definition an uncontrolled
-  third-party system, which CLAUDE.md forbids relying on in CI ("avoid uncontrolled third-party
+  third-party system, which this project's engineering rules forbid relying on in CI ("avoid
+  uncontrolled third-party
   sites in CI"). No design change in Falcon's own architecture resolves that constraint — it is
   an external access problem, not an implementation problem.
 - Option (D) defer leaves D5 unmeasured, and D5 is a Must per EP-3 and the phase's only
