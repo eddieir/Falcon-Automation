@@ -362,6 +362,199 @@ test("AC-49: Tier 1 success: evidence is recorded in the background without chan
     assert.equal(trusted.signature.tagName, "button");
   }));
 
+test("AC-49/AC-18: a hanging collector delays Tier 1 by at most the documented pre-capture bound", () =>
+  withTempDir(async (dir) => {
+    const memory = makeMemory(dir);
+    const { AIHealer } = loadAIHealer();
+
+    // Slower than the pre-capture bound, but it does eventually settle, so
+    // this test leaves no pending work behind for the ones after it.
+    const SLOW_MS = 900;
+    let settle = null;
+    const slow = new Promise((resolve) => {
+      settle = setTimeout(() => resolve(liveCandidateFacts("#submit-btn")), SLOW_MS);
+    });
+    const collector = { collect: async () => [], collectOne: () => slow };
+    const healer = new AIHealer(makePage(), { locatorMemory: memory, elementFactsCollector: collector });
+
+    const startedAt = Date.now();
+    await healer.healAndClick("#submit-btn", "Submit");
+    const elapsed = Date.now() - startedAt;
+
+    // Reading the element before acting on it means Tier 1 can wait on the
+    // collector, so the guarantee is a documented BOUND rather than zero.
+    // The point is that it returns on the bound, not on the collector.
+    assert.ok(elapsed < SLOW_MS, `Tier 1 must return on the pre-capture bound, not the collector (${elapsed}ms)`);
+    await flush(memory);
+    assert.equal(
+      Object.keys(memory.list()).length,
+      0,
+      "a collector slower than the bound must yield no evidence, not a partial entry"
+    );
+
+    // Let the abandoned read settle so it cannot outlive this test.
+    await slow;
+    clearTimeout(settle);
+  }));
+
+// ---------------------------------------------------------------------------
+// AC-18: for navigating/destructive actions, the element is read BEFORE the
+// interaction and persisted only after it succeeds.
+//
+// A click that navigates has replaced the document by the time it returns.
+// Reading the element afterwards described whatever the landing page put
+// behind the same selector, keyed to the landing page's URL — recording a
+// trusted fact about an element nobody interacted with, and leaving the page
+// the click actually happened on with no evidence at all.
+// ---------------------------------------------------------------------------
+
+const LANDING_URL = "https://example.com/thank-you";
+
+/** A page whose click navigates: url() changes and the selector re-resolves. */
+function makeNavigatingPage(onNavigate) {
+  let current = PAGE_URL;
+  const page = makePage({
+    url: () => current,
+    click: async () => {
+      current = LANDING_URL;
+      if (onNavigate) onNavigate();
+    },
+  });
+  page.currentUrl = () => current;
+  return page;
+}
+
+// A different element that also matches the selector on the landing page.
+const LANDING_DESCRIPTOR = Object.freeze({
+  tagName: "input",
+  role: "button",
+  accessibleName: "Sign up for our newsletter",
+  attributes: { "data-testid": "newsletter-signup", type: "submit" },
+  structuralPath: ["footer", "form"],
+  ownText: "Sign up",
+  boundingBoxBucket: "bottom-left:small",
+});
+
+test("AC-18: a navigating Tier 1 click records evidence for the page the click happened on, describing the element clicked", () =>
+  withTempDir(async (dir) => {
+    const memory = makeMemory(dir);
+    const { AIHealer } = loadAIHealer();
+
+    const page = makeNavigatingPage();
+    // An honest collector: it reports whatever is on the page right now.
+    const collector = {
+      collect: async () => [],
+      collectOne: async (_p, selector) =>
+        page.currentUrl() === PAGE_URL
+          ? liveCandidateFacts(selector, BUTTON_DESCRIPTOR)
+          : liveCandidateFacts(selector, LANDING_DESCRIPTOR),
+    };
+    const healer = new AIHealer(page, { locatorMemory: memory, elementFactsCollector: collector });
+
+    await healer.healAndClick("#submit", "Place order");
+    await flush(memory);
+
+    assert.equal(page.currentUrl(), LANDING_URL, "the click must really have navigated");
+
+    const keys = Object.keys(memory.list());
+    assert.equal(keys.length, 1, "exactly one entry should be recorded");
+
+    // Scoped to the page the interaction happened on, not the landing page.
+    const expected = identityFor("#submit").identity;
+    assert.ok(memory.getTrusted(expected), "evidence must be scoped to the page the click happened on");
+
+    // THE FALSIFICATION: both of these held before the fix.
+    assert.ok(!/thank-you/.test(keys[0]), "evidence must not be keyed to the landing page");
+    const stored = memory.getTrusted(expected).signature;
+    const landing = ElementSignature.capture(LANDING_DESCRIPTOR, { salt: memory.salt });
+    const clicked = ElementSignature.capture(BUTTON_DESCRIPTOR, { salt: memory.salt });
+    assert.notDeepEqual(
+      stored.attributes,
+      landing.attributes,
+      "evidence must not describe the landing page's element"
+    );
+    assert.deepEqual(stored.attributes, clicked.attributes, "evidence must describe the element clicked");
+  }));
+
+test("AC-18: pre-captured evidence is persisted only after the action succeeds, never when it throws", () =>
+  withTempDir(async (dir) => {
+    const memory = makeMemory(dir);
+    const { AIHealer } = loadAIHealer();
+
+    // The element reads cleanly, so pre-capture succeeds; the action itself
+    // then fails. Nothing may be persisted from a capture whose interaction
+    // never happened.
+    const page = makePage({
+      click: async () => {
+        throw new Error("click intercepted");
+      },
+    });
+    const collector = {
+      collect: async () => [],
+      collectOne: async (_p, selector) => liveCandidateFacts(selector),
+    };
+    const healer = new AIHealer(page, { locatorMemory: memory, elementFactsCollector: collector });
+
+    // Tier 1 fails, falls through the chain; no trusted evidence either way.
+    await healer.healAndClick("#submit", "Place order").catch(() => {});
+    await flush(memory);
+
+    const trusted = memory.getTrusted(identityFor("#submit").identity);
+    assert.ok(!trusted, "a failed action must persist no trusted evidence");
+  }));
+
+test("AC-18: a navigating Tier 2 stored-alternative success is scoped to the page it acted on", () =>
+  withTempDir(async (dir) => {
+    const memory = makeMemory(dir);
+    const logs = [];
+    const AdaptiveRetryFake = class {
+      async execute(fn) {
+        return fn();
+      }
+    };
+    // Tier 1 fails so the stored alternative runs; that alternative navigates.
+    let current = PAGE_URL;
+    const AIHealer = load("src/core/AIHealer/AIHealer.js", {
+      "../../../utils/Logger": silent,
+      "./LocatorStore": { getAlternatives: () => ["#submit-v2"] },
+      "./HealingReport": { log: (o) => logs.push(o) },
+      "./HealingTrust": { recordPending() {}, recordTier3Invocation() {} },
+      "./AdaptiveRetry": AdaptiveRetryFake,
+    });
+
+    const page = makePage({
+      url: () => current,
+      waitForSelector: async (sel) => {
+        if (sel === "#submit") throw new Error("gone");
+      },
+      click: async () => {
+        current = LANDING_URL;
+      },
+    });
+    const collector = {
+      collect: async () => [],
+      collectOne: async (_p, selector) =>
+        current === PAGE_URL
+          ? liveCandidateFacts(selector, BUTTON_DESCRIPTOR)
+          : liveCandidateFacts(selector, LANDING_DESCRIPTOR),
+    };
+    const healer = new AIHealer(page, { locatorMemory: memory, elementFactsCollector: collector });
+
+    await healer.healAndClick("#submit", "Place order");
+    await flush(memory);
+
+    assert.equal(current, LANDING_URL, "the stored alternative must really have navigated");
+    assert.equal(logs.filter((l) => l.tier === "LocatorStore").length, 1, "Tier 2 should have handled it");
+
+    const keys = Object.keys(memory.list());
+    assert.equal(keys.length, 1);
+    assert.ok(!/thank-you/.test(keys[0]), "Tier 2 evidence must not be keyed to the landing page");
+    const stored = memory.getTrusted(identityFor("#submit").identity);
+    assert.ok(stored, "Tier 2 evidence stays scoped to the original selector on the acting page");
+    const landing = ElementSignature.capture(LANDING_DESCRIPTOR, { salt: memory.salt });
+    assert.notDeepEqual(stored.signature.attributes, landing.attributes);
+  }));
+
 // ---------------------------------------------------------------------------
 // Quiet degradation: collector returns no facts even though evidence exists.
 // ---------------------------------------------------------------------------

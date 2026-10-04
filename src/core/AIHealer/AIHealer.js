@@ -58,10 +58,28 @@ const DefaultElementFactsCollector = require("../locator/ElementFactsCollector")
  * never grants itself trust.
  *
  * Tier 1 and Tier 2 successes feed this same evidence store on a
- * best-effort, fire-and-forget basis — a slow or failing capture must never
- * add latency or a new failure mode to an otherwise-successful Tier 1/2
- * attempt, so neither path is ever awaited inline before returning.
+ * best-effort basis. The element is read BEFORE the interaction and the
+ * result persisted only after it succeeds: a click that navigates has
+ * already replaced the document by the time it returns, so reading the
+ * element afterwards describes whatever the landing page happens to put
+ * behind the same selector, scoped to the landing page's URL. That recorded
+ * a trusted fact about an element nobody had interacted with and left the
+ * page the click actually happened on with no evidence at all — the most
+ * common healing targets in a real suite (submit and login buttons) being
+ * exactly the ones that navigate.
+ *
+ * Reading first costs one bounded DOM query before the interaction. It is
+ * capped by PRE_CAPTURE_TIMEOUT_MS and every failure resolves to "no
+ * evidence", so a slow, hanging or throwing collector still cannot delay the
+ * interaction materially, change its outcome, or add a failure mode to it.
+ * Persistence stays fire-and-forget after success.
  */
+
+// Upper bound on the pre-interaction element read. Small deliberately: this
+// sits in front of every Tier 1/2 action, and losing a piece of evidence is
+// always preferable to delaying the interaction it describes.
+const PRE_CAPTURE_TIMEOUT_MS = 150;
+
 class AIHealer {
     constructor(page, { locatorMemory, elementFactsCollector } = {}) {
         this.page = page;
@@ -128,15 +146,20 @@ class AIHealer {
      */
     async _healAndPerform(action, selector, description, value) {
         try {
+            let captured = null;
             await this._retry.execute(async () => {
                 Logger.info(`🔹 Tier 1: Trying ${description} (${selector})`);
                 await this.page.waitForSelector(selector, { timeout: 2000 });
+                // Read the element while it is still the one being acted on.
+                // Re-read on every retry attempt so the evidence always comes
+                // from the attempt that actually succeeds.
+                captured = await this._preCaptureEvidence(action, selector, selector);
                 await this._performAction(action, selector, value);
             }, description);
-            // Fire-and-forget (Phase 14 EP-5 §8): never awaited, so a slow or
-            // failing capture cannot add latency or a new failure mode to a
-            // Tier 1 success that has already happened by this point.
-            void this._recordTrustedEvidence(action, selector, selector);
+            // Persistence only after success, and fire-and-forget (Phase 14
+            // EP-5 §8): a slow or failing write cannot add latency or a new
+            // failure mode to a Tier 1 success that has already happened.
+            void this._persistCapturedEvidence(captured);
             return; // Tier 1 succeeded
         } catch (error) {
             Logger.error(`❌ Tier 1 exhausted for ${description}. Engaging Tier 2/3 healing.`);
@@ -183,6 +206,9 @@ class AIHealer {
                 }
 
                 Logger.info(`🔹 Trying stored alternative: ${altSelector}`);
+                // Same ordering as Tier 1: read the element before acting on
+                // it, because this action can navigate too.
+                const captured = await this._preCaptureEvidence(action, selector, altSelector);
                 await this._performAction(action, altSelector, value);
                 HealingReport.log({
                     original: selector,
@@ -192,7 +218,7 @@ class AIHealer {
                     action,
                 });
                 // Fire-and-forget, same posture as the Tier 1 capture above.
-                void this._recordTrustedEvidence(action, selector, altSelector);
+                void this._persistCapturedEvidence(captured);
                 return;
             } catch (err) {
                 Logger.warning(`⚠️ Alternative locator ${altSelector} also failed.`);
@@ -438,32 +464,41 @@ class AIHealer {
     }
 
     /**
-     * Best-effort evidence capture for a Tier 1/Tier 2 success (EP-5 §8).
-     * ALWAYS fire-and-forget from the caller's side (never awaited inline) —
-     * every failure mode here is swallowed internally so the returned
-     * promise never rejects, but the point of calling this without `await`
-     * is structural: Tier 1/2's own timing, retry semantics, and return
-     * value must never depend on how long (or whether) this succeeds.
+     * Read the element a Tier 1/Tier 2 interaction is about to act on, and
+     * build the identity it would be scoped to, BEFORE the interaction runs
+     * (EP-5 §8, AC-18). Returns `{ identity, signature }`, or `null` when
+     * there is nothing to record — which includes every failure mode, since
+     * no evidence is always an acceptable outcome here and a broken
+     * collector must never change whether the interaction itself happens.
+     *
+     * This is awaited by its callers, so it is bounded by
+     * PRE_CAPTURE_TIMEOUT_MS: a collector that hangs resolves to `null`
+     * rather than stalling the interaction behind it.
      *
      * `identitySelector` is the selector the identity is scoped to (always
      * the ORIGINAL selector the caller asked to heal — the one that might
      * break again later and trigger a Tier 2.5 lookup for this exact
-     * identity); `liveSelector` is whichever selector actually resolved the
-     * element just now (the same selector for a Tier 1 success, or the
-     * stored alternative for a Tier 2 success).
+     * identity); `liveSelector` is whichever selector resolves the element
+     * right now (the same selector for a Tier 1 success, or the stored
+     * alternative for a Tier 2 success).
      */
-    async _recordTrustedEvidence(action, identitySelector, liveSelector) {
+    async _preCaptureEvidence(action, identitySelector, liveSelector) {
         try {
-            if (!this._locatorMemory) return;
+            if (!this._locatorMemory) return null;
+            // Built from the PRE-interaction URL. After a navigating click
+            // this is the only moment the correct page is still current.
             const identityResult = LocatorIdentity.buildIdentity({
                 url: typeof this.page.url === "function" ? this.page.url() : undefined,
                 action,
                 originalSelector: identitySelector,
             });
-            if (identityResult.status !== "built") return;
+            if (identityResult.status !== "built") return null;
 
-            const facts = await this._collector.collectOne(this.page, liveSelector);
-            if (!facts) return;
+            const facts = await this._withTimeout(
+                this._collector.collectOne(this.page, liveSelector),
+                PRE_CAPTURE_TIMEOUT_MS
+            );
+            if (!facts) return null;
 
             const signature = ElementSignature.capture(
                 {
@@ -478,9 +513,46 @@ class AIHealer {
                 { salt: this._locatorMemory.salt }
             );
 
-            this._locatorMemory.recordEvidence(identityResult.identity, signature);
+            return { identity: identityResult.identity, signature };
         } catch (err) {
             Logger.warning(`AIHealer: best-effort evidence capture skipped (${err.message}).`);
+            return null;
+        }
+    }
+
+    /**
+     * Persist evidence read before a now-successful interaction. Called
+     * without `await` on purpose: the interaction has already happened, and
+     * its timing, retry semantics and return value must never depend on how
+     * long (or whether) the write succeeds. Never rejects.
+     */
+    async _persistCapturedEvidence(captured) {
+        try {
+            if (!captured || !this._locatorMemory) return;
+            this._locatorMemory.recordEvidence(captured.identity, captured.signature);
+        } catch (err) {
+            Logger.warning(`AIHealer: evidence persistence skipped (${err.message}).`);
+        }
+    }
+
+    /**
+     * Resolve `promise`, or `null` once `ms` has elapsed. The underlying work
+     * is abandoned, never cancelled — it cannot be, and it holds nothing the
+     * caller needs. The timer is unref'd so a pending pre-capture never keeps
+     * the process alive on its own.
+     */
+    async _withTimeout(promise, ms) {
+        let timer = null;
+        try {
+            return await Promise.race([
+                Promise.resolve(promise).catch(() => null),
+                new Promise((resolve) => {
+                    timer = setTimeout(() => resolve(null), ms);
+                    if (typeof timer.unref === "function") timer.unref();
+                }),
+            ]);
+        } finally {
+            if (timer) clearTimeout(timer);
         }
     }
 
