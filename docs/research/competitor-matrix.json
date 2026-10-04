@@ -1,0 +1,236 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": {
+    "note": "Every cell below is derived from already-committed Phase 14 research. No cell was invented for this file; each cites the source row(s) it came from, resolvable in the sources list below.",
+    "documents": [
+      "docs/research/phase-14-competitive-analysis.md",
+      "docs/research/phase-14-gap-analysis.md",
+      ".git/production-cycle/phase-14-locator-memory-20260929T200401Z/01-source-log.md"
+    ]
+  },
+  "statusEnum": [
+    "VERIFIED",
+    "UNKNOWN",
+    "NOT_FOUND_IN_DOCS",
+    "MARKETING_CLAIM",
+    "ACCOUNT_ACCESS_REQUIRED",
+    "FETCH_BLOCKED"
+  ],
+  "statusEnumMeaning": {
+    "VERIFIED": "Read directly on an official vendor documentation page (or, for Falcon, confirmed by direct code reading at the cited revision).",
+    "UNKNOWN": "The official page was read and is explicitly silent on this question.",
+    "NOT_FOUND_IN_DOCS": "The claim was not found in the reviewed source. This never means the competitor lacks the capability.",
+    "MARKETING_CLAIM": "Sourced from a vendor marketing page, press release, or vendor-authored blog/article rather than official technical documentation. Not independently verifiable; must not be restated as fact.",
+    "ACCOUNT_ACCESS_REQUIRED": "Verifying this cell would require a paid or logged-in account this research did not use. Reserved for that case; not used if the research instead hit a fetch error (see FETCH_BLOCKED).",
+    "FETCH_BLOCKED": "The official documentation page could not be retrieved at all (e.g. HTTP 403) despite being publicly linked."
+  },
+  "sources": [
+    { "id": "S-01", "vendor": "BrowserStack", "title": "AI Self-Heal for Playwright", "url": "https://www.browserstack.com/docs/automate/playwright/self-healing", "kind": "official_docs" },
+    { "id": "S-02", "vendor": "Healenium", "title": "How Healenium works", "url": "https://healenium.io/docs/how_healenium_works", "kind": "official_docs" },
+    { "id": "S-03", "vendor": "Katalon", "title": "Self-healing tests in Katalon Studio", "url": "https://docs.katalon.com/katalon-studio/maintain-tests/self-healing-tests-in-katalon-studio", "kind": "official_docs" },
+    { "id": "S-04", "vendor": "mabl", "title": "GenAI Test Automation with Self-Healing", "url": "https://www.mabl.com/auto-healing-tests", "kind": "marketing" },
+    { "id": "L-01", "vendor": "mabl", "title": "mabl help centre (technical docs)", "url": "https://help.mabl.com/hc/en-us/articles/19078583792404-How-auto-heal-works", "kind": "fetch_blocked" },
+    { "id": "S-05", "vendor": "Testsigma", "title": "Auto-Healing Insights", "url": "https://testsigma.com/docs/auto-healing/auto-healing-insights", "kind": "official_docs" },
+    { "id": "S-06", "vendor": "testRigor", "title": "AI-Based Self-Healing for Test Automation", "url": "https://testrigor.com/ai-based-self-healing/", "kind": "official_docs" },
+    { "id": "S-07", "vendor": "Tricentis Testim", "title": "Locators: Auto Improve", "url": "https://docs.tricentis.com/testim/content/test-management/locators-auto-improve.htm", "kind": "official_docs" },
+    { "id": "S-08", "vendor": "Functionize", "title": "Self-healing tests aren't magic", "url": "https://www.functionize.com/blog/self-healing-tests-arent-magic-heres-whats-actually-happening-under-the-hood", "kind": "vendor_article" },
+    { "id": "S-09", "vendor": "Momentic", "title": "AI test maintenance", "url": "https://momentic.ai/docs/reliability/auto-maintenance", "kind": "official_docs" },
+    { "id": "S-10", "vendor": "Autify", "title": "Self-healing test automation", "url": "https://autify.com/blog/self-healing-test-automation", "kind": "vendor_article" },
+    { "id": "S-13", "vendor": "Virtuoso QA", "title": "Elements and self-healing", "url": "https://docs.virtuoso.qa/guide/making-the-most-of-virtuoso/elements/", "kind": "official_docs" },
+    { "id": "S-14", "vendor": "open-source survey", "title": "GitHub REST API measurement of Playwright healing projects", "url": "https://api.github.com", "kind": "measurement" },
+    { "id": "S-15", "vendor": "BrowserStack", "title": "BrowserStack Unveils AI-Powered Self-Healing Agent (40% claim)", "url": "https://www.prnewswire.com/news-releases/browserstack-unveils-ai-powered-self-healing-agent-to-keep-builds-green-302617102.html", "kind": "press_release" },
+    { "id": "S-16", "vendor": "Healenium", "title": "Documentation Overview (storage engine)", "url": "https://healenium.io/docs/overview", "kind": "official_docs" }
+  ],
+  "features": [
+    { "id": "elementHistoryCapture", "label": "Captures element context/history for later healing" },
+    { "id": "numericConfidenceExposed", "label": "A numeric confidence/match score is shown to the user" },
+    { "id": "refusalOnLowConfidence", "label": "Withholds or escalates rather than silently applying a low-confidence heal" },
+    { "id": "approvalBeforePersistence", "label": "A human approval step gates persisting a healed locator for reuse" },
+    { "id": "rollbackCapability", "label": "A documented way to revert a previously applied/persisted heal" },
+    { "id": "localSelfHosted", "label": "Runs locally/self-hosted with no mandatory cloud execution dependency" },
+    { "id": "playwrightSupport", "label": "Explicit, named Playwright support on the reviewed page" },
+    { "id": "runScopedVsPersistedSplit", "label": "Distinguishes a run-only repair from one that is persisted for future runs" }
+  ],
+  "competitors": {
+    "BrowserStack": {
+      "sourceIds": ["S-01", "S-15"],
+      "cells": {
+        "elementHistoryCapture": { "status": "VERIFIED", "value": "Stores locator, nearby attributes and DOM structure; storage location not stated.", "sourceIds": ["S-01"] },
+        "numericConfidenceExposed": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-01"] },
+        "refusalOnLowConfidence": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-01"] },
+        "approvalBeforePersistence": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-01", "S-15"] },
+        "rollbackCapability": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-01"] },
+        "localSelfHosted": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-01"] },
+        "playwrightSupport": { "status": "VERIFIED", "value": "Explicit, but described as \"presently in limited capacity\"; findElements healing is [Beta].", "sourceIds": ["S-01"] },
+        "runScopedVsPersistedSplit": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-01"] }
+      }
+    },
+    "Healenium": {
+      "sourceIds": ["S-02", "S-16"],
+      "cells": {
+        "elementHistoryCapture": { "status": "VERIFIED", "value": "Persists the successful locator as a baseline; PostgreSQL stores reference selector/healing/report/DOM.", "sourceIds": ["S-02", "S-16"] },
+        "numericConfidenceExposed": { "status": "NOT_FOUND_IN_DOCS", "value": "An internal \"LSC algorithm\" score selects the highest-scoring locator, but no page states it is shown to the user or names a threshold.", "sourceIds": ["S-02"] },
+        "refusalOnLowConfidence": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-02"] },
+        "approvalBeforePersistence": { "status": "UNKNOWN", "value": "Documentation is explicitly silent on auto-trust vs. human review of a healed locator.", "sourceIds": ["S-02"] },
+        "rollbackCapability": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-02"] },
+        "localSelfHosted": { "status": "VERIFIED", "value": "Open-source, self-hosted, own PostgreSQL backend.", "sourceIds": ["S-16"] },
+        "playwrightSupport": { "status": "NOT_FOUND_IN_DOCS", "value": "Overview page names Selenium and Appium; Playwright is not mentioned on that page.", "sourceIds": ["S-16"] },
+        "runScopedVsPersistedSplit": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-02"] }
+      }
+    },
+    "Katalon": {
+      "sourceIds": ["S-03"],
+      "cells": {
+        "elementHistoryCapture": { "status": "VERIFIED", "value": "LLM tier analyses page source, accessibility tree, full-page screenshot and element screenshots.", "sourceIds": ["S-03"] },
+        "numericConfidenceExposed": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-03"] },
+        "refusalOnLowConfidence": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-03"] },
+        "approvalBeforePersistence": { "status": "VERIFIED", "value": "Self-healing Insights tab requires explicit \"Approve\" to save, or \"Discard\" to reject.", "sourceIds": ["S-03"] },
+        "rollbackCapability": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-03"] },
+        "localSelfHosted": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-03"] },
+        "playwrightSupport": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-03"] },
+        "runScopedVsPersistedSplit": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-03"] }
+      }
+    },
+    "mabl": {
+      "sourceIds": ["S-04", "L-01"],
+      "cells": {
+        "elementHistoryCapture": { "status": "MARKETING_CLAIM", "value": "Marketing page claims \"Smarter Element Locators ... use visual context and multiple attributes\"; attribute count not disclosed.", "sourceIds": ["S-04"] },
+        "numericConfidenceExposed": { "status": "FETCH_BLOCKED", "value": null, "sourceIds": ["L-01"] },
+        "refusalOnLowConfidence": { "status": "FETCH_BLOCKED", "value": null, "sourceIds": ["L-01"] },
+        "approvalBeforePersistence": { "status": "MARKETING_CLAIM", "value": "Marketing page states human involvement only \"when clarification is needed\"; not confirmed on official technical docs.", "sourceIds": ["S-04"] },
+        "rollbackCapability": { "status": "FETCH_BLOCKED", "value": null, "sourceIds": ["L-01"] },
+        "localSelfHosted": { "status": "FETCH_BLOCKED", "value": null, "sourceIds": ["L-01"] },
+        "playwrightSupport": { "status": "FETCH_BLOCKED", "value": null, "sourceIds": ["L-01"] },
+        "runScopedVsPersistedSplit": { "status": "FETCH_BLOCKED", "value": null, "sourceIds": ["L-01"] }
+      }
+    },
+    "Testsigma": {
+      "sourceIds": ["S-05"],
+      "cells": {
+        "elementHistoryCapture": { "status": "VERIFIED", "value": "Records a full \"locator trace\": the complete sequence the engine worked through to arrive at a heal.", "sourceIds": ["S-05"] },
+        "numericConfidenceExposed": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-05"] },
+        "refusalOnLowConfidence": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-05"] },
+        "approvalBeforePersistence": { "status": "VERIFIED", "value": "\"Approve as Primary\" persists the heal; \"Ignore\" leaves the original in place; \"Update\" applies it across linked test cases.", "sourceIds": ["S-05"] },
+        "rollbackCapability": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-05"] },
+        "localSelfHosted": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-05"] },
+        "playwrightSupport": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-05"] },
+        "runScopedVsPersistedSplit": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-05"] }
+      }
+    },
+    "testRigor": {
+      "sourceIds": ["S-06"],
+      "cells": {
+        "elementHistoryCapture": { "status": "VERIFIED", "value": "Elements described \"from the end-user's perspective\"; a wrapper records the end-user's way of explaining the locator.", "sourceIds": ["S-06"] },
+        "numericConfidenceExposed": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-06"] },
+        "refusalOnLowConfidence": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-06"] },
+        "approvalBeforePersistence": { "status": "VERIFIED", "value": "Heals apply automatically; reviewable and reversible afterward — not pre-approved before taking effect.", "sourceIds": ["S-06"] },
+        "rollbackCapability": { "status": "VERIFIED", "value": "\"you can always see the differences in the UI and rollback to the previous version if necessary.\"", "sourceIds": ["S-06"] },
+        "localSelfHosted": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-06"] },
+        "playwrightSupport": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-06"] },
+        "runScopedVsPersistedSplit": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-06"] }
+      }
+    },
+    "Tricentis Testim": {
+      "sourceIds": ["S-07"],
+      "cells": {
+        "elementHistoryCapture": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-07"] },
+        "numericConfidenceExposed": { "status": "VERIFIED", "value": "Numeric locator score; auto-improve activates when the score drops below 70%.", "sourceIds": ["S-07"] },
+        "refusalOnLowConfidence": { "status": "NOT_FOUND_IN_DOCS", "value": "Below the 70% threshold Testim replaces the locator automatically; this is auto-replacement, not a refusal/escalation.", "sourceIds": ["S-07"] },
+        "approvalBeforePersistence": { "status": "VERIFIED", "value": "Testim replaces the degraded locator directly; human approval is not mentioned or required.", "sourceIds": ["S-07"] },
+        "rollbackCapability": { "status": "NOT_FOUND_IN_DOCS", "value": "A test revision is created and surfaced in Revision History, but the page does not name this a \"rollback\" affordance.", "sourceIds": ["S-07"] },
+        "localSelfHosted": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-07"] },
+        "playwrightSupport": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-07"] },
+        "runScopedVsPersistedSplit": { "status": "NOT_FOUND_IN_DOCS", "value": "Scoped to the master branch by default; other branches excluded unless settings change — a branch scope, not a run-vs-persisted scope.", "sourceIds": ["S-07"] }
+      }
+    },
+    "Functionize": {
+      "sourceIds": ["S-08"],
+      "cells": {
+        "elementHistoryCapture": { "status": "MARKETING_CLAIM", "value": "Vendor article describes five fingerprint dimensions: attributes/properties, visual, hierarchy, state, content/metadata.", "sourceIds": ["S-08"] },
+        "numericConfidenceExposed": { "status": "MARKETING_CLAIM", "value": "Similarity scoring over a high-dimensional embedding; thresholds not disclosed.", "sourceIds": ["S-08"] },
+        "refusalOnLowConfidence": { "status": "MARKETING_CLAIM", "value": "Vendor article describes an \"adjoint model\" escalating as \"self-heal validation failed\" on high uncertainty rather than proceeding.", "sourceIds": ["S-08"] },
+        "approvalBeforePersistence": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-08"] },
+        "rollbackCapability": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-08"] },
+        "localSelfHosted": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-08"] },
+        "playwrightSupport": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-08"] },
+        "runScopedVsPersistedSplit": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-08"] }
+      }
+    },
+    "Momentic": {
+      "sourceIds": ["S-09"],
+      "cells": {
+        "elementHistoryCapture": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-09"] },
+        "numericConfidenceExposed": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-09"] },
+        "refusalOnLowConfidence": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-09"] },
+        "approvalBeforePersistence": { "status": "NOT_FOUND_IN_DOCS", "value": "PR-by-default delivery implies review but the page does not state approval is required.", "sourceIds": ["S-09"] },
+        "rollbackCapability": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-09"] },
+        "localSelfHosted": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-09"] },
+        "playwrightSupport": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-09"] },
+        "runScopedVsPersistedSplit": { "status": "VERIFIED", "value": "\"The resolution applies to the current run and never edits the test\"; only triage persists a repair that changes the test/module.", "sourceIds": ["S-09"] }
+      }
+    },
+    "Autify": {
+      "sourceIds": ["S-10"],
+      "cells": {
+        "elementHistoryCapture": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-10"] },
+        "numericConfidenceExposed": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-10"] },
+        "refusalOnLowConfidence": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-10"] },
+        "approvalBeforePersistence": { "status": "MARKETING_CLAIM", "value": "Vendor blog: user decides whether to apply AI-suggested fixes after tests finish running (deferred, user-initiated application).", "sourceIds": ["S-10"] },
+        "rollbackCapability": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-10"] },
+        "localSelfHosted": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-10"] },
+        "playwrightSupport": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-10"] },
+        "runScopedVsPersistedSplit": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-10"] }
+      }
+    },
+    "Virtuoso QA": {
+      "sourceIds": ["S-13"],
+      "cells": {
+        "elementHistoryCapture": { "status": "VERIFIED", "value": "Selector kinds: Hint, XPath, XPath ID, ID, CSS; infers more specific identifiers during execution.", "sourceIds": ["S-13"] },
+        "numericConfidenceExposed": { "status": "VERIFIED", "value": "A confidence level is computed and gates behaviour internally, but the numeric score itself is explicitly NOT displayed to users.", "sourceIds": ["S-13"] },
+        "refusalOnLowConfidence": { "status": "VERIFIED", "value": "Below the confidence threshold, the change is withheld from auto-apply and offered as a proposal instead (a soft refusal, not a hard no-action refusal).", "sourceIds": ["S-13"] },
+        "approvalBeforePersistence": { "status": "VERIFIED", "value": "Confidence-gated: below threshold the user must Accept/Reject; above threshold the change applies automatically with no approval step.", "sourceIds": ["S-13"] },
+        "rollbackCapability": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-13"] },
+        "localSelfHosted": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-13"] },
+        "playwrightSupport": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-13"] },
+        "runScopedVsPersistedSplit": { "status": "NOT_FOUND_IN_DOCS", "value": null, "sourceIds": ["S-13"] }
+      }
+    }
+  },
+  "claims": [
+    {
+      "id": "C-01",
+      "text": "Mandatory human approval before a healed locator persists is already documented by Katalon and Testsigma; Falcon's approval gate alone is not a differentiator.",
+      "sourceIds": ["S-03", "S-05"]
+    },
+    {
+      "id": "C-02",
+      "text": "Tricentis Testim already exposes a numeric locator score with a documented, acted-on threshold (70%); a bare confidence score is not unique to Falcon.",
+      "sourceIds": ["S-07"]
+    },
+    {
+      "id": "C-03",
+      "text": "Virtuoso QA is the closest documented analogue to Falcon's intended trust model: it implements both a confidence threshold gating automatic application and an explicit human Accept/Reject path, though it never shows the numeric score to users.",
+      "sourceIds": ["S-13"]
+    },
+    {
+      "id": "C-04",
+      "text": "Momentic already separates a run-scoped repair (never edits the test) from a persisted repair (triage); this conceptual split is not unique to Falcon, though the persistence mechanism differs.",
+      "sourceIds": ["S-09"]
+    },
+    {
+      "id": "C-05",
+      "text": "No established, widely-adopted open-source Playwright-specific self-healing library was found; Healenium is the only open-source project in the reviewed set with meaningful adoption signals, and it targets Selenium/Appium, not Playwright.",
+      "sourceIds": ["S-14", "S-16"]
+    },
+    {
+      "id": "C-06",
+      "text": "mabl's technical self-healing implementation remains unverified because its official help-centre documentation returned HTTP 403 on every attempted path; no Falcon differentiation claim relies on mabl lacking a capability.",
+      "sourceIds": ["L-01", "S-04"]
+    },
+    {
+      "id": "C-07",
+      "text": "BrowserStack's publicly cited \"40% reduction in automation build failures\" figure is an unqualified vendor press claim with no stated methodology, population, or time period, and does not appear on BrowserStack's own technical documentation; it must never be used as a benchmark baseline or comparison target.",
+      "sourceIds": ["S-15"]
+    }
+  ]
+}

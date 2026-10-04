@@ -20,6 +20,8 @@
 
 ---
 
+**Structured data:** the capability-by-capability matrix described in prose below is also published as schema-validated structured data at `docs/research/competitor-matrix.json`, one status cell per competitor per feature restricted to the six-value enum in the table immediately below, with no blank and no default. That file, not this prose, is the machine-checked source of truth for "every cell carries an honest status" (see `tests/regression/p14-claims.check.cjs`).
+
 ## Evidence Status Vocabulary
 
 | Status | Meaning |
