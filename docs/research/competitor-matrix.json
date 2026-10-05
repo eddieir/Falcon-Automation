@@ -6348,8 +6348,8 @@
           "evidenceScope": "Reviewed public pages only; behavior not exercised in an account."
         },
         "numericConfidenceExposed": {
-          "status": "VERIFIED",
-          "value": "Numeric locator score; auto-improve activates when the score drops below 70%.",
+          "status": "NOT_FOUND_IN_DOCS",
+          "value": "The reviewed page documents a numeric locator score and an acted-on threshold — \"If a locator score drops below 70%, Testim automatically attempts to improve that locator\" — but the feature asserted here is that the number is shown to a user, and the reviewed page does not say that. Re-read on 2026-10-05, including the Revision History Panel section. Not found in this source; the product may well display it somewhere not covered by the reviewed page.",
           "sourceIds": [
             "S-07"
           ],
@@ -6397,7 +6397,7 @@
         },
         "runScopedVsPersistedSplit": {
           "status": "NOT_FOUND_IN_DOCS",
-          "value": "Scoped to the master branch by default; other branches excluded unless settings change \u2014 a branch scope, not a run-vs-persisted scope.",
+          "value": "Scoped to the master branch by default; other branches excluded unless settings change — a branch scope, not a run-vs-persisted scope.",
           "sourceIds": [
             "S-07"
           ],
@@ -10541,7 +10541,7 @@
     },
     {
       "id": "C-02",
-      "text": "Tricentis Testim already exposes a numeric locator score with a documented, acted-on threshold (70%); a bare confidence score is not unique to Falcon.",
+      "text": "Tricentis Testim documents a numeric locator score with an acted-on threshold (70%), so scoring itself is not unique to Falcon. Whether Testim shows that number to a user was not found in the reviewed page, which is not evidence either way and must not be read as Falcon being alone in displaying one.",
       "sourceIds": [
         "S-07"
       ]

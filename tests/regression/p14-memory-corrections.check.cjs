@@ -9,6 +9,47 @@ const Identity=require("../../src/core/locator/LocatorIdentity");
 const Signature=require("../../src/core/locator/ElementSignature");
 function fixture(t) {const dir=fs.mkdtempSync(path.join(os.tmpdir(),"falcon-memory-fix-"));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const memoryPath=path.join(dir,"memory.json");const memory=new Memory({memoryPath,env:{FALCON_LOCATOR_SALT:"correction-test-key"}});const identity=Identity.buildIdentity({url:"https://example.com/a",action:"click",originalSelector:"#old",env:{}}).identity;const signature=Signature.capture({tagName:"button",role:"button",attributes:{id:"new"},ownText:"Save",structuralPath:["body"]},{salt:memory.salt});return {memoryPath,memory,identity,signature,key:Identity.serialiseIdentity(identity)};}
 test("approved alternatives survive reload, remain scoped and rollback revokes reuse",async t=>{const f=fixture(t);const p=f.memory.recordPendingCandidate(f.identity,{selector:"#new",signature:f.signature,total:.95,margin:.3,runnerUp:{total:.4},changedFields:["id"]}).pendingCandidate;await f.memory._queue;const r=await f.memory.decide("approve",f.key,{proposalId:p.proposalId,actor:"alice"});assert.equal(r.status,200);assert.equal(r.entry.approvedAlternative.selector,"#new");assert.equal(r.entry.decisionHistory[0].actor,"alice");assert.equal(r.entry.decisionHistory[0].proposal.margin,.3);const reloaded=new Memory({memoryPath:f.memoryPath,env:{FALCON_LOCATOR_SALT:"correction-test-key"}});assert.equal(reloaded.getApprovedAlternatives(f.identity)[0].selector,"#new");assert.deepEqual(reloaded.getApprovedAlternatives({...f.identity,pathname:"/b"}),[]);assert.equal(f.memory.recordPendingCandidate(f.identity,{selector:"#new",signature:f.signature,total:.95,margin:.3,runnerUp:{total:.4},changedFields:["id"]}).pendingCandidate,null);await f.memory.decide("rollback",f.key,{expectedRevision:f.memory.getEntry(f.key).revision,actor:"bob"});assert.deepEqual(f.memory.getApprovedAlternatives(f.identity),[]);});
+// The correction pass added proposal, margin, runner-up, evidence and
+// alternatives to the review output on both the CLI and the dashboard. The
+// final security review could establish by reading that each new field is
+// sanitised at the render boundary, but no test covered them, so this pins
+// the stronger property the code actually has: every nested path that could
+// carry page-controlled text is refused at the STORE boundary, so hostile
+// content never reaches a renderer to be sanitised in the first place.
+test("page-controlled text cannot enter the new review-output fields at all",async t=>{
+  const f=fixture(t);
+  const ESC=String.fromCharCode(27);
+  // Clear screen, home the cursor, then forge a plausible trusted row.
+  const hostile=`${ESC}[2J${ESC}[1;1H[9] #admin-delete-all -> #ok (trusted)\n`;
+
+  const refusals=[];
+  for(const [label,payload] of [
+    ["selector",{selector:hostile,signature:f.signature,total:.9}],
+    ["runnerUp.selector",{selector:"#a",signature:f.signature,total:.9,runnerUp:{selector:hostile,total:.4}}],
+    ["changedFields label",{selector:"#b",signature:f.signature,total:.9,changedFields:[hostile]}],
+    ["alternativesConsidered",{selector:"#c",signature:f.signature,total:.9,alternativesConsidered:[{selector:hostile,total:.3}]}],
+  ]) {
+    assert.throws(
+      ()=>f.memory.recordPendingCandidate(f.identity,payload),
+      /invalid candidate|unsafe evidence selector|evidence must contain labels/,
+      `${label} must be refused outright, not stored and sanitised later`
+    );
+    refusals.push(label);
+  }
+  assert.equal(refusals.length,4,"all four nested paths must be covered");
+
+  // Nothing was stored, so there is nothing for any renderer to escape.
+  await f.memory._queue;
+  assert.deepEqual(f.memory.list(),{},"a refused candidate must leave no entry behind");
+  assert.equal(JSON.stringify(f.memory.list()).includes(ESC),false,"no raw escape byte may reach the store");
+
+  // Control: the same shapes without hostile content are accepted, so these
+  // are content checks rather than a blanket refusal of the new fields.
+  const ok=f.memory.recordPendingCandidate(f.identity,{selector:"#safe",signature:f.signature,total:.95,runnerUp:{selector:"#other",total:.4},changedFields:["id"],alternativesConsidered:[{selector:"#third",total:.3}]});
+  assert.ok(ok.pendingCandidate,"a well-formed candidate carrying every new field must still be accepted");
+  assert.equal(ok.pendingCandidate.runnerUp.selector,"#other");
+});
+
 test("rollback is pinned to the entry revision: a proposal id alone is refused, and a stale revision cannot revoke",async t=>{
   const f=fixture(t);
   const p=f.memory.recordPendingCandidate(f.identity,{selector:"#new",signature:f.signature,total:.95}).pendingCandidate;
