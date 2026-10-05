@@ -48,6 +48,39 @@ test("a rejected envelope says so, names the reason, and leaves the file alone",
     assert.deepEqual(memory.list(),{},`${label}: no entry may be trusted from a rejected envelope`);
   }
 
+  // A rejected file's own schemaVersion is attacker- or accident-controlled,
+  // so naming it verbatim put unvalidated bytes into the log and into
+  // envelopeStatus() — the opposite of the quarantine path here, which logs a
+  // count and never content. Found by the delta review of this very change.
+  for(const [label,version,expectRe] of [
+    ["a long string",{schemaVersion:"L".repeat(520),entries:{}},/a 520-character string/],
+    ["an object",{schemaVersion:{nested:"x".repeat(300)},entries:{}},/an object/],
+    ["an array",{schemaVersion:["x".repeat(300)],entries:{}},/an array/],
+    ["a number",{schemaVersion:999,entries:{}},/schemaVersion 999 is not supported/],
+  ]){
+    const p=path.join(dir,`sv-${label.replace(/[^a-z]/gi,"-")}.json`);
+    fs.writeFileSync(p,JSON.stringify(version));
+    const seen=[];
+    const real=Logger.warning;
+    Logger.warning=(m)=>{seen.push(String(m));};
+    let mem;
+    try{ mem=new Memory({memoryPath:p,env:{FALCON_LOCATOR_SALT:"envelope-test"}}); }
+    finally{ Logger.warning=real; }
+    await mem._queue;
+
+    const reason=mem.envelopeStatus().reason;
+    assert.match(reason,expectRe,`${label}: the reason must describe the value, not echo it`);
+    assert.ok(reason.length<200,`${label}: the reason must stay bounded, got ${reason.length} chars`);
+    assert.equal(reason.includes("L".repeat(40)),false,`${label}: no raw run of file content may appear`);
+    assert.equal(reason.includes("x".repeat(40)),false,`${label}: no raw run of nested content may appear`);
+    // The warning carries a fixed explanatory sentence plus the path, so the
+    // bound that matters is that it grows with neither.
+    assert.equal(seen.length,1,`${label}: exactly one warning`);
+    assert.equal(seen[0].includes("L".repeat(40)),false,`${label}: no raw file content in the warning`);
+    assert.equal(seen[0].includes("x".repeat(40)),false,`${label}: no raw nested content in the warning`);
+    assert.ok(seen[0].length<600,`${label}: the warning must stay bounded, got ${seen[0].length} chars`);
+  }
+
   // Control: a healthy store reports unblocked and warns about none of this.
   const good=path.join(dir,"good.json");
   const warnings=[];
