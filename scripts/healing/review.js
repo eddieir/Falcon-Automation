@@ -1,30 +1,12 @@
 #!/usr/bin/env node
-/**
- * scripts/healing/review.js — CLI for reviewing selector-repair evidence
- * awaiting approval, for workflows where the live dashboard isn't open
- * (e.g. CI, a headless box). Two UNRELATED review surfaces live in this one
- * file, kept visibly distinct rather than merged into one ambiguous list:
+/** Scoped repair review. Legacy decisions remain inspectable but do not
+ * authorize automatic replay; use locator-* commands for scoped proposals.
  *
- *   - Tier 3 (LLM-inferred fixes, Phase 8's healing trust gate) — the
- *     original `list`/`approve`/`reject`/`approve-all` subcommands below,
- *     unchanged.
- *   - Tier 2.5 (scoped locator evidence, Phase 14's LocatorMemory) — the
- *     new `locator-*` subcommands, operating on a completely different
- *     store keyed by scoped identity (application/origin/pathname/action/
- *     selector), with its own three-state trust (trusted/unproven/revoked)
- *     that Tier 3's pending/approved/rejected shape does not have.
- *
- * Usage:
- *   node scripts/healing/review.js list
- *   node scripts/healing/review.js approve "<original-selector>"
- *   node scripts/healing/review.js reject  "<original-selector>"
- *   node scripts/healing/review.js approve-all
- *
- *   node scripts/healing/review.js locator-list
- *   node scripts/healing/review.js locator-show "<identity-key>"
- *   node scripts/healing/review.js locator-approve  "<identity-key>"
- *   node scripts/healing/review.js locator-reject   "<identity-key>"
- *   node scripts/healing/review.js locator-rollback "<identity-key>" ["note"]
+ * node scripts/healing/review.js locator-list
+ * node scripts/healing/review.js locator-show "<identity-key>"
+ * node scripts/healing/review.js locator-approve "<identity-key>" "<proposal-id>"
+ * node scripts/healing/review.js locator-reject "<identity-key>" "<proposal-id>"
+ * node scripts/healing/review.js locator-rollback "<identity-key>" "<revision>" ["note"]
  */
 const path = require("path");
 const HealingTrust = require(path.join("..", "..", "src", "core", "AIHealer", "HealingTrust"));
@@ -47,14 +29,14 @@ function printList(entries) {
         console.log(`  ${sanitizeField(entry.original)}`);
         console.log(`    -> ${sanitizeField(entry.suggested)}`);
         console.log(`    description: ${sanitizeField(entry.description || "(none)")}`);
-        console.log(`    seen ${entry.occurrences}x, last ${entry.lastSeen}`);
+        console.log(`    seen ${entry.occurrences}x, last ${sanitizeField(entry.lastSeen)}`);
         console.log(`    Tier 3 invocations: ${entry.tier3Invocations ?? 0}`);
         // A legacy entry recorded before Phase 13 has no `previouslyRejected`
         // field at all — treat that the same as count 0, never crash on it.
         const previouslyRejected = entry.previouslyRejected;
         if (previouslyRejected && previouslyRejected.count > 0) {
             const lastBy = sanitizeField(previouslyRejected.lastRejectedBy ?? "(unknown)");
-            console.log(`    ⚠ previously rejected ${previouslyRejected.count} time(s), last by ${lastBy} at ${previouslyRejected.lastRejectedAt}`);
+            console.log(`    ⚠ previously rejected ${previouslyRejected.count} time(s), last by ${lastBy} at ${sanitizeField(previouslyRejected.lastRejectedAt)}`);
         }
         console.log("");
     }
@@ -122,14 +104,20 @@ function printLocatorList(entries) {
   for (const entry of pending) {
     console.log(`  ${describeIdentity(entry.identity)}`);
     console.log(`    key: ${sanitizeField(entry.key)}`);
+    console.log(`    proposal: ${sanitizeField(entry.pendingCandidate.proposalId)}`);
+    console.log(`    revision: ${sanitizeField(entry.revision)}`);
     console.log(`    current trust: ${sanitizeField(entry.trust)}`);
     console.log(`    proposed: ${sanitizeField(entry.pendingCandidate.selector)}`);
     console.log(`    scores: ${describeContributions(entry.pendingCandidate.contributions)}`);
-    console.log(`    seen ${entry.pendingCandidate.occurrences}x, last ${entry.pendingCandidate.lastSeen}`);
+    console.log(`    margin: ${sanitizeField(entry.pendingCandidate.margin)}`);
+    console.log(`    runner-up: ${sanitizeField(entry.pendingCandidate.runnerUp?.selector ?? "none")}`);
+    console.log(`    evidence: ${sanitizeField(JSON.stringify(entry.pendingCandidate.evidence || {}))}`);
+    console.log(`    alternatives: ${sanitizeField(JSON.stringify(entry.pendingCandidate.alternativesConsidered || []))}`);
+    console.log(`    seen ${entry.pendingCandidate.occurrences}x, last ${sanitizeField(entry.pendingCandidate.lastSeen)}`);
     const previouslyRejected = entry.pendingCandidate.previouslyRejected;
     if (previouslyRejected && previouslyRejected.count > 0) {
       const lastBy = sanitizeField(previouslyRejected.lastRejectedBy ?? "(unknown)");
-      console.log(`    ⚠ previously rejected ${previouslyRejected.count} time(s), last by ${lastBy} at ${previouslyRejected.lastRejectedAt}`);
+      console.log(`    ⚠ previously rejected ${previouslyRejected.count} time(s), last by ${lastBy} at ${sanitizeField(previouslyRejected.lastRejectedAt)}`);
     }
     console.log("");
   }
@@ -138,19 +126,21 @@ function printLocatorList(entries) {
 function printLocatorEntry(entry) {
   console.log(`  ${describeIdentity(entry.identity)}`);
   console.log(`    key: ${sanitizeField(entry.key)}`);
+  console.log(`    revision: ${sanitizeField(entry.revision)}`);
   console.log(`    trust: ${sanitizeField(entry.trust)}`);
-  console.log(`    first seen ${entry.firstSeen}, last seen ${entry.lastSeen}`);
+  console.log(`    first seen ${sanitizeField(entry.firstSeen)}, last seen ${sanitizeField(entry.lastSeen)}`);
   console.log("    trusted signature:");
   for (const line of describeSignature(entry.signature)) console.log(line);
   if (entry.pendingCandidate) {
     console.log("    pending candidate:");
+    console.log(`      proposal: ${sanitizeField(entry.pendingCandidate.proposalId)}`);
     console.log(`      proposed: ${sanitizeField(entry.pendingCandidate.selector)}`);
     console.log(`      scores: ${describeContributions(entry.pendingCandidate.contributions)}`);
-    console.log(`      seen ${entry.pendingCandidate.occurrences}x, last ${entry.pendingCandidate.lastSeen}`);
+    console.log(`      seen ${entry.pendingCandidate.occurrences}x, last ${sanitizeField(entry.pendingCandidate.lastSeen)}`);
     const previouslyRejected = entry.pendingCandidate.previouslyRejected;
     if (previouslyRejected && previouslyRejected.count > 0) {
       const lastBy = sanitizeField(previouslyRejected.lastRejectedBy ?? "(unknown)");
-      console.log(`      ⚠ previously rejected ${previouslyRejected.count} time(s), last by ${lastBy} at ${previouslyRejected.lastRejectedAt}`);
+      console.log(`      ⚠ previously rejected ${previouslyRejected.count} time(s), last by ${lastBy} at ${sanitizeField(previouslyRejected.lastRejectedAt)}`);
     }
   } else {
     console.log("    pending candidate: (none)");
@@ -165,7 +155,7 @@ function printLocatorEntry(entry) {
 }
 
 async function main() {
-    const [, , command, arg, secondArg] = process.argv;
+    const [, , command, arg, secondArg, thirdArg] = process.argv;
 
     switch (command) {
         case "list":
@@ -186,7 +176,7 @@ async function main() {
                 process.exitCode = 1;
                 return;
             }
-            console.log(`Approved "${sanitizeField(arg)}" -> "${sanitizeField(decision.suggested)}". LocatorStore will use it for Tier 2 from now on.`);
+            console.log(`Approved "${sanitizeField(arg)}" -> "${sanitizeField(decision.suggested)}". Legacy decision recorded. Scoped locator approval is required for replay.`);
             return;
         }
 
@@ -238,54 +228,25 @@ async function main() {
             return;
         }
 
-        case "locator-approve": {
-            if (!arg) {
-                console.error('Usage: node scripts/healing/review.js locator-approve "<identity-key>"');
-                process.exitCode = 1;
-                return;
-            }
-            const entry = locatorMemory.approve(arg, { approvedBy: "cli" });
-            await locatorMemory._queue;
-            if (!entry) {
-                console.error(`No pending candidate for key "${sanitizeField(arg)}" (missing, or the identity is revoked).`);
-                process.exitCode = 1;
-                return;
-            }
-            console.log(`Approved the pending candidate for "${sanitizeField(arg)}". It is now trusted evidence for Tier 2 matching.`);
-            return;
-        }
-
-        case "locator-reject": {
-            if (!arg) {
-                console.error('Usage: node scripts/healing/review.js locator-reject "<identity-key>"');
-                process.exitCode = 1;
-                return;
-            }
-            const entry = locatorMemory.reject(arg, { rejectedBy: "cli" });
-            await locatorMemory._queue;
-            if (!entry) {
-                console.error(`No pending candidate for key "${sanitizeField(arg)}".`);
-                process.exitCode = 1;
-                return;
-            }
-            console.log(`Rejected the pending candidate for "${sanitizeField(arg)}". Discarded; trust state unchanged.`);
-            return;
-        }
-
+        case "locator-approve":
+        case "locator-reject":
         case "locator-rollback": {
-            if (!arg) {
-                console.error('Usage: node scripts/healing/review.js locator-rollback "<identity-key>" ["note"]');
+            const kind = command.slice("locator-".length);
+            if (!arg || !secondArg) {
+                console.error(`Usage: node scripts/healing/review.js ${command} "<identity-key>" "<${kind === "rollback" ? "expected-revision" : "proposal-id"}>" ["note"]`);
                 process.exitCode = 1;
                 return;
             }
-            const entry = locatorMemory.rollback(arg, { actor: "cli", note: secondArg });
-            await locatorMemory._queue;
-            if (!entry) {
-                console.error(`No tracked identity for key "${sanitizeField(arg)}".`);
+            const decision = await locatorMemory.decide(kind, arg, {
+                actor: "cli", proposalId: kind === "rollback" ? undefined : secondArg,
+                expectedRevision: kind === "rollback" ? secondArg : undefined, note: thirdArg,
+            });
+            if (!decision.ok) {
+                console.error(`Locator decision failed (${decision.status}): ${sanitizeField(decision.error)}`);
                 process.exitCode = 1;
                 return;
             }
-            console.log(`Revoked trust for "${sanitizeField(arg)}". The only way back is fresh ground-truth evidence (a passing Tier 1 run).`);
+            console.log(`Persisted ${kind} decision for "${sanitizeField(arg)}".`);
             return;
         }
 

@@ -465,7 +465,7 @@ test("D3: a secret planted in every allow-listed field is hashed (identity field
         name: SECRET,
         "data-testid": SECRET,
         "data-test": SECRET,
-        "data-qa": SECRET, // not in the allow-list at all — must never appear
+        "data-qa": SECRET, // supported test hook, hashed before storage
         href: `https://host.com/path?token=${SECRET}`,
         placeholder: SECRET,
         id: SECRET,
@@ -478,11 +478,8 @@ test("D3: a secret planted in every allow-listed field is hashed (identity field
 
   const serialised = JSON.stringify(sig);
 
-  // CLOSED channels: the href query string/userinfo, and any key outside
-  // the fixed allow-list (data-qa is a real-world attribute but is NOT on
-  // this module's allow-list). Both must be fully absent — not truncated,
-  // not present in any form.
-  assert.equal(sig.attributes["data-qa"], undefined, "data-qa is not on the allow-list and must never be captured");
+  // Query data is excluded, and the supported data-qa hook is hashed.
+  assert.match(sig.attributes["data-qa"], /^[a-f0-9]{64}$/, "data-qa is a hashed supported test hook");
   assert.ok(!serialised.includes(`token=${SECRET}`), "the href query string must never survive into the signature");
   assert.equal(sig.attributes.href, hashIdentityValue("/path", TEST_SALT), "href must be the hash of the sanitised pathname, not plaintext");
 
@@ -519,9 +516,9 @@ test("D3: a secret planted in every allow-listed field is hashed (identity field
   // important property is that the marker is present and the raw secret
   // text is not, not that the match is pixel-perfect.
   assert.ok(sig.accessibleNameApprox.includes(REDACTION_MARKER), "high-entropy/labelled-shaped secret in accessibleNameApprox must be redacted");
-  assert.ok(sig.textApprox.includes(REDACTION_MARKER), "high-entropy/labelled-shaped secret in textApprox must be redacted");
+  assert.equal(sig.textApprox, null, "input contents are excluded before similarity scoring");
   assert.ok(!sig.accessibleNameApprox.includes(SECRET));
-  assert.ok(!sig.textApprox.includes(SECRET));
+  assert.equal(sig.textApprox, null);
   assert.ok(!serialised.includes(SECRET));
 });
 
@@ -541,7 +538,7 @@ test("D3: a realistic SHORT secret that does not match any redaction pattern sur
 test("D3: allow-list contains exactly the documented set, nothing broader", () => {
   assert.deepEqual(
     [...ATTRIBUTE_ALLOW_LIST].sort(),
-    ["aria-label", "data-test", "data-testid", "href", "id", "name", "placeholder", "type"].sort()
+    ["aria-label", "data-qa", "data-test", "data-testid", "href", "id", "name", "placeholder", "type"].sort()
   );
 });
 

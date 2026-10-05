@@ -199,7 +199,7 @@
       "implementation": ["src/core/AIHealer/AIHealer.js"],
       "verifiedBy": "test",
       "tests": [
-        { "file": "tests/regression/p14-tier25.check.cjs", "name": "AC-17: a Tier 2 (LocatorStore) success against an already-trusted identity refreshes its evidence, preserving firstSeen" },
+        { "file": "tests/regression/p14-tier25.check.cjs", "name": "AC-17: legacy alternatives cannot refresh scoped trusted evidence" },
         { "file": "tests/regression/p14-tier25.check.cjs", "name": "AC-17 negative control: without a Tier 2 success, evidence is never refreshed at all (proves the refresh is caused by the success, not a timer)" }
       ]
     },
@@ -212,7 +212,7 @@
       "tests": [
         { "file": "tests/regression/p14-tier25.check.cjs", "name": "AC-18: a navigating Tier 1 click records evidence for the page the click happened on, describing the element clicked" },
         { "file": "tests/regression/p14-tier25.check.cjs", "name": "AC-18: pre-captured evidence is persisted only after the action succeeds, never when it throws" },
-        { "file": "tests/regression/p14-tier25.check.cjs", "name": "AC-18: a navigating Tier 2 stored-alternative success is scoped to the page it acted on" }
+        { "file": "tests/regression/p14-tier25.check.cjs", "name": "AC-18: unscoped legacy alternatives cannot navigate or create scoped evidence" }
       ]
     },
     {
@@ -345,7 +345,7 @@
       "verifiedBy": "test",
       "tests": [
         { "file": "tests/regression/p14-tier25.check.cjs", "name": "Tier 2.5: no trusted evidence falls through to Tier 3 with zero DOM query" },
-        { "file": "tests/regression/p14-tier25.check.cjs", "name": "AC-18: a navigating Tier 2 stored-alternative success is scoped to the page it acted on" }
+        { "file": "tests/regression/p14-tier25.check.cjs", "name": "AC-18: unscoped legacy alternatives cannot navigate or create scoped evidence" }
       ]
     },
     {

@@ -74,7 +74,7 @@ function candidateFor(selector, label) {
 // Construction / salt precedence (F14-1)
 // ---------------------------------------------------------------------------
 
-test("constructs against a temp directory and creates no file until a write is queued", (t) => {
+test("constructs against a temp directory and creates no file until a write is queued", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -86,7 +86,7 @@ test("constructs against a temp directory and creates no file until a write is q
   assert.ok(memory.salt.length > 0);
 });
 
-test("salt precedence: FALCON_LOCATOR_SALT from env wins even when the file already has a different salt", (t) => {
+test("salt precedence: FALCON_LOCATOR_SALT from env wins even when the file already has a different salt", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);
@@ -98,7 +98,7 @@ test("salt precedence: FALCON_LOCATOR_SALT from env wins even when the file alre
   assert.equal(memory.saltSource, "env");
 });
 
-test("salt precedence: an existing file salt is reused (not regenerated) when no env salt is set", (t) => {
+test("salt precedence: an existing file salt is reused (not regenerated) when no env salt is set", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);
@@ -110,7 +110,7 @@ test("salt precedence: an existing file salt is reused (not regenerated) when no
   assert.equal(memory.saltSource, "file");
 });
 
-test("a generated salt is persisted so a second instance pointed at the same file reuses it", (t) => {
+test("a generated salt is persisted so a second instance pointed at the same file reuses it", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);
@@ -127,7 +127,7 @@ test("a generated salt is persisted so a second instance pointed at the same fil
   });
 });
 
-test("generating a fresh salt emits exactly one warning", (t) => {
+test("generating a fresh salt emits exactly one warning", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);
@@ -145,7 +145,7 @@ test("generating a fresh salt emits exactly one warning", (t) => {
 // The trust invariant: recordEvidence vs. recordPendingCandidate
 // ---------------------------------------------------------------------------
 
-test("recordEvidence grants trusted evidence directly, with no approval step", (t) => {
+test("recordEvidence grants trusted evidence directly, with no approval step", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -162,7 +162,7 @@ test("recordEvidence grants trusted evidence directly, with no approval step", (
   assert.deepEqual(trusted.signature, signature);
 });
 
-test("recordPendingCandidate never touches trust or signature on an existing trusted entry", (t) => {
+test("recordPendingCandidate never touches trust or signature on an existing trusted entry", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -187,10 +187,11 @@ test("recordPendingCandidate never touches trust or signature on an existing tru
   assert.deepEqual(entry2.signature, groundTruthSignature);
 
   // Re-proposing the same selector bumps occurrences in place.
-  assert.equal(entry2.pendingCandidate.occurrences, 2);
+  assert.equal(entry2.pendingCandidate.occurrences, 1, "substantive score changes create a fresh proposal");
+  assert.notEqual(entry.pendingCandidate.proposalId, entry2.pendingCandidate.proposalId);
 });
 
-test("recordPendingCandidate on a never-before-seen identity creates an entry with no usable trusted evidence", (t) => {
+test("recordPendingCandidate on a never-before-seen identity creates an entry with no usable trusted evidence", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -207,7 +208,7 @@ test("recordPendingCandidate on a never-before-seen identity creates an entry wi
 // approve() / reject() / previouslyRejected()
 // ---------------------------------------------------------------------------
 
-test("approve() promotes pendingCandidate into signature + trusted, and clears pendingCandidate", (t) => {
+test("approve() promotes pendingCandidate into signature + trusted, and clears pendingCandidate", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -219,7 +220,7 @@ test("approve() promotes pendingCandidate into signature + trusted, and clears p
   const key = LocatorIdentity.serialiseIdentity(identity);
   memory.recordPendingCandidate(identity, candidate);
 
-  const approved = memory.approve(key, { approvedBy: "qa-lead" });
+  const approved = await memory.approve(key, { approvedBy: "qa-lead", proposalId: memory.getEntry(key)?.pendingCandidate?.proposalId });
   assert.ok(approved);
   assert.equal(approved.trust, "trusted");
   assert.deepEqual(approved.signature, candidate.signature);
@@ -233,7 +234,7 @@ test("approve() promotes pendingCandidate into signature + trusted, and clears p
 // Three trust states: "trusted" | "unproven" | "revoked"
 // ---------------------------------------------------------------------------
 
-test("getTrusted() returns usable evidence for \"trusted\" only, and null for both \"unproven\" and \"revoked\"", (t) => {
+test("getTrusted() returns usable evidence for \"trusted\" only, and null for both \"unproven\" and \"revoked\"", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -255,12 +256,12 @@ test("getTrusted() returns usable evidence for \"trusted\" only, and null for bo
   const revokedIdentity = identityFor("#removed-button");
   memory.recordEvidence(revokedIdentity, signatureFor("Removed"));
   const revokedKey = LocatorIdentity.serialiseIdentity(revokedIdentity);
-  memory.rollback(revokedKey, { actor: "qa-lead" });
+  await memory.rollback(revokedKey, { expectedRevision: memory.getEntry(revokedKey).revision, actor: "qa-lead" });
   assert.equal(memory.getEntry(revokedKey).trust, "revoked");
   assert.equal(memory.getTrusted(revokedIdentity), null, "\"revoked\" must never be usable evidence");
 });
 
-test("approve() SUCCEEDS on an \"unproven\" entry — this is the ordinary first-time Tier 2.5 promotion path", (t) => {
+test("approve() SUCCEEDS on an \"unproven\" entry — this is the ordinary first-time Tier 2.5 promotion path", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -272,7 +273,7 @@ test("approve() SUCCEEDS on an \"unproven\" entry — this is the ordinary first
   memory.recordPendingCandidate(identity, candidate);
   assert.equal(memory.getEntry(key).trust, "unproven", "precondition: the entry must actually be unproven before approving it");
 
-  const approved = memory.approve(key, { approvedBy: "qa-lead" });
+  const approved = await memory.approve(key, { approvedBy: "qa-lead", proposalId: memory.getEntry(key)?.pendingCandidate?.proposalId });
   assert.ok(approved, "approve() must succeed on an unproven entry — refusing this would block the primary approval path entirely");
   assert.equal(approved.trust, "trusted");
   assert.deepEqual(approved.signature, candidate.signature);
@@ -280,7 +281,7 @@ test("approve() SUCCEEDS on an \"unproven\" entry — this is the ordinary first
   assert.ok(memory.getTrusted(identity), "the identity must now have usable evidence");
 });
 
-test("approve() still REFUSES a genuinely revoked entry, leaving it untouched (both directions proven explicitly)", (t) => {
+test("approve() still REFUSES a genuinely revoked entry, leaving it untouched (both directions proven explicitly)", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -291,17 +292,17 @@ test("approve() still REFUSES a genuinely revoked entry, leaving it untouched (b
   memory.recordEvidence(identity, originalSignature);
   const key = LocatorIdentity.serialiseIdentity(identity);
   memory.recordPendingCandidate(identity, candidateFor("#sneaky", "Sneaky"));
-  memory.rollback(key, { actor: "qa-lead" });
+  await memory.rollback(key, {expectedRevision: memory.getEntry(key)?.revision,  actor: "qa-lead" });
   assert.equal(memory.getEntry(key).trust, "revoked", "precondition: the entry must actually be revoked");
 
-  const result = memory.approve(key, { approvedBy: "attacker-or-mistake" });
+  const result = await memory.approve(key, { approvedBy: "attacker-or-mistake", proposalId: memory.getEntry(key)?.pendingCandidate?.proposalId });
   assert.equal(result, null, "approve() must still refuse a genuinely revoked entry");
   const entry = memory.getEntry(key);
   assert.equal(entry.trust, "revoked");
   assert.deepEqual(entry.signature, originalSignature);
 });
 
-test("rollback() on an \"unproven\" entry transitions it to \"revoked\" with an attributed revocationHistory row, never silently", (t) => {
+test("rollback() on an \"unproven\" entry transitions it to \"revoked\" with an attributed revocationHistory row, never silently", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -314,7 +315,7 @@ test("rollback() on an \"unproven\" entry transitions it to \"revoked\" with an 
   assert.equal(before.trust, "unproven");
   assert.deepEqual(before.revocationHistory, [], "an unproven entry must start with an empty revocationHistory — nothing has been revoked yet");
 
-  const revoked = memory.rollback(key, { actor: "qa-lead", note: "rejecting this guess outright" });
+  const revoked = await memory.rollback(key, {expectedRevision: memory.getEntry(key)?.revision,  actor: "qa-lead", note: "rejecting this guess outright" });
   assert.ok(revoked, "rollback() must be permitted from \"unproven\", not only from \"trusted\"");
   assert.equal(revoked.trust, "revoked");
   assert.equal(revoked.revocationHistory.length, 1, "the transition must be recorded as one real, attributed event — never a silent no-op");
@@ -323,10 +324,10 @@ test("rollback() on an \"unproven\" entry transitions it to \"revoked\" with an 
   assert.equal(memory.getTrusted(identity), null);
 
   // approve() must now refuse it, same as any other revoked entry.
-  assert.equal(memory.approve(key), null);
+  assert.equal(await memory.approve(key), null);
 });
 
-test("an unrecognised trust value on load is quarantined into legacy, never silently treated as trusted", (t) => {
+test("an unrecognised trust value on load is quarantined into legacy, never silently treated as trusted", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);
@@ -359,7 +360,7 @@ test("an unrecognised trust value on load is quarantined into legacy, never sile
   assert.equal(legacyRow.reason, "invalid_trust");
 });
 
-test("reject() clears pendingCandidate without ever writing it to signature, and records the rejection", (t) => {
+test("reject() clears pendingCandidate without ever writing it to signature, and records the rejection", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -372,7 +373,7 @@ test("reject() clears pendingCandidate without ever writing it to signature, and
   const key = LocatorIdentity.serialiseIdentity(identity);
   memory.recordPendingCandidate(identity, candidate);
 
-  const rejected = memory.reject(key, { rejectedBy: "qa-lead" });
+  const rejected = await memory.reject(key, { rejectedBy: "qa-lead", proposalId: memory.getEntry(key)?.pendingCandidate?.proposalId });
   assert.ok(rejected);
   assert.equal(rejected.pendingCandidate, null);
   assert.deepEqual(rejected.signature, groundTruth, "rejecting a candidate must never alter the existing trusted signature");
@@ -387,7 +388,7 @@ test("reject() clears pendingCandidate without ever writing it to signature, and
   assert.equal(stillRejected.count, 1);
 });
 
-test("previouslyRejected is always recomputed from the rejection index, never trusted from a stored field", (t) => {
+test("previouslyRejected is always recomputed from the rejection index, never trusted from a stored field", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -399,7 +400,7 @@ test("previouslyRejected is always recomputed from the rejection index, never tr
 
   assert.equal(memory.previouslyRejected(key, "#guess").count, 0);
   memory.recordPendingCandidate(identity, candidateFor("#guess", "Guess"));
-  memory.reject(key);
+  await memory.reject(key, {proposalId: memory.getEntry(key)?.pendingCandidate?.proposalId});
   assert.equal(memory.previouslyRejected(key, "#guess").count, 1);
 
   // Corrupting the in-memory entry (as if a stale cached field existed)
@@ -413,7 +414,7 @@ test("previouslyRejected is always recomputed from the rejection index, never tr
 // AC-36: list() must fold the previously-rejected signal into every listed
 // entry's pendingCandidate — a consumer must see it from list() ALONE, with
 // no second call to previouslyRejected() required.
-test("list() exposes the previously-rejected signal for a re-proposed candidate through list() alone, and carries each entry's own key", (t) => {
+test("list() exposes the previously-rejected signal for a re-proposed candidate through list() alone, and carries each entry's own key", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -425,7 +426,7 @@ test("list() exposes the previously-rejected signal for a re-proposed candidate 
 
   const rejectedCandidate = candidateFor("#bad-guess", "Bad Guess");
   memory.recordPendingCandidate(identity, rejectedCandidate);
-  memory.reject(key, { rejectedBy: "alice" });
+  await memory.reject(key, { rejectedBy: "alice", proposalId: memory.getEntry(key)?.pendingCandidate?.proposalId });
   // Re-propose the IDENTICAL candidate selector — this is the AC-36 scenario:
   // an approver must see, from list() alone, that this was already rejected.
   memory.recordPendingCandidate(identity, rejectedCandidate);
@@ -461,7 +462,7 @@ test("list() exposes the previously-rejected signal for a re-proposed candidate 
 // rollback() and the re-approve loophole closure
 // ---------------------------------------------------------------------------
 
-test("rollback() revokes trust, preserves revocationHistory and the prior signature, and getTrusted returns nothing", (t) => {
+test("rollback() revokes trust, preserves revocationHistory and the prior signature, and getTrusted returns nothing", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -472,7 +473,7 @@ test("rollback() revokes trust, preserves revocationHistory and the prior signat
   memory.recordEvidence(identity, signature);
   const key = LocatorIdentity.serialiseIdentity(identity);
 
-  const revoked = memory.rollback(key, { actor: "qa-lead", note: "page redesign broke this" });
+  const revoked = await memory.rollback(key, {expectedRevision: memory.getEntry(key)?.revision,  actor: "qa-lead", note: "page redesign broke this" });
   assert.equal(revoked.trust, "revoked");
   assert.deepEqual(revoked.signature, signature, "the prior signature must be preserved, not cleared, by a rollback");
   assert.equal(revoked.revocationHistory.length, 1);
@@ -482,13 +483,13 @@ test("rollback() revokes trust, preserves revocationHistory and the prior signat
   assert.equal(memory.getTrusted(identity), null, "a revoked entry must never be returned as usable evidence");
 
   // A second rollback appends, never replaces, the history.
-  memory.rollback(key, { actor: "someone-else" });
+  await memory.rollback(key, {expectedRevision: memory.getEntry(key)?.revision,  actor: "someone-else" });
   const afterSecond = memory.getEntry(key);
   assert.equal(afterSecond.revocationHistory.length, 2);
   assert.equal(afterSecond.revocationHistory[0].actor, "qa-lead", "earlier history rows must never be overwritten");
 });
 
-test("a revoked entry cannot be re-promoted via approve() — only recordEvidence() can re-trust it", (t) => {
+test("a revoked entry cannot be re-promoted via approve() — only recordEvidence() can re-trust it", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -505,15 +506,15 @@ test("a revoked entry cannot be re-promoted via approve() — only recordEvidenc
   // back to trusted without a real ground-truth pass.
   const candidate = candidateFor("#sneaky", "Sneaky");
   memory.recordPendingCandidate(identity, candidate);
-  memory.rollback(key, { actor: "qa-lead" });
+  await memory.rollback(key, {expectedRevision: memory.getEntry(key)?.revision,  actor: "qa-lead" });
 
-  const result = memory.approve(key, { approvedBy: "attacker-or-mistake" });
+  const result = await memory.approve(key, { approvedBy: "attacker-or-mistake", proposalId: memory.getEntry(key)?.pendingCandidate?.proposalId });
   assert.equal(result, null, "approve() must refuse to promote a pendingCandidate on a revoked entry");
 
   const entry = memory.getEntry(key);
   assert.equal(entry.trust, "revoked", "trust must remain revoked after the refused approve() attempt");
   assert.deepEqual(entry.signature, originalSignature, "signature must be completely unchanged by the refused approve()");
-  assert.ok(entry.pendingCandidate, "the pendingCandidate itself is left as-is by a refused approve() (only cleared on success)");
+  assert.equal(entry.pendingCandidate, null, "rollback clears revoked pending proposals");
 
   // The only sanctioned way back: a fresh ground-truth pass.
   const freshSignature = signatureFor("Checkout Again");
@@ -526,7 +527,7 @@ test("a revoked entry cannot be re-promoted via approve() — only recordEvidenc
 // Caps: MAX_TRACKED_IDENTITIES, deterministic LRU eviction
 // ---------------------------------------------------------------------------
 
-test("MAX_TRACKED_IDENTITIES is enforced on mutation, evicting least-recently-seen first, ties broken by ascending key", (t) => {
+test("MAX_TRACKED_IDENTITIES is enforced on mutation, evicting least-recently-seen first, ties broken by ascending key", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -551,7 +552,7 @@ test("MAX_TRACKED_IDENTITIES is enforced on mutation, evicting least-recently-se
   }
 });
 
-test("MAX_TRACKED_IDENTITIES is enforced on load too, not only on mutation, and eviction is deterministic across repeated loads", (t) => {
+test("MAX_TRACKED_IDENTITIES is enforced on load too, not only on mutation, and eviction is deterministic across repeated loads", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);
@@ -595,7 +596,7 @@ test("MAX_TRACKED_IDENTITIES is enforced on load too, not only on mutation, and 
   });
 });
 
-test("REJECTIONS_MAX_ROWS is enforced on load, trimming oldest rows and rebuilding the rejection index from only what survives", (t) => {
+test("REJECTIONS_MAX_ROWS is enforced on load, trimming oldest rows and rebuilding the rejection index from only what survives", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);
@@ -630,7 +631,7 @@ test("REJECTIONS_MAX_ROWS is enforced on load, trimming oldest rows and rebuildi
 // Legacy quarantine
 // ---------------------------------------------------------------------------
 
-test("a row missing required identity fields is quarantined into legacy, never into entries, and never auto-promoted", (t) => {
+test("a row missing required identity fields is quarantined into legacy, never into entries, and never auto-promoted", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);
@@ -652,7 +653,8 @@ test("a row missing required identity fields is quarantined into legacy, never i
   assert.equal(memory.legacy.size, 1, "it must be quarantined into legacy instead");
   const [legacyRow] = [...memory.legacy.values()];
   assert.equal(legacyRow.reason, "missing_identity_field:origin");
-  assert.deepEqual(legacyRow.rawEntry, malformed.entries["bad-key"]);
+  assert.equal(legacyRow.rawEntry, undefined, "quarantine exposes metadata only");
+  assert.equal(typeof legacyRow.digest, "string");
 
   return memory._queue.then(() => {
     const second = new LocatorMemory({ memoryPath, env: {} });
@@ -661,7 +663,7 @@ test("a row missing required identity fields is quarantined into legacy, never i
   });
 });
 
-test("a row below the current identity schemaVersion is quarantined", (t) => {
+test("a row below the current identity schemaVersion is quarantined", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);
@@ -694,7 +696,7 @@ test("a row below the current identity schemaVersion is quarantined", (t) => {
   assert.equal(legacyRow.reason, "identity_schema_version_below_current");
 });
 
-test("deleteLegacy permanently removes a quarantined row and only that row", (t) => {
+test("deleteLegacy permanently removes a quarantined row and only that row", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);
@@ -724,7 +726,7 @@ test("deleteLegacy permanently removes a quarantined row and only that row", (t)
 // S-Q8: prototype-pollution-safe keying
 // ---------------------------------------------------------------------------
 
-test('a "__proto__" identity key is inert: never touches Object.prototype, never leaks via for...in on a fresh object', (t) => {
+test('a "__proto__" identity key is inert: never touches Object.prototype, never leaks via for...in on a fresh object', async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -760,17 +762,19 @@ test('a "__proto__" identity key is inert: never touches Object.prototype, never
   for (const _k in {}) { void _k; sawViaForIn = true; }
   assert.equal(sawViaForIn, false, '"__proto__" must never appear via for...in on a fresh object');
 
+  memory._persist();
   // Persisting and reloading must round-trip a literal "__proto__" key
   // safely too, since _toPersistable()/_reload() both go through Map <->
   // plain-object conversion.
   return memory._queue.then(() => {
     const reloaded = new LocatorMemory({ memoryPath: memory.memoryPath, env: {} });
-    assert.equal(reloaded.entries.get("__proto__")?.trust ?? reloaded.legacy.get("__proto__") !== undefined, true);
+    assert.equal(reloaded.entries.has("__proto__"), false, "noncanonical identity keys cannot reload as trusted");
+    assert.ok(Object.values(reloaded.listLegacy()).some(row => row.reason === "test"));
     assert.equal(Object.getPrototypeOf({}), Object.prototype);
   });
 });
 
-test('"constructor" and "prototype" identity keys behave like any other key', (t) => {
+test('"constructor" and "prototype" identity keys behave like any other key', async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -795,7 +799,7 @@ test('"constructor" and "prototype" identity keys behave like any other key', (t
 // AC-08 / S-Q7: write-failure visibility
 // ---------------------------------------------------------------------------
 
-test("a blocked write directory is reported through hasUnpersistedWriteFailure()/lastWriteError(), not just swallowed", (t) => {
+test("a blocked write directory is reported through hasUnpersistedWriteFailure()/lastWriteError(), not just swallowed", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const notADirectory = path.join(dir, "not-a-directory");
@@ -817,7 +821,7 @@ test("a blocked write directory is reported through hasUnpersistedWriteFailure()
   });
 });
 
-test("a successful write to the SAME path after a failure clears hasUnpersistedWriteFailure()", (t) => {
+test("a successful write to the SAME path after a failure clears hasUnpersistedWriteFailure()", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const notADirectory = path.join(dir, "not-a-directory");
@@ -848,7 +852,7 @@ test("a successful write to the SAME path after a failure clears hasUnpersistedW
 // today, so the cross-path hazard cannot arise from its own calls — this
 // test proves the composed tracker would still protect correctly the
 // instant that changes.
-test("S-Q7: the composed WriteFailureTracker reports a failed FIRST write even after a SECOND write to a different path succeeds", (t) => {
+test("S-Q7: the composed WriteFailureTracker reports a failed FIRST write even after a SECOND write to a different path succeeds", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -869,7 +873,7 @@ test("S-Q7: the composed WriteFailureTracker reports a failed FIRST write even a
 // cannot corrupt the store's own internal state.
 // ---------------------------------------------------------------------------
 
-test("AC-10: mutating the object returned by recordEvidence does not corrupt the store's internal state", (t) => {
+test("AC-10: mutating the object returned by recordEvidence does not corrupt the store's internal state", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -891,7 +895,7 @@ test("AC-10: mutating the object returned by recordEvidence does not corrupt the
   assert.deepEqual(internal.revocationHistory, [], "pushing onto the returned revocationHistory array must not append to the stored one");
 });
 
-test("AC-10: mutating the object returned by list() does not corrupt the store's internal state", (t) => {
+test("AC-10: mutating the object returned by list() does not corrupt the store's internal state", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -912,7 +916,7 @@ test("AC-10: mutating the object returned by list() does not corrupt the store's
   assert.equal(stillThere[key].signature.tagName, "button");
 });
 
-test("AC-10: mutating the object returned by getEntry()/getTrusted() across TWO separate calls never lets one call's mutation leak into the next", (t) => {
+test("AC-10: mutating the object returned by getEntry()/getTrusted() across TWO separate calls never lets one call's mutation leak into the next", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const LocatorMemory = loadLocatorMemory();
@@ -943,7 +947,7 @@ test("AC-10: mutating the object returned by getEntry()/getTrusted() across TWO 
 //          (entries vs. legacy, same legacy reason) every time.
 // ---------------------------------------------------------------------------
 
-test("AC-14/AC-15: unscoped legacy rows are quarantined, never silently trusted, and that classification is deterministic across independent LocatorMemory instances", (t) => {
+test("AC-14/AC-15: unscoped legacy rows are quarantined, never silently trusted, and that classification is deterministic across independent LocatorMemory instances", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);
@@ -1024,7 +1028,7 @@ test("AC-14/AC-15: unscoped legacy rows are quarantined, never silently trusted,
   );
 });
 
-test("AC-15: reloading the SAME already-open instance via _reload() reproduces the identical classification as a fresh instance", (t) => {
+test("AC-15: reloading the SAME already-open instance via _reload() reproduces the identical classification as a fresh instance", async (t) => {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memoryPath = makeMemoryPath(dir);

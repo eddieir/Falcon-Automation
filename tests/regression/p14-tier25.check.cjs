@@ -281,7 +281,7 @@ test("Tier 2.5: an accepted new selector lands in pendingCandidate, not trusted"
 // Accepted, verbatim-identical selector -> trust refresh.
 // ---------------------------------------------------------------------------
 
-test("Tier 2.5: an accepted verbatim-identical selector refreshes trust", () =>
+test("Tier 2.5: matcher success never refreshes ground-truth trust", () =>
   withTempDir(async (dir) => {
     const memory = makeMemory(dir);
     // The broken selector IS what SelectorBuilder will deterministically
@@ -305,7 +305,7 @@ test("Tier 2.5: an accepted verbatim-identical selector refreshes trust", () =>
 
     const entry = memory.getEntry(built.key);
     assert.equal(entry.trust, "trusted");
-    assert.equal(entry.pendingCandidate, null, "a refresh must never populate pendingCandidate");
+    assert.ok(entry.pendingCandidate, "matcher success remains pending even if the selector text is unchanged");
 
     const tier25Logs = logs.filter((l) => l.tier === "LocatorMemory");
     assert.equal(tier25Logs[tier25Logs.length - 1].status, "accepted");
@@ -552,7 +552,7 @@ test("AC-18: pre-captured evidence is persisted only after the action succeeds, 
     assert.ok(!trusted, "a failed action must persist no trusted evidence");
   }));
 
-test("AC-18: a navigating Tier 2 stored-alternative success is scoped to the page it acted on", () =>
+test("AC-18: unscoped legacy alternatives cannot navigate or create scoped evidence", () =>
   withTempDir(async (dir) => {
     const memory = makeMemory(dir);
     const logs = [];
@@ -589,19 +589,12 @@ test("AC-18: a navigating Tier 2 stored-alternative success is scoped to the pag
     };
     const healer = new AIHealer(page, { locatorMemory: memory, elementFactsCollector: collector });
 
-    await healer.healAndClick("#submit", "Place order");
+    healer.getAlternativeSelector = async () => null;
+    await assert.rejects(healer.healAndClick("#submit", "Place order"), { code: "TARGET_UNAVAILABLE" });
     await flush(memory);
-
-    assert.equal(current, LANDING_URL, "the stored alternative must really have navigated");
-    assert.equal(logs.filter((l) => l.tier === "LocatorStore").length, 1, "Tier 2 should have handled it");
-
-    const keys = Object.keys(memory.list());
-    assert.equal(keys.length, 1);
-    assert.ok(!/thank-you/.test(keys[0]), "Tier 2 evidence must not be keyed to the landing page");
-    const stored = memory.getTrusted(identityFor("#submit").identity);
-    assert.ok(stored, "Tier 2 evidence stays scoped to the original selector on the acting page");
-    const landing = ElementSignature.capture(LANDING_DESCRIPTOR, { salt: memory.salt });
-    assert.notDeepEqual(stored.signature.attributes, landing.attributes);
+    assert.equal(current, PAGE_URL, "unscoped legacy alternatives must never navigate");
+    assert.equal(logs.filter((l) => l.tier === "LocatorStore").length, 0);
+    assert.equal(Object.keys(memory.list()).length, 0, "legacy strings cannot become trusted evidence");
   }));
 
 // ---------------------------------------------------------------------------
@@ -733,6 +726,8 @@ test("ElementFactsCollector.collect runs the real in-browser gatherer against a 
   // what the function is written to tolerate (no outer Node closures).
   const fakeButton = {
     tagName: "BUTTON",
+    matches: () => false,
+    hasAttribute: () => false,
     getAttribute: (name) => ({ "data-testid": "submit-btn", "aria-label": null, role: null }[name] ?? null),
     parentElement: null,
     previousElementSibling: null,
@@ -746,7 +741,7 @@ test("ElementFactsCollector.collect runs the real in-browser gatherer against a 
   };
   const originalDocument = global.document;
   const originalWindow = global.window;
-  global.document = { querySelectorAll: () => [fakeButton] };
+  global.document = { querySelectorAll: () => [fakeButton], getElementById: () => null };
   global.window = { innerWidth: 1000, innerHeight: 800, getComputedStyle: () => ({ display: "block", visibility: "visible", position: "static" }) };
   try {
     const page = { evaluate: async (fn, args) => fn(args) };
@@ -864,7 +859,7 @@ test("AIHealer and Dashboard share one LocatorMemory instance; nothing written i
   assert.equal(Object.keys(dashboardView).length, 2, "the dashboard must see both entries the run just wrote, not a stale empty map");
 
   // Simulate "one dashboard approval" of the pending candidate.
-  dash._locatorMemory.approve(pendingBuilt.key, { approvedBy: "test-operator" });
+  await dash._locatorMemory.decide("approve", pendingBuilt.key, { actor: "test-operator", proposalId: dash._locatorMemory.getEntry(pendingBuilt.key).pendingCandidate.proposalId });
   await instance._queue;
 
   // Nothing the run wrote may be destroyed by that approval.
@@ -906,7 +901,7 @@ function loadAIHealerWithStoredAlternatives(alternatives, logs = []) {
   return { AIHealer, logs };
 }
 
-test("AC-17: a Tier 2 (LocatorStore) success against an already-trusted identity refreshes its evidence, preserving firstSeen", () =>
+test("AC-17: legacy alternatives cannot refresh scoped trusted evidence", () =>
   withTempDir(async (dir) => {
     const memory = makeMemory(dir);
     const identity = identityFor("#broken-selector").identity;
@@ -926,22 +921,11 @@ test("AC-17: a Tier 2 (LocatorStore) success against an already-trusted identity
     const page = makePage();
     const healer = new AIHealer(page, { locatorMemory: memory, elementFactsCollector: collector });
 
-    await healer.healSelector("#broken-selector", "Submit", "click");
+    healer.getAlternativeSelector = async () => null;
+    await assert.rejects(healer.healSelector("#broken-selector", "Submit", "click"), { code: "TARGET_UNAVAILABLE" });
     await flush(memory);
-
-    const tier2Logs = logs.filter((l) => l.tier === "LocatorStore");
-    assert.equal(tier2Logs.length, 1, "the Tier 2 success must be logged exactly once");
-    assert.equal(tier2Logs[0].resolved, "#stored-alternative");
-
-    const after = memory.getTrusted(identity);
-    assert.ok(after, "the identity must still carry usable trusted evidence after the refresh");
-    assert.equal(after.firstSeen, before.firstSeen, "a refresh must preserve the original firstSeen, never reset it");
-    assert.notEqual(
-      after.signature.accessibleNameApprox,
-      before.signature.accessibleNameApprox,
-      "the refreshed signature must reflect what the live element looks like NOW, not the stale original capture"
-    );
-    assert.equal(after.signature.accessibleNameApprox, "Submit order now");
+    assert.equal(logs.filter((l) => l.tier === "LocatorStore").length, 0);
+    assert.deepEqual(memory.getTrusted(identity).signature, before.signature, "legacy alternatives cannot refresh trust");
   }));
 
 test("AC-17 negative control: without a Tier 2 success, evidence is never refreshed at all (proves the refresh is caused by the success, not a timer)", () =>
@@ -1020,7 +1004,7 @@ test("AC-38: Tier 2.5 refusal falls through to Tier 3, and ONLY THEN does Healin
     const memory = makeMemory(dir);
     const identity = identityFor("#broken-weak").identity;
     // Weak evidence only (no stable identity signal) — Tier 2.5 must refuse.
-    memory.recordEvidence(identity, { schemaVersion: 1, tagName: "button", role: null, accessibleNameApprox: null, attributes: {}, structuralPath: null, textApprox: null, boundingBoxBucket: null });
+    memory.recordEvidence(identity, { schemaVersion: 1, tagName: "button", role: null, accessibleNameApprox: null, attributes: {}, structuralPath: [], textApprox: null, boundingBoxBucket: null });
 
     const recordTier3Calls = [];
     const AdaptiveRetryFake = class {

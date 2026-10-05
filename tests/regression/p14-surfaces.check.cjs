@@ -190,7 +190,7 @@ test("locator routes: full HTTP round trip — pending candidate, approve, now t
   assert.equal(before.statusCode, 200);
   assert.equal(before.body[key].trust, "unproven");
 
-  const approve = await httpJSON(d.port, "POST", "/locator/approve", auth, { key });
+  const approve = await httpJSON(d.port, "POST", "/locator/approve", auth, { key, proposalId: d._locatorMemory.getEntry(key)?.pendingCandidate?.proposalId });
   assert.equal(approve.statusCode, 200);
   assert.equal(approve.body.trust, "trusted");
   assert.equal(approve.body.pendingCandidate, null);
@@ -210,7 +210,7 @@ test("locator routes: reject discards the candidate and leaves trust untouched",
   await d._locatorMemory._queue;
   const key = LocatorIdentity.serialiseIdentity(identity);
 
-  const reject = await httpJSON(d.port, "POST", "/locator/reject", auth, { key });
+  const reject = await httpJSON(d.port, "POST", "/locator/reject", auth, { key, proposalId: d._locatorMemory.getEntry(key)?.pendingCandidate?.proposalId });
   assert.equal(reject.statusCode, 200);
   assert.equal(reject.body.trust, "unproven");
   assert.equal(reject.body.pendingCandidate, null);
@@ -232,7 +232,7 @@ test("locator routes: rollback revokes trust, and a revoked identity refuses re-
   await d._locatorMemory._queue;
   const key = LocatorIdentity.serialiseIdentity(identity);
 
-  const rollback = await httpJSON(d.port, "POST", "/locator/rollback", auth, { key, note: "operator judged this unsafe" });
+  const rollback = await httpJSON(d.port, "POST", "/locator/rollback", auth, { key, expectedRevision: d._locatorMemory.getEntry(key).revision, note: "operator judged this unsafe" });
   assert.equal(rollback.statusCode, 200);
   assert.equal(rollback.body.trust, "revoked");
   assert.equal(rollback.body.revocationHistory.length, 1);
@@ -243,8 +243,8 @@ test("locator routes: rollback revokes trust, and a revoked identity refuses re-
   // the only way back is fresh recordEvidence(), never approve().
   d._locatorMemory.recordPendingCandidate(identity, candidateFor("[data-testid=tricky-2]", "Tricky2"));
   await d._locatorMemory._queue;
-  const approve = await httpJSON(d.port, "POST", "/locator/approve", auth, { key });
-  assert.equal(approve.statusCode, 404);
+  const approve = await httpJSON(d.port, "POST", "/locator/approve", auth, { key, proposalId: d._locatorMemory.getEntry(key)?.pendingCandidate?.proposalId });
+  assert.equal(approve.statusCode, 409);
   const stillRevoked = await httpJSON(d.port, "GET", "/locator/entries", auth);
   assert.equal(stillRevoked.body[key].trust, "revoked");
 });
@@ -254,11 +254,11 @@ test("locator routes: acting on a key that doesn't exist returns 404, not a sile
   await d.start();
   const auth = { "X-Dashboard-Token": "fixture-token" };
 
-  const approve = await httpJSON(d.port, "POST", "/locator/approve", auth, { key: "never-existed" });
+  const approve = await httpJSON(d.port, "POST", "/locator/approve", auth, { key: "never-existed", proposalId: "absent", expectedRevision: "absent" });
   assert.equal(approve.statusCode, 404);
-  const reject = await httpJSON(d.port, "POST", "/locator/reject", auth, { key: "never-existed" });
+  const reject = await httpJSON(d.port, "POST", "/locator/reject", auth, { key: "never-existed", proposalId: "absent", expectedRevision: "absent" });
   assert.equal(reject.statusCode, 404);
-  const rollback = await httpJSON(d.port, "POST", "/locator/rollback", auth, { key: "never-existed" });
+  const rollback = await httpJSON(d.port, "POST", "/locator/rollback", auth, { key: "never-existed", proposalId: "absent", expectedRevision: "absent" });
   assert.equal(rollback.statusCode, 404);
   const legacyDelete = await httpJSON(d.port, "POST", "/locator/legacy/delete", auth, { id: "never-existed" });
   assert.equal(legacyDelete.statusCode, 404);
@@ -271,7 +271,7 @@ test("locator routes: a non-string key/id is rejected, not crashed on", async (t
 
   for (const body of [{}, { key: 42 }, { key: null }, { key: ["x"] }, { key: { nested: true } }]) {
     const res = await httpJSON(d.port, "POST", "/locator/approve", auth, body);
-    assert.equal(res.statusCode, 404, `expected 404 for body ${JSON.stringify(body)}`);
+    assert.equal(res.statusCode, 400, `expected 400 for body ${JSON.stringify(body)}`);
   }
 });
 
@@ -384,9 +384,9 @@ test("CLI: locator-list shows a pending candidate, locator-approve promotes it, 
   assert.match(list.stdout, /cli-submit/);
   assert.match(list.stdout, /unproven/);
 
-  const approve = runCLI(["locator-approve", key], memoryPath);
+  const approve = runCLI(["locator-approve", key, decisionToken(memoryPath, key)], memoryPath);
   assert.equal(approve.status, 0);
-  assert.match(approve.stdout, /Approved the pending candidate/);
+  assert.match(approve.stdout, /Persisted approve decision/);
 
   const show = runCLI(["locator-show", key], memoryPath);
   assert.equal(show.status, 0);
@@ -408,13 +408,13 @@ test("CLI: locator-reject discards the candidate; locator-rollback revokes and b
     mem.recordPendingCandidate(identity, candidateFor("[data-testid=nope]", "Nope"));
   });
 
-  const reject = runCLI(["locator-reject", key], memoryPath);
+  const reject = runCLI(["locator-reject", key, decisionToken(memoryPath, key)], memoryPath);
   assert.equal(reject.status, 0);
-  assert.match(reject.stdout, /Rejected the pending candidate/);
+  assert.match(reject.stdout, /Persisted reject decision/);
 
-  const rollback = runCLI(["locator-rollback", key, "no longer trusted"], memoryPath);
+  const rollback = runCLI(["locator-rollback", key, decisionToken(memoryPath, key, true), "no longer trusted"], memoryPath);
   assert.equal(rollback.status, 0);
-  assert.match(rollback.stdout, /Revoked trust/);
+  assert.match(rollback.stdout, /Persisted rollback decision/);
 
   const show = runCLI(["locator-show", key], memoryPath);
   assert.match(show.stdout, /trust: revoked/);
@@ -425,7 +425,7 @@ test("CLI: locator-reject discards the candidate; locator-rollback revokes and b
   await seedMemory(memoryPath, (mem) => {
     mem.recordPendingCandidate(identity, candidateFor("[data-testid=nope2]", "Nope2"));
   });
-  const approve = runCLI(["locator-approve", key], memoryPath);
+  const approve = runCLI(["locator-approve", key, decisionToken(memoryPath, key)], memoryPath);
   assert.notEqual(approve.status, 0);
   assert.match(approve.stderr, /revoked/);
 });
@@ -467,50 +467,14 @@ test("CLI: an ANSI-escape- and newline-laden selector is neutralised in real std
     "#legit\x1b[31mFAKE\x1b[0m\nkey: forged-key  current trust: trusted  proposed: [data-testid=innocent]";
   const signature = signatureFor("Evil", { attributes: { id: "Evil", "data-testid": "evil" } });
 
-  await seedMemory(memoryPath, (mem) => {
-    mem.recordPendingCandidate(identity, {
-      selector: evilSelector,
-      signature,
-      contributions: { attribute: 0.4, accessibleName: 0.2, structural: 0.1, text: 0.05, boundingBox: 0.02, rawTotal: 0.77 },
-      total: 0.77,
-    });
-  });
-
+  const memory = new LocatorMemory({ memoryPath, env: { FALCON_LOCATOR_SALT: TEST_SALT } });
+  assert.throws(() => memory.recordPendingCandidate(identity, { selector: evilSelector, signature }), /invalid candidate/);
+  await memory._queue;
   const list = runCLI(["locator-list"], memoryPath);
   assert.equal(list.status, 0);
+  assert.ok(!list.stdout.includes("forged-key"));
+  assert.ok(!list.stdout.includes("\x1b"));
 
-  // No raw ESC (0x1B) byte anywhere in stdout.
-  const escCount = [...Buffer.from(list.stdout, "utf8")].filter((b) => b === 0x1b).length;
-  assert.equal(escCount, 0, `stdout contained ${escCount} raw ESC byte(s): ${JSON.stringify(list.stdout)}`);
-
-  // The forged "row" text survives only as an escaped, inert substring on
-  // the SAME line as the real proposed-selector field — never as a raw
-  // newline that would start a new line a human could mistake for a
-  // separate, legitimate entry.
-  assert.ok(!/\n\s*key: forged-key/.test(list.stdout), "a raw newline let the payload forge what looks like a second entry");
-  assert.match(list.stdout, /\\nkey: forged-key/, "the embedded newline should survive only as a visible \\n escape");
-
-  // The ANSI colour codes themselves are gone outright (not merely escaped).
-  assert.ok(!list.stdout.includes("\x1b[31m"));
-  assert.ok(!list.stdout.includes("FAKE\x1b[0m"));
-
-  // Hash proof: the real hash of "Evil" never appears in stdout, anywhere.
-  assert.equal(signature.attributes.id.length, 64);
-  assert.ok(!list.stdout.includes(signature.attributes.id));
-  assert.ok(!list.stdout.includes(signature.role));
-
-  // Approve it, so locator-show has to describe a REAL trusted signature
-  // (not just an empty "no trusted signature" placeholder) and still must
-  // not leak the hash.
-  const approve = runCLI(["locator-approve", key], memoryPath);
-  assert.equal(approve.status, 0);
-
-  const show = runCLI(["locator-show", key], memoryPath);
-  assert.equal(show.status, 0);
-  assert.ok(!show.stdout.includes(signature.attributes.id));
-  assert.ok(!show.stdout.includes(signature.role));
-  assert.match(show.stdout, /role: present \(hashed — value not displayed\)/);
-  assert.match(show.stdout, /attributes matched \(keys only, values are hashed\): id, data-testid/);
 });
 
 // ---------------------------------------------------------------------------
@@ -658,4 +622,49 @@ test("dashboard UI: legacy rows render read-only and labelled, with no raw marku
   assert.match(html, /legacy — not usable for matching/);
   assert.ok(!html.includes("<script>x</script>"));
   assert.match(html, /&lt;script&gt;/);
+});
+
+function decisionToken(memoryPath, key, rollback = false) {
+  const mem = new LocatorMemory({ memoryPath, env: { FALCON_LOCATOR_SALT: TEST_SALT } });
+  const entry = mem.getEntry(key);
+  return rollback ? entry?.revision : entry?.pendingCandidate?.proposalId;
+}
+
+test("locator decisions require the displayed proposal and reject a replacement proposal", async (t) => {
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const auth = { "X-Dashboard-Token": "fixture-token" };
+  const identity = identityFor("#stale");
+  const key = LocatorIdentity.serialiseIdentity(identity);
+  d._locatorMemory.recordPendingCandidate(identity, candidateFor("#proposal-a", "A"));
+  await d._locatorMemory._queue;
+  const first = d._locatorMemory.getEntry(key).pendingCandidate.proposalId;
+  d._locatorMemory.recordPendingCandidate(identity, candidateFor("#proposal-b", "B"));
+  await d._locatorMemory._queue;
+  const missing = await httpJSON(d.port, "POST", "/locator/approve", auth, { key });
+  assert.equal(missing.statusCode, 400);
+  for (const kind of ["approve", "reject"]) {
+    const stale = await httpJSON(d.port, "POST", `/locator/${kind}`, auth, { key, proposalId: first });
+    assert.equal(stale.statusCode, 409);
+    assert.equal(d._locatorMemory.getEntry(key).pendingCandidate.selector, "#proposal-b");
+  }
+});
+
+test("locator decision surfaces report a durable-write failure and keep trust unchanged", async (t) => {
+  const d = setup(t, "fixture-token");
+  await d.start();
+  const auth = { "X-Dashboard-Token": "fixture-token" };
+  const identity = identityFor("#write-failure");
+  const key = LocatorIdentity.serialiseIdentity(identity);
+  d._locatorMemory.recordPendingCandidate(identity, candidateFor("#replacement", "Replacement"));
+  await d._locatorMemory._queue;
+  const before = d._locatorMemory.getEntry(key);
+  fs.writeFileSync(d._locatorMemory.memoryPath + ".lock", JSON.stringify({ pid: process.pid, token: "other-writer" }));
+  const res = await httpJSON(d.port, "POST", "/locator/approve", auth, { key, proposalId: before.pendingCandidate.proposalId });
+  assert.equal(res.statusCode, 503);
+  assert.equal(d._locatorMemory.getEntry(key).trust, before.trust);
+  const result = runCLI(["locator-approve", key, before.pendingCandidate.proposalId], d._locatorMemory.memoryPath);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /failed/);
+  assert.equal(new LocatorMemory({ memoryPath: d._locatorMemory.memoryPath, env: { FALCON_LOCATOR_SALT: TEST_SALT } }).getEntry(key).trust, before.trust);
 });

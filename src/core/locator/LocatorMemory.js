@@ -1,133 +1,21 @@
 "use strict";
 
 const path = require("path");
+const V = require("./LocatorMemoryValidation");
+const Writer = require("./LocatorMemoryWriter");
 const crypto = require("crypto");
 const AtomicJsonStore = require("../util/AtomicJsonStore");
 const LocatorIdentity = require("./LocatorIdentity");
 const ElementSignature = require("./ElementSignature");
 const Logger = require("../../../utils/Logger");
 
-/**
- * LocatorMemory — Phase 14 (EP-5 §7) trusted-evidence store for scoped
- * locator identities.
- *
- * Persists to `data/locator_memory.json`, a NEW path. It deliberately does
- * NOT reuse `data/locator_store.json`: that file holds bare Tier 2
- * alternative-selector strings with no signature evidence at all, and
- * synthesising a signature for those rows would mean inventing evidence that
- * was never actually captured. The two stores stay structurally separate so
- * neither can be mistaken for the other's guarantees.
- *
- * ---------------------------------------------------------------------------
- * THE TRUST INVARIANT — two ingestion paths, asymmetric on purpose:
- *
- *   1. `recordEvidence(identity, signature)` — ground-truth refresh. Writes
- *      `entries[key]` directly as `trust: "trusted"`, no approval step, no
- *      score involved. This is legitimate because it records what the
- *      developer's own authored selector (Tier 1) currently resolves to —
- *      exactly as unconditionally trusted as Tier 1 already is today. It is
- *      the ONLY path that can ever grant an identity trusted evidence from
- *      nothing.
- *
- *   2. `recordPendingCandidate(identity, candidate)` — Tier 2.5 proposal.
- *      Writes into `entries[key].pendingCandidate` ONLY; it must never touch
- *      that entry's `trust` or `signature`. A match score, however high, can
- *      never manufacture trust by itself. Promotion happens solely through
- *      `approve()`.
- *
- * THREE TRUST STATES (`trust: "trusted" | "unproven" | "revoked"`):
- *
- *   - `"trusted"` — usable evidence, granted only by `recordEvidence()` or by
- *     `approve()` promoting a pending candidate.
- *   - `"unproven"` — the state a BRAND-NEW entry gets when
- *     `recordPendingCandidate()` is called for an identity that has never
- *     had ground truth recorded for it. There is no usable evidence, but
- *     critically, NOTHING WAS EVER REVOKED: `revocationHistory` starts empty
- *     and stays empty until an actual revocation decision is made. This
- *     state exists specifically so the ledger never lies — an entry must
- *     never claim `trust: "revoked"` with an empty, attributionless
- *     `revocationHistory`, because that is self-contradictory audit data in
- *     a phase whose entire point is that trust changes are attributable.
- *   - `"revoked"` — a human (or `rollback()`) actively withdrew trust;
- *     `revocationHistory` always has at least one `{actor, at, note?}` row
- *     when this state is reached, because the only code path that sets it
- *     is `rollback()`, which always appends one.
- *
- * `approve(key, { approvedBy })` promotes `pendingCandidate` into
- * `signature` + `trust: "trusted"` and clears `pendingCandidate` for BOTH
- * `"unproven"` and `"trusted"` source entries (an unproven entry approving
- * its first candidate is the ordinary, expected Tier 2.5 path) — UNLESS the
- * entry's current `trust` is `"revoked"`, in which case it refuses and
- * leaves the entry completely untouched. This closes the rollback ->
- * re-approve loophole: a human revoking trust in a piece of evidence must
- * not be undoable by re-approving a candidate that was sitting there before
- * (or arrives after) the rollback. The ONLY way a revoked identity regains
- * trusted evidence is a fresh `recordEvidence()` call — i.e. a human fixing
- * the test so Tier 1 passes again.
- *
- * `rollback(identityKey, { actor, note })` sets `trust: "revoked"` (never
- * deletes the entry) and appends to the append-only `revocationHistory`. It
- * is deliberately permitted from ANY prior state, including `"unproven"`:
- * an operator looking at a never-trusted candidate and explicitly rejecting
- * it is a real, auditable decision (distinct from simply never having
- * approved it), and it must produce the same kind of attributable record as
- * revoking previously-trusted evidence — never a silently-indistinguishable
- * no-op. `getTrusted()` treats anything other than `trust === "trusted"`
- * (both `"unproven"` and `"revoked"`) as "no usable evidence", so neither
- * state is ever reused, while `"revoked"`'s history and prior signature stay
- * inspectable for audit.
- *
- * ---------------------------------------------------------------------------
- * SALT (finding F14-1): the HMAC salt `ElementSignature.capture()` requires
- * must stay stable across runs so hashes remain comparable. Precedence:
- *   1. `FALCON_LOCATOR_SALT` from the environment, if set to a non-empty
- *      string — `saltSource: "env"`. Never persisted into the file; an
- *      operator who supplies their own salt keeps it out of the store
- *      entirely.
- *   2. Otherwise, a salt already persisted in this file's own header —
- *      `saltSource: "file"`.
- *   3. Otherwise, a freshly generated random salt, persisted into this
- *      file's header so later runs reuse it — also `saltSource: "file"`,
- *      and logged exactly once (never claiming the values are
- *      irrecoverable: a salt stored in the same file as the hashes it
- *      protects is a real, stated weakness, not a solved one — it leaves
- *      low-entropy values brute-forceable offline by anyone who can read
- *      this file).
- *
- * ---------------------------------------------------------------------------
- * LEGACY HANDLING — scoped to this file's OWN rows only (never
- * `locator_store.json`, which keeps serving Tier 2 untouched). A row in the
- * persisted `entries` object that is missing a required identity field, has
- * an unrecognised `trust` value, claims `trust: "trusted"` with no
- * signature, or whose `identity.schemaVersion` is not exactly the current
- * `LocatorIdentity.SCHEMA_VERSION`, is quarantined into `legacy` instead of
- * loaded into `entries`. Quarantining is a pure function of the row's own
- * content (never of load order or wall-clock time), so the same file always
- * classifies the same way. Legacy rows are never read by the matcher, never
- * auto-promoted, and are only ever removed via the explicit
- * `deleteLegacy(opaqueId, { actor })`. Only a COUNT of newly-quarantined
- * rows is ever logged — never raw content.
- *
- * ---------------------------------------------------------------------------
- * SECURITY (S-Q8): `entries`, `legacy`, and the rejection index are all
- * backed by `Map`, not plain objects — a locator identity key or a
- * generated legacy id can never repoint `Object.prototype` or be masked by
- * an inherited member, regardless of what string it happens to be (this is
- * strictly stronger than the `Object.hasOwn`/`Object.defineProperty`
- * discipline used elsewhere in this codebase, and was chosen specifically
- * so legacy ids need no separate provably-collision-safe-format argument:
- * a `Map` makes the question moot). Every accessor below returns a
- * defensive (deep) copy; nothing lets a caller mutate this store's internal
- * state by reference.
- *
- * SECURITY (S-Q7): `_persist()` performs exactly one `writeJsonAtomic` per
- * call, to this store's single managed path (`this.memoryPath`) — there is
- * structurally no second path for a later success to mask an earlier
- * failure against. The per-path `AtomicJsonStore.WriteFailureTracker` is
- * still composed in (rather than a single `_lastWriteFailure` slot) so the
- * aggregation discipline is identical to every other Phase 14 store and
- * would keep working correctly unchanged if a future slice ever adds a
- * second managed path to this store.
+/** Scoped trusted evidence and explicit review decisions.
+ * Authored-selector evidence is trusted; matched candidates remain pending.
+ * Durable decisions require a content-addressed proposal ID and persist before
+ * installing state. External salts are never serialized. Unsupported envelopes
+ * and salt mismatches remain untouched and cannot provide trusted evidence.
+ * Writes use an exclusive adjacent lock plus an expected durable-file digest.
+ * Quarantine surfaces retain only bounded metadata, never raw historical rows.
  */
 
 const SCHEMA_VERSION = 1;
@@ -213,6 +101,8 @@ class LocatorMemory {
     if (!LocatorIdentity.ALLOWED_ACTIONS.has(identity.action)) {
       return { ok: false, reason: "invalid_identity_action" };
     }
+    if(this._decisionInProgress) throw new Error("locator decision in progress");
+    if (!V.identity(identity)) return { ok: false, reason: "invalid_identity_bounds" };
     if (key !== LocatorIdentity.serialiseIdentity(identity)) {
       // The stored key must be the canonical serialisation of its own
       // identity — a mismatch means the row was hand-edited or corrupted in
@@ -234,16 +124,19 @@ class LocatorMemory {
       return { ok: false, reason: "signature_schema_version_below_current" };
     }
 
+    if (hasSignature && !V.signature(rawEntry.signature)) return {ok:false, reason:"invalid_signature_bounds"};
     return {
       ok: true,
       entry: {
-        identity,
+        identity: _clone(identity),
+        approvedAlternative: rawEntry.approvedAlternative && this._normalisePendingCandidate(rawEntry.approvedAlternative) && V.string(rawEntry.approvedAlternative.actor,128) && V.bytes(rawEntry.approvedAlternative)<=12000 ? {...this._normalisePendingCandidate(rawEntry.approvedAlternative),actor:rawEntry.approvedAlternative.actor,approvedAt:V.timestamp(rawEntry.approvedAlternative.approvedAt)} : null,
+        decisionHistory: this._boundedHistory(rawEntry.decisionHistory),
         trust: rawEntry.trust,
-        signature: hasSignature ? rawEntry.signature : null,
+        signature: hasSignature ? _clone(rawEntry.signature) : null,
         pendingCandidate: this._normalisePendingCandidate(rawEntry.pendingCandidate),
-        firstSeen: _isNonEmptyString(rawEntry.firstSeen) ? rawEntry.firstSeen : new Date().toISOString(),
-        lastSeen: _isNonEmptyString(rawEntry.lastSeen) ? rawEntry.lastSeen : new Date().toISOString(),
-        revocationHistory: Array.isArray(rawEntry.revocationHistory) ? rawEntry.revocationHistory : [],
+        firstSeen: V.timestamp(rawEntry.firstSeen),
+        lastSeen: V.timestamp(rawEntry.lastSeen),
+        revocationHistory: this._boundedHistory(rawEntry.revocationHistory),
       },
     };
   }
@@ -253,19 +146,23 @@ class LocatorMemory {
    * malformed one self-heals to `null` rather than quarantining the whole
    * entry (whose `signature`/`trust` may be perfectly good evidence).
    */
+  _boundedHistory(rows) {
+    if(!Array.isArray(rows)) return [];
+    return rows.slice(-V.HISTORY_MAX).flatMap(row=>{
+      if(!row || !V.string(row.actor,128) || !V.string(row.at,64)) return [];
+      const event={actor:row.actor,at:V.timestamp(row.at)};
+      if(["approve","reject","rollback"].includes(row.kind)) event.kind=row.kind;
+      if(typeof row.note === "string" && row.note.length<=500) event.note=row.note;
+      if(["trusted","unproven","revoked"].includes(row.priorTrust)) event.priorTrust=row.priorTrust;
+      if(row.proposal) {try {event.proposal=V.proposal(row.proposal);}catch{return [];}}
+      return [event];
+    });
+  }
+
   _normalisePendingCandidate(raw) {
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-    if (!_isNonEmptyString(raw.selector)) return null;
-    if (!raw.signature || typeof raw.signature !== "object") return null;
-    return {
-      selector: raw.selector,
-      signature: raw.signature,
-      contributions: raw.contributions && typeof raw.contributions === "object" ? raw.contributions : {},
-      total: typeof raw.total === "number" ? raw.total : 0,
-      firstSeen: _isNonEmptyString(raw.firstSeen) ? raw.firstSeen : new Date().toISOString(),
-      lastSeen: _isNonEmptyString(raw.lastSeen) ? raw.lastSeen : new Date().toISOString(),
-      occurrences: Number.isFinite(raw.occurrences) ? raw.occurrences : 1,
-    };
+    try {
+      return {...V.proposal(raw), firstSeen: V.timestamp(raw.firstSeen), lastSeen: V.timestamp(raw.lastSeen), occurrences: Math.min(1000000,Math.max(1,Number(raw.occurrences)||1))};
+    } catch { return null; }
   }
 
   /**
@@ -279,12 +176,30 @@ class LocatorMemory {
    */
   _reload() {
     const fallback = { schemaVersion: SCHEMA_VERSION, salt: null, entries: {}, legacy: {}, rejections: [] };
-    const raw = AtomicJsonStore.readJsonSync(this.memoryPath, fallback);
+    let raw;
+    let oversized=false;
+    try {
+      const buffer=Writer.readBoundedSync(this.memoryPath);
+      this._expectedDigest=V.hash(buffer);
+      try {raw=JSON.parse(buffer.toString("utf8"));}
+      catch {raw=AtomicJsonStore.readJsonSync(this.memoryPath,fallback);}
+    } catch(error) {
+      if(error.code === "EFBIG") {oversized=true;raw=fallback;this._expectedDigest=null;}
+      else {this._expectedDigest=null;raw=AtomicJsonStore.readJsonSync(this.memoryPath,fallback);}
+    }
+    const saltFingerprint = V.hash(this._env.FALCON_LOCATOR_SALT || raw.salt || "");
+    const invalidEnvelope = oversized || !raw || raw.schemaVersion !== SCHEMA_VERSION || V.bytes(raw) > V.MAX_BYTES;
+    const saltMismatch = raw && raw.saltFingerprint && raw.saltFingerprint !== saltFingerprint;
+    this._blockedEnvelope = invalidEnvelope || saltMismatch;
+    if (this._blockedEnvelope) {
+      // Preserve the original at its managed path; never rewrite unknown state.
+      raw = fallback;
+    }
 
     const { salt, saltSource, generated } = this._resolveSalt(raw);
     this.salt = salt;
     this.saltSource = saltSource;
-    if (generated && !this._saltWarningLogged) {
+    if (generated && !this._blockedEnvelope && !this._saltWarningLogged) {
       this._saltWarningLogged = true;
       Logger.warning(
         "LocatorMemory: FALCON_LOCATOR_SALT is not set; generated a new locator-signature salt and persisted it in "
@@ -299,16 +214,16 @@ class LocatorMemory {
     let quarantinedCount = 0;
 
     const rawEntries = raw && typeof raw.entries === "object" && raw.entries && !Array.isArray(raw.entries) ? raw.entries : {};
-    for (const [key, rawEntry] of Object.entries(rawEntries)) {
+    for (const [key, rawEntry] of Object.entries(rawEntries).slice(0,1000)) {
       const classification = this._classifyEntry(key, rawEntry);
       if (classification.ok) {
         this.entries.set(key, classification.entry);
       } else {
         quarantinedCount += 1;
-        this.legacy.set(crypto.randomUUID(), {
-          rawEntry,
+        this.legacy.set(V.hash({key,rawEntry}), {
+          digest: V.hash(rawEntry),
           reason: classification.reason,
-          loadedAt: new Date().toISOString(),
+          loadedAt: "1970-01-01T00:00:00.000Z",
         });
       }
     }
@@ -318,8 +233,8 @@ class LocatorMemory {
     // `entries`, so a legacy row can't bounce back to trusted on a later
     // load just because it happens to parse again.
     const rawLegacy = raw && typeof raw.legacy === "object" && raw.legacy && !Array.isArray(raw.legacy) ? raw.legacy : {};
-    for (const [id, entry] of Object.entries(rawLegacy)) {
-      this.legacy.set(id, entry);
+    for (const [id, entry] of Object.entries(rawLegacy).slice(-500)) {
+      this.legacy.set(id, {reason: typeof entry.reason === "string" ? entry.reason.slice(0,100) : "legacy", digest: entry.digest || V.hash(entry)});
     }
 
     if (quarantinedCount > 0) {
@@ -345,11 +260,13 @@ class LocatorMemory {
         );
       }
     }
+    this.rejections = this.rejections.filter(row => V.bytes(row) <= 12000).map(row => ({...row,rejectedAt:V.timestamp(row.rejectedAt)}));
+    this.legacy = new Map([...this.legacy].slice(-500));
     this._buildRejectionIndex();
 
     const evictedCount = this._evictIfNeeded();
 
-    if (generated || quarantinedCount > 0 || rejectionsTrimmed || evictedCount > 0) {
+    if (!this._blockedEnvelope && (generated || quarantinedCount > 0 || rejectionsTrimmed || evictedCount > 0)) {
       this._persist();
     }
   }
@@ -402,32 +319,23 @@ class LocatorMemory {
    * Returns the number of entries evicted.
    */
   _evictIfNeeded() {
-    const keys = [...this.entries.keys()];
-    const overflow = keys.length - MAX_TRACKED_IDENTITIES;
-    if (overflow <= 0) return 0;
-
-    const toEvict = keys
-      .map((key) => ({ key, lastSeenMs: Date.parse(this.entries.get(key)?.lastSeen) || 0 }))
-      .sort((a, b) => a.lastSeenMs - b.lastSeenMs || a.key.localeCompare(b.key))
-      .slice(0, overflow);
-
-    const shown = toEvict.slice(0, LOGGED_EVICTION_SAMPLE);
-    const remaining = toEvict.length - shown.length;
-    const details = shown.map(({ key }) => `"${key}"`);
-    const suffix = remaining > 0 ? `, ... and ${remaining} more` : "";
-    Logger.warning(
-      `LocatorMemory tracked-identity cap reached (MAX_TRACKED_IDENTITIES=${MAX_TRACKED_IDENTITIES}); evicted `
-      + `${toEvict.length} least-recently-seen entr${toEvict.length === 1 ? "y" : "ies"}: ${details.join(", ")}${suffix}.`,
-    );
-    for (const { key } of toEvict) this.entries.delete(key);
-    return toEvict.length;
+    const oldest=[...this.entries.keys()].sort((a,b)=> (Date.parse(this.entries.get(a).lastSeen)||0)-(Date.parse(this.entries.get(b).lastSeen)||0)||a.localeCompare(b));
+    let removed=0;
+    while(this.entries.size>MAX_TRACKED_IDENTITIES || V.bytes(this._toPersistable())>V.MAX_BYTES) {
+      const key=oldest.shift();
+      if(!key) break;
+      this.entries.delete(key); removed++;
+    }
+    if(removed) Logger.warning(`LocatorMemory bounded storage evicted ${removed} oldest entries.`);
+    return removed;
   }
 
   /** Serialise current in-memory state into the on-disk JSON shape. */
   _toPersistable() {
     return {
       schemaVersion: SCHEMA_VERSION,
-      salt: this.salt,
+      ...(this.saltSource === "file" ? {salt: this.salt} : {}),
+      saltFingerprint: V.hash(this.salt),
       saltSource: this.saltSource,
       entries: Object.fromEntries(this.entries),
       legacy: Object.fromEntries(this.legacy),
@@ -441,10 +349,19 @@ class LocatorMemory {
    * invocation — there is no second path in the same chain whose success
    * could mask this one's failure.
    */
+  async _writeState(data) {
+    let result;
+    if(this._blockedEnvelope) result={ok:false,error:"unsupported schema or salt mismatch; original file preserved"};
+    else if(V.bytes(data)>V.MAX_BYTES) result={ok:false,error:"memory serialized size exceeds bound"};
+    else result=await Writer.write(this.memoryPath,data,this._expectedDigest,AtomicJsonStore.writeJsonAtomic);
+    this._writeFailures.record(this.memoryPath,result);
+    if(result.ok) this._expectedDigest=result.digest;
+    return result;
+  }
+
   _persist() {
-    this._queue = this._queue
-      .then(() => AtomicJsonStore.writeJsonAtomic(this.memoryPath, this._toPersistable()))
-      .then((result) => this._writeFailures.record(this.memoryPath, result));
+    const snapshot = _clone(this._toPersistable());
+    this._queue = this._queue.then(() => this._writeState(snapshot));
     return this._queue;
   }
 
@@ -455,11 +372,16 @@ class LocatorMemory {
    * can never pass a key that doesn't match its own identity.
    */
   recordEvidence(identity, signature) {
+    if(this._decisionInProgress) throw new Error("locator decision in progress");
+    if (!V.identity(identity) || !V.signature(signature)) throw new Error("invalid locator evidence");
+    identity = _clone(identity); signature = _clone(signature);
     const key = LocatorIdentity.serialiseIdentity(identity);
     const existing = this.entries.get(key);
     const now = new Date().toISOString();
     const entry = {
       identity,
+      approvedAlternative: existing ? existing.approvedAlternative : null,
+      decisionHistory: existing ? existing.decisionHistory : [],
       trust: "trusted",
       signature,
       pendingCandidate: existing ? existing.pendingCandidate : null,
@@ -487,22 +409,17 @@ class LocatorMemory {
    * entry claiming to have been revoked, by nobody, at no time.
    */
   recordPendingCandidate(identity, candidate) {
+    if(this._decisionInProgress) throw new Error("locator decision in progress");
+    if (!V.identity(identity)) throw new Error("invalid locator identity");
+    identity = _clone(identity);
+    const proposed = V.proposal(candidate);
     const key = LocatorIdentity.serialiseIdentity(identity);
     const existing = this.entries.get(key);
     const now = new Date().toISOString();
-
     const priorCandidate = existing ? existing.pendingCandidate : null;
-    const sameSelector = priorCandidate && priorCandidate.selector === candidate.selector;
-
-    const pendingCandidate = {
-      selector: candidate.selector,
-      signature: candidate.signature,
-      contributions: candidate.contributions && typeof candidate.contributions === "object" ? candidate.contributions : {},
-      total: typeof candidate.total === "number" ? candidate.total : 0,
-      firstSeen: sameSelector ? priorCandidate.firstSeen : now,
-      lastSeen: now,
-      occurrences: sameSelector ? priorCandidate.occurrences + 1 : 1,
-    };
+    const sameProposal = priorCandidate && priorCandidate.proposalId === proposed.proposalId;
+    if(existing && existing.approvedAlternative?.proposalId === proposed.proposalId && existing.trust === "trusted") return _clone(existing);
+    const pendingCandidate = {...proposed,firstSeen:sameProposal?priorCandidate.firstSeen:now,lastSeen:now,occurrences:sameProposal?Math.min(1000000,priorCandidate.occurrences+1):1};
 
     const entry = existing
       ? { ...existing, pendingCandidate, lastSeen: now }
@@ -542,9 +459,10 @@ class LocatorMemory {
    * Returns `null` if there is no entry, no pendingCandidate, or the entry
    * is revoked; otherwise the approved (cloned) entry.
    */
-  approve(key, { approvedBy = "dashboard" } = {}) {
+  _applyApprove(key, { approvedBy = "dashboard", proposalId } = {}) {
+    if(this._decisionInProgress) return null;
     const entry = this.entries.get(key);
-    if (!entry || !entry.pendingCandidate) return null;
+    if (!entry || !entry.pendingCandidate || (!proposalId || entry.pendingCandidate.proposalId !== proposalId)) return null;
     if (entry.trust === "revoked") {
       Logger.warning(
         `LocatorMemory: refused to approve a pending candidate for a revoked identity (key=${key}); `
@@ -554,17 +472,21 @@ class LocatorMemory {
       return null;
     }
 
+    if(!V.string(approvedBy,128)) return null;
     const now = new Date().toISOString();
     const approved = {
       ...entry,
       trust: "trusted",
-      signature: entry.pendingCandidate.signature,
+      signature: _clone(entry.pendingCandidate.signature),
+      approvedAlternative: {..._clone(entry.pendingCandidate),actor:approvedBy,approvedAt:now},
+      decisionHistory: this._boundedHistory([...(entry.decisionHistory || []),{kind:"approve",actor:approvedBy,at:now,proposal:_clone(entry.pendingCandidate),priorTrust:entry.trust}]),
       pendingCandidate: null,
       lastSeen: now,
     };
     this.entries.set(key, approved);
+    this._evictIfNeeded();
     this._persist();
-    void approvedBy;
+
     return _clone(approved);
   }
 
@@ -574,13 +496,15 @@ class LocatorMemory {
    * rejected" via `previouslyRejected()`. Returns `null` if there is no
    * entry or no pendingCandidate to reject.
    */
-  reject(key, { rejectedBy = "dashboard" } = {}) {
+  _applyReject(key, { rejectedBy = "dashboard", proposalId } = {}) {
+    if(this._decisionInProgress) return null;
     const entry = this.entries.get(key);
-    if (!entry || !entry.pendingCandidate) return null;
+    if (!entry || !entry.pendingCandidate || (!proposalId || entry.pendingCandidate.proposalId !== proposalId)) return null;
 
+    if(!V.string(rejectedBy,128)) return null;
     const candidateSelector = entry.pendingCandidate.selector;
     const now = new Date().toISOString();
-    const rejected = { ...entry, pendingCandidate: null, lastSeen: now };
+    const rejected = { ...entry, pendingCandidate: null, lastSeen: now, decisionHistory:this._boundedHistory([...(entry.decisionHistory || []),{kind:"reject",actor:rejectedBy,at:now,proposal:_clone(entry.pendingCandidate),priorTrust:entry.trust}]) };
     this.entries.set(key, rejected);
 
     this.rejections.push({ identityKey: key, candidateSelector, rejectedBy, rejectedAt: now });
@@ -595,6 +519,7 @@ class LocatorMemory {
       }
     }
     this._buildRejectionIndex();
+    this._evictIfNeeded();
     this._persist();
     return _clone(rejected);
   }
@@ -618,19 +543,25 @@ class LocatorMemory {
    *
    * Returns `null` if there is no entry for `identityKey`.
    */
-  rollback(identityKey, { actor = "dashboard", note } = {}) {
+  _applyRollback(identityKey, { actor = "dashboard", note } = {}) {
+    if(this._decisionInProgress) return null;
     const entry = this.entries.get(identityKey);
     if (!entry) return null;
 
     const now = new Date().toISOString();
+    if(!V.string(actor,128) || (note!==undefined && (typeof note!=="string" || note.length>500))) return null;
     const revocationEvent = note !== undefined ? { actor, at: now, note } : { actor, at: now };
     const revoked = {
       ...entry,
       trust: "revoked",
       lastSeen: now,
-      revocationHistory: [...entry.revocationHistory, revocationEvent],
+      approvedAlternative: null,
+      pendingCandidate: null,
+      decisionHistory: this._boundedHistory([...(entry.decisionHistory || []),{kind:"rollback",...revocationEvent,proposal:_clone(entry.pendingCandidate || entry.approvedAlternative),priorTrust:entry.trust}]),
+      revocationHistory: this._boundedHistory([...entry.revocationHistory, revocationEvent]),
     };
     this.entries.set(identityKey, revoked);
+    this._evictIfNeeded();
     this._persist();
     return _clone(revoked);
   }
@@ -646,13 +577,62 @@ class LocatorMemory {
     const key = LocatorIdentity.serialiseIdentity(identity);
     const entry = this.entries.get(key);
     if (!entry || entry.trust !== "trusted") return null;
-    return _clone({ identity: entry.identity, signature: entry.signature, firstSeen: entry.firstSeen, lastSeen: entry.lastSeen });
+    return _clone({ identity: entry.identity, signature: entry.signature, approvedAlternative:entry.approvedAlternative, firstSeen: entry.firstSeen, lastSeen: entry.lastSeen });
+  }
+
+  _revision(entry) {
+    function substantive(v) {
+      if(Array.isArray(v)) return v.map(substantive);
+      if(v && typeof v === "object") return Object.fromEntries(Object.entries(v).filter(([k])=>!["lastSeen","firstSeen","occurrences","capturedAt"].includes(k)).map(([k,value])=>[k,substantive(value)]));
+      return v;
+    }
+    return V.hash(substantive(entry));
+  }
+
+  async approve(key,{approvedBy="dashboard",proposalId}={}) {const r=await this.decide("approve",key,{actor:approvedBy,proposalId});return r.ok?r.entry:null;}
+  async reject(key,{rejectedBy="dashboard",proposalId}={}) {const r=await this.decide("reject",key,{actor:rejectedBy,proposalId});return r.ok?r.entry:null;}
+  async rollback(key,{actor="dashboard",note,expectedRevision,proposalId}={}) {const r=await this.decide("rollback",key,{actor,note,expectedRevision,proposalId});return r.ok?r.entry:null;}
+
+  getApprovedAlternatives(identity) {
+    const trusted=this.getTrusted(identity);
+    return trusted?.approvedAlternative ? [_clone(trusted.approvedAlternative)] : [];
+  }
+
+  decide(kind,key,{proposalId,expectedRevision,actor="dashboard",note}={}) {
+    const operation=async () => {
+      const fail=(status,error)=>({ok:false,status,entry:null,error});
+      if(!["approve","reject","rollback"].includes(kind) || !V.string(actor,128) || (note!==undefined && (typeof note!=="string" || note.length>500))) return fail(400,"invalid decision");
+      if(kind !== "rollback" && !V.string(proposalId,64)) return fail(400,"proposalId required");
+      if(kind === "rollback" && !V.string(expectedRevision,64) && !V.string(proposalId,64)) return fail(400,"expectedRevision required");
+      const current=this.entries.get(key);
+      if(!current) return fail(404,"identity missing");
+      const expected=kind === "rollback" ? current.approvedAlternative || current.pendingCandidate : current.pendingCandidate;
+      if(kind === "rollback" ? (expectedRevision ? this._revision(current) !== expectedRevision : !expected || expected.proposalId !== proposalId) : current.trust === "revoked" || !expected || expected.proposalId !== proposalId) return fail(409,"stale or revoked proposal");
+      // Stage using the same pure state transformations as the low-level API.
+      const oldEntries=this.entries,oldRejections=this.rejections,oldQueue=this._queue;
+      this.entries=new Map([...oldEntries].map(([k,v])=>[k,_clone(v)])); this.rejections=_clone(oldRejections);
+      const persist=this._persist; this._persist=()=>Promise.resolve();
+      let entry;
+      try {entry=kind==="approve"?this._applyApprove(key,{approvedBy:actor,proposalId}):kind==="reject"?this._applyReject(key,{rejectedBy:actor,proposalId}):this._applyRollback(key,{actor,note});}
+      finally {this._persist=persist;}
+      const stagedEntries=this.entries,stagedRejections=this.rejections,data=_clone(this._toPersistable());
+      this.entries=oldEntries;this.rejections=oldRejections;this._queue=oldQueue;this._buildRejectionIndex();
+      this._decisionInProgress=true;
+      let result;
+      try {result=await this._writeState(data);} finally {this._decisionInProgress=false;}
+      if(!result.ok) return fail(503,result.error);
+      this.entries=stagedEntries;this.rejections=stagedRejections;this._buildRejectionIndex();
+      return {ok:true,status:200,entry:{..._clone(entry),revision:this._revision(entry)},error:null};
+    };
+    const result=this._queue.then(operation);
+    this._queue=result.then(()=>undefined);
+    return result;
   }
 
   /** Defensive copy of one entry by its canonical key, or `null`. */
   getEntry(key) {
     const entry = this.entries.get(key);
-    return entry ? _clone(entry) : null;
+    return entry ? {..._clone(entry),revision:this._revision(entry)} : null;
   }
 
   /**
@@ -683,6 +663,7 @@ class LocatorMemory {
     for (const [key, entry] of this.entries) {
       const cloned = _clone(entry);
       cloned.key = key;
+      cloned.revision = this._revision(entry);
       if (cloned.pendingCandidate) {
         cloned.pendingCandidate.previouslyRejected = this.previouslyRejected(key, cloned.pendingCandidate.selector);
       }
@@ -693,8 +674,8 @@ class LocatorMemory {
 
   /** Defensive copies of every quarantined legacy row, keyed by opaque id. */
   listLegacy() {
-    const out = {};
-    for (const [id, entry] of this.legacy) out[id] = _clone(entry);
+    const out = Object.create(null);
+    for (const [id, entry] of this.legacy) out[id] = {reason: entry.reason, digest: entry.digest || V.hash(entry)};
     return out;
   }
 
@@ -705,6 +686,7 @@ class LocatorMemory {
    * `true` if a row was removed, `false` if `opaqueId` was not present.
    */
   deleteLegacy(opaqueId, { actor = "dashboard" } = {}) {
+    if(this._decisionInProgress) return false;
     if (!this.legacy.has(opaqueId)) return false;
     this.legacy.delete(opaqueId);
     Logger.info(`LocatorMemory: legacy row ${opaqueId} deleted by ${actor}.`);

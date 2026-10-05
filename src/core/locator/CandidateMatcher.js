@@ -154,13 +154,14 @@ const ATTRIBUTE_MATCH_KEYS = Object.freeze([
   "id",
   "data-testid",
   "data-test",
+  "data-qa",
   "name",
   "type",
 ]);
 
 // Keys treated as strong, identity-bearing attributes for the
 // "conflicting stable identity" negative-evidence gate.
-const STABLE_IDENTITY_KEYS = Object.freeze(["id", "data-testid", "data-test"]);
+const STABLE_IDENTITY_KEYS = Object.freeze(["id", "data-testid", "data-test", "data-qa"]);
 
 const ACTION_COMPATIBLE_TAGS = Object.freeze({
   type: new Set(["input", "textarea"]),
@@ -338,6 +339,7 @@ function _score(storedSignature, candidateSignature, maxLen) {
   const total = nonGeometryText === 0 ? 0 : rawTotal;
 
   return {
+    evidence: _compareEvidence(storedSignature, candidateSignature),
     contributions: {
       attribute,
       accessibleName,
@@ -349,6 +351,19 @@ function _score(storedSignature, candidateSignature, maxLen) {
     },
     total,
   };
+}
+
+function _compareEvidence(stored, current) {
+  const supporting = [], changed = [], missing = [], contradictions = [];
+  const compare = (field, before, after, contradictory = false) => {
+    if (before === undefined || before === null || before === "" || (Array.isArray(before) && !before.length)) { missing.push(field); return; }
+    if (after === undefined || after === null || after === "") { missing.push(field); return; }
+    if (JSON.stringify(before) === JSON.stringify(after)) supporting.push(field);
+    else { changed.push(field); if (contradictory) contradictions.push(field); }
+  };
+  for (const key of ATTRIBUTE_MATCH_KEYS) compare(`attributes.${key}`, _safeGet(_attributesOf(stored), key), _safeGet(_attributesOf(current), key), STABLE_IDENTITY_KEYS.includes(key));
+  for (const field of ["tagName", "role", "accessibleNameApprox", "textApprox", "structuralPath", "boundingBoxBucket"]) compare(field, _safeGet(stored, field), _safeGet(current, field), field === "role" || field === "tagName");
+  return { supporting, changed, missing, contradictions };
 }
 
 function _stateOf(candidate) {
@@ -560,6 +575,7 @@ function _alternativeEntry(selector, scored, maxSelectorLen) {
   return {
     selector: _boundString(typeof selector === "string" ? selector : "", maxSelectorLen),
     contributions: scored.contributions,
+    evidence: scored.evidence,
     total: scored.total,
   };
 }

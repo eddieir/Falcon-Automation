@@ -68,7 +68,7 @@ function _preserveCorrupt(filePath, rawBytes) {
         const sidecar = _sidecarPath(filePath);
         // Exclusive-create: never overwrite an existing sidecar, and never
         // follow a pre-placed symlink at that path.
-        fs.writeFileSync(sidecar, rawBytes, { flag: "wx" });
+        fs.writeFileSync(sidecar, rawBytes, { flag: "wx", mode: 0o600 });
     } catch (sidecarError) {
         Logger.warning(
             `AtomicJsonStore corrupt-file recovery: failed to preserve corrupt sidecar for ${filePath} — ${sidecarError.message}`,
@@ -142,7 +142,7 @@ async function writeJsonAtomic(filePath, data) {
     const tmpPath = path.join(dir, `${path.basename(filePath)}.tmp-${process.pid}-${crypto.randomUUID()}`);
     try {
         await fs.promises.mkdir(dir, { recursive: true });
-        await fs.promises.writeFile(tmpPath, JSON.stringify(data, null, 2), "utf8");
+        await fs.promises.writeFile(tmpPath, JSON.stringify(data, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
         await fs.promises.rename(tmpPath, filePath);
         return { ok: true };
     } catch (error) {

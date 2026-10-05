@@ -1,364 +1,244 @@
 # Phase 14 Competitive Analysis: Self-Healing Test Automation
 
-## Method and Limitations
+## Method and limitations
 
-**Access date:** 2026-09-29. **Source priority:** Official technical documentation > vendor articles > marketing pages. **Source freshness:** Dates are as recorded on the source page. When "last updated: not stated" appears below, no secondary freshness check (changelog, release notes, archived snapshot) was attempted; these sources are acceptable for an internal gate but require secondary freshness verification before external publication.
+Reviewed on **2026-10-05**. The primary technical pages for all eleven profiles were reopened, including the previously inaccessible mabl help pages. Vendor articles remain separately labeled. Source metadata, exact URLs, page sections, publication/update dates where supplied, and retrieval limitations are in [the source register](phase-14-source-register.md).
 
-**Technical limitations of this research:**
+“VERIFIED” means that a reviewed public source explicitly documents the precise behavior; it does not mean the product was independently exercised. “UNKNOWN” and “NOT_FOUND_IN_DOCS” never establish absence. Vendor descriptions are not comparable accuracy measurements. No accounts, paid features or competitor executions were used. Undated live pages have no established publication date; access date is not publication date. A separate independent review and owner Gate 0 decision remain required; this refresh does not fabricate either approval.
 
-- **mabl technical documentation unreachable.** Four official mabl help center paths returned HTTP 403 (access denied):
-  - https://help.mabl.com/hc/en-us/articles/19078583792404-How-auto-heal-works
-  - https://help.mabl.com/hc/en-us/articles/19078598947092-Auto-heal-FAQs
-  - https://help.mabl.com/docs/auto-heal-faqs
-  - https://help.mabl.com/docs/assertions-and-auto-heal
-  
-  Consequence: every mabl technical claim is recorded as **UNVERIFIED** — not confirmed, and emphatically not denied. Each capability mabl is reported to have is independently verified on another vendor's official documentation (see confidence notes below). This is an accepted permanent limitation of this research pass.
+The structured [matrix](competitor-matrix.json) includes every requested A–J subdimension, with one explicit cell for each competitor. The original eight feature IDs remain for compatibility. Composite questions require all named subclauses: partial evidence leaves the status UNKNOWN and describes the known subset. UNKNOWN is an explicit insufficiency judgment, not a favorable default. Source linkage tests establish structure only, not evidentiary sufficiency.
 
-- **Several sources carry no last-updated date,** and secondary freshness checks were not performed (see source list).
-
-- **Quoted text was audited for internal consistency only,** not re-fetched, by a reviewer with no web tools. This is weak-confidence clearance on summary accuracy, not a strong one. All quotes are marked with their source.
-
----
-
-**Structured data:** the capability-by-capability matrix described in prose below is also published as schema-validated structured data at `docs/research/competitor-matrix.json`, one status cell per competitor per feature restricted to the six-value enum in the table immediately below, with no blank and no default. That file, not this prose, is the machine-checked source of truth for "every cell carries an honest status" (see `tests/regression/p14-claims.check.cjs`).
-
-## Evidence Status Vocabulary
+## Evidence vocabulary
 
 | Status | Meaning |
-|--------|---------|
-| **VERIFIED** | Read on the official vendor technical documentation page. |
-| **PARTIALLY VERIFIED** | Found on an official page, but claims on the same page remain unverified. |
-| **MARKETING CLAIM** | Sourced from a vendor marketing or press page, not technical documentation. Not independently verifiable. Must not be restated as fact or used as a comparison baseline. |
-| **VENDOR ARTICLE** | Written by the vendor but published as a blog post or article, not official documentation. Lower priority than technical docs. |
-| **NOT FOUND IN PUBLIC DOCUMENTATION** | Not stated on the official page reviewed. **This never means the competitor lacks the capability.** It means the claim was not found in the reviewed source. |
-| **UNKNOWN** | The official page was silent on the question. |
-| **NOT APPLICABLE** | The feature category does not apply to this product. |
-| **FETCH BLOCKED** | The official documentation page could not be accessed. |
+|---|---|
+| VERIFIED | Explicitly documented behavior on the reviewed technical source. |
+| UNKNOWN | Insufficient evidence for the exact requirement or composite question. |
+| NOT_FOUND_IN_DOCS | No supporting statement in reviewed pages; not product absence. |
+| MARKETING_CLAIM | Vendor article, marketing or press assertion; not independently measured. |
+| ACCOUNT_ACCESS_REQUIRED | A verified access barrier requires an account. |
+| FETCH_BLOCKED | Retrieval failed; not evidence about product capability. |
 
----
+## Competitor profiles
 
-## Competitor Profiles
+### BrowserStack
 
-### BrowserStack — AI Self-Heal for Playwright
+**Sources:** S-01, exact URLs in source register.
 
-**Source:** Official documentation, https://www.browserstack.com/docs/automate/playwright/self-healing (VERIFIED). Last-updated: not stated on page.
+**Strongest documented capability:** Historical locator, attribute and structure context supports in-run recovery; build reports explain repairs.
 
-**Healing trigger:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Trust model:** In-run changes precede review. Source edits use MCP or an SDK pull request; mandatory pre-persistence approval is unknown.
 
-**Stored historical model:** Stores element context: "securely stores key information about that element — including its locator, nearby attributes and the structure of the DOM". Storage location: UNKNOWN. Privacy statement: NOT FOUND.
+**Evidence and storage:** Build reports and healed locators. Storage location and retention unknown.
 
-**Matching behaviour:** Uses "historical context" and "AI signals"; algorithm detail NOT STATED. Selection is automatic; human approval before reuse NOT MENTIONED.
+**Advantage:** Hosted execution and a source-update workflow.
 
-**Trust and governance:** Automatic healing; resilient-locator output is marked [Beta]; findElements healing marked [Beta]; some features in "limited capacity" for Playwright. Available only on Automate Pro plan.
+**Limitation:** Automate Pro entitlement; Playwright coverage is explicitly limited.
 
-**Validation:** Reports "Every healed locator and the reason it was applied, per build." Healings are reviewable in build dashboard and via REST API.
+**Relevance to Falcon:** Compare reporting and source-update behavior, not accuracy.
 
-**Explainability:** Reason for each healed locator is reported.
-
-**Storage and ownership:** Source update delivered via MCP direct-apply OR automatic GitHub PR for SDK users. Data location UNKNOWN.
-
-**Operational behaviour:** Requires at least one successful test execution with the same elementIdentifier to capture correct element context. Performance overhead noted as a limitation. "Not all failures can be healed."
-
-**Commercial evidence:** (NOT FOUND IN PUBLIC DOCUMENTATION)
-
-**Evidence confidence:** MEDIUM. Storage location, privacy model, and human-approval affordances remain undisclosed. Playwright support is acknowledged as "presently in limited capacity."
-
----
+**Evidence confidence:** Public technical evidence; undocumented details remain unknown and execution was not independently tested.
 
 ### Healenium
 
-**Source:** Official documentation, https://healenium.io/docs/how_healenium_works (VERIFIED). Last-updated: not stated on page.
+**Sources:** S-02, S-16, S-17, exact URLs in source register.
 
-**Healing trigger:** NoSuchElement exception.
+**Strongest documented capability:** Successful selectors provide a baseline; stored page context produces scored alternatives.
 
-**Stored historical model:** Persists the "successful locator" as a baseline for later runs; retrieves "previous successful locator path" and compares against "current page state".
+**Trust model:** Highest-score candidate is executed; mandatory approval is not established.
 
-**Matching behaviour:** Retrieves historical successful locator and re-evaluates against current page. Selects locator with "the highest score". No threshold value stated. Whether healed locators are auto-trusted for later runs versus confirmed by a human: UNKNOWN (documentation is silent).
+**Evidence and storage:** Screenshots and feedback; PostgreSQL stores selectors, reports and DOM.
 
-**Trust and governance:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Advantage:** Open-source Selenium wrapper/proxy and customer-managed backend.
 
-**Validation:** Report includes healed locator, screenshot, and a feedback button.
+**Limitation:** Playwright Proxy belongs to Pro; do not attribute it to the free library.
 
-**Explainability:** Report surface exists; algorithm named "LSC algorithm" but not defined on the page.
+**Relevance to Falcon:** Compare local ownership, storage and review controls.
 
-**Storage and ownership:** Storage engine named in official documentation as PostgreSQL (S-16, verified via https://healenium.io/docs/overview). Stated purpose: "store reference selector / healing / report / DOM". S-02's caveat "storage engine NOT named on this page ... must verify" is superseded for the storage-engine question only; S-02's other UNKNOWNs (auto-trust vs. human review) stand. Healenium's overview page names Selenium and Appium support; Playwright is not mentioned on this page (recorded as not established from this page, not unsupported). Screenshots and method/class names are not mentioned as stored. Whether healed locators are automatically reused: UNKNOWN.
+**Evidence confidence:** Public technical evidence; undocumented details remain unknown and execution was not independently tested.
 
-**Operational behaviour:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+### Katalon
 
-**Commercial evidence:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Sources:** S-03, exact URLs in source register.
 
-**Evidence confidence:** LOW-MEDIUM. Critical governance questions (auto-trust vs. human review, storage engine, persistence of healed locators) are undisclosed.
+**Strongest documented capability:** Ordered fallback methods, then LLM-assisted matching using selected page, accessibility and screenshot signals.
 
----
+**Trust model:** Run recovery continues execution; Approve saves a proposed default locator.
 
-### Katalon — Self-healing tests in Katalon Studio
+**Evidence and storage:** Broken/proposed locator, recovery method and screenshot; project object defaults.
 
-**Source:** Official documentation, https://docs.katalon.com/katalon-studio/maintain-tests/self-healing-tests-in-katalon-studio (VERIFIED). Last-updated: April 2026.
+**Advantage:** Documented review before changing the default locator.
 
-**Healing trigger:** User-prioritised fallback locator methods, applied in order when a method fails.
+**Limitation:** Active license required; image-locator limitations documented.
 
-**Stored historical model:** User can configure two tiers: (1) ordered fallback locator methods, configured by drag-and-drop priority; (2) LLM-based analysis of "page source, accessibility tree, full-page screenshot, and element screenshots" with user-configurable signal set.
+**Relevance to Falcon:** Approval alone is not a differentiator.
 
-**Matching behaviour:** Tries locator methods from highest to lowest priority. LLM tier analyzes multiple signal sources; "Selecting more sources increases healing accuracy but may slightly increase processing time and cost."
+**Evidence confidence:** Public technical evidence; undocumented details remain unknown and execution was not independently tested.
 
-**Trust and governance:** **Human approval required before persistence.** Once healing completes, "Katalon Studio suggests replacing the broken locator with the one that worked". The Self-healing Insights tab requires explicit "Approve" to save, or "Discard" to reject. Confidence score NOT MENTIONED.
+### mabl
 
-**Validation:** Insights table shows Test Object ID, Broken Locator, Proposed Locator, Recovered By, and screenshot preview.
+**Sources:** L-01, S-18, S-19, exact URLs in source register.
 
-**Explainability:** "Recovered By" shows the healing method. Per-locator reason is explicit.
+**Strongest documented capability:** Environment-scoped models, standard matching and cloud generative healing; weak matches fail.
 
-**Storage and ownership:** Persisted to project configuration after explicit approval.
+**Trust model:** Passing plan runs update the model automatically; failed/ad-hoc/local runs do not.
 
-**Operational behaviour:** On heal, "the test continues to run without interruption".
+**Evidence and storage:** Find summary, attribute history and insights; physical storage and retention unknown.
 
-**Commercial evidence:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Advantage:** Explicit model-update conditions and environment separation.
 
-**Evidence confidence:** HIGH. Human approval before reuse is explicitly documented; this directly contradicts the Phase 14 brief's premise that pre-reuse human approval is a Falcon differentiator.
+**Limitation:** Rollback deletes newer versions and does not prevent the same repair recurring.
 
----
+**Relevance to Falcon:** Compare scope isolation, evidence and revocation semantics.
 
-### mabl — GenAI Test Automation with Self-Healing
+**Evidence confidence:** Public technical evidence; undocumented details remain unknown and execution was not independently tested.
 
-**Source:** Vendor marketing page, https://www.mabl.com/auto-healing-tests (MARKETING CLAIM). No date shown. Companion source: mabl blog post, "Self-healing test automation — autonomous QA" (Abbey Charles, 2025-11-17), reviewed but contains no technical detail.
+### Testsigma
 
-**Healing trigger:** UNVERIFIED. Official help documentation is inaccessible (HTTP 403).
+**Sources:** S-05, exact URLs in source register.
 
-**Stored historical model:** UNVERIFIED. Official documentation is inaccessible.
+**Strongest documented capability:** Locator trace records the engine sequence; analysis explains a successful or failed heal.
 
-**Matching behaviour:** Marketing page states "Smarter Element Locators … use visual context and multiple attributes"; attribute count NOT disclosed. Described as "Adaptive Multi-Layer Auto-Healing"; "autonomously updates element locators and test steps".
+**Trust model:** Approve as Primary changes future use; Ignore retains the original after a run-only heal.
 
-**Trust and governance:** Marketing page states human involvement only "when clarification is needed". Broader governance model (thresholds, auto-vs-proposal split, persistence rules): UNVERIFIED.
+**Evidence and storage:** Failed/replacement locators, duration, visual evidence and trace; storage backend unknown.
 
-**Validation:** UNVERIFIED.
+**Advantage:** Clear run-only versus future-use review workflow.
 
-**Explainability:** UNVERIFIED.
+**Limitation:** Failed-heal explanation requires Analyzer V2.
 
-**Storage and ownership:** UNVERIFIED.
+**Relevance to Falcon:** The run/persistence split already has a documented analogue.
 
-**Operational behaviour:** UNVERIFIED.
+**Evidence confidence:** Public technical evidence; undocumented details remain unknown and execution was not independently tested.
 
-**Commercial evidence:** "eliminating up to 95% of test maintenance" — MARKETING CLAIM, not independently verifiable.
+### testRigor
 
-**Evidence confidence:** VERY LOW. Technical documentation is inaccessible. Every technical capability above is independently verified on another vendor's official documentation (see cross-references in other profiles), but mabl's own implementation details remain unknown. This is an accepted permanent limitation of this research pass. The marketing claim is recorded; it must not be restated as fact or used as a target or baseline.
+**Sources:** S-06, exact URLs in source register.
 
----
+**Strongest documented capability:** Vendor describes end-user intent and opt-in vision recovery.
 
-### Testsigma — Auto-Healing
+**Trust model:** Automatic repairs have later review and rollback; mandatory pre-persistence approval is unknown.
 
-**Source:** Official documentation, https://testsigma.com/docs/auto-healing/auto-healing-insights (VERIFIED). Last-updated: not stated on page. Companion introductory page https://testsigma.com/docs/auto-healing/intro/ confirms auto-healing is a feature; technical model details are NOT stated there.
+**Evidence and storage:** Changed-step warnings and UI differences; backend storage unknown.
 
-**Healing trigger:** (NOT FOUND ON INSIGHTS PAGE; introductory page does not clarify)
+**Advantage:** Documented reversibility of repaired tests.
 
-**Stored historical model:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Limitation:** Algorithm, matching thresholds and storage policy not established on this page.
 
-**Matching behaviour:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Relevance to Falcon:** Compare changed-step explanations; vendor behavior was not exercised.
 
-**Trust and governance:** **Explicit human persistence control.** "Click Approve as Primary to make the healed locator the locator the test uses from now on"; "Click Ignore to leave the original locator in place"; "Click Update to apply the healed locator across every test case linked to the element". Healing happens automatically during execution; persistence requires explicit user action.
+**Evidence confidence:** Public technical evidence; undocumented details remain unknown and execution was not independently tested.
 
-**Validation:** Shows healed element, "The locator that failed, struck through, followed by the locator that replaced it". "Every auto-heal event records a locator trace: the full sequence the engine worked through to arrive at a heal".
+### Tricentis Testim
 
-**Explainability:** Full locator trace is recorded and displayed.
+**Sources:** S-07, exact URLs in source register.
 
-**Storage and ownership:** User chooses per-locator persistence via Approve, Ignore, or Update actions.
+**Strongest documented capability:** Locator health below 70% triggers automatic improvement.
 
-**Operational behaviour:** Automatically identifies and updates broken element locators during execution.
+**Trust model:** Improved locator replaces the degraded one; mandatory human approval is not documented.
 
-**Commercial evidence:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Evidence and storage:** Labeled test revisions and UI indicators; backend unknown.
 
-**Evidence confidence:** MEDIUM. Governance model (explicit approval for persistence) is very clearly documented. Healing trigger and historical matching strategy are NOT disclosed.
+**Advantage:** Documented health threshold and revision history.
 
----
+**Limitation:** Branch restrictions; page does not establish named rollback or candidate-score factors.
 
-### testRigor — AI-Based Self-Healing
+**Relevance to Falcon:** Locator health and candidate similarity are different metrics.
 
-**Source:** Vendor official product page, https://testrigor.com/ai-based-self-healing/ (VERIFIED). No date shown.
+**Evidence confidence:** Public technical evidence; undocumented details remain unknown and execution was not independently tested.
 
-**Healing trigger:** Two types: locator breakage and specification change (element renamed).
+### Functionize
 
-**Stored historical model:** Elements described "from the end-user's perspective"; wrapper records "the end-user's way of explaining your locator".
+**Sources:** S-08, exact URLs in source register.
 
-**Matching behaviour:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Strongest documented capability:** Vendor article describes multidimensional fingerprints and uncertainty validation.
 
-**Trust and governance:** Heals apply automatically and are **reviewable and reversible** — not pre-approved. Vision AI requires explicit opt-in: "If you enable Vision AI and enable Auto-Healing for rules and single commands…".
+**Trust model:** Pre-persistence approval unknown.
 
-**Validation:** Review affordances include "fixed-by-ai" label; "the steps that were self-healed will have a warning on them describing what exactly was changed"; "you can always see the differences in the UI and rollback to the previous version if necessary".
+**Evidence and storage:** Article discusses attributes, visual and structural context; backend unknown.
 
-**Explainability:** Warning label describes what was changed. User can see exact differences.
+**Advantage:** Detailed vendor explanation of its model.
 
-**Storage and ownership:** Rollback capability is explicit. (Persistence mechanism: NOT FOUND IN PUBLIC DOCUMENTATION)
+**Limitation:** Article claims are not independent execution evidence or accuracy measurements.
 
-**Operational behaviour:** Automatic repair is reversible. Vendor honestly states: "some of the ways AI adapts will not be what you want".
+**Relevance to Falcon:** Treat model descriptions as vendor claims, not superiority evidence.
 
-**Commercial evidence:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Evidence confidence:** Vendor article only; product behavior not independently verified.
 
-**Evidence confidence:** MEDIUM-HIGH. Reversibility and explanation are explicit. Persistence and historical model details are undisclosed.
+### Momentic
 
----
+**Sources:** S-09, exact URLs in source register.
 
-### Tricentis Testim — Locators: Auto Improve
+**Strongest documented capability:** Temporary recovery is separate from permanent triage; triage tests changes in a browser.
 
-**Source:** Official documentation, https://docs.tricentis.com/testim/content/test-management/locators-auto-improve.htm (VERIFIED). Last-updated: not stated on page.
+**Trust model:** PR is default permanent delivery, but direct commit and on-disk modes exist; mandatory approval is unknown.
 
-**Healing trigger:** Numeric threshold. "If a locator score drops below 70%" auto-improve activates.
+**Evidence and storage:** Classification/triage reasoning and repair validation; cache backend unknown.
 
-**Stored historical model:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Advantage:** Configurable delivery and run-only recovery.
 
-**Matching behaviour:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Limitation:** A default PR is not proof of a universal approval gate.
 
-**Trust and governance:** **Automatic replacement, no approval required.** "Testim replaces the degraded locator with the improved locator"; human approval NOT mentioned or required. Scope limitation: applies "only to tests run on the master branch"; other branches excluded unless settings are changed.
+**Relevance to Falcon:** Compare the conceptual split while distinguishing cache and source edits.
 
-**Validation:** Auditability provided: "Testim creates a test revision and labels it 'Testim auto improve'"; surfaced in Revision History, Locators panel and Test Library; an "Ai" icon shows for ~two weeks.
+**Evidence confidence:** Public technical evidence; undocumented details remain unknown and execution was not independently tested.
 
-**Explainability:** Label identifies auto-improved revisions; icon distinguishes them for two weeks.
+### Autify
 
-**Storage and ownership:** Locator is persisted automatically; revision history tracks the change.
+**Sources:** S-10, exact URLs in source register.
 
-**Operational behaviour:** Replaces degraded locators without user intervention; scoped to master-branch runs by default.
+**Strongest documented capability:** Vendor article describes user-applied fixes after completed tests.
 
-**Commercial evidence:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Trust model:** Deferred suggested-fix application, as a vendor article claim.
 
-**Evidence confidence:** HIGH. Numeric threshold (70%) and automatic replacement are explicitly documented. Testim is direct evidence that a competitor exposes a numeric locator score AND acts on a documented threshold. This contradicts the premise that Falcon's confidence-score approach is unique.
+**Evidence and storage:** Detailed evidence and storage unknown in this reviewed article.
 
----
+**Advantage:** User control over applying fixes is described.
 
-### Functionize — Self-Healing Tests Analysis
+**Limitation:** Article does not establish a complete product validation/storage contract.
 
-**Source:** Vendor technical article, https://www.functionize.com/blog/self-healing-tests-arent-magic-heres-whats-actually-happening-under-the-hood (VENDOR ARTICLE, not official documentation). Author Matt Young. Published 2026-03-30. Brief priority 8.
+**Relevance to Falcon:** Do not infer implementation details from a general explainer.
 
-**Healing trigger:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Evidence confidence:** Vendor article only; product behavior not independently verified.
 
-**Stored historical model:** Five fingerprint dimensions: attributes/properties, visual characteristics, hierarchy and relationships, state and interactions, content and metadata.
+### Virtuoso QA
 
-**Matching behaviour:** Similarity scoring over a "high-dimensional embedding"; thresholds NOT disclosed. Scale claim: "3,500 elements per page, with approximately 200 attributes evaluated per element"; "70 million data points per test run". These are VENDOR CLAIMS, not independently verified. (See vendor-claims register below.)
+**Sources:** S-13, exact URLs in source register.
 
-**Trust and governance:** Confidence thresholds, low-confidence failure, rollback: NOT on this page. **Safe-refusal equivalent exists:** an "adjoint model" performs a "reverse-likelihood check"; "If the adjoint model disagrees, or if the uncertainty score stays high, the system flags the result as 'self-heal validation failed' and escalates rather than silently proceeding"; "Failing loudly on genuine uncertainty is a feature, not a limitation."
+**Strongest documented capability:** Confidence determines automatic changes, proposals or no healing.
 
-**Validation:** Similarity scoring produces a confidence metric; adjoint model provides a second-opinion safety gate.
+**Trust model:** High-confidence changes apply automatically; proposals need acceptance; Reject reverts applied changes.
 
-**Explainability:** Adjoint model acts as a validation gate. Safe refusal is explicit when confidence is low.
+**Evidence and storage:** Execution report and healing review; numeric score and backend unknown.
 
-**Storage and ownership:** (NOT FOUND IN PUBLIC DOCUMENTATION)
+**Advantage:** Conditional refusal and an explicit review/revert path.
 
-**Operational behaviour:** "A similarity score of 94% doesn't mean the system found the right element, it means it found the closest match". Vendor-admitted limitation: "Self-healing is constrained by your verifications. It cannot override a failed verification."
+**Limitation:** No numeric threshold disclosed; not a universal approval gate.
 
-**Commercial evidence:** Article is vendor-authored; claims about fingerprint dimensions and "70 million data points" originate here, not from independent test reports.
+**Relevance to Falcon:** Compare confidence/refusal policy and operator control.
 
-**Evidence confidence:** MEDIUM. Safe-refusal strategy is explicitly described. Scale claims ("70 million data points") are quantified but vendor-originated and unverified. Safe refusal is NOT unique to Falcon.
+**Evidence confidence:** Public technical evidence; undocumented details remain unknown and execution was not independently tested.
 
----
+## Commercial claims and survey limitations
 
-### Momentic — AI Test Maintenance
+BrowserStack's press-release reduction percentage and mabl's maintenance-reduction percentage remain vendor claims with no comparable public controlled methodology in the sources reviewed. They are not benchmark baselines, targets or independent evidence. Untraceable quantitative Virtuoso claims have been removed. Entitlements are recorded only when the technical source names them: BrowserStack Automate Pro, Katalon active Studio license, and Healenium Pro Playwright Proxy. Usage limits and exact pricing remain UNKNOWN.
 
-**Source:** Official documentation, https://momentic.ai/docs/reliability/auto-maintenance (VERIFIED). Last-updated: not stated on page.
+The September repository-star survey had no committed response snapshots. Its quantitative adoption conclusions are withdrawn. Exact per-repository API endpoints are registered for future reproduction; they are not a fresh measurement, completeness claim, or proof of maturity. The newly reviewed Healenium Pro page explicitly documents Playwright, so a blanket Selenium-only comparison is invalid.
 
-**Healing trigger:** Four escalating layers: locator auto-healing, failure recovery, permanent healing (triage), quarantine.
+## Required A–J coverage
 
-**Stored historical model:** **Run-scoped versus persisted split, very close to Falcon's intended model.** "The resolution applies to the current run and never edits the test"; "Generated steps apply only to that run and never edit the test." Only triage "delivers a repair only when it changes the test or a module."
+- **A. Product model:** 10 exact prompt subdimensions in the structured matrix.
+- **B. Healing trigger:** 7 exact prompt subdimensions in the structured matrix.
+- **C. Stored historical model:** 12 exact prompt subdimensions in the structured matrix.
+- **D. Matching behavior:** 13 exact prompt subdimensions in the structured matrix.
+- **E. Trust and governance:** 11 exact prompt subdimensions in the structured matrix.
+- **F. Validation:** 8 exact prompt subdimensions in the structured matrix.
+- **G. Explainability:** 7 exact prompt subdimensions in the structured matrix.
+- **H. Storage and ownership:** 12 exact prompt subdimensions in the structured matrix.
+- **I. Operational behavior:** 9 exact prompt subdimensions in the structured matrix.
+- **J. Commercial evidence:** 7 exact prompt subdimensions in the structured matrix.
 
-**Matching behaviour:** (NOT FOUND IN PUBLIC DOCUMENTATION)
-
-**Trust and governance:** Delivery of persisted repairs is configurable, default being a PR: "Pull request (default): open a pull request with the repairs"; also draft PR, direct commit, patch, or nothing. Step cache applied "after an eligible successful run". Explicit pre-approval: NOT STATED (PR default implies review, but the page does not say approval is required). Recorded as NOT FOUND, not as absence.
-
-**Validation:** Stops "after three recoveries in one run"; skips triage when "at least 20 failures and at least 50% of its tests failed"; excludes product regressions, config errors, network outages, 5xx, CAPTCHAs, browser crashes.
-
-**Explainability:** (NOT FOUND IN PUBLIC DOCUMENTATION)
-
-**Storage and ownership:** Persisted repairs delivered as configurable code change (PR, commit, patch, or none).
-
-**Operational behaviour:** Run-scoped repairs never modify test code; persisted repairs require explicit approval by default (PR review).
-
-**Commercial evidence:** (NOT FOUND IN PUBLIC DOCUMENTATION)
-
-**Evidence confidence:** MEDIUM-HIGH. Run vs. persisted split is explicitly documented. This is direct evidence that Momentic already separates "repair this run only" from "persist the repair," which is the core of Falcon's proposed Tier 2.5 trust contract. Implementation details (matching strategy, confidence thresholds) are not disclosed.
-
----
-
-### Autify — Self-Healing Test Automation
-
-**Source:** Vendor blog article, https://autify.com/blog/self-healing-test-automation (VENDOR ARTICLE, not official documentation). Published 2025-08-22.
-
-**Healing trigger:** (NOT FOUND IN PUBLIC DOCUMENTATION)
-
-**Stored historical model:** (NOT FOUND IN PUBLIC DOCUMENTATION)
-
-**Matching behaviour:** Element-characteristic description in the article is generic, not Autify-specific.
-
-**Trust and governance:** "Autify lets you decide whether to apply the AI-suggested fixes after the tests have completed running." — deferred, user-decided application. Healing is suggested, not automatic.
-
-**Validation:** (NOT FOUND IN PUBLIC DOCUMENTATION)
-
-**Explainability:** (NOT FOUND IN PUBLIC DOCUMENTATION)
-
-**Storage and ownership:** Persistence is user-initiated after test completion.
-
-**Operational behaviour:** Vendor-admitted risk: self-healing "can sometimes 'successfully' adapt to changes that actually represent bugs".
-
-**Commercial evidence:** (NOT FOUND IN PUBLIC DOCUMENTATION)
-
-**Evidence confidence:** LOW. This is a blog post, not technical documentation. Healing model details are absent. Governance model (deferred, user-decided) is stated; technical implementation is not.
-
----
-
-### Virtuoso QA — Elements and Self-Healing
-
-**Source:** Official documentation, https://docs.virtuoso.qa/guide/making-the-most-of-virtuoso/elements/ (VERIFIED). Last-updated: 2026-07-30. Companion marketing claim on vendor site: "95% accuracy … only 5% of changes require human review" (MARKETING CLAIM, see vendor-claims register).
-
-**Healing trigger:** (NOT FOUND IN PUBLIC DOCUMENTATION)
-
-**Stored historical model:** Selector kinds: Hint, XPath, XPath ID, ID, CSS. Infers "more specific element identifiers (e.g., XPath, XPath ID, CSS)" during execution. ML comparison of an expected model to a found model: NOT STATED on technical page (asserted on vendor marketing pages only; do not upgrade to verified).
-
-**Matching behaviour:** "Virtuoso not only considers the selectors, but it will also do a smarter analysis to infer the target element." Algorithm detail NOT STATED. **Confidence-gated split between auto-apply and human proposal:** "Above a certain confidence level, the change is applied automatically; below it, the change is offered as a proposal." Users see "Element healed automatically" or "Element can be healed" and may "Accept" or "Reject". Numeric score is NOT displayed to users.
-
-**Trust and governance:** Confidence threshold gates automatic vs. proposed application. Healing disabled for elements "selected with low confidence"; deterministic-selector-only elements are not healed by design. Stated limitations: "Virtuoso will also never heal your hint selector".
-
-**Validation:** User sees element healing outcome and can accept/reject proposal path.
-
-**Explainability:** Outcome labels ("healed automatically" vs. "can be healed") are explicit.
-
-**Storage and ownership:** (NOT FOUND IN PUBLIC DOCUMENTATION)
-
-**Operational behaviour:** Operates on confidence threshold (undisclosed numeric value); applies automatically above threshold, offers proposal below.
-
-**Commercial evidence:** "95% accuracy … only 5% of changes require human review" — MARKETING CLAIM, not independently verifiable.
-
-**Evidence confidence:** MEDIUM-HIGH. Virtuoso is the closest documented analogue to Falcon's intended Tier 2.5 trust model found anywhere in this research. It already implements BOTH a confidence threshold that gates automatic application AND an explicit human Accept/Reject proposal path. Numeric confidence threshold is NOT disclosed to users.
-
----
-
-## Vendor Claims Register
-
-| Vendor | Claim (verbatim) | Qualification | Source |
-|--------|------------------|---------------|--------|
-| mabl | "eliminating up to 95% of test maintenance" | MARKETING CLAIM. "Up to" qualifier appears in marketing page only. No methodology, population, time period, or measurement approach stated. | Vendor marketing page; blog post contains no technical detail. |
-| Virtuoso | "95% accuracy … only 5% of changes require human review" | MARKETING CLAIM. No population, time period, methodology, or measurement approach stated. | Vendor marketing page. |
-| Functionize | "3,500 elements per page" | VENDOR CLAIM. Scale presented as example; not independently verified. | Vendor technical article (blog). |
-| Functionize | "approximately 200 attributes evaluated per element" | VENDOR CLAIM. Presented as example; not independently verified. | Vendor technical article (blog). |
-| Functionize | "70 million data points per test run" | VENDOR CLAIM. Presented as scale example; not independently verified. | Vendor technical article (blog). |
-| BrowserStack | "40% reduction in automation build failures" | MARKETING CLAIM (unqualified). Who measured it — NOT SPECIFIED. Population — NOT SPECIFIED ("teams", generic). Time period — NOT SPECIFIED. Methodology — NONE PROVIDED. No sample size. Source: vendor press release (2025-11-17). Does NOT appear on technical documentation. | Vendor press release (https://www.prnewswire.com/news-releases/browserstack-unveils-ai-powered-self-healing-agent-to-keep-builds-green-302617102.html). Cross-checked against technical docs; figure absent. |
-
-**Important note:** These quantitative claims must not be restated as facts, used as benchmark baselines, used as Falcon targets, or compared against any Falcon measurement. Falcon's own benchmark measures Falcon under Falcon's own published conditions and compares against nothing.
-
----
-
-## Open-Source Survey
-
-Candidate projects were identified on GitHub and measured via REST API on 2026-09-29.
-
-| Project | Stars | Forks | Last Push | Created | License | Notes |
-|---------|-------|-------|-----------|---------|---------|-------|
-| healenium/healenium | 167 | 34 | 2026-03-31 | 2021-10-07 | Apache-2.0 | Only project with meaningful adoption signals and sustained history. Java/Selenium/Appium-centric, PostgreSQL-backed (S-16). |
-| paulocoliveira/playwright-auto-heal | 2 | — | 2025-09-30 | — | No license | — |
-| nagaqualizeal/playwright-self-heal-agent | 0 | — | 2026-09-16 | — | No license | — |
-| Karthick-1501/playwright-agent | 0 | — | 2026-04-26 | — | No license | — |
-| qosha1/healing-playwright | 0 | — | 2025-05-07 | — | Apache-2.0 | — |
-| davidTharwat23/playwright-locator-self-healing | 0 | — | 2026-09-29 | 2026-09-29 | MIT | Created and pushed same day as research. |
-| anshi43/autonomous-playwright-healer | 0 | — | 2026-09-29 | 2026-09-29 | No license | Created and pushed same day as research. |
-
-**Honest reading, stated as measurement not judgment:** Healenium is the only project in this set with meaningful adoption signals and a sustained history. Every Playwright-specific project found has 0-2 stars, and two of them were created on the day of this research (2026-09-29). Low stars do NOT prove a project is unmaintained; creation date alone does not prove a project will not mature. This is not a completeness claim about GitHub — only a statement of what was found in reviewed sources.
-
-**Conclusion:** **No established, widely-adopted open-source Playwright self-healing library was found meeting adoption or maturity signals in reviewed sources.** Recorded as "none found", not "none exists". Falcon's realistic open-source peer is Healenium (Selenium/Appium, Java-centric, PostgreSQL-backed per S-16), not a Playwright equivalent.
-
----
+Every undocumented storage, business-outcome-validation, false-heal-metric, concurrent-writer, privacy or approval detail stays UNKNOWN. Falcon benchmark results cannot be compared to a competitor without matched execution conditions and ground truth.
 
 ## Falcon's Current Capabilities (Revision `11657cb`)
 
@@ -468,12 +348,6 @@ The following capabilities are NOT present in Falcon as shipped:
 
 ## Research Residual Risks
 
-**RR-1 — Undated sources.** Sources S-01, S-02, S-05, S-07, S-09 record "last-updated: not stated on page". No secondary freshness check was attempted. Acceptable for an internal gate; must be closed before external publication.
+## Remaining research gates
 
-**RR-2 — Quote audit scope.** Quoted text was audited for internal consistency only, because the reviewer has no web tools. This is weak-confidence clearance on summary accuracy, not a strong one.
-
-**RR-3 — mabl technical documentation.** All mabl technical claims remain UNVERIFIED due to HTTP 403 access to four official help center pages. This is an accepted permanent limitation. No Falcon differentiation claim rests on mabl's absence; each capability is independently verified on another vendor's documentation.
-
-**RR-4 — CLI test enumeration.** `scripts/healing/review.js` behavior was verified by direct reading; specific test names in `cli.check.cjs` were not individually enumerated. Treat as PARTIAL evidence on that subsection.
-
-**RR-5 — HealingTrust implementation details.** Items on HealingTrust caps (200/500), eviction mechanics, and rejection-index behavior were not independently re-derived under this dispatch's turn budget; they were verified by direct code reading only.
+The Falcon baseline above remains the recorded pre-Phase-14 revision `11657cb1`; it is not a statement of the repaired branch. Independent source interpretation review, acceptance-criteria review and owner Gate 0 approval must be recorded separately. A green source-linkage test does not satisfy those gates.

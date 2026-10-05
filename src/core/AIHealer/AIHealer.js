@@ -1,5 +1,4 @@
 const Logger = require("../../../utils/Logger");
-const LocatorStore = require("./LocatorStore");
 const HealingReport = require("./HealingReport");
 const HealingTrust = require("./HealingTrust");
 const AdaptiveRetry = require("./AdaptiveRetry");
@@ -11,73 +10,11 @@ const SelectorBuilder = require("../locator/SelectorBuilder");
 const DefaultElementFactsCollector = require("../locator/ElementFactsCollector");
 
 /**
- * AIHealer — three-tier self-healing locator engine.
- *
- * Tier 1: Direct selector attempt (up to 3 retries with back-off).
- * Tier 2: Stored alternative locators from LocatorStore (learned from prior runs).
- * Tier 3: LLM-powered selector inference using live DOM snapshot via OpenAI gpt-4o-mini.
- *
- * Phase 8 — healing trust. A successful Tier 2 match was already reviewed
- * once (it's how it got into LocatorStore in the first place) and is reused
- * immediately. A successful Tier 3 guess has never been reviewed by anyone —
- * it goes to HealingTrust as a pending fix instead of straight into
- * LocatorStore. It only becomes a trusted Tier 2 alternative once a human
- * approves it (via the dashboard or `scripts/healing/review.js`); until
- * then, the same broken selector pays the Tier 3 LLM cost again on every run.
- *
- * Phase 11 — healing for every action, not just click. Every tier used to be
- * three near-identical copies hard-wired to `page.click()`, so a renamed
- * input or select silently lost its healing chain entirely (D13). The tiers
- * now resolve a selector once and then perform whatever action the caller
- * asked for against that selector — `click`, `type` (page.fill) or `select`
- * (page.selectOption) — so a form field is healed exactly as thoroughly as a
- * button, with the same trust gate and the same audit trail.
- *
- * Phase 14 — Tier 2.5, evidence-based locator memory (EP-5 §8). Sits between
- * Tier 2 and Tier 3: it is tried only after every stored LocatorStore
- * alternative has been exhausted, and only when `LocatorMemory` already
- * holds TRUSTED evidence for this exact (page, action, selector) identity —
- * no trusted evidence means zero DOM query and an immediate fall-through to
- * Tier 3, which is what keeps this tier cheap for the overwhelming majority
- * of identities that have never been healed before. When evidence exists,
- * a single bounded `ElementFactsCollector.collect()` call gathers live
- * candidates, `CandidateMatcher.evaluate()` scores them deterministically
- * against the stored signature, and only an "accepted" verdict is ever
- * acted on — `SelectorBuilder` resolves the winner to a concrete selector,
- * which is re-verified for uniqueness immediately before executing (defence
- * in depth, reusing the same `_matchCount` guard Tier 2 already relies on).
- * A verdict of "refused" or "no_candidate" is treated exactly like Tier 2
- * having nothing: it falls through to Tier 3, never aborts the run.
- *
- * Trust boundary on success: if the resolved selector is byte-identical to
- * the original (broken) selector, it is a trust REFRESH
- * (`LocatorMemory.recordEvidence`) — the same selector string, re-confirmed
- * against a live element. Any other resolved selector is a brand-new
- * PROPOSAL (`LocatorMemory.recordPendingCandidate`) that sits unreviewed
- * until a human calls `approve()`; a Tier 2.5 match, however confident,
- * never grants itself trust.
- *
- * Tier 1 and Tier 2 successes feed this same evidence store on a
- * best-effort basis. The element is read BEFORE the interaction and the
- * result persisted only after it succeeds: a click that navigates has
- * already replaced the document by the time it returns, so reading the
- * element afterwards describes whatever the landing page happens to put
- * behind the same selector, scoped to the landing page's URL. That recorded
- * a trusted fact about an element nobody had interacted with and left the
- * page the click actually happened on with no evidence at all — the most
- * common healing targets in a real suite (submit and login buttons) being
- * exactly the ones that navigate.
- *
- * Reading first costs one bounded DOM query before the interaction. It is
- * capped by PRE_CAPTURE_TIMEOUT_MS and every failure resolves to "no
- * evidence", so a slow, hanging or throwing collector still cannot delay the
- * interaction materially, change its outcome, or add a failure mode to it.
- * Persistence stays fire-and-forget after success.
+ * Locator healing preserves authored Tier 1 evidence and scopes reviewed
+ * alternatives by application, page, action, and original selector.
+ * Deterministic matches and inference successes remain proposals until approved.
+ * Legacy selector-only history is inspectable but never automatically replayed.
  */
-
-// Upper bound on the pre-interaction element read. Small deliberately: this
-// sits in front of every Tier 1/2 action, and losing a piece of evidence is
-// always preferable to delaying the interaction it describes.
 const PRE_CAPTURE_TIMEOUT_MS = 150;
 
 class AIHealer {
@@ -185,46 +122,13 @@ class AIHealer {
 
     /**
      * Tier 2 → Tier 3 fallback chain.
-     * First exhausts all LocatorStore alternatives, then calls the LLM.
+     * Tries scoped reviewed evidence before requesting an inferred proposal.
      *
      * `action` defaults to "click" so this method keeps working exactly as
      * before for existing callers that only ever healed clicks directly.
      */
     async healSelector(selector, description, action = "click", value) {
-        // --- Tier 2: LocatorStore ---
-        const alternatives = LocatorStore.getAlternatives(selector);
-        for (const altSelector of alternatives) {
-            try {
-                // page.click()/fill()/selectOption() all act on the first
-                // match without complaint when a selector resolves to more
-                // than one element — verify uniqueness ourselves before
-                // acting on a stored alternative, for every action type.
-                const count = await this._matchCount(altSelector);
-                if (count !== 1) {
-                    Logger.warning(`⚠️ Stored alternative ${altSelector} is ambiguous (${count} matches) — skipping.`);
-                    continue;
-                }
-
-                Logger.info(`🔹 Trying stored alternative: ${altSelector}`);
-                // Same ordering as Tier 1: read the element before acting on
-                // it, because this action can navigate too.
-                const captured = await this._preCaptureEvidence(action, selector, altSelector);
-                await this._performAction(action, altSelector, value);
-                HealingReport.log({
-                    original: selector,
-                    resolved: altSelector,
-                    tier: "LocatorStore",
-                    description,
-                    action,
-                });
-                // Fire-and-forget, same posture as the Tier 1 capture above.
-                void this._persistCapturedEvidence(captured);
-                return;
-            } catch (err) {
-                Logger.warning(`⚠️ Alternative locator ${altSelector} also failed.`);
-            }
-        }
-
+        // Unscoped legacy alternatives remain inspectable, but cannot authorize replay.
         // --- Tier 2.5: LocatorMemory evidence-based healing ---
         if (this._locatorMemory) {
             const identityResult = LocatorIdentity.buildIdentity({
@@ -260,7 +164,13 @@ class AIHealer {
                     throw new Error(`AI-suggested locator "${aiSuggestedLocator}" is ambiguous (${count} matches)`);
                 }
 
+                const captured = await this._preCaptureEvidence(action, selector, aiSuggestedLocator);
                 await this._performAction(action, aiSuggestedLocator, value);
+                if (captured) {
+                    this._locatorMemory.recordPendingCandidate(captured.identity, {
+                        selector: aiSuggestedLocator, signature: captured.signature, source: "inference",
+                    });
+                }
                 // Phase 8: not persisted to LocatorStore yet — an unreviewed
                 // guess is not trusted for reuse just because it worked once.
                 // It sits in HealingTrust until a human approves it. This
@@ -270,6 +180,7 @@ class AIHealer {
                     original: selector,
                     suggested: aiSuggestedLocator,
                     description,
+                    scoped: Boolean(captured),
                 });
                 HealingReport.log({
                     original: selector,
@@ -366,6 +277,7 @@ class AIHealer {
                     attributes: f.attributes,
                     structuralPath: f.structuralPath,
                     ownText: f.ownText,
+                    contentEditable: f.contentEditable,
                     boundingBoxBucket: f.boundingBoxBucket,
                 },
                 // Shared salt (F14-1): the same LocatorMemory instance that
@@ -378,6 +290,34 @@ class AIHealer {
             contentEditable: f.contentEditable,
             selectOptionAbsent: f.selectOptionAbsent,
         }));
+
+        const approved = typeof this._locatorMemory.getApprovedAlternatives === "function"
+            ? this._locatorMemory.getApprovedAlternatives(identity) : [];
+        for (const alternative of approved) {
+            try {
+                if (await this._matchCount(alternative.selector) !== 1) continue;
+                const current = await this._collector.collectOne(this.page, alternative.selector, {
+                    action, expectedSelectValue: action === "select" ? value : undefined,
+                });
+                if (!current) continue;
+                const candidate = {
+                    selector: alternative.selector,
+                    signature: ElementSignature.capture({ ...current, accessibleName: current.accessibleName }, { salt: this._locatorMemory.salt }),
+                    state: current.state, contentEditable: current.contentEditable,
+                    selectOptionAbsent: current.selectOptionAbsent,
+                };
+                const checked = CandidateMatcher.evaluate({ storedSignature: alternative.signature, liveCandidates: [candidate], action });
+                // Reviewed exact evidence can be sparse (for example an unnamed
+                // input). Reuse still requires every live safety gate and exact
+                // evidence equality; discovery continues to use the full threshold.
+                const withoutTimestamp = ({ capturedAt, ...evidence }) => evidence;
+                const unchanged = JSON.stringify(withoutTimestamp(alternative.signature)) === JSON.stringify(withoutTimestamp(candidate.signature));
+                if (checked.status !== "accepted" && !(checked.reason === "below_threshold" && unchanged)) continue;
+                await this._performAction(action, alternative.selector, value);
+                HealingReport.log({ original: selector, resolved: alternative.selector, tier: "LocatorMemory", description, action, status: "approved_reuse" });
+                return true;
+            } catch (_) { /* A reviewed selector must still pass current live guards. */ }
+        }
 
         const matchResult = CandidateMatcher.evaluate({ storedSignature: entry.signature, liveCandidates, action });
 
@@ -444,21 +384,18 @@ class AIHealer {
 
         HealingReport.log({ original: selector, resolved: resolvedSelector, tier: "LocatorMemory", description, action, status: "accepted" });
 
-        // The trust boundary (EP-5 §8): verbatim-identical to the original
-        // (broken) selector is a ground-truth REFRESH; anything else is a
-        // brand-new, unreviewed PROPOSAL. A match score, however high, can
-        // never manufacture trust by itself — only recordEvidence() can, and
-        // only for the selector that was already the identity's own.
-        if (resolvedSelector === selector) {
-            this._locatorMemory.recordEvidence(identity, winnerCandidate.signature);
-        } else {
-            this._locatorMemory.recordPendingCandidate(identity, {
-                selector: resolvedSelector,
-                signature: winnerCandidate.signature,
-                contributions: matchResult.winner.contributions,
-                total: matchResult.winner.total,
-            });
-        }
+        // Only a successful authored Tier 1 action creates ground-truth evidence.
+        this._locatorMemory.recordPendingCandidate(identity, {
+            selector: resolvedSelector,
+            signature: winnerCandidate.signature,
+            contributions: matchResult.winner.contributions,
+            total: matchResult.winner.total,
+            winner: matchResult.winner,
+            runnerUp: matchResult.runnerUp,
+            margin: matchResult.margin,
+            alternativesConsidered: matchResult.alternativesConsidered,
+            evidence: matchResult.winner.evidence,
+        });
 
         return true;
     }
@@ -508,6 +445,7 @@ class AIHealer {
                     attributes: facts.attributes,
                     structuralPath: facts.structuralPath,
                     ownText: facts.ownText,
+                    contentEditable: facts.contentEditable,
                     boundingBoxBucket: facts.boundingBoxBucket,
                 },
                 { salt: this._locatorMemory.salt }
