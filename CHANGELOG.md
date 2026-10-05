@@ -853,6 +853,54 @@ each with how it was caught — several were found by the phase's own benchmark 
 rather than by reading the code, which is the only reason they are written down here instead of
 shipping silently.
 
+### Trusted evidence was recorded for an element nobody had interacted with
+
+**Problem:** Evidence capture ran *after* the interaction it described. For a click that navigates —
+a submit button, a login button, any link-like control — the document had already been replaced by
+the time capture ran. `page.url()` returned the landing page, so the identity was built from the
+wrong page; `collectOne` re-resolved the original selector against the landing page, so the
+signature described whatever element happened to sit behind that selector there; and
+`recordEvidence` grants trust directly with no approval step, so the result was written
+`trust: "trusted"`. Meanwhile the page the click actually happened on got **no evidence at all**.
+
+Two consequences, and the second is the one that matters. The efficacy gap is that this tier
+silently never learned the most common healing targets in a real suite, since the controls that
+navigate are exactly the ones a test clicks. The integrity violation is that the store asserted
+ground-truth observation of a successful interaction with an element that had merely been *present*
+on a page where nothing was clicked — and "trust originates only from ground-truth observation" is
+the single provenance claim this store exists to be able to make.
+
+Reproduced with a page double whose click changes `url()` and whose landing page resolves the same
+selector to a different element: one entry written, keyed to the landing page, describing the
+landing page's element, `trust: "trusted"`, and zero entries for the page clicked.
+
+**Found by** writing the phase's 70 acceptance criteria down as a register. AC-18 specifies exactly
+this ordering — "for destructive/navigation actions, capture occurs before action and persistence
+only after success" — and had no implementation at all. Nothing caught it for the whole phase
+because the criteria lived only in the phase brief, so no check could ask whether a given criterion
+had been implemented. The full test suite passed over it throughout.
+
+**Fix:** The element is read *before* the interaction (`_preCaptureEvidence`, built from the
+pre-interaction URL) and persisted only once the interaction succeeds (`_persistCapturedEvidence`).
+Both tiers are covered — Tier 1 and the Tier 2 stored-alternative path — each failing on its own
+when the ordering is put back.
+
+That trade is deliberate and it is not free: the read now sits in front of every Tier 1/2 action
+rather than after it, so it is capped at 150 ms and every failure mode resolves to *no evidence*
+rather than a partial entry. A slow collector can cost a piece of evidence; it cannot delay the
+interaction or change its outcome. Persistence stays fire-and-forget afterwards, so AC-49's
+no-delay guarantee becomes a documented bound instead of zero, asserted as such. The pre-read is
+re-taken on every retry attempt, so a read from a failed attempt is always overwritten by the
+attempt that actually succeeds.
+
+Capture timing does not change what is observable, which is worth stating because reading earlier
+does see a form that navigation would later have discarded. `ElementFactsCollector` reads a fixed
+nine-key attribute allow-list that excludes `value`, and `ownText` reads only direct child text
+nodes — an `<input>` has none, and a `<textarea>`'s text node is its authored content, not the
+user's typed value. `el.value` is read once, to compute whether an expected `<select>` option
+exists, and the value itself is never returned or stored. The protection is structural, so it holds
+regardless of when capture runs.
+
 ### Locator memory had never been atomic, and corruption was silent
 
 **Problem:** `LocatorStore._save()` called `fs.promises.writeFile` directly and swallowed every

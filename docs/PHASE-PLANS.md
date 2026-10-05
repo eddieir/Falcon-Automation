@@ -685,6 +685,16 @@ it.
   considered."
 - **This is matching, not comprehension.** Scores compare captured signals. No general DOM
   understanding is involved.
+- **A DOM mutation between the read and the interaction is not detected.** The element is read
+  immediately before the interaction, so a re-render in that window — under 150 ms, and without a
+  URL change, since a navigation is handled correctly — can leave the stored evidence describing
+  the element that was behind the selector a moment earlier rather than the one finally acted on.
+  Reproduced during the final security review with a page double that flips the element between the
+  two steps. Neither ordering closes this: capturing after the action raced the same mutation from
+  the other side. `_matchCount` guards the Tier 2, Tier 2.5 and Tier 3 paths but deliberately not
+  Tier 1, which acts on the selector the developer wrote. Assessed P3 and left open rather than
+  papered over: closing it means re-reading identity after the action and comparing, which is a
+  slice of its own.
 - **Evidence capture is bounded, so it can be skipped.** The element is read before the interaction
   it describes, because a click that navigates has already replaced the document by the time it
   returns — reading afterwards described whatever the landing page put behind the same selector and
