@@ -191,9 +191,30 @@ class LocatorMemory {
     const invalidEnvelope = oversized || !raw || typeof raw !== "object" || Array.isArray(raw) || raw.schemaVersion !== SCHEMA_VERSION || V.bytes(raw) > V.MAX_BYTES;
     const saltMismatch = raw && raw.saltFingerprint && raw.saltFingerprint !== saltFingerprint;
     this._blockedEnvelope = invalidEnvelope || saltMismatch;
+    this._blockedEnvelopeReason = !this._blockedEnvelope ? null
+      : oversized ? "the file is larger than the readable bound"
+      : !raw || typeof raw !== "object" || Array.isArray(raw) ? "the top-level JSON value is not an object"
+      : raw.schemaVersion !== SCHEMA_VERSION ? `schemaVersion ${JSON.stringify(raw.schemaVersion)} is not supported (this build reads ${SCHEMA_VERSION})`
+      : V.bytes(raw) > V.MAX_BYTES ? "the serialised envelope is over the size bound"
+      : "the stored salt fingerprint does not match the salt in use";
     if (this._blockedEnvelope) {
       // Preserve the original at its managed path; never rewrite unknown state.
       raw = fallback;
+      // Say so. A rejected envelope yields an empty store, which on its own is
+      // indistinguishable from a store that is simply empty — and quarantine
+      // holds nothing either, because nothing in the file was parsed into a
+      // row to quarantine. Without this line the only signal was a later write
+      // failing, so an operator reading an empty list had no way to tell their
+      // file had been set aside. AC-07 asks for visible recovery evidence.
+      if (!this._envelopeWarningLogged) {
+        this._envelopeWarningLogged = true;
+        Logger.warning(
+          `LocatorMemory: ignoring ${this.memoryPath} because ${this._blockedEnvelopeReason}. `
+          + "The file is left exactly as it is and nothing will be written over it; trusted reuse is "
+          + "disabled until it is readable again, so healing falls back to the later tiers. "
+          + "Inspect it with envelopeStatus() or by opening the path above.",
+        );
+      }
     }
 
     const { salt, saltSource, generated } = this._resolveSalt(raw);
@@ -682,6 +703,26 @@ class LocatorMemory {
     const out = Object.create(null);
     for (const [id, entry] of this.legacy) out[id] = {reason: entry.reason, digest: entry.digest || V.hash(entry)};
     return out;
+  }
+
+  /**
+   * Whether the whole stored envelope was set aside on load, and why.
+   *
+   * This is a different failure from a quarantined row, and it needs its own
+   * surface: a row that fails validation lands in `legacy` and is listable,
+   * but a file whose top level cannot be read produces no rows at all, so
+   * `list()` and `listLegacy()` are both empty and look exactly like a store
+   * that has nothing in it yet. Anything reporting store contents to a person
+   * should check this first and say so, rather than showing an empty list.
+   *
+   * `{blocked: false, reason: null}` is the ordinary case.
+   */
+  envelopeStatus() {
+    return {
+      blocked: this._blockedEnvelope === true,
+      reason: this._blockedEnvelope === true ? this._blockedEnvelopeReason : null,
+      path: this.memoryPath,
+    };
   }
 
   /**

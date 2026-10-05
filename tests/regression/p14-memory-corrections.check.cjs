@@ -9,6 +9,58 @@ const Identity=require("../../src/core/locator/LocatorIdentity");
 const Signature=require("../../src/core/locator/ElementSignature");
 function fixture(t) {const dir=fs.mkdtempSync(path.join(os.tmpdir(),"falcon-memory-fix-"));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const memoryPath=path.join(dir,"memory.json");const memory=new Memory({memoryPath,env:{FALCON_LOCATOR_SALT:"correction-test-key"}});const identity=Identity.buildIdentity({url:"https://example.com/a",action:"click",originalSelector:"#old",env:{}}).identity;const signature=Signature.capture({tagName:"button",role:"button",attributes:{id:"new"},ownText:"Save",structuralPath:["body"]},{salt:memory.salt});return {memoryPath,memory,identity,signature,key:Identity.serialiseIdentity(identity)};}
 test("approved alternatives survive reload, remain scoped and rollback revokes reuse",async t=>{const f=fixture(t);const p=f.memory.recordPendingCandidate(f.identity,{selector:"#new",signature:f.signature,total:.95,margin:.3,runnerUp:{total:.4},changedFields:["id"]}).pendingCandidate;await f.memory._queue;const r=await f.memory.decide("approve",f.key,{proposalId:p.proposalId,actor:"alice"});assert.equal(r.status,200);assert.equal(r.entry.approvedAlternative.selector,"#new");assert.equal(r.entry.decisionHistory[0].actor,"alice");assert.equal(r.entry.decisionHistory[0].proposal.margin,.3);const reloaded=new Memory({memoryPath:f.memoryPath,env:{FALCON_LOCATOR_SALT:"correction-test-key"}});assert.equal(reloaded.getApprovedAlternatives(f.identity)[0].selector,"#new");assert.deepEqual(reloaded.getApprovedAlternatives({...f.identity,pathname:"/b"}),[]);assert.equal(f.memory.recordPendingCandidate(f.identity,{selector:"#new",signature:f.signature,total:.95,margin:.3,runnerUp:{total:.4},changedFields:["id"]}).pendingCandidate,null);await f.memory.decide("rollback",f.key,{expectedRevision:f.memory.getEntry(f.key).revision,actor:"bob"});assert.deepEqual(f.memory.getApprovedAlternatives(f.identity),[]);});
+// A rejected envelope used to load in complete silence. Nothing was parsed
+// into a row, so quarantine held nothing and list()/listLegacy() were both
+// empty — indistinguishable from a store with nothing in it yet. The only
+// signal was a later write failing, so an operator reading an empty list had
+// no way to know their file had been set aside. AC-07 asks for visible
+// recovery evidence, and this is the class of malformed storage where it was
+// missing. Found by independent QA on the final revision.
+test("a rejected envelope says so, names the reason, and leaves the file alone",async t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),"falcon-envelope-"));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const Logger=require("../../utils/Logger");
+  const cases=[
+    ["top-level array",JSON.stringify([{a:1}]),/not an object/],
+    ["top-level string",JSON.stringify("nope"),/not an object/],
+    ["top-level null",JSON.stringify(null),/not an object/],
+    ["unsupported schemaVersion",JSON.stringify({schemaVersion:999,entries:{}}),/schemaVersion 999 is not supported/],
+  ];
+  for(const [label,contents,reasonRe] of cases){
+    const p=path.join(dir,`${label.replace(/[^a-z]/gi,"-")}.json`);
+    fs.writeFileSync(p,contents);
+    const before=fs.readFileSync(p);
+    const warnings=[];
+    const realWarning=Logger.warning;
+    Logger.warning=(m)=>{warnings.push(String(m));};
+    let memory;
+    try{ memory=new Memory({memoryPath:p,env:{FALCON_LOCATOR_SALT:"envelope-test"}}); }
+    finally{ Logger.warning=realWarning; }
+    await memory._queue;
+
+    const status=memory.envelopeStatus();
+    assert.equal(status.blocked,true,`${label}: the envelope must report as blocked`);
+    assert.match(status.reason,reasonRe,`${label}: the reason must name what was wrong`);
+    assert.equal(status.path,p,`${label}: the status must name the file it is talking about`);
+    assert.equal(warnings.length,1,`${label}: exactly one warning, not zero and not a storm`);
+    assert.match(warnings[0],reasonRe,`${label}: the warning must carry the reason too`);
+    assert.deepEqual(fs.readFileSync(p),before,`${label}: the original bytes must survive untouched`);
+    assert.deepEqual(memory.list(),{},`${label}: no entry may be trusted from a rejected envelope`);
+  }
+
+  // Control: a healthy store reports unblocked and warns about none of this.
+  const good=path.join(dir,"good.json");
+  const warnings=[];
+  const realWarning=Logger.warning;
+  Logger.warning=(m)=>{warnings.push(String(m));};
+  let healthy;
+  try{ healthy=new Memory({memoryPath:good,env:{FALCON_LOCATOR_SALT:"envelope-test"}}); }
+  finally{ Logger.warning=realWarning; }
+  await healthy._queue;
+  assert.deepEqual(healthy.envelopeStatus(),{blocked:false,reason:null,path:good});
+  assert.equal(warnings.filter(w=>/ignoring/.test(w)).length,0,"a healthy store must not claim it was ignored");
+});
+
 // The correction pass added proposal, margin, runner-up, evidence and
 // alternatives to the review output on both the CLI and the dashboard. The
 // final security review could establish by reading that each new field is
