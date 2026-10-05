@@ -603,11 +603,16 @@ class LocatorMemory {
       const fail=(status,error)=>({ok:false,status,entry:null,error});
       if(!["approve","reject","rollback"].includes(kind) || !V.string(actor,128) || (note!==undefined && (typeof note!=="string" || note.length>500))) return fail(400,"invalid decision");
       if(kind !== "rollback" && !V.string(proposalId,64)) return fail(400,"proposalId required");
-      if(kind === "rollback" && !V.string(expectedRevision,64) && !V.string(proposalId,64)) return fail(400,"expectedRevision required");
+      // Rollback is pinned to the whole-entry revision, never to a proposal
+      // id. Accepting a proposal id here let a caller revoke an entry whose
+      // state had moved on since they looked at it — discarding a newer,
+      // never-reviewed candidate without the staleness signal every other
+      // decision gets. Both real callers already send expectedRevision.
+      if(kind === "rollback" && !V.string(expectedRevision,64)) return fail(400,"expectedRevision required");
       const current=this.entries.get(key);
       if(!current) return fail(404,"identity missing");
       const expected=kind === "rollback" ? current.approvedAlternative || current.pendingCandidate : current.pendingCandidate;
-      if(kind === "rollback" ? (expectedRevision ? this._revision(current) !== expectedRevision : !expected || expected.proposalId !== proposalId) : current.trust === "revoked" || !expected || expected.proposalId !== proposalId) return fail(409,"stale or revoked proposal");
+      if(kind === "rollback" ? this._revision(current) !== expectedRevision : current.trust === "revoked" || !expected || expected.proposalId !== proposalId) return fail(409,"stale or revoked proposal");
       // Stage using the same pure state transformations as the low-level API.
       const oldEntries=this.entries,oldRejections=this.rejections,oldQueue=this._queue;
       this.entries=new Map([...oldEntries].map(([k,v])=>[k,_clone(v)])); this.rejections=_clone(oldRejections);

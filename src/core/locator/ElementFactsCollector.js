@@ -49,9 +49,17 @@ const MAX_STRUCTURAL_DEPTH = 4;
 const MAX_TEXT_LENGTH = 80;
 const MAX_ATTR_LENGTH = 200;
 
-// Reuses Tier 3's existing bounded interactive-element query verbatim
-// (AIHealer.getAlternativeSelector's domSnapshot tag list), so Tier 2.5 and
-// Tier 3 agree on what "the interactive elements on this page" means.
+// Started as Tier 3's bounded interactive-element query verbatim
+// (AIHealer.getAlternativeSelector's domSnapshot tag list) and is now a
+// superset of it: `[data-test]`, `[data-qa]`, `[role]` and
+// `[contenteditable=true]` were added here and not there. So Tier 2.5 can
+// hold evidence for an element Tier 3's snapshot never shows the model, and
+// the two tiers no longer agree on what "the interactive elements on this
+// page" means. That asymmetry is safe in this direction — the deterministic
+// tier seeing more is what lets it refuse rather than defer — but it is not
+// the "verbatim" relationship this comment used to claim, and widening Tier
+// 3's list to match would change what the model is asked about. Keep them
+// deliberately separate, or change both together.
 const INTERACTIVE_SELECTOR = "input, button, a, select, textarea, label, [data-testid], [data-test], [data-qa], [aria-label], [role], [contenteditable=true]";
 
 // Fixed allow-list of attribute keys ever read off a live element — the
