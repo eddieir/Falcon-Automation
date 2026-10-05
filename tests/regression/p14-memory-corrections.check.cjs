@@ -41,3 +41,16 @@ test("loaded timestamps cannot retain control bytes or unbounded text", async t 
   assert.equal(row.pendingCandidate.lastSeen,"1970-01-01T00:00:00.000Z");
   await loaded._queue;
 });
+
+
+test("unsupported null and primitive envelopes preserve their bytes without trust", async t => {
+  const f=fixture(t);await f.memory._queue;
+  for(const content of ["null","[]","17",'"unsupported"']) {
+    fs.writeFileSync(f.memoryPath,content);
+    const memory=new Memory({memoryPath:f.memoryPath,env:{}});
+    assert.equal(memory.entries.size,0);
+    assert.equal(memory._blockedEnvelope,true);
+    await memory._queue;
+    assert.equal(fs.readFileSync(f.memoryPath,"utf8"),content);
+  }
+});
