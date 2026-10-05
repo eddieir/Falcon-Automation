@@ -475,6 +475,22 @@ function readTestFile(relPath) {
   return fileCache.get(relPath);
 }
 
+/**
+ * Does `contents` register a LIVE test under exactly this name?
+ *
+ * A plain substring search is not enough, and the final code review said so:
+ * the name would also be found inside a comment, or inside `test.skip(...)`,
+ * so the register could point at dead text and still pass. The name must
+ * appear as the first argument of an actual `test(` call. `test.skip(` does
+ * not match, because this requires `(` to follow `test` directly, and a
+ * mention in a comment does not match because it is not preceded by `test(`.
+ */
+function registersLiveTest(contents, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // test( "name" | 'name' | `name`  — allowing whitespace and newlines.
+  return new RegExp(String.raw`\btest\s*\(\s*(["'\x60])${escaped}\1`).test(contents);
+}
+
 test("AC register: all 70 criteria are present exactly once, numbered AC-01 to AC-70 with no gaps", () => {
   const { criteria } = loadRegister();
   assert.equal(criteria.length, 70, "the brief states 70 acceptance criteria");
@@ -517,9 +533,10 @@ test("AC register: every test-verified criterion names at least one test that re
         missing.push(`${c.id}: test file does not exist — ${ref.file}`);
         continue;
       }
-      // The name must appear literally in the file that claims to hold it.
-      if (!contents.includes(ref.name)) {
-        missing.push(`${c.id}: no such test in ${ref.file} — "${ref.name}"`);
+      // The name must be registered as a live test in the file that claims
+      // to hold it — not merely present as text.
+      if (!registersLiveTest(contents, ref.name)) {
+        missing.push(`${c.id}: no such live test in ${ref.file} — "${ref.name}"`);
       }
     }
   }
@@ -557,6 +574,39 @@ test("AC register: no criterion is left unaccounted for — every row resolves t
   );
 });
 
+test("AC register: a name that only appears in a comment or a skipped test does not count as coverage", () => {
+  const name = "AC-99: a criterion whose test is not really there";
+
+  // The three ways a register row could previously have been satisfied by
+  // text that never runs. A plain substring search accepted all of them.
+  const inLineComment = `// ${name}\ntest("something else", () => {});\n`;
+  const inBlockComment = `/*\n * ${name}\n */\ntest("something else", () => {});\n`;
+  const skipped = `test.skip("${name}", () => {});\n`;
+  const onlyMentioned = `assert.ok(true, "see ${name} for context");\n`;
+
+  for (const [label, contents] of [
+    ["line comment", inLineComment],
+    ["block comment", inBlockComment],
+    ["test.skip", skipped],
+    ["mentioned in a message", onlyMentioned],
+  ]) {
+    assert.ok(contents.includes(name), `sanity: the ${label} fixture must contain the name verbatim`);
+    assert.equal(
+      registersLiveTest(contents, name),
+      false,
+      `a name appearing only as a ${label} must not count as a registered test`
+    );
+  }
+
+  // And the real thing still counts, in each quoting style.
+  for (const quoted of [`test("${name}", () => {});`, `test('${name}', () => {});`, "test(`" + name + "`, () => {});"]) {
+    assert.equal(registersLiveTest(quoted, name), true, `a real registration must count: ${quoted.slice(0, 24)}…`);
+  }
+
+  // Whitespace and a newline between `test(` and the name are still a match.
+  assert.equal(registersLiveTest(`test(\n  "${name}",\n  () => {}\n);`, name), true);
+});
+
 test("AC register negative control: the same check catches a test name that does not exist (proves the gate can fail)", () => {
   const register = loadRegister();
   // Tamper with a copy in memory: point AC-01 at a test nobody wrote.
@@ -569,7 +619,7 @@ test("AC register negative control: the same check catches a test name that does
     if (c.verifiedBy !== "test") continue;
     for (const ref of c.tests) {
       const contents = readTestFile(ref.file);
-      if (contents === null || !contents.includes(ref.name)) {
+      if (contents === null || !registersLiveTest(contents, ref.name)) {
         missing.push(`${c.id}: ${ref.name}`);
       }
     }
@@ -583,7 +633,7 @@ test("AC register negative control: the same check catches a test name that does
     if (c.verifiedBy !== "test") continue;
     for (const ref of c.tests) {
       const contents = readTestFile(ref.file);
-      if (contents === null || !contents.includes(ref.name)) realMissing.push(c.id);
+      if (contents === null || !registersLiveTest(contents, ref.name)) realMissing.push(c.id);
     }
   }
   assert.deepEqual(realMissing, [], "the real register must pass the same check the tampered one fails");
