@@ -187,8 +187,8 @@ class LocatorMemory {
       if(error.code === "EFBIG") {oversized=true;raw=fallback;this._expectedDigest=null;}
       else {this._expectedDigest=null;raw=AtomicJsonStore.readJsonSync(this.memoryPath,fallback);}
     }
-    const saltFingerprint = V.hash(this._env.FALCON_LOCATOR_SALT || raw.salt || "");
-    const invalidEnvelope = oversized || !raw || raw.schemaVersion !== SCHEMA_VERSION || V.bytes(raw) > V.MAX_BYTES;
+    const saltFingerprint = V.hash(_safeGet(this._env, "FALCON_LOCATOR_SALT") || _safeGet(raw, "salt") || "");
+    const invalidEnvelope = oversized || !raw || typeof raw !== "object" || Array.isArray(raw) || raw.schemaVersion !== SCHEMA_VERSION || V.bytes(raw) > V.MAX_BYTES;
     const saltMismatch = raw && raw.saltFingerprint && raw.saltFingerprint !== saltFingerprint;
     this._blockedEnvelope = invalidEnvelope || saltMismatch;
     if (this._blockedEnvelope) {
