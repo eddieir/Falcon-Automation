@@ -19,6 +19,28 @@ const Logger = require("../../../utils/Logger");
  */
 
 const SCHEMA_VERSION = 1;
+
+/**
+ * Render a rejected file's own `schemaVersion` for a human, without echoing
+ * the file back.
+ *
+ * The value comes from a file this process has just decided it cannot read,
+ * so it is arbitrary: it can be an object, or a megabyte of text. Naming it
+ * verbatim in a log line and in envelopeStatus() put unvalidated bytes
+ * straight into the application log and into any surface that renders that
+ * status — which is exactly the posture the quarantine path in this file
+ * avoids by logging only a count, never raw content. A short scalar is the
+ * useful case and the only one echoed; anything else is described by shape.
+ */
+function _describeSchemaVersion(value) {
+  if (value === null || typeof value === "number" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "string" && value.length <= 24 && /^[\w.\- ]*$/.test(value)) return JSON.stringify(value);
+  if (typeof value === "string") return `a ${value.length}-character string`;
+  if (Array.isArray(value)) return "an array";
+  if (value === undefined) return "absent";
+  if (typeof value === "object") return "an object";
+  return `a ${typeof value} value`;
+}
 const MAX_TRACKED_IDENTITIES = 500;
 const REJECTIONS_MAX_ROWS = 500;
 const LOGGED_EVICTION_SAMPLE = 10;
@@ -194,7 +216,7 @@ class LocatorMemory {
     this._blockedEnvelopeReason = !this._blockedEnvelope ? null
       : oversized ? "the file is larger than the readable bound"
       : !raw || typeof raw !== "object" || Array.isArray(raw) ? "the top-level JSON value is not an object"
-      : raw.schemaVersion !== SCHEMA_VERSION ? `schemaVersion ${JSON.stringify(raw.schemaVersion)} is not supported (this build reads ${SCHEMA_VERSION})`
+      : raw.schemaVersion !== SCHEMA_VERSION ? `schemaVersion ${_describeSchemaVersion(raw.schemaVersion)} is not supported (this build reads ${SCHEMA_VERSION})`
       : V.bytes(raw) > V.MAX_BYTES ? "the serialised envelope is over the size bound"
       : "the stored salt fingerprint does not match the salt in use";
     if (this._blockedEnvelope) {
