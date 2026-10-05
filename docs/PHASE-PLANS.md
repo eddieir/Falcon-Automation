@@ -685,6 +685,16 @@ it.
   considered."
 - **This is matching, not comprehension.** Scores compare captured signals. No general DOM
   understanding is involved.
+- **A quarantined row is kept as metadata, not as its contents.** A row that fails validation is
+  replaced on first load by a digest and the reason it was set aside, and that replacement is
+  written back, so the original content is gone from the file from then on. This is deliberate —
+  keeping raw historical rows would reintroduce exactly the unbounded, page-derived values this
+  phase forbids storing — but it does mean "preserved for inspection" is narrower than it sounds:
+  an operator can see that a row was rejected and why, and cannot recover what it held. The one
+  exception is a file that will not parse at all, whose bytes are kept in a `.corrupt-*` sidecar.
+  A file whose whole envelope is unreadable is reported separately, through a warning naming the
+  reason and through `envelopeStatus()`, because it parses into no rows and so has nothing to
+  quarantine — without that it was indistinguishable from an empty store.
 - **A DOM mutation between the read and the interaction is not detected.** The element is read
   immediately before the interaction, so a re-render in that window — under 150 ms, and without a
   URL change, since a navigation is handled correctly — can leave the stored evidence describing
