@@ -3,11 +3,15 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const os = require("node:os");
+const LocatorMemory = require("./LocatorMemory");
+const LocatorIdentity = require("./LocatorIdentity");
 const { chromium } = require("playwright");
 
 const CandidateMatcher = require("./CandidateMatcher");
 const ElementSignature = require("./ElementSignature");
 const ElementFactsCollector = require("./ElementFactsCollector");
+const SelectorBuilder = require("./SelectorBuilder");
 const Logger = require("../../../utils/Logger");
 
 /**
@@ -139,6 +143,8 @@ async function loadCorpus(corpusDir = DEFAULT_CORPUS_DIR) {
       id: entry.id,
       mutationClass: entry.mutationClass,
       action: entry.action,
+      expectedSelectValue: entry.expectedSelectValue,
+      expectedOutcome: entry.expectedOutcome || null,
       groundTruthId: entry.groundTruthId,
       groundTruthSelector,
       mustRefuse: entry.mustRefuse === true,
@@ -260,7 +266,7 @@ async function runFixture(page, fixture, { salt = DEFAULT_SALT, config = {} } = 
   await page.setContent(fixture.postHtml, { waitUntil: "load" });
 
   const collectStart = process.hrtime.bigint();
-  const facts = await ElementFactsCollector.collect(page, { action: fixture.action });
+  const facts = await ElementFactsCollector.collect(page, { action: fixture.action, expectedSelectValue: fixture.expectedSelectValue });
   const collectEnd = process.hrtime.bigint();
 
   const liveCandidates = _toLiveCandidates(facts, salt);
@@ -279,12 +285,36 @@ async function runFixture(page, fixture, { salt = DEFAULT_SALT, config = {} } = 
   const deterministicRepeatAgreement = JSON.stringify(matcherResult) === JSON.stringify(repeatResult);
 
   const { outcome: gateOutcome, reason } = classifyOutcome(facts.length, matcherResult);
+  let refusalReason = reason;
+  let resolvedSelector = null;
+  let actionSucceeded = false;
 
   let outcome = gateOutcome;
   let isCorrect = null;
   if (gateOutcome === "accepted") {
-    isCorrect = await _resolvesToGroundTruth(page, matcherResult.winner.selector, fixture);
-    outcome = isCorrect ? "correct_heal" : "false_heal";
+    const winnerFacts = facts.find((f) => f.selector === matcherResult.winner.selector);
+    const built = SelectorBuilder.build({ ...winnerFacts, accessibleNameApprox: winnerFacts && winnerFacts.accessibleName });
+    if (built.status !== "built") {
+      outcome = "refused";
+      refusalReason = built.reason || "selector_build_failed";
+    } else if (await page.locator(built.selector).count() !== 1) {
+      outcome = "refused";
+      refusalReason = "non_unique_live_selector";
+    } else {
+      resolvedSelector = built.selector;
+      isCorrect = await _resolvesToGroundTruth(page, resolvedSelector, fixture);
+      try {
+        const target = page.locator(resolvedSelector);
+        if (fixture.action === "type") await target.fill("benchmark input", { timeout: 1000 });
+        else if (fixture.action === "select") await target.selectOption(fixture.expectedSelectValue || "one", { timeout: 1000 });
+        else await target.click({ timeout: 1000 });
+        actionSucceeded = true;
+        outcome = isCorrect ? "correct_heal" : "false_heal";
+      } catch {
+        outcome = "refused";
+        refusalReason = "action_failed";
+      }
+    }
   }
 
   const collectMs = Number(collectEnd - collectStart) / 1e6;
@@ -296,6 +326,11 @@ async function runFixture(page, fixture, { salt = DEFAULT_SALT, config = {} } = 
     action: fixture.action,
     mustRefuse: fixture.mustRefuse,
     description: fixture.description,
+    expectedOutcome: fixture.expectedOutcome,
+    expectationMet: fixture.expectedOutcome ? outcome === fixture.expectedOutcome : null,
+    resolvedSelector,
+    actionSucceeded,
+    storedSignature,
     rawCandidateCount: facts.length,
     matcherStatus: matcherResult.status,
     matcherReason: matcherResult.reason || null,
@@ -311,7 +346,7 @@ async function runFixture(page, fixture, { salt = DEFAULT_SALT, config = {} } = 
     runnerUpContributions: matcherResult.runnerUp ? matcherResult.runnerUp.contributions : null,
     alternativesConsidered: matcherResult.alternativesConsidered,
     outcome,
-    refusalReason: outcome === "refused" ? reason : null,
+    refusalReason: outcome === "refused" ? refusalReason : null,
     collectMs,
     scoreMs,
     totalMs: collectMs + scoreMs,
@@ -422,13 +457,28 @@ async function runBenchmark({ corpusDir = DEFAULT_CORPUS_DIR, salt = DEFAULT_SAL
       }
     }
 
-    return _buildReport({ fixtures, perCase, salt, performance });
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "falcon-benchmark-"));
+    let storageBytes;
+    try {
+      const memoryPath = path.join(directory, "memory.json");
+      const memory = new LocatorMemory({ memoryPath, env: { FALCON_LOCATOR_SALT: salt } });
+      for (const row of perCase) {
+        const { identity } = LocatorIdentity.buildIdentity({ url: `https://benchmark.invalid/${row.id}`, action: row.action, originalSelector: `[${GROUND_TRUTH_ATTR}="${row.id}"]`, env: {} });
+        memory.recordEvidence(identity, row.storedSignature);
+      }
+      await memory._queue;
+      if (memory.hasUnpersistedWriteFailure()) throw new Error("benchmark evidence snapshot failed to persist");
+      storageBytes = (await fs.stat(memoryPath)).size;
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+    return _buildReport({ fixtures, perCase, salt, performance, storageBytes });
   } finally {
     await browser.close();
   }
 }
 
-function _buildReport({ fixtures, perCase, salt, performance }) {
+function _buildReport({ fixtures, perCase, salt, performance, storageBytes }) {
   const N = perCase.length;
   const counts = { no_candidate: 0, refused: 0, correct_heal: 0, false_heal: 0 };
   for (const row of perCase) counts[row.outcome] += 1;
@@ -438,15 +488,6 @@ function _buildReport({ fixtures, perCase, salt, performance }) {
   const totalTimes = perCase.map((r) => r.totalMs).sort((a, b) => a - b);
   const deterministicAgreementCount = perCase.filter((r) => r.deterministicRepeatAgreement).length;
 
-  // Storage-size estimate: the bytes a LocatorMemory-shaped entries object
-  // would occupy if every fixture's stored signature were persisted — the
-  // same JSON shape `LocatorMemory._toPersistable()` writes, computed here
-  // without touching the real store or disk.
-  const storageShape = {};
-  for (const fixture of fixtures) {
-    storageShape[fixture.id] = { groundTruthId: fixture.groundTruthId };
-  }
-  const storageBytes = Buffer.byteLength(JSON.stringify(storageShape), "utf8");
 
   const rates = {};
   for (const key of Object.keys(counts)) {
@@ -468,6 +509,8 @@ function _buildReport({ fixtures, perCase, salt, performance }) {
       p95MatchTimeMs: _percentile(totalTimes, 95),
     },
     storageBytes,
+    storageMeasurement: "actual LocatorMemory file bytes for captured scoped evidence; no proposal/decision history",
+    executionPath: "collector → matcher → selector builder → live uniqueness → browser action → ground-truth identity",
     deterministicRepeatAgreement: {
       agreedCount: deterministicAgreementCount,
       total: N,

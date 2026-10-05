@@ -552,7 +552,7 @@ protected by explicit regression tests. Do NOT describe D12 as newly fixed in Ph
 
 ---
 
-## Phase 14 — Evidence-based locator matching and scoped memory — DELIVERED
+## Phase 14 — Evidence-based locator matching and scoped memory — IMPLEMENTED, UNDER REVIEW
 
 Promoted ahead of run history, and ahead of the provider-adapter work it was originally bundled
 with, because the healing chain's weakest link was not its reporting: between a locator cache that
@@ -576,9 +576,10 @@ structural property rather than a convention.
   plaintext, because fuzzy similarity cannot run on a hash. Never stored: input or textarea values,
   passwords, hidden tokens, cookies, storage, authorization data, raw `outerHTML`, full DOM,
   scripts, complete forms, URL credentials, raw queries, unrestricted `data-*`, unbounded text.
-- **Three trust states.** `trusted` evidence comes only from direct observation — the developer's
-  own selector resolved and the action succeeded — with no score involved anywhere. A candidate the
-  matcher accepts becomes `unproven` and is promoted solely by an explicit `approve()`. `revoked`
+- **Three trust states.** `trusted` evidence comes from a successful action with the developer's
+  own selector or explicit approval of the current scoped proposal. A score alone grants no trust. A candidate the
+  matcher accepts becomes `unproven` and is promoted solely by an explicit durable decision tied to
+  its proposal ID. The approved selector and decision channel remain in bounded audit history. `revoked`
   stops reuse immediately while keeping the prior signature and an attributed revocation history,
   and regains trust only through a fresh ground-truth pass, never by re-approving the evidence that
   was rejected.
@@ -589,7 +590,7 @@ structural property rather than a convention.
 - **A published mutation benchmark**, scored against ground truth authored into each fixture rather
   than against whether a click threw.
 
-### Acceptance criteria — met
+### Acceptance criteria — validation required
 
 A locator that previously only the LLM tier could resolve is resolved locally with no network call;
 ambiguous matches are refused; repeated identical inputs produce identical rankings and identical
@@ -597,33 +598,12 @@ score contributions across separate process invocations.
 
 ### Measured results, including the unflattering ones
 
-Nine fixtures, one per mutation class, `npm run healing:benchmark`:
-
-| Outcome | Count | Rate |
-|---|---|---|
-| Correct heal (resolves to the fixture's declared ground-truth node) | 3 | 33.3% |
-| Refused | 5 | 55.6% |
-| No candidate | 1 | 11.1% |
-| False heal | 0 | 0.0% |
-
-The four outcomes partition the corpus exactly once per fixture, so the rates sum to 100% and no
-case can be dropped or double-counted. Every fixture appears in the per-case log, not only the ones
-that heal. Deterministic repeat agreement: 9/9 across separate processes, compared over full score
-contributions.
-
-Two of the five refusals exist because a review found a wrong-element match the tests had not
-covered, and the corpus now carries a fixture for each. That is the benchmark doing the job it was
-built for, and the reason the refusal share rose rather than the heal share.
-
-**What those numbers do and do not support.** They describe this corpus, authored here, and nothing
-else. "Correct" is measurable only because each fixture carries an author-declared ground-truth
-attribute present in both its pre- and post-mutation HTML; on a scraped or customer page no such
-ground truth exists, and correctness would become unmeasurable rather than inferable from an action
-that did not throw. More of the corpus refuses than heals — that is the intended posture, not a
-shortfall, but it is also why no claim here is stated as a healing rate for applications in general.
-
-Matching cost on a 5,000-node, 200-interactive-element DOM measured 67–129ms across runs on a
-loaded development machine. That is reported as measured, not as a guarantee.
+The expanded corpus contains 27 cases. Run `npm run healing:benchmark` for current counts,
+per-case expected outcomes, false heals, repeat agreement, selector resolution and measured bytes
+of an actual persisted memory snapshot. Ground truth is fixture-authored, and these results do not
+establish a healing rate for arbitrary applications. Runtime regression tests separately cover
+actual actions, scope isolation and review persistence. No release verdict is implied by corpus
+results alone.
 
 ### ADR — why a deterministic tier rather than a stronger Tier 3
 
@@ -646,8 +626,7 @@ check it has.
 
 **Consequences, accepted.** `MIN_CONFIDENCE` 0.85 and `WINNER_MARGIN` 0.15 are provisional and
 uncalibrated; the benchmark is the instrument for calibrating them, and it already caused two
-changes to the matcher during this phase. Half this corpus refuses, which means the LLM tier still
-earns its place. Scoring sits behind a structural rule — a stable key shared by two candidates
+changes to the matcher during this phase. Refusals remain expected, and the LLM tier still earns its place. Scoring sits behind a structural rule — a stable key shared by two candidates
 identifies neither, so that case refuses regardless of score or margin — specifically so the
 protection survives any later recalibration of those two constants.
 
@@ -678,17 +657,21 @@ it.
   OTP-style secret is not caught by it, and matches are replaced in place, so a meaningful prefix
   can survive (`SUPER-SECRET-…` becomes `SUPER-[REDACTED]`). The phase's own tests assert this
   rather than hiding it.
-- **No coordination between concurrent writers.** Temp-file-and-rename gives crash safety and no
-  torn reads. Within one process the healing chain and the dashboard share a single store instance.
-  Across processes, each holds its own copy, exactly as every other state file in this project
-  does. Multi-process safety is not implemented and is not claimed.
+- **Concurrent writers are detected, not merged.** An exclusive adjacent lock covers the durable
+  digest check and atomic replacement. A stale instance fails rather than overwriting new state;
+  restart it to reload. Recover a crashed lock manually only after verifying its owning process has
+  exited. Review decisions are installed only after persistence succeeds.
+- **Review is scoped and revision-bound.** Legacy `LocatorStore` and `HealingTrust` approvals do not
+  authorise automatic replay. Fresh scoped evidence and the current proposal ID are required.
+  Rollback requires the current revision. See the CLI examples in [README](../README.md#scoped-healing-and-review)
+  and the [correction ADR](architecture/phase-14-correction-decisions.md).
 - **Locator memory is local-only.** `data/locator_memory.json` is gitignored and is deliberately
   **not** cached by CI, so it never crosses a branch boundary. The exact-key cache entry can never
   hit on restore, so every restore falls back to a branch prefix — which would let one branch
   inherit another's approved evidence. Revisit only alongside a same-branch-provenance check inside
   the store itself, never as a CI configuration change.
-- **It acts only on elements carrying a stable identifier.** With no `id`, `data-testid` or
-  `data-test` in the stored evidence it refuses with `insufficient_identity_evidence` before
+- **It acts only on elements carrying a stable identifier.** With no `id`, `data-testid`, `data-test` or
+  `data-qa` in the stored evidence it refuses with `insufficient_identity_evidence` before
   scoring. This is a limit of the evidence model, not an omission: with no identifier in the stored
   snapshot nothing can separate "the real element changed" from "a different element still matches
   the old snapshot," and attempting it produced a wrong-element action on ordinary markup during

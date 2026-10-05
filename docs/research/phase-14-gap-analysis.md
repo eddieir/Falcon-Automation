@@ -6,6 +6,8 @@ constraints), EP-4/P14-06 (QA testability verdict). No production code was writt
 produce this document. All "current Falcon state" statements are EP-2's verified findings at
 this revision, not aspirational Phase 14 behaviour.
 
+Refresh: 2026-10-05. Source metadata and the complete A–J matrix are in the companion research artifacts. The baseline remains `11657cb1`; historical gate decisions below are not a fresh owner approval.
+
 Status vocabulary follows EP-1: VERIFIED / MARKETING CLAIM / NOT FOUND IN PUBLIC DOCUMENTATION /
 UNKNOWN / FETCH BLOCKED. "Not found" is never restated here as "competitor lacks it."
 
@@ -258,26 +260,16 @@ Momentic (PR is the default delivery option for a persisted triage repair, among
 configurable options, S-09).
 
 **8. Which already operate locally or self-hosted?**
-Healenium is the one clear case — open-source, self-hosted, with its own PostgreSQL backend and
-real adoption signals (167 stars, created 2021, not archived, per the GitHub measurement in
-S-14). Every other verified source (BrowserStack, Katalon, mabl, Testsigma, testRigor, Testim,
-Functionize, Momentic, Autify, Virtuoso) is a SaaS/cloud platform on the pages reviewed. No
+Healenium is the one clear case — open-source, self-hosted, with its own PostgreSQL backend (S-16); historical quantitative adoption signals are withdrawn. The reviewed mabl page also documents local standard healing dependent on cloud models. A completely self-hosted mabl product is not established. Other sources do not establish fully local ownership. No
 self-host claim for those was found — recorded as NOT FOUND, not as absent, since self-host
 support may exist and simply not be covered on the specific pages read.
 
 **9. Which already support Playwright?**
-BrowserStack, explicitly, though marked "presently in limited capacity" and with `findElements`
-healing labelled Beta (S-01). No other verified source in EP-1 names Playwright support on the
-page reviewed. S-14's GitHub measurement found no established, widely-adopted open-source
-Playwright-specific self-healing library (every Playwright-named project measured had 0-2 stars,
-two created the same day as the research) — Falcon's realistic open-source peer is Healenium
-(Selenium/Appium-centric), not a Playwright equivalent.
+BrowserStack explicitly documents limited-capacity Playwright healing (S-01). Healenium now documents Playwright Proxy under Healenium Pro (S-17); do not confuse that with its open-source Selenium wrapper. Historical star-count/adoption conclusions are withdrawn because response snapshots were not committed. Other reviewed-page omissions remain unknown, not proof of absence.
 
 **10. Which automatically trust repairs (no approval)?**
 Testim (auto-improve replaces the degraded locator directly once the 70% threshold is crossed,
-no approval mentioned, S-07). Virtuoso, above its internal confidence threshold (S-13). mabl
-claims autonomous updates with human involvement "only when clarification is needed" — this is a
-MARKETING CLAIM (S-04), not independently verified technically. BrowserStack's page describes
+no approval mentioned, S-07). Virtuoso, above its internal confidence threshold (S-13). mabl documents automatic model updates only for passing plan runs, with no model updates for failed, ad-hoc or local runs (L-01); an unconditional pre-persistence approval gate is not established. BrowserStack's page describes
 healing as applied automatically during the run and does not mention a pre-reuse approval step —
 recorded as NOT FOUND IN PUBLIC DOCUMENTATION, not as confirmed automatic-without-approval
 (S-01/S-15).
@@ -327,9 +319,7 @@ machine-checked rather than asserted in prose alone.
 
 **15. What can Falcon not reasonably outperform in one phase?**
 Cloud-platform execution breadth (device/browser farm coverage, fleet-scale concurrent
-execution, enterprise plan features such as BrowserStack's Pro-gated healing). Healenium's
-multi-year production adoption and maturity signal (created 2021, 167 stars, sustained history)
-against a brand-new Falcon feature. Any direct quantitative accuracy comparison against a real
+execution, enterprise plan features such as BrowserStack's Pro-gated healing). Established operational maturity cannot be inferred from the withdrawn repository-star survey. Any direct quantitative accuracy comparison against a real
 competitor number — this is not a "not yet" limitation but a permanent one under protected-replay
 option (C): Falcon has no controlled, reproducible access to any competitor's actual accuracy,
 and this project's engineering rules forbid uncontrolled third-party access in CI regardless of
@@ -347,8 +337,7 @@ Concrete prohibited-claims checklist, to be run against every externally publish
   under explicitly stated conditions and limitations (AC-69).
 - "Zero false heals" / "no false heals" / "eliminates test maintenance."
 - Any statement that a named competitor "lacks" a feature because it was not found in the
-  documentation reviewed (this applies to every NOT FOUND / UNKNOWN row in EP-1, mabl's technical
-  claims in particular).
+  documentation reviewed (this applies to every NOT FOUND / UNKNOWN row in EP-1, all undocumented competitor details).
 - "Falcon stores no DOM," unqualified. Must always read "no raw or verbatim DOM — a bounded,
   schema-enforced projection" attached in the same sentence, per the D3 analysis above.
 - Any claim that Falcon's confidence score is "more accurate than" or "better than" Testim's or
@@ -388,3 +377,11 @@ view, not only a testability one:
   accept or require any competitor account, API key, or network target as an input. Its only
   external dependency should be the locally-authored fixture corpus.
 
+
+## Refresh implications for the gap decision
+
+The accessible mabl technical pages (L-01, S-18, S-19) establish environment-separated histories, low-confidence step failure, passing-plan-only automatic model updates, attribute-change evidence and rollback. These are concrete comparators for scope isolation, refusal, review and history. Rollback deletes later versions and does not prevent the same heal recurring; Falcon must verify its own revocation semantics rather than claiming generic rollback uniqueness.
+
+Momentic's default PR delivery is not a mandatory approval guarantee: direct-commit and on-disk modes exist, and successful in-run resolutions can update a step cache. Its run-only/source-edit distinction does not establish mandatory cache-promotion approval. Testim and testRigor describe automatic changes followed by review; matrix approval-before-persistence cells therefore remain NOT_FOUND_IN_DOCS. Virtuoso's approval requirement is conditional, not universal, and numeric-score exposure is not established.
+
+The complete A–J inventory now has explicit evidence cells. UNKNOWN dimensions include unsupported composite requirements and undocumented concurrency, retention, business validation and false-heal metrics. The combined local, deterministic, attributable-review design remains a hypothesis to validate on Falcon's own production path. Comparative product performance and exclusive capabilities remain unestablished. Gate 0 source review and owner acceptance remain separate decisions.

@@ -52,7 +52,7 @@ const MAX_ATTR_LENGTH = 200;
 // Reuses Tier 3's existing bounded interactive-element query verbatim
 // (AIHealer.getAlternativeSelector's domSnapshot tag list), so Tier 2.5 and
 // Tier 3 agree on what "the interactive elements on this page" means.
-const INTERACTIVE_SELECTOR = "input, button, a, select, textarea, label, [data-testid], [aria-label]";
+const INTERACTIVE_SELECTOR = "input, button, a, select, textarea, label, [data-testid], [data-test], [data-qa], [aria-label], [role], [contenteditable=true]";
 
 // Fixed allow-list of attribute keys ever read off a live element — the
 // union of what ElementSignature.capture's descriptor and SelectorBuilder's
@@ -150,10 +150,12 @@ function _browserGatherFacts(args) {
       var tag = node.tagName.toLowerCase();
       var nth = 1;
       var sibling = node.previousElementSibling;
-      while (sibling) {
+      var scanned = 0;
+      while (sibling && scanned++ < 1000) {
         if (sibling.tagName && sibling.tagName.toLowerCase() === tag) nth++;
         sibling = sibling.previousElementSibling;
       }
+      if (sibling) return [];
       steps.unshift({ tagName: tag, nthOfType: nth });
       node = node.parentElement;
       depth++;
@@ -217,12 +219,47 @@ function _browserGatherFacts(args) {
   }
 
   function ownTextOf(el) {
+    var tag = el.tagName ? el.tagName.toLowerCase() : "";
+    if (["input", "textarea", "select", "option", "script", "style"].indexOf(tag) !== -1 || el.isContentEditable) return "";
     var parts = [];
     var children = el.childNodes || [];
     for (var i = 0; i < children.length; i++) {
       if (children[i].nodeType === 3) parts.push(children[i].nodeValue);
     }
     return parts.join(" ");
+  }
+
+  function roleOf(el) {
+    var explicit = el.getAttribute("role");
+    if (explicit) return explicit;
+    var tag = el.tagName.toLowerCase();
+    if (tag === "button") return "button";
+    if (tag === "a" && el.getAttribute("href") !== null) return "link";
+    if (tag === "textarea" || el.isContentEditable) return "textbox";
+    if (tag === "select") return el.multiple || el.size > 1 ? "listbox" : "combobox";
+    if (tag === "input") {
+      var type = (el.getAttribute("type") || "text").toLowerCase();
+      if (["submit", "reset", "button", "image"].indexOf(type) !== -1) return "button";
+      if (type === "checkbox" || type === "radio") return type;
+      if (type === "range") return "slider";
+      if (type === "number") return "spinbutton";
+      if (["text", "email", "tel", "url", "search"].indexOf(type) !== -1) return type === "search" ? "searchbox" : "textbox";
+    }
+    return null;
+  }
+
+  function nameOf(el, attrs) {
+    if (attrs["aria-label"]) return attrs["aria-label"];
+    var labelledBy = (el.getAttribute("aria-labelledby") || "").split(/\s+/).slice(0, 8);
+    var names = [];
+    for (var i = 0; i < labelledBy.length; i++) {
+      var label = document.getElementById(labelledBy[i]);
+      if (label) names.push(ownTextOf(label));
+    }
+    if (names.join(" ").trim()) return names.join(" ");
+    var labels = el.labels || [];
+    for (var j = 0; j < Math.min(labels.length, 8); j++) names.push(ownTextOf(labels[j]));
+    return names.join(" ").trim() || ownTextOf(el);
   }
 
   var nodeList;
@@ -238,8 +275,8 @@ function _browserGatherFacts(args) {
     var el = nodeList[i];
     var attrs = readAttrs(el);
     var tagName = el.tagName ? el.tagName.toLowerCase() : "";
-    var roleRaw = el.getAttribute ? el.getAttribute("role") : null;
-    var accessibleNameRaw = attrs["aria-label"] || ownTextOf(el);
+    var roleRaw = roleOf(el);
+    var accessibleNameRaw = nameOf(el, attrs);
 
     var selectOptionAbsent;
     if (action === "select" && tagName === "select" && typeof expectedSelectValue === "string") {
@@ -267,7 +304,7 @@ function _browserGatherFacts(args) {
       structuralChain: structuralChainOf(el),
       state: {
         hidden: isHidden(el),
-        disabled: el.disabled === true,
+        disabled: el.disabled === true || (typeof el.matches === "function" && el.matches(":disabled")) || el.getAttribute("aria-disabled") === "true",
         readonly: el.readOnly === true || (el.getAttribute && el.getAttribute("readonly") !== null),
       },
       contentEditable: el.isContentEditable === true,
@@ -313,9 +350,9 @@ async function collect(page, { action, expectedSelectValue } = {}) {
  * capture). Returns `null` if the selector matches nothing or facts could
  * not be gathered.
  */
-async function collectOne(page, selector) {
+async function collectOne(page, selector, { action, expectedSelectValue } = {}) {
   if (typeof selector !== "string" || selector.length === 0) return null;
-  const results = await _evaluate(page, { singleSelector: selector, maxCandidates: 1 });
+  const results = await _evaluate(page, { singleSelector: selector, maxCandidates: 1, action, expectedSelectValue });
   return results[0] || null;
 }
 

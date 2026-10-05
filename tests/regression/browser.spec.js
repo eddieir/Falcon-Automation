@@ -13,6 +13,22 @@ const Logger = require("../../utils/Logger");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const Memory = require("../../src/core/locator/LocatorMemory");
+const Identity = require("../../src/core/locator/LocatorIdentity");
+const Signature = require("../../src/core/locator/ElementSignature");
+const Collector = require("../../src/core/locator/ElementFactsCollector");
+let memorySequence=0;
+async function scopedPage(page,html) {
+  await page.route("https://browser-fixture.invalid/**", r=>r.fulfill({contentType:"text/html",body:html}));
+  await page.goto("https://browser-fixture.invalid/form");
+  return new Memory({memoryPath:path.join(scratch,`memory-${++memorySequence}.json`),env:{FALCON_LOCATOR_SALT:"browser-fixture-key"}});
+}
+async function approveScoped(page,memory,original,selector,action="click") {
+  const built=Identity.buildIdentity({url:page.url(),action,originalSelector:original,env:{}});
+  const facts=await Collector.collectOne(page,selector);
+  const proposal=memory.recordPendingCandidate(built.identity,{selector,signature:Signature.capture(facts,{salt:memory.salt})}).pendingCandidate;
+  expect((await memory.decide("approve",built.key,{proposalId:proposal.proposalId,actor:"test"})).ok).toBe(true);
+}
 let scratch;
 test.beforeAll(() => {
   scratch = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-browser-"));
@@ -115,16 +131,16 @@ test("autoheal clicks original element with no recovery event", async ({
   expect(await page.evaluate(() => window.saved)).toBe(true);
   expect(Report._instance.logs).toHaveLength(before);
 });
-test("autoheal repairs changed selector through persistent alternatives inside runner", async ({
+test("autoheal repairs changed selector through scoped approved alternatives inside runner", async ({
   page,
 }) => {
-  await page.setContent(
-    '<button id="new" onclick="window.saved=true">Save</button>',
-  );
+  const memory=await scopedPage(page,'<button id="new" onclick="window.saved=true">Save</button>');
+  await approveScoped(page,memory,"#old","#new");
   Store.addLocator("#old", "#new");
   const runner = new Runner(page, {
     test_scenarios: [{ action: "click", locator: "#old", description: "Save" }],
   });
+  runner.healer._locatorMemory = memory;
   runner.healer._retry.maxAttempts = 1;
   const results = await runner.executeTest();
   expect(results[0].status).toBe("passed");
@@ -134,10 +150,8 @@ test("autoheal repairs changed selector through persistent alternatives inside r
 test("autoheal infers from real DOM through a controlled provider, but does not trust it until approved", async ({
   page,
 }) => {
-  await page.setContent(
-    '<button data-testid="replacement" onclick="window.saved=true">Save</button>',
-  );
-  const healer = new Healer(page);
+  const memory=await scopedPage(page,'<button data-testid="replacement" onclick="window.saved=true">Save</button>');
+  const healer = new Healer(page,{locatorMemory:memory});
   let requests = 0;
   healer._getOpenAIClient = async () => ({
     chat: {
@@ -165,13 +179,8 @@ test("autoheal infers from real DOM through a controlled provider, but does not 
   await healer.healSelector("#renamed", "Save");
   expect(requests).toBe(2);
 
-  // Once a human approves it, it becomes a trusted Tier 2 alternative and
-  // the LLM is no longer consulted for this selector.
-  Trust.approve("#renamed", { approvedBy: "test" });
-  await Trust._queue;
-  expect(Store.getAlternatives("#renamed")).toContain(
-    '[data-testid="replacement"]',
-  );
+  const entry=Object.values(memory.list()).find(e=>e.identity.originalSelector==="#renamed");
+  expect((await memory.decide("approve",entry.key,{proposalId:entry.pendingCandidate.proposalId,actor:"test"})).ok).toBe(true);
   await healer.healSelector("#renamed", "Save");
   expect(requests).toBe(2);
 });
@@ -201,31 +210,31 @@ test("an unresolvable click target reports 'unavailable', not a silent success o
 // element that genuinely isn't there — that's the whole reason D13/D14 went
 // undetected. These run against real Chromium.
 
-test("a renamed type target heals through Tier 2 (LocatorStore) and the fill lands in the real field, not a click", async ({
+test("a renamed type target heals through scoped approval and fills the real field", async ({
   page,
 }) => {
-  await page.setContent('<input id="new-field">');
+  const memory=await scopedPage(page,'<input id="new-field">');
+  await approveScoped(page,memory,"#old-field","#new-field","type");
   Store.addLocator("#old-field", "#new-field");
   const runner = new Runner(page, {
     test_scenarios: [
       { action: "type", locator: "#old-field", value: "hello", description: "Field" },
     ],
   });
+  runner.healer._locatorMemory = memory;
   runner.healer._retry.maxAttempts = 1;
   const results = await runner.executeTest();
   expect(results[0].status).toBe("passed");
   await expect(page.locator("#new-field")).toHaveValue("hello");
   expect(Report._instance.logs.at(-1).resolved).toBe("#new-field");
-  expect(Report._instance.logs.at(-1).tier).toBe("LocatorStore");
+  expect(Report._instance.logs.at(-1).tier).toBe("LocatorMemory");
 });
 
 test("a renamed select target heals through Tier 3 inference via a controlled provider, selects the real option, and still holds the trust gate", async ({
   page,
 }) => {
-  await page.setContent(
-    '<select data-testid="country-replacement"><option value="it">Italy</option><option value="fr">France</option></select>',
-  );
-  const healer = new Healer(page);
+  const memory=await scopedPage(page,'<select data-testid="country-replacement"><option value="it">Italy</option><option value="fr">France</option></select>');
+  const healer = new Healer(page,{locatorMemory:memory});
   healer._getOpenAIClient = async () => ({
     chat: {
       completions: {
@@ -243,11 +252,11 @@ test("a renamed select target heals through Tier 3 inference via a controlled pr
     '[data-testid="country-replacement"]',
   );
   expect(Trust.list().map((entry) => entry.original)).toContain("#renamed-country");
-  Trust.approve("#renamed-country", { approvedBy: "test" });
-  await Trust._queue;
-  expect(Store.getAlternatives("#renamed-country")).toContain(
-    '[data-testid="country-replacement"]',
-  );
+  const entry=Object.values(memory.list()).find(e=>e.identity.originalSelector==="#renamed-country");
+  expect((await memory.decide("approve",entry.key,{proposalId:entry.pendingCandidate.proposalId,actor:"test"})).ok).toBe(true);
+  healer.getAlternativeSelector=async()=>{throw new Error("approved scoped selection must not invoke provider");};
+  await healer.healSelector("#renamed-country","Country","select","it");
+  await expect(page.locator('[data-testid="country-replacement"]')).toHaveValue("it");
 });
 
 test("an unresolvable renamed type target ends 'unavailable' (not 'skipped', not a silent pass), and FlakinessTracker still records it as a classified failure", async ({
@@ -503,9 +512,9 @@ test('fixed-position inputs are executed rather than skipped',async({page})=>{
 test('visibility-hidden elements do not produce generated actions',async({page})=>{
  await page.setContent('<button style="visibility:hidden">Hidden</button>');expect((await new Generator(page).generateTestScenarios()).test_scenarios).toHaveLength(0);
 });
-test('healing refuses ambiguous stored targets and tries the next unique alternative',async({page})=>{
- await page.setContent('<button class="duplicate" onclick="window.wrong=true">Wrong</button><button class="duplicate">Other</button><button id="right" onclick="window.right=true">Right</button>');
- Store.addLocator('#ambiguous','.duplicate');Store.addLocator('#ambiguous','#right');await new Healer(page).healSelector('#ambiguous','Right');
+test('healing ignores ambiguous legacy targets and uses the scoped approved target',async({page})=>{
+ const memory=await scopedPage(page,'<button class="duplicate" onclick="window.wrong=true">Wrong</button><button class="duplicate">Other</button><button id="right" onclick="window.right=true">Right</button>');
+ Store.addLocator('#ambiguous','.duplicate');await approveScoped(page,memory,'#ambiguous','#right');await new Healer(page,{locatorMemory:memory}).healSelector('#ambiguous','Right');
  expect(await page.evaluate(()=>window.wrong)).toBeUndefined();expect(await page.evaluate(()=>window.right)).toBe(true);
 });
 test('healing rejects an ambiguous inferred target without clicking, caching, or queuing it for review',async({page})=>{

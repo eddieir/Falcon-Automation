@@ -123,6 +123,7 @@ const ATTRIBUTE_ALLOW_LIST = Object.freeze([
   "type",
   "data-testid",
   "data-test",
+  "data-qa",
   "placeholder",
   "href",
   "aria-label",
@@ -431,7 +432,8 @@ function capture(descriptor, options = {}) {
     cfg.MAX_ACCESSIBLE_NAME_LENGTH,
     redactionPatterns
   );
-  const textApprox = _normaliseText(_safeGet(source, "ownText"), cfg.MAX_TEXT_APPROX_LENGTH, redactionPatterns);
+  const textApprox = ["input", "textarea", "select", "option", "script", "style"].includes(tagName) || source.contentEditable === true
+    ? null : _normaliseText(_safeGet(source, "ownText"), cfg.MAX_TEXT_APPROX_LENGTH, redactionPatterns);
   const attributes = _buildAttributes(_safeGet(source, "attributes"), cfg, salt);
   const structuralPath = _buildStructuralPath(_safeGet(source, "structuralPath"), cfg);
   const boundingBoxBucket = _buildBoundingBoxBucket(_safeGet(source, "boundingBoxBucket"));

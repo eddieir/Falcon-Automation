@@ -433,3 +433,19 @@ test("a real CLI run writes its report under reports/ and nothing is staged by g
   const gitStatus = execFileSync("git", ["status", "--porcelain", "reports/"], { cwd: root, encoding: "utf8" });
   assert.equal(gitStatus.trim(), "", "reports/ must show no untracked/staged changes to git even after a real run");
 });
+
+
+test("expanded corpus expectations cover selector construction and executed actions", async () => {
+  const report = await getReport();
+  assert.ok(report.N >= 27);
+  for (const row of report.perCase) {
+    assert.equal(row.expectationMet, true, `${row.id}: expected ${row.expectedOutcome}, got ${row.outcome}`);
+    if (row.outcome === "correct_heal") {
+      assert.equal(row.actionSucceeded, true);
+      assert.ok(row.resolvedSelector);
+    }
+  }
+  const actualSignatureBytes = Buffer.byteLength(JSON.stringify(report.perCase.map(row => row.storedSignature)));
+  assert.ok(report.storageBytes > actualSignatureBytes, "measurement includes actual scoped memory schema, not fixture IDs");
+  assert.match(report.storageMeasurement, /actual LocatorMemory file/);
+});

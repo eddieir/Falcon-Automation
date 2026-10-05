@@ -1074,6 +1074,10 @@
     const pendingBlock = pending
       ? `
         <div class="locator-detail">pending candidate: ${escapeHtml(pending.selector)}</div>
+        <div class="locator-detail">proposal: ${escapeHtml(pending.proposalId)}</div>
+        <div class="locator-detail">margin: ${escapeHtml(pending.margin ?? "unavailable")} · runner-up: ${escapeHtml(pending.runnerUp?.selector ?? "none")}</div>
+        <div class="locator-detail">evidence: ${escapeHtml(JSON.stringify(pending.evidence || {}))}</div>
+        <div class="locator-detail">alternatives: ${escapeHtml(JSON.stringify(pending.alternativesConsidered || []))}</div>
         <div class="locator-detail">scores: ${escapeHtml(locatorContributionsLabel(pending.contributions))}</div>
         <div class="locator-detail">seen ${pending.occurrences}× · last ${fmt(new Date(pending.lastSeen).getTime())}</div>
         ${rejectedWarning}
@@ -1089,10 +1093,10 @@
       </div>
       <div class="locator-actions">
         ${canDecide
-          ? `<button class="btn btn-approve" data-action="approve" data-key="${escapeHtml(entry.key)}">Approve</button>
-             <button class="btn btn-reject" data-action="reject" data-key="${escapeHtml(entry.key)}">Reject</button>`
+          ? `<button class="btn btn-approve" data-action="approve" data-key="${escapeHtml(entry.key)}" data-proposal-id="${escapeHtml(pending.proposalId)}">Approve</button>
+             <button class="btn btn-reject" data-action="reject" data-key="${escapeHtml(entry.key)}" data-proposal-id="${escapeHtml(pending.proposalId)}">Reject</button>`
           : ""}
-        <button class="btn btn-reject" data-action="rollback" data-key="${escapeHtml(entry.key)}">Rollback</button>
+        <button class="btn btn-reject" data-action="rollback" data-key="${escapeHtml(entry.key)}" data-revision="${escapeHtml(entry.revision)}">Rollback</button>
       </div>
     `;
     return row;
@@ -1154,7 +1158,9 @@
     const { action, key } = button.dataset;
     button.disabled = true;
     try {
-      const extra = action === "rollback" ? { note: prompt("Optional note for this rollback:") || undefined } : {};
+      const extra = action === "rollback"
+        ? { expectedRevision: button.dataset.revision, note: prompt("Optional note for this rollback:") || undefined }
+        : { proposalId: button.dataset.proposalId };
       await locatorDecision(action, key, extra);
     } catch (err) {
       button.disabled = false;

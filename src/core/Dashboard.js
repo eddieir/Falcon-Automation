@@ -529,39 +529,24 @@ class Dashboard {
             res.json(this._locatorMemory.listLegacy());
         });
 
-        app.post("/locator/approve", authLimiter, (req, res) => {
-            if (!this._isAuthorized(this._tokenFromRequest(req))) {
-                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
-            }
-            const { key } = req.body || {};
-            const entry = typeof key === "string" ? this._locatorMemory.approve(key, { approvedBy: "dashboard" }) : null;
-            if (!entry) {
-                return res.status(404).json({ error: "No pending candidate for that identity (missing, or the identity is revoked)." });
-            }
-            res.json(entry);
-        });
-
-        app.post("/locator/reject", authLimiter, (req, res) => {
-            if (!this._isAuthorized(this._tokenFromRequest(req))) {
-                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
-            }
-            const { key } = req.body || {};
-            const entry = typeof key === "string" ? this._locatorMemory.reject(key, { rejectedBy: "dashboard" }) : null;
-            if (!entry) return res.status(404).json({ error: "No pending candidate for that identity." });
-            res.json(entry);
-        });
-
-        app.post("/locator/rollback", authLimiter, (req, res) => {
-            if (!this._isAuthorized(this._tokenFromRequest(req))) {
-                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
-            }
-            const { key, note } = req.body || {};
-            const entry = typeof key === "string"
-                ? this._locatorMemory.rollback(key, { actor: "dashboard", note: typeof note === "string" ? note : undefined })
-                : null;
-            if (!entry) return res.status(404).json({ error: "No tracked identity for that key." });
-            res.json(entry);
-        });
+        for (const kind of ["approve", "reject", "rollback"]) {
+            app.post(`/locator/${kind}`, authLimiter, async (req, res) => {
+                if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                    return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+                }
+                const { key, proposalId, expectedRevision, note } = req.body || {};
+                if (typeof key !== "string") return res.status(400).json({ error: "An identity key is required." });
+                try {
+                    const decision = await this._locatorMemory.decide(kind, key, {
+                        proposalId, expectedRevision, actor: "dashboard", note: typeof note === "string" ? note : undefined,
+                    });
+                    if (!decision.ok) return res.status(decision.status).json({ error: decision.error });
+                    return res.json(decision.entry);
+                } catch (_) {
+                    return res.status(503).json({ error: "Locator decision could not be persisted." });
+                }
+            });
+        }
 
         app.post("/locator/legacy/delete", authLimiter, (req, res) => {
             if (!this._isAuthorized(this._tokenFromRequest(req))) {

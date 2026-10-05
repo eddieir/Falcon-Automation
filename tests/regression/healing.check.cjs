@@ -157,7 +157,7 @@ test("locator cache tolerates write errors", async (t) => {
   await store._queue;
   assert.deepEqual(store.getAlternatives("#old"), ["#new"]);
 });
-function healer(page, alternatives = []) {
+function healer(page, alternatives = [], reviewed = []) {
   const events = [],
     saved = [],
     pending = [];
@@ -171,7 +171,20 @@ function healer(page, alternatives = []) {
     "./HealingTrust": { recordPending: (e) => pending.push(e), recordTier3Invocation: () => {} },
     "./AdaptiveRetry": Retry,
   });
-  const instance = new Healer(page);
+  const salt = "healing-regression-salt";
+  const Signature = require(path.join(root, "src/core/locator/ElementSignature.js"));
+  const facts = { tagName: "input", role: "textbox", accessibleName: "Field", ownText: "", attributes: { "data-testid": "reviewed-field", type: "text" }, structuralPath: ["form"], boundingBoxBucket: "top-left:small", state: { hidden: false, disabled: false, readonly: false } };
+  const signature = Signature.capture(facts, { salt });
+  const memory = {
+    salt, getTrusted: () => reviewed.length ? { signature } : null,
+    getApprovedAlternatives: identity => identity.action === "type" ? reviewed.map(selector => ({ selector, signature })) : [],
+    recordEvidence() { assert.fail("healing must not manufacture ground-truth evidence"); },
+    recordPendingCandidate() {},
+  };
+  const instance = new Healer(page, { locatorMemory: memory, elementFactsCollector: {
+    collect: async () => reviewed.length ? [{ ...facts, selector: reviewed[0] }] : [],
+    collectOne: async () => reviewed.length ? facts : null,
+  } });
   instance._retry = new Retry({ baseDelayMs: 0 });
   return { instance, events, saved, pending };
 }
@@ -189,25 +202,16 @@ test("direct healing succeeds without inference or persistence", async () => {
   assert.equal(events.length, 0);
   assert.equal(saved.length, 0);
 });
-test("stored alternatives are attempted in order and logged", async () => {
+test("legacy selector-only alternatives cannot authorize automatic replay", async () => {
   const clicked = [];
-  const { instance, events } = healer(
-    {
-      waitForSelector: async () => {
-        throw Error("invalid selector");
-      },
-      click: async (s) => {
-        clicked.push(s);
-        if (s === "#bad") throw Error("missing");
-      },
-    },
-    ["#bad", "#good"],
-  );
-  instance.getAlternativeSelector = () => assert.fail("unexpected inference");
-  await instance.healAndClick("#old", "Save");
-  assert.deepEqual(clicked, ["#bad", "#good"]);
-  assert.equal(events[0].tier, "LocatorStore");
-  assert.equal(events[0].resolved, "#good");
+  const { instance, events } = healer({
+    waitForSelector: async () => { throw Error("invalid selector"); },
+    click: async selector => clicked.push(selector),
+  }, ["#bad", "#good"]);
+  instance.getAlternativeSelector = async () => null;
+  await assert.rejects(instance.healAndClick("#old", "Save"), { code: "TARGET_UNAVAILABLE" });
+  assert.deepEqual(clicked, []);
+  assert.ok(events.every(event => event.tier !== "LocatorStore"));
 });
 test("Phase 8: inferred locator is clicked and sent for review, not auto-persisted", async () => {
   const clicked = [];
@@ -220,7 +224,7 @@ test("Phase 8: inferred locator is clicked and sent for review, not auto-persist
   // Not written to LocatorStore — an unreviewed Tier 3 guess is not trusted
   // for reuse just because it worked once.
   assert.equal(saved.length, 0);
-  assert.deepEqual(pending, [{ original: "#old", suggested: "#new", description: "Save" }]);
+  assert.deepEqual(pending, [{ original: "#old", suggested: "#new", description: "Save", scoped: false }]);
   assert.equal(events[0].resolved, "#new");
   assert.equal(events[0].trust, "pending");
 });
@@ -314,22 +318,23 @@ test("Phase 11: healAndSelect succeeds directly via selectOption, no inference",
   assert.deepEqual(selected, ["#choice", "it"]);
   assert.equal(events.length, 0);
 });
-test("Phase 11: Tier 2 stored alternative for type performs the actual fill, not a click", async () => {
+test("Phase 11: scoped approved type alternative performs the actual fill", async () => {
   const filled = [];
   const { instance, events } = healer(
     {
       waitForSelector: async () => {
         throw Error("gone");
       },
+      url: () => "https://example.com/form",
       fill: async (s, v) => {
         filled.push([s, v]);
       },
     },
-    ["#new-field"],
+    [], ["#new-field"],
   );
   await instance.healAndType("#old-field", "value", "Field");
   assert.deepEqual(filled, [["#new-field", "value"]]);
-  assert.equal(events[0].tier, "LocatorStore");
+  assert.equal(events.at(-1).tier, "LocatorMemory");
   assert.equal(events[0].action, "type");
 });
 test("Phase 11: Tier 3 inferred locator for select performs the actual selectOption, and goes to trust review, not LocatorStore", async () => {
@@ -344,23 +349,24 @@ test("Phase 11: Tier 3 inferred locator for select performs the actual selectOpt
   // straight to LocatorStore, whichever action it healed.
   assert.equal(saved.length, 0);
   assert.deepEqual(pending, [
-    { original: "#old-choice", suggested: "#new-choice", description: "Country" },
+    { original: "#old-choice", suggested: "#new-choice", description: "Country", scoped: false },
   ]);
   assert.equal(events[0].tier, "LLM");
   assert.equal(events[0].trust, "pending");
   assert.equal(events[0].action, "select");
 });
-test("Phase 11: the uniqueness guard applies to a stored type alternative exactly as it does for click", async () => {
+test("Phase 11: scoped approved type alternatives require live uniqueness", async () => {
   const filled = [];
   const { instance } = healer(
     {
       waitForSelector: async () => {
         throw Error("gone");
       },
+      url: () => "https://example.com/form",
       fill: async (s, v) => filled.push([s, v]),
       locator: (sel) => ({ count: async () => (sel === "#ambiguous" ? 2 : 1) }),
     },
-    ["#ambiguous", "#unique"],
+    [], ["#ambiguous", "#unique"],
   );
   await instance.healAndType("#old", "value", "Field");
   assert.deepEqual(filled, [["#unique", "value"]]);
@@ -1495,7 +1501,20 @@ function healerWithRealTrust(t, page) {
     "./HealingTrust": Trust,
     "./AdaptiveRetry": Retry,
   });
-  const instance = new Healer(page);
+  const salt = "healing-regression-salt";
+  const Signature = require(path.join(root, "src/core/locator/ElementSignature.js"));
+  const facts = { tagName: "input", role: "textbox", accessibleName: "Field", ownText: "", attributes: { "data-testid": "reviewed-field", type: "text" }, structuralPath: ["form"], boundingBoxBucket: "top-left:small", state: { hidden: false, disabled: false, readonly: false } };
+  const signature = Signature.capture(facts, { salt });
+  const memory = {
+    salt, getTrusted: () => reviewed.length ? { signature } : null,
+    getApprovedAlternatives: identity => identity.action === "type" ? reviewed.map(selector => ({ selector, signature })) : [],
+    recordEvidence() { assert.fail("healing must not manufacture ground-truth evidence"); },
+    recordPendingCandidate() {},
+  };
+  const instance = new Healer(page, { locatorMemory: memory, elementFactsCollector: {
+    collect: async () => reviewed.length ? [{ ...facts, selector: reviewed[0] }] : [],
+    collectOne: async () => reviewed.length ? facts : null,
+  } });
   instance._retry = new Retry({ baseDelayMs: 0 });
   return { instance, trust: Trust };
 }
