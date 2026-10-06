@@ -158,38 +158,15 @@ class AIHealer {
 
         if (aiSuggestedLocator) {
             Logger.info(`🤖 AI suggested: ${aiSuggestedLocator}`);
+            let captured;
             try {
                 const count = await this._matchCount(aiSuggestedLocator);
                 if (count !== 1) {
                     throw new Error(`AI-suggested locator "${aiSuggestedLocator}" is ambiguous (${count} matches)`);
                 }
 
-                const captured = await this._preCaptureEvidence(action, selector, aiSuggestedLocator);
+                captured = await this._preCaptureEvidence(action, selector, aiSuggestedLocator);
                 await this._performAction(action, aiSuggestedLocator, value);
-                if (captured) {
-                    this._locatorMemory.recordPendingCandidate(captured.identity, {
-                        selector: aiSuggestedLocator, signature: captured.signature, source: "inference",
-                    });
-                }
-                // Phase 8: not persisted to LocatorStore yet — an unreviewed
-                // guess is not trusted for reuse just because it worked once.
-                // It sits in HealingTrust until a human approves it. This
-                // trust gate is unconditional — it applies the same way
-                // whichever action was healed.
-                HealingTrust.recordPending({
-                    original: selector,
-                    suggested: aiSuggestedLocator,
-                    description,
-                    scoped: Boolean(captured),
-                });
-                HealingReport.log({
-                    original: selector,
-                    resolved: aiSuggestedLocator,
-                    tier: "LLM",
-                    description,
-                    trust: "pending",
-                    action,
-                });
             } catch (clickErr) {
                 Logger.error(`🔥 AI-suggested locator "${aiSuggestedLocator}" also failed: ${clickErr.message}`);
                 HealingReport.log({
@@ -227,6 +204,34 @@ class AIHealer {
                     throw err;
                 }
             }
+
+            // The catch above always throws, so only a successful action
+            // reaches the bookkeeping below. A failure here must never be
+            // reported as the action having failed.
+            if (captured) {
+                this._recordPendingCandidateSafe(captured.identity, {
+                    selector: aiSuggestedLocator, signature: captured.signature, source: "inference",
+                });
+            }
+            // Phase 8: not persisted to LocatorStore yet — an unreviewed
+            // guess is not trusted for reuse just because it worked once.
+            // It sits in HealingTrust until a human approves it. This
+            // trust gate is unconditional — it applies the same way
+            // whichever action was healed.
+            HealingTrust.recordPending({
+                original: selector,
+                suggested: aiSuggestedLocator,
+                description,
+                scoped: Boolean(captured),
+            });
+            HealingReport.log({
+                original: selector,
+                resolved: aiSuggestedLocator,
+                tier: "LLM",
+                description,
+                trust: "pending",
+                action,
+            });
         } else {
             const msg = `AI-Healer could not resolve ${description} (${selector}): element not found after healing`;
             Logger.error(`🔥 ${msg}`);
@@ -385,7 +390,7 @@ class AIHealer {
         HealingReport.log({ original: selector, resolved: resolvedSelector, tier: "LocatorMemory", description, action, status: "accepted" });
 
         // Only a successful authored Tier 1 action creates ground-truth evidence.
-        this._locatorMemory.recordPendingCandidate(identity, {
+        this._recordPendingCandidateSafe(identity, {
             selector: resolvedSelector,
             signature: winnerCandidate.signature,
             contributions: matchResult.winner.contributions,
@@ -470,6 +475,22 @@ class AIHealer {
             this._locatorMemory.recordEvidence(captured.identity, captured.signature);
         } catch (err) {
             Logger.warning(`AIHealer: evidence persistence skipped (${err.message}).`);
+        }
+    }
+
+    /**
+     * Record a pending candidate after an interaction that already
+     * succeeded. The call is synchronous and can throw (a decision in
+     * progress, an invalid identity or candidate); that must never turn a
+     * completed action into a failed heal, so it is logged and swallowed.
+     * Not awaited: there is nothing to wait for.
+     */
+    _recordPendingCandidateSafe(identity, candidate) {
+        if (!this._locatorMemory) return;
+        try {
+            this._locatorMemory.recordPendingCandidate(identity, candidate);
+        } catch (err) {
+            Logger.warning(`AIHealer: pending candidate not recorded (${err.message}).`);
         }
     }
 
