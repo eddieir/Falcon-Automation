@@ -19,6 +19,8 @@ function dashboardUI({ fetchImpl, search = "" } = {}) {
     nodes = new Map(),
     rows = [],
     fetchCalls = [],
+    storageWrites = [],
+    ioCalls = [],
     alerts = [];
   const makeNode = () => ({
     textContent: "",
@@ -56,12 +58,19 @@ function dashboardUI({ fetchImpl, search = "" } = {}) {
   const defaultFetch = async () => ({ ok: true, json: async () => [] });
   vm.runInNewContext(source, {
     document,
-    io: () => ({ on: (name, fn) => (handlers[name] = fn) }),
+    io: (...args) => {
+      ioCalls.push(args);
+      return { on: (name, fn) => (handlers[name] = fn) };
+    },
     setInterval() {},
     URL,
     URLSearchParams,
     location: { search, href: `http://localhost${search}` },
-    localStorage: { getItem: () => null, setItem() {} },
+    localStorage: {
+      getItem: () => null,
+      setItem: (k, v) => storageWrites.push([k, v]),
+      removeItem() {},
+    },
     history: { replaceState() {} },
     fetch: async (url, options) => {
       fetchCalls.push({ url, options });
@@ -69,7 +78,7 @@ function dashboardUI({ fetchImpl, search = "" } = {}) {
     },
     alert: (msg) => alerts.push(msg),
   });
-  return { handlers, nodes, rows, fetchCalls, alerts };
+  return { handlers, nodes, rows, fetchCalls, alerts, storageWrites, ioCalls };
 }
 
 /** Simulates clicking a data-action button inside #healing-pending-list. */
@@ -321,8 +330,8 @@ test("Phase 8: a failed /healing/pending fetch on connect never throws and leave
   assert.equal(nodes.get("healing-pending-list").children.length, 0);
 });
 
-test("Phase 8: approve button POSTs the selector with auth header and disables itself", async () => {
-  const { handlers, nodes, fetchCalls } = dashboardUI({ search: "?token=secret-token" });
+test("Phase 8: approve button POSTs the selector without a token header (cookie auth) and disables itself", async () => {
+  const { handlers, nodes, fetchCalls, storageWrites } = dashboardUI({ search: "?token=secret-token" });
   handlers.event(pendingEvent({ original: "#old", suggested: "#new" }));
 
   const button = await clickHealingButton(nodes, { action: "approve", selector: "#old" });
@@ -330,7 +339,8 @@ test("Phase 8: approve button POSTs the selector with auth header and disables i
   assert.equal(fetchCalls.length, 1);
   assert.equal(fetchCalls[0].url, "/healing/approve");
   assert.equal(fetchCalls[0].options.method, "POST");
-  assert.equal(fetchCalls[0].options.headers["X-Dashboard-Token"], "secret-token");
+  assert.equal(fetchCalls[0].options.headers["X-Dashboard-Token"], undefined);
+  assert.deepEqual(storageWrites, [], "the token is never persisted to localStorage");
   assert.deepEqual(JSON.parse(fetchCalls[0].options.body), { original: "#old" });
   assert.equal(button.disabled, true);
 });
@@ -464,7 +474,7 @@ test("Phase 9: scenario fields are HTML-escaped in the flaky panel, not injected
   assert.match(html, /&lt;img/);
 });
 
-test("Phase 9: quarantine button POSTs the scenario key, with auth header, and disables itself", async () => {
+test("Phase 9: quarantine button POSTs the scenario key, without a token header, and disables itself", async () => {
   const { handlers, nodes, fetchCalls } = dashboardUI({ search: "?token=secret-token" });
   handlers.event(flakyDetectedEvent());
 
@@ -473,7 +483,7 @@ test("Phase 9: quarantine button POSTs the scenario key, with auth header, and d
   assert.equal(fetchCalls.length, 1);
   assert.equal(fetchCalls[0].url, "/flakiness/quarantine");
   assert.equal(fetchCalls[0].options.method, "POST");
-  assert.equal(fetchCalls[0].options.headers["X-Dashboard-Token"], "secret-token");
+  assert.equal(fetchCalls[0].options.headers["X-Dashboard-Token"], undefined);
   assert.deepEqual(JSON.parse(fetchCalls[0].options.body), { key: "https://x.com::click::#flaky" });
   assert.equal(button.disabled, true);
 });
@@ -707,13 +717,22 @@ test("Phase 10: connecting fetches the current sweep from /coverage and renders 
   assert.match(nodes.get("coverage-summary").textContent, /1 of 7 discovered page\(s\) tested/);
 });
 
-test("Phase 10: /coverage is fetched with the auth header when a token is present", async () => {
-  const { handlers, fetchCalls } = dashboardUI({ search: "?token=secret-token" });
+test("Phase 10: /coverage is fetched without a token header even when the URL carries one", async () => {
+  const { handlers, fetchCalls, storageWrites } = dashboardUI({ search: "?token=secret-token" });
   handlers.connect();
   await new Promise(setImmediate);
   const call = fetchCalls.find((c) => c.url === "/coverage");
   assert.ok(call);
-  assert.equal(call.options.headers["X-Dashboard-Token"], "secret-token");
+  assert.equal(call.options.headers["X-Dashboard-Token"], undefined);
+  assert.deepEqual(storageWrites, []);
+});
+
+test("auth: the socket is opened with no token and the page never reads one from the URL", () => {
+  const { ioCalls, storageWrites } = dashboardUI({ search: "?token=secret-token" });
+  assert.equal(ioCalls.length, 1);
+  assert.equal(JSON.stringify(ioCalls[0]).includes("secret-token"), false);
+  assert.equal(ioCalls[0][0]?.auth, undefined);
+  assert.deepEqual(storageWrites, []);
 });
 
 test("Phase 10: a failed /coverage fetch on connect never throws, and live events still render afterwards", async () => {
