@@ -388,8 +388,8 @@ const tier3Page = () => ({
 });
 for (const [content, expected, rejection] of [
   [" 0 ", '[id="new"]', null],
-  ["null", null, "invalid_reply"],
-  ["", null, "invalid_reply"],
+  ["null", null, "model_declined"],
+  ["", null, "model_declined"],
   [undefined, null, "invalid_reply"],
   ["#new", null, "invalid_reply"],
   ["0 and also 1", null, "invalid_reply"],

@@ -193,3 +193,55 @@ test("a page with no eligible candidates is rejected without asking the model", 
   assert.equal(seen.prompt, null);
   assert.equal(events[0].reason, "no_eligible_candidates");
 });
+
+test("opacity, inert, off-screen and pointer-events decoys are never offered", async (t) => {
+  const page = await withPage(t, `
+    <button id="ok-btn">Ok</button>
+    <button id="opacity-btn" style="opacity:0">O</button>
+    <div style="opacity:0"><button id="opacity-parent-btn">P</button></div>
+    <div inert><button id="inert-btn">I</button></div>
+    <button id="offscreen-btn" style="position:absolute;left:-9999px;top:0">Off</button>
+    <button id="offscreen-top-btn" style="position:absolute;left:0;top:-9999px">Off</button>
+    <button id="pe-btn" style="pointer-events:none">PE</button>`);
+  const { Healer } = setup();
+  const healer = new Healer(page, { locatorMemory: null });
+  const seen = model(healer, "null");
+  await healer.getAlternativeSelector("#old", "Ok", "click");
+  const lines = candidateLines(seen.prompt);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /id="ok-btn"/);
+  for (const bad of ["opacity-btn", "opacity-parent-btn", "inert-btn", "offscreen-btn", "offscreen-top-btn", "pe-btn"]) {
+    assert.ok(!seen.prompt.includes(bad), bad);
+  }
+});
+
+test("a candidate whose aria-label, test id or href changes before verification is rejected", async (t) => {
+  for (const [html, mutate] of [
+    ['<button aria-label="Save">S</button>', (el) => el.setAttribute("aria-label", "Delete")],
+    ['<button data-testid="save">S</button>', (el) => el.setAttribute("data-testid", "delete")],
+    ['<base href="http://localhost/"><a href="/save">S</a>', (el) => el.setAttribute("href", "/delete")],
+    ['<button aria-label="Save">S</button>', (el) => { el.style.opacity = "0"; }],
+  ]) {
+    const page = await withPage(t, html);
+    const { Healer } = setup();
+    const healer = new Healer(page, { locatorMemory: null });
+    model(healer, async () => "0");
+    healer._openai.chat.completions.create = async () => {
+      await page.evaluate((src) => { new Function("el", "(" + src + ")(el)")(document.querySelector("button, a")); }, mutate.toString());
+      return { choices: [{ message: { content: "0" } }] };
+    };
+    assert.equal(await healer.getAlternativeSelector("#old", "S", "click"), null, html);
+    assert.equal(healer._lastTier3Rejection, "selector_not_unique", html);
+  }
+});
+
+test("a null or empty reply is model_declined; other unparseable replies stay invalid_reply", async (t) => {
+  const page = await withPage(t, '<button id="b">B</button>');
+  const { Healer } = setup();
+  const healer = new Healer(page, { locatorMemory: null });
+  for (const [reply, reason] of [["null", "model_declined"], ["  NULL \n", "model_declined"], ["", "model_declined"], ["foo", "invalid_reply"], ["0 and 1", "invalid_reply"]]) {
+    model(healer, reply);
+    assert.equal(await healer.getAlternativeSelector("#old", "B", "click"), null);
+    assert.equal(healer._lastTier3Rejection, reason, JSON.stringify(reply));
+  }
+});
