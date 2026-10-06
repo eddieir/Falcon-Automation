@@ -28,7 +28,7 @@ Falcon is a Node.js test automation framework built on Playwright. Its different
 | Test target | https://www.saucedemo.com (UI/DB scenarios), https://jsonplaceholder.typicode.com (API scenarios), https://www.google.com (GoogleSearchTest — not run in CI, see §9), plus inline HTML fixtures for `tests/regression/*` suite (no real target site, deterministic) |
 
 Two things worth knowing about this history if you're new to the repo:
-1. A real Supabase DB password and an OpenAI key were at different points committed to `.env` on various branches early on. Both were treated as compromised and the user was told to rotate them.
+1. A real Supabase DB password and an OpenAI key were at different points committed to `.env` on various branches early on. Both were treated as compromised and the user was told to rotate them. A private key (`client.key`) was also committed in March 2025 and deleted a month later, but stayed in history. The Supabase project it dates from had been paused since 16 March 2025 and was deleted on 6 October 2026, so nothing still accepts that credential. CI never used it: DB tests run against the job's own Postgres service. `.gitignore` now ignores key and certificate files.
 2. One PR (`feat/phase-2-stability-and-coverage`) briefly had its git history rewritten to scrub a leaked secret, which severed shared ancestry with `main` and caused GitHub to auto-close the PR. **Lesson: never rewrite history on a branch with an open PR if the secret is already exposed elsewhere — a plain `git rm --cached` + new commit is safer.**
 
 ---
