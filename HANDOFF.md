@@ -61,10 +61,12 @@ DASHBOARD_LINGER_MS=60000             # how long the dashboard stays up after a 
 # DASHBOARD_TOKEN=              # optional on the default loopback bind (unset =
                                  # unauthenticated, logs a warning on startup).
                                  # REQUIRED when DASHBOARD_HOST is not loopback —
-                                 # it's then required on
-                                 # POST /emit, GET /events, and the socket
-                                 # connection. Open the dashboard at
-                                 # http://localhost:3000/?token=<value> once set.
+                                 # it's then required on every API route and the
+                                 # socket connection, via an Authorization: Bearer
+                                 # or X-Dashboard-Token header or the dashboard cookie.
+                                 # ?token= is NOT accepted on API routes. Open
+                                 # http://localhost:3000/?token=<value> once; the
+                                 # dashboard sets an HttpOnly cookie and redirects.
 # DASHBOARD_ALLOWED_ORIGIN=      # optional. Restricts the dashboard's socket.io
                                  # CORS policy; defaults to the dashboard's own
                                  # localhost origin. Only matters for cross-origin
@@ -136,7 +138,7 @@ DB_SSL=false                 # set true only if your Postgres actually requires 
 
 - `src/core/Dashboard.js` — **Phase 7**: `POST /emit`, `GET /events`, and the socket.io handshake all now require `DASHBOARD_TOKEN` when it's set (header `X-Dashboard-Token`, query param `?token=`, or socket `auth: { token }`). Unauthorized socket connections are rejected outright (`connect_error`), not silently allowed through. CORS restricted from `origin: "*"` to `DASHBOARD_ALLOWED_ORIGIN` (default: the dashboard's own localhost origin). When `DASHBOARD_TOKEN` is unset, behavior is unchanged from Phase 3–6, but `start()` now logs a loud warning. Also fixed: `this.port` wasn't updated after `listen(0)` (ephemeral port), so `dashboard.url` printed the wrong port when port 0 was used (only matters for the regression test, which uses ephemeral ports to avoid colliding with a real dashboard).
 - `src/core/Middleware.js` — **Phase 7**: `emit()`'s HTTP `POST /emit` fallback now sends `X-Dashboard-Token` when `DASHBOARD_TOKEN` is set, so a standalone test process (`DASHBOARD_URL=...`) can still report into a token-protected dashboard. No token configured → no header sent → unchanged from before.
-- `src/dashboard/index.html` — **Phase 7**: reads `?token=` from the URL on load, persists it to `localStorage` (best-effort, wrapped in try/catch) and strips it from the visible URL via `history.replaceState`, then passes it into `io({ auth: { token } })`. Falls back to `localStorage` on reload if the URL has no token. Shows a clear "Unauthorized" status label on `connect_error` instead of just silently failing to connect.
+- `src/dashboard/index.html` — **Phase 7**: reads `?token=` from the URL on load, persists it to `localStorage` (best-effort, wrapped in try/catch) and strips it from the visible URL via `history.replaceState`, then passes it into `io({ auth: { token } })`. Falls back to `localStorage` on reload if the URL has no token. Shows a clear "Unauthorized" status label on `connect_error` instead of just silently failing to connect. *(Superseded after Phase 14: the token now travels in an HttpOnly cookie and is no longer stored in `localStorage`; see §7.)*
 - `tests/ui/GoogleSearchTest.js` — **Phase 7 fix, not wired into CI** (see §9). Was failing 100% of the time locally due to Google's cookie-consent dialog covering the search box (confirmed: an Italian-language "Prima di continuare su Google" overlay, region-dependent). Fixed by dismissing it via its `id` (`#L2AGLb`, Google's "Accept all" button — stable across locales, unlike the visible text) before searching, with a short timeout + catch since not every region/profile shows it.
 - `tests/unit/DashboardAuth.check.js` — **new in Phase 7**. Spins up a real `Dashboard` instance on an ephemeral port and makes real HTTP requests + real `socket.io-client` connections against it — proves both that the no-token default is unchanged and that every one of `POST /emit` / `GET /events` / the socket handshake actually rejects unauthenticated and wrong-token attempts when `DASHBOARD_TOKEN` is set. Confirmed it catches a real regression by temporarily removing the socket auth middleware and watching it fail. Also covers rate limiting — see below.
 - `src/core/Dashboard.js` — **CodeQL follow-up, same PR**: the first push of this branch triggered a real CodeQL finding — `POST /emit` and `GET /events` performed authorization but had no rate limiting, so `DASHBOARD_TOKEN` could be brute-forced by hammering either endpoint. Fixed with `express-rate-limit` (120 req/min, applied before the auth check) on both routes, plus a matching hand-rolled sliding-window limiter on the socket.io handshake (CodeQL doesn't analyze socket.io as an Express route, so it didn't flag that half, but the same risk applies there — no new dependency needed, ~15 lines). Also switched `_isAuthorized()`'s token comparison from `===` to `crypto.timingSafeEqual()` while already in that function, for the same general class of issue (timing side-channel, not something CodeQL flagged this time, but cheap to close while touching the exact function).
@@ -188,7 +190,7 @@ node falcon.js --no-dashboard     # same, no dashboard (also the CI=true default
 
 # Dashboard with auth (Phase 7):
 DASHBOARD_TOKEN=some-secret node falcon.js --dashboard
-# → open the printed URL, which includes ?token=some-secret
+# → open the printed URL once; its ?token= is exchanged for an HttpOnly cookie
 
 npx playwright test                                  # native suite
 npx allure awesome allure-results -o allure-report   # NOT `allure generate ... --clean`
@@ -204,32 +206,42 @@ npx allure awesome allure-results -o allure-report   # NOT `allure generate ... 
 healAndClick(selector, description)
     ├── Tier 1: AdaptiveRetry — backoff + jitter, error-classified
     ├── Tier 2: LocatorStore — cached alternatives (bounded, LRU-evicted — Phase 5)
-    └── Tier 3: AIHealer (OpenAI gpt-4o-mini) — live DOM snapshot → CSS selector
+    └── Tier 3: AIHealer (OpenAI gpt-4o-mini) — numbered list of eligible, visible
+                candidates → model replies with an index → locally built selector,
+                re-verified before use (README: "What Tier 3 sends to OpenAI")
 ```
 
 Single healing engine everywhere since Phase 5 (`SelfHealingManager` deleted). Every event logged via `HealingReport.log()`, which emits to the live dashboard.
 
 ---
 
-## 7. Architecture — Dashboard Auth (Phase 7)
+## 7. Architecture — Dashboard Auth (Phase 7, revised after Phase 14)
 
 ```
-No DASHBOARD_TOKEN set (default):
-  POST /emit, GET /events, socket connections — all open, as before.
-  start() logs a loud warning so this isn't a silent accident.
+Binding:
+  DASHBOARD_HOST, default 127.0.0.1. A non-loopback host without DASHBOARD_TOKEN
+  is refused at start() and falcon.js exits 1.
+
+No DASHBOARD_TOKEN set (loopback only):
+  API routes and socket connections are open. start() logs a loud warning.
+  Host guard: a request whose Host is not localhost / 127.0.0.1 / [::1] / the
+  configured loopback host on the listening port gets 403 (DNS rebinding).
+  A state-changing request or socket handshake with a foreign Origin gets 403;
+  no Origin (a Node reporter) is allowed. DASHBOARD_ALLOWED_ORIGIN is honoured.
 
 DASHBOARD_TOKEN set:
-  POST /emit, GET /events   → require X-Dashboard-Token header OR ?token= query param
-  socket.io connection      → io.use() middleware requires auth.token in the handshake;
-                               mismatch/missing → connect_error, connection refused
-  CORS                      → DASHBOARD_ALLOWED_ORIGIN (default: this dashboard's own
-                               localhost origin) instead of "*"
+  API routes and socket → Authorization: Bearer, X-Dashboard-Token, or the
+                          HttpOnly SameSite=Strict cookie falcon_dashboard_token.
+                          The socket also accepts auth: { token }.
+                          ?token= is refused everywhere except GET /.
+  GET /?token=<value>   → valid token: Set-Cookie + 303 to "/" (clean URL).
+  Comparison            → SHA-256 of both sides, then timingSafeEqual.
+  CORS                  → DASHBOARD_ALLOWED_ORIGIN (default: own localhost origin).
+  Every response        → Referrer-Policy: no-referrer.
 
 Front-end (src/dashboard/index.html):
-  ?token=<value> in the URL → read once, saved to localStorage, stripped from the
-  visible URL, sent as the socket auth token. Missing on reload → falls back to
-  localStorage. Neither present → socket connects unauthenticated → connect_error →
-  UI shows "Unauthorized — check the dashboard URL/token".
+  Stores nothing and sends no token itself; same-origin requests and the socket
+  carry the cookie. An old token left in localStorage is removed on load.
 
 Middleware.emit()'s cross-process HTTP fallback (DASHBOARD_URL) sends
 X-Dashboard-Token automatically when DASHBOARD_TOKEN is set in that process's env.
@@ -241,7 +253,7 @@ Verified end-to-end, not just at the unit level: real `falcon.js --dashboard` ru
 
 ## 8. Architecture — Autonomous Pipeline (`falcon.js`)
 
-Unchanged since Phase 3/5 apart from the scanner's name: `Dashboard.start()` → `DOMIssueScanner` (named `ExploratoryAI` until Phase 12) → `ClickExplorer` → `TestGenerator` (delegates to `PageAnalyser`) → `TestRunner.executeTest()` → `TestRunner.executeExploratoryTest()`. Dashboard stays up for `DASHBOARD_LINGER_MS` (default 60s) after the run for review, then the process exits. `dashboard.url` (a getter, Phase 7) is what gets printed — includes `?token=` automatically when one's configured.
+Unchanged since Phase 3/5 apart from the scanner's name: `Dashboard.start()` → `DOMIssueScanner` (named `ExploratoryAI` until Phase 12) → `ClickExplorer` → `TestGenerator` (delegates to `PageAnalyser`) → `TestRunner.executeTest()` → `TestRunner.executeExploratoryTest()`. Dashboard stays up for `DASHBOARD_LINGER_MS` (default 60s) after the run for review, then the process exits. `dashboard.url` (a getter, Phase 7) is what gets printed — includes `?token=` when one's configured, which `GET /` exchanges for a cookie on first load.
 
 ---
 
