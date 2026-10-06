@@ -631,3 +631,127 @@ test("one dead page does not abort the sweep", async ({ page }) => {
   expect(result.coverage.pagesTested).toBe(2);
   expect(result.pages.find((p) => p.url === "http://sweep.test/pricing").status).toBe("tested");
 });
+
+// ── Phase 15: the History panel in the real dashboard page ──────────────────
+// The shipped index.html is served from a stub origin with /history answered by
+// page.route(), so these cover the panel's rendering and escaping without
+// depending on the server. The socket.io client is replaced by a stub that only fires "connect".
+const DASHBOARD_HTML = fs.readFileSync(path.join(__dirname, "../../src/dashboard/index.html"), "utf8");
+
+function historyRun(i, over = {}) {
+  return {
+    schemaVersion: 1,
+    runId: `run-${i}`,
+    timestamp: `2026-01-${String(i + 1).padStart(2, "0")}T10:00:00.000Z`,
+    sha: "abcdef0123456789",
+    branch: "main",
+    result: "PASSED",
+    counts: { total: 10, passed: 8, failed: 2, skipped: 0, quarantined: 0, deduped: 0, unavailable: 0 },
+    heals: { t2: 1, t25: 0, t3: 1 },
+    pendingDepth: 3,
+    quarantineCount: 1,
+    durationMs: 1000 + i * 100,
+    incomplete: false,
+    flagged: [],
+    ...over,
+  };
+}
+
+async function openDashboard(page, historyPayload) {
+  await page.route("http://dash.test/**", (route) => {
+    const { pathname } = new URL(route.request().url());
+    if (pathname === "/") return route.fulfill({ contentType: "text/html", body: DASHBOARD_HTML });
+    if (pathname === "/socket.io/socket.io.js") {
+      return route.fulfill({ contentType: "text/javascript", body: "window.io=function(){return{on:function(n,f){if(n===\"connect\")setTimeout(f,0);},emit:function(){}}};" });
+    }
+    if (pathname === "/history") return route.fulfill({ contentType: "application/json", body: JSON.stringify(historyPayload) });
+    return route.fulfill({ contentType: "application/json", body: "[]" });
+  });
+  await page.goto("http://dash.test/");
+  await page.click("#history-summary");
+}
+
+test("history panel renders the seeded runs newest first with computed rates", async ({ page }) => {
+  const runs = Array.from({ length: 25 }, (_, i) => historyRun(24 - i, { branch: `b${24 - i}` }));
+  await openDashboard(page, { runs, flags: [{ signal: "heal_rate", message: "heal_rate 0.9 is above threshold 0.5" }], suppressed: [] });
+  const rows = page.locator("#history-body tr");
+  await expect(rows).toHaveCount(20);
+  const first = rows.first().locator("td");
+  await expect(first.nth(1)).toHaveText("b24");
+  await expect(first.nth(2)).toHaveText("abcdef0");
+  await expect(first.nth(4)).toHaveText("80.0%"); // 8 / (8 + 2 + 0)
+  await expect(first.nth(5)).toHaveText("20.0%"); // 2 / (8 + 2 + 0 + 0)
+  await expect(first.nth(7)).toHaveText("3");
+  await expect(first.nth(8)).toHaveText("1");
+  await expect(page.locator("#history-flags li")).toHaveText(["heal_rate: heal_rate 0.9 is above threshold 0.5"]);
+});
+
+test("history panel shows a branch of <img onerror> as text and runs no script", async ({ page }) => {
+  const evil = "<img src=x onerror=window.__x=1>";
+  await openDashboard(page, { runs: [historyRun(0, { branch: evil, flagged: ["<b>x</b>"] })], flags: [{ signal: evil, message: evil }], suppressed: [] });
+  await expect(page.locator("#history-body tr")).toHaveCount(1);
+  await expect(page.locator("#history-body tr td").nth(1)).toHaveText(evil);
+  expect(await page.evaluate(() => window.__x)).toBeUndefined();
+  expect(await page.locator("#history-section img").count()).toBe(0);
+  expect(await page.locator("#history-section b").count()).toBe(0);
+});
+
+test("history panel empty state", async ({ page }) => {
+  await openDashboard(page, { runs: [], flags: [], suppressed: [] });
+  await expect(page.locator("#history-status")).toHaveText("No runs recorded yet. Run `node falcon.js` to start building history.");
+  await expect(page.locator("#history-table")).toBeHidden();
+});
+
+test("history panel disabled and unavailable states", async ({ page }) => {
+  await openDashboard(page, { disabled: true, runs: [] });
+  await expect(page.locator("#history-status")).toHaveText("History is disabled (FALCON_RUN_HISTORY=off).");
+  await expect(page.locator("#history-table")).toBeHidden();
+});
+
+test("history panel unavailable state", async ({ page }) => {
+  await openDashboard(page, { runs: [], error: "unavailable" });
+  await expect(page.locator("#history-status")).toHaveText("History is unavailable.");
+  await expect(page.locator("#history-table")).toBeHidden();
+});
+
+test("history sparklines plot only known values and never emit NaN", async ({ page }) => {
+  const empty = { total: 0, passed: 0, failed: 0, skipped: 0, quarantined: 0, deduped: 0, unavailable: 0 };
+  // Newest first: runs 0 and 3 have no verified scenarios, so both rates are null.
+  const runs = [0, 1, 2, 3, 4].map((i) => historyRun(4 - i, i === 0 || i === 3 ? { counts: empty, durationMs: null } : {}));
+  await openDashboard(page, { runs, flags: [], suppressed: [] });
+  const svgs = page.locator("#history-sparks svg");
+  await expect(svgs).toHaveCount(3);
+  const info = await svgs.evaluateAll((nodes) => nodes.map((svg) => ({
+    circles: svg.querySelectorAll("circle").length,
+    attrs: [svg, ...svg.querySelectorAll("*")].flatMap((el) => Array.from(el.attributes).map((a) => a.value)),
+  })));
+  expect(info.map((s) => s.circles)).toEqual([3, 3, 3]);
+  for (const s of info) expect(s.attrs.filter((v) => /NaN|undefined|null|Infinity/.test(v))).toEqual([]);
+});
+
+test("history panel flags a flagged run with a badge", async ({ page }) => {
+  await openDashboard(page, { runs: [historyRun(1, { flagged: ["heal_rate"] }), historyRun(0)], flags: [], suppressed: [] });
+  const badges = page.locator("#history-body tr").first().locator(".history-badge");
+  await expect(badges).toHaveText(["heal_rate"]);
+  await expect(page.locator("#history-body tr").nth(1).locator(".history-badge")).toHaveCount(0);
+});
+
+test("history panel fetches only when opened, and again on Refresh", async ({ page }) => {
+  let calls = 0;
+  await page.route("http://dash.test/**", (route) => {
+    const { pathname } = new URL(route.request().url());
+    if (pathname === "/") return route.fulfill({ contentType: "text/html", body: DASHBOARD_HTML });
+    if (pathname === "/socket.io/socket.io.js") return route.fulfill({ contentType: "text/javascript", body: "window.io=function(){return{on:function(n,f){if(n===\"connect\")setTimeout(f,0);},emit:function(){}}};" });
+    if (pathname === "/history") { calls++; return route.fulfill({ contentType: "application/json", body: JSON.stringify({ runs: [historyRun(0)], flags: [], suppressed: [] }) }); }
+    return route.fulfill({ contentType: "application/json", body: "[]" });
+  });
+  await page.goto("http://dash.test/");
+  await page.waitForTimeout(500);
+  expect(calls).toBe(0); // nothing is requested until the panel is opened
+  await page.click("#history-summary");
+  await expect(page.locator("#history-body tr")).toHaveCount(1);
+  await page.waitForTimeout(500);
+  expect(calls).toBe(1);
+  await page.click("#history-refresh");
+  await expect.poll(() => calls).toBe(2);
+});
