@@ -164,3 +164,19 @@ test("a displaced live lock is put back when the path is still free", async (t) 
   assert.equal(fs.readFileSync(f.lock, "utf8"), live);
   assert.deepEqual(staleFiles(f.dir), []);
 });
+
+test("a displaced live lock is kept aside, not destroyed, when it cannot be linked back", async (t) => {
+  const f = tmp(t);
+  fs.writeFileSync(f.lock, "");
+  backdate(f.lock, 60e3);
+  const live = JSON.stringify({ token: "live", pid: process.ppid });
+  const realLink = fs.promises.link;
+  fs.promises.link = async () => { throw Object.assign(new Error("operation not permitted"), { code: "EPERM" }); };
+  t.after(() => { fs.promises.link = realLink; });
+  const reclaimed = await Writer._reclaimStale(f.lock, { beforeRename: () => swapLock(f.lock, live) });
+  fs.promises.link = realLink;
+  assert.equal(reclaimed, false);
+  const aside = staleFiles(f.dir);
+  assert.equal(aside.length, 1, "the live lock must survive under its aside name");
+  assert.equal(fs.readFileSync(path.join(f.dir, aside[0]), "utf8"), live);
+});
