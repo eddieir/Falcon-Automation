@@ -2,7 +2,7 @@
 
 > **For:** Any engineer or Claude Code session continuing this work
 > **Author:** Peyman Iravani — QA Manager / Tech Lead
-> **Last updated:** Phase 14 ("Evidence-based locator matching and scoped memory") implemented on `phase-14/evidence-based-locator-memory` and open for review. Phases 1–13 are merged and verified on `main` at `11657cb`.
+> **Last updated:** Phase 14 ("Evidence-based locator matching and scoped memory") merged on `main` at `669750d`. Phases 1–14 are now merged and verified.
 > **Repo:** https://github.com/eddieir/Falcon-Automation
 
 ---
@@ -23,7 +23,7 @@ Falcon is a Node.js test automation framework built on Playwright. Its different
 
 | Item | Value |
 |---|---|
-| `main` | Phases 1–13 merged and verified at `11657cb`. Phase 14 is implemented on `phase-14/evidence-based-locator-memory` and is open for review, not merged. |
+| `main` | Phases 1–14 merged and verified at `669750d`. |
 | Node version | 24 in CI (`node-version: "24"` in `ci.yml`, bumped in Phase 6). **Node 20.19+ required locally** — `package.json` declares `engines.node`, since `test:regression`/`test:coverage` use `node:test` flags that don't exist on older Node. |
 | Test target | https://www.saucedemo.com (UI/DB scenarios), https://jsonplaceholder.typicode.com (API scenarios), https://www.google.com (GoogleSearchTest — not run in CI, see §9), plus inline HTML fixtures for `tests/regression/*` suite (no real target site, deterministic) |
 
@@ -48,17 +48,28 @@ OPENAI_API_KEY=              # every call site guards `if (!process.env.OPENAI_A
 # ── API base URL — optional (defaults to jsonplaceholder) ─────────────────
 API_BASE_URL=https://jsonplaceholder.typicode.com
 
-# ── Live dashboard — optional ──────────────────────────────────────────────
-DASHBOARD_PORT=3000
-DASHBOARD_LINGER_MS=60000
-DASHBOARD_URL=http://localhost:3000   # standalone test process → already-running dashboard
+# ── Live dashboard (optional) ──────────────────────────────────────────────
+DASHBOARD_PORT=3000                   # port for `node falcon.js`'s live dashboard
+DASHBOARD_HOST=                       # blank = 127.0.0.1 (this machine only). Set a LAN address
+                                       # or 0.0.0.0 only together with DASHBOARD_TOKEN — the
+                                       # dashboard refuses to start otherwise.
+DASHBOARD_LINGER_MS=60000             # how long the dashboard stays up after a run finishes
+# DASHBOARD_URL=http://localhost:3000  # set on a standalone test run (e.g.
+                                        # `node tests/ui/LoginTest.js`) to report
+                                        # its events into an already-running dashboard
 
-# Phase 7 — dashboard auth, both optional, unset = current unauthenticated behavior
-DASHBOARD_TOKEN=                      # required on POST /emit, GET /events, and the
-                                       # socket handshake once set. Open the dashboard
-                                       # at http://localhost:3000/?token=<value>.
-DASHBOARD_ALLOWED_ORIGIN=             # socket.io CORS origin; defaults to the
-                                       # dashboard's own localhost origin
+# DASHBOARD_TOKEN=              # optional on the default loopback bind (unset =
+                                 # unauthenticated, logs a warning on startup).
+                                 # REQUIRED when DASHBOARD_HOST is not loopback —
+                                 # it's then required on
+                                 # POST /emit, GET /events, and the socket
+                                 # connection. Open the dashboard at
+                                 # http://localhost:3000/?token=<value> once set.
+# DASHBOARD_ALLOWED_ORIGIN=      # optional. Restricts the dashboard's socket.io
+                                 # CORS policy; defaults to the dashboard's own
+                                 # localhost origin. Only matters for cross-origin
+                                 # browser access — same-origin (the bundled UI)
+                                 # is unaffected either way.
 
 # Phase 14 — Tier 2.5 locator memory, both optional and blank by default.
 # Deliberately absent from src/config/testConfig.json: ConfigManager.get()

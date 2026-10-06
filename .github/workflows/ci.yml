@@ -16,6 +16,13 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same branch/PR makes the older run's result moot, so
+# cancel it to save runner minutes. Runs on main are never cancelled: each
+# one is a record of that commit's result and also persists Falcon state.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   regression:
     runs-on: ubuntu-latest
@@ -39,6 +46,10 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # Recent runs of this job finish in about 1.5-2 minutes; 10 minutes leaves
+    # generous headroom for a cold cache while stopping a hung browser or
+    # database step well before the 360-minute default.
+    timeout-minutes: 10
     env:
       HEADLESS: "true"
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -256,4 +267,6 @@ jobs:
           path: |
             reports/
             allure-report/
+            allure-results/
+          if-no-files-found: ignore
           retention-days: 14
