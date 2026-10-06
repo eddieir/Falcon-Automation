@@ -38,7 +38,8 @@
     "review:status:strict": "node scripts/review/status.js --fail-on-stale",
     "history:list": "node scripts/history.js list",
     "history:export": "node scripts/history.js export",
-    "history:check": "node scripts/history.js check"
+    "history:check": "node scripts/history.js check",
+    "dashboard": "node scripts/dashboard.js"
   },
   "keywords": [
     "AI",

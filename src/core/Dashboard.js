@@ -9,6 +9,9 @@ const FlakinessTracker = require("./FlakinessTracker");
 const SharedLocatorMemory = require("./locator/sharedLocatorMemory");
 const ConfigManager = require("./ConfigManager");
 const { validateIntSetting } = require("./util/ConfigValidation");
+const { RunLedger, MAX_BYTES: RUN_LEDGER_MAX_BYTES, DEFAULT_FILE: RUN_LEDGER_DEFAULT_FILE } = require("./history/RunLedger");
+const { validateRecord, computeMetrics, SCHEMA_VERSION } = require("./history/RunRecord");
+const { evaluate, parseTrendSettings } = require("./history/TrendDetector");
 
 // Upper bound on the in-memory event history. Every new tab replays this whole
 // list, and a long sweep emits events indefinitely, so the oldest entries are
@@ -16,6 +19,12 @@ const { validateIntSetting } = require("./util/ConfigValidation");
 // so the cap covers several thousand tests; a tab opened after trimming
 // derives its totals from the retained events only and undercounts.
 const MAX_EVENTS = 20000;
+
+// Phase 15 — GET /history serves at most this many of the newest records.
+const HISTORY_LIMIT = 50;
+const HISTORY_SCHEMA_VERSION = SCHEMA_VERSION;
+const HISTORY_DEFAULT_FILE = RUN_LEDGER_DEFAULT_FILE;
+const HISTORY_MAX_BYTES = RUN_LEDGER_MAX_BYTES;
 
 const COOKIE_NAME = "falcon_dashboard_token";
 
@@ -270,6 +279,83 @@ class Dashboard {
                 budgetExhausted: this._sweep.budgetExhausted,
             },
         };
+    }
+
+    /**
+     * Phase 15 — the payload behind GET /history: the newest 50 valid ledger
+     * records (newest first) plus the trend flags for the latest complete run.
+     *
+     * Reads the ledger file directly and never calls RunLedger.load(), which
+     * moves a damaged file aside: a request must not change anything on disk.
+     * A missing ledger is an empty history; a damaged, unreadable, oversized or
+     * newer-schema one answers `{ runs: [], error: "unavailable" }` with no path
+     * and no error text. Records come out of RunRecord.validateRecord, which
+     * rebuilds each one from the field allow-list, so nothing else can leak.
+     */
+    async historySnapshot() {
+        if (!RunLedger.isEnabled(process.env)) return { disabled: true, runs: [] };
+        const unavailable = (why) => {
+            Logger.warning(`Dashboard: run history unavailable (${why})`);
+            return { runs: [], error: "unavailable" };
+        };
+        const seam = globalThis.__FALCON_TEST_SEAMS__;
+        const override = process.env.FALCON_TEST_RUN_HISTORY_PATH;
+        const file = seam && seam.runHistory === true && typeof override === "string" && override
+            ? override
+            : HISTORY_DEFAULT_FILE;
+
+        let stat;
+        try {
+            stat = await fs.promises.lstat(file);
+        } catch (e) {
+            if (e.code === "ENOENT" || e.code === "ENOTDIR") return { runs: [], flags: [], suppressed: [] };
+            return unavailable(e.code || "error");
+        }
+        if (stat.isSymbolicLink() || !stat.isFile()) return unavailable("not a regular file");
+        if (stat.size > HISTORY_MAX_BYTES) return unavailable("file too large");
+        let parsed;
+        try {
+            const raw = await fs.promises.readFile(file);
+            if (raw.length > HISTORY_MAX_BYTES) return unavailable("file too large");
+            parsed = JSON.parse(raw.toString("utf8"));
+        } catch (e) {
+            return unavailable(e instanceof SyntaxError ? "invalid JSON" : e.code || "error");
+        }
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray(parsed.runs)
+            || parsed.schemaVersion !== HISTORY_SCHEMA_VERSION) {
+            return unavailable("unexpected shape");
+        }
+
+        const runs = parsed.runs
+            .map((item) => validateRecord(item))
+            .filter((v) => v.ok)
+            .map((v) => v.record)
+            .sort((a, b) => (a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : a.runId < b.runId ? -1 : a.runId > b.runId ? 1 : 0));
+
+        let settings;
+        try {
+            settings = parseTrendSettings(process.env);
+        } catch (e) {
+            if (!e || e.code !== "INVALID_CONFIG") throw e;
+            if (!this._warnedTrendSettings) {
+                this._warnedTrendSettings = true;
+                Logger.warning(`Dashboard: invalid ${e.setting || "FALCON_TREND_*"} setting — using the default trend settings`);
+            }
+            settings = undefined; // evaluate() falls back to its defaults
+        }
+
+        const latest = runs.slice().reverse().find((r) => !r.incomplete);
+        const { flags, suppressed } = latest ? evaluate(runs, latest, settings) : { flags: [], suppressed: [] };
+        const recent = runs.slice(-HISTORY_LIMIT).reverse().map((record) => {
+            const metrics = computeMetrics(record.counts, record.heals);
+            return {
+                ...record,
+                pass_rate: metrics.pass_rate,
+                heal_rate: metrics.heal_rate,
+                flagged: record.incomplete ? [] : evaluate(runs, record, settings).flags.map((f) => f.signal),
+            };
+        });
+        return { runs: recent, flags, suppressed };
     }
 
     /**
@@ -626,6 +712,25 @@ class Dashboard {
                 return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
             }
             res.json(this.coverageSnapshot());
+        });
+
+        // Phase 15 — run history. Read-only, GET-only, no parameter of any
+        // kind (query, path or body) reaches the filesystem or the trend
+        // settings. Same token gate and rate limiter as every route above; the
+        // Host/Origin guard already ran. A hosted ledger is never repaired or
+        // moved from here (see historySnapshot).
+        app.get("/history", authLimiter, async (req, res) => {
+            if (!this._isAuthorized(this._tokenFromRequest(req))) {
+                return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
+            }
+            let body;
+            try {
+                body = await this.historySnapshot();
+            } catch (_) {
+                body = { runs: [], error: "unavailable" };
+            }
+            res.setHeader("Cache-Control", "no-store");
+            res.json(body);
         });
 
         // Phase 14 — Tier 2.5 scoped locator evidence review surfaces, kept
