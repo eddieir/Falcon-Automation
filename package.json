@@ -47,22 +47,22 @@
   "author": "Peyman Iravani",
   "license": "MIT",
   "dependencies": {
-    "allure-playwright": "^3.2.0",
+    "allure-playwright": "^3.13.0",
     "axios": "^1.8.2",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
+    "dotenv": "^18.0.5",
+    "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
     "mysql2": "^3.13.0",
-    "openai": "^4.86.2",
-    "pg": "^8.13.3",
+    "openai": "^7.27.0",
+    "pg": "^8.23.1",
     "pixelmatch": "^7.2.0",
     "playwright": "^1.51.0",
     "pngjs": "^7.0.0",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.0",
     "allure": "^3.20.0",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.4"
   }
 }
