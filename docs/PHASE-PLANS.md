@@ -736,7 +736,7 @@ it.
 
 The detailed plan of record is [phase-15-plan.md](phase-15-plan.md): definitions, run record,
 architecture and ADR, trend rules with worked examples, CLI, dashboard and serve mode, CI, security
-requirements SEC-01 to SEC-15, 36 acceptance criteria, test strategy, delivery plan, release gates
+requirements SEC-01 to SEC-15, acceptance criteria, test strategy, delivery plan, release gates
 and rollback.
 
 ### Why
@@ -770,7 +770,7 @@ CI artifact and the ledger itself in a per-branch cache.
 ### Acceptance criteria
 
 Ten consecutive runs produce a readable trend; a deliberately induced heal-rate spike is flagged.
-The full set of 36 criteria is in the detailed plan and will be enforced by
+The full set of criteria is in the detailed plan and will be enforced by
 `docs/phase-15-acceptance-criteria.json` and its traceability check.
 
 ---

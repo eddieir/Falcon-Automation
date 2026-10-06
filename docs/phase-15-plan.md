@@ -59,7 +59,10 @@ These are fixed in one place (`RunRecord.js`) so every surface agrees.
 - **pass_rate** = passed ÷ (passed + failed + unavailable). Quarantined outcomes are reported but
   excluded so a quarantine cannot make the rate look better. `null` when the denominator is 0.
   Deduplicated scenarios are not outcomes and never count.
-- **heals** = successful resolutions only, classified from the events `AIHealer` actually emits:
+- **heals** = successful resolutions only, classified by the shape of the events `AIHealer` actually
+  emits, not by the tier names the README uses (the README describes Tier 2 as `LocatorStore`
+  cached alternatives; in the code, scoped replay of an approved selector is logged under
+  `LocatorMemory`):
   Tier 2 = `tier: "LocatorMemory"`, `status: "approved_reuse"` (scoped replay of an approved
   selector); Tier 2.5 = `tier: "LocatorMemory"`, `status: "accepted"`; Tier 3 = `tier: "LLM"` with a
   non-null `resolved` and `trust: "pending"`. Tier 1 retry successes are not heals. Nothing logs
@@ -111,13 +114,15 @@ and refuses if the file changed since it was read. That function does not wait: 
 changed file returns `{ ok: false }` at once. `RunLedger.append` therefore runs a **bounded retry
 loop** — re-read, re-validate, recompute the digest, push, evict oldest to **500 records**, call
 `write` — up to 5 attempts with a short jittered back-off and a total wait under 2 s, then gives up
-with a warning. Without the loop, concurrent appends would lose records. Note that the writer's
+with a warning. On the first append there is no file, so the expected digest is `null` (what
+`digestSync` returns for a missing file). If computing the digest throws (an oversized or unreadable
+file), the append takes the corrupt-file path below rather than retrying. Without the loop, concurrent appends would lose records. Note that the writer's
 digest reader allows 8 MB; the ledger's own 1 MB cap is enforced separately, below.
 
 - Load is defensive. `RunLedger` `stat`s the file first: over **1 MB** is treated as corrupt.
   `AtomicJsonStore.readJsonSync` has no size bound and its corrupt-file preservation is internal, so
-  `RunLedger` writes its own byte-for-byte sidecar (`run_history.json.corrupt-<timestamp>-<pid>`,
-  `wx`, 0600) for oversized, unparsable or wrongly shaped files, then starts empty. Every record is
+  `RunLedger` writes its own byte-for-byte sidecar (`run_history.json.corrupt-<timestamp>-<pid>-<uuid>`,
+  `wx`, 0600, the same naming as `AtomicJsonStore`) for oversized, unparsable or wrongly shaped files, then starts empty. Every record is
   re-validated and invalid ones are dropped with a count (never their content) logged;
   `__proto__`/`constructor` keys are rejected; records with a future `schemaVersion` are skipped
   with a warning and never rewritten.
