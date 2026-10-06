@@ -188,6 +188,53 @@ test("flags come from the trend detector for the latest complete run", async (t)
   assert.deepEqual(body.runs[0].flagged, body.flags.map((f) => f.signal));
 });
 
+test("each row's flagged list is its own: a mid-ledger heal spike flags only that row", async (t) => {
+  const records = [];
+  for (let i = 0; i < 14; i++) records.push(rec(i, { heal: 0 }));
+  records.push(rec(14, { heal: 40 })); // the spike, 14 clean baseline runs before it
+  for (let i = 15; i < 22; i++) records.push(rec(i, { heal: 0 }));
+  const { d } = await fixture(t, { records });
+  const body = json(await request(d.port, { headers: auth }));
+  assert.equal(body.runs.length, 22);
+  assert.equal(body.runs[0].runId, uuid(21));
+  assert.equal(body.runs[body.runs.length - 1].runId, uuid(0));
+  const byId = new Map(body.runs.map((r) => [r.runId, r]));
+  assert.ok(byId.get(uuid(14)).flagged.includes("heal_rate"), JSON.stringify(byId.get(uuid(14)).flagged));
+  for (const r of body.runs) {
+    if (r.runId !== uuid(14)) assert.ok(!r.flagged.includes("heal_rate"), `${r.runId} flagged ${r.flagged}`);
+  }
+  // The latest run is clean, so the headline flags are empty although an older row is flagged.
+  assert.deepEqual(body.flags, []);
+  assert.deepEqual(body.runs[0].flagged, []);
+});
+
+test("an unchanged ledger is served from the snapshot cache; a change or a new setting recomputes it", async (t) => {
+  const records = [];
+  for (let i = 0; i < 12; i++) records.push(rec(i));
+  const { d, file } = await fixture(t, { records });
+  const reads = [];
+  const realRead = fs.promises.readFile;
+  fs.promises.readFile = function (f, ...rest) { reads.push(f); return realRead.call(this, f, ...rest); };
+  t.after(() => { fs.promises.readFile = realRead; });
+
+  const a = await d.historySnapshot();
+  const b = await d.historySnapshot();
+  assert.equal(reads.filter((f) => f === file).length, 1, "second call must not re-read the file");
+  assert.equal(a, b);
+
+  process.env.FALCON_TREND_BASELINE_N = "5";
+  const c = await d.historySnapshot();
+  assert.equal(reads.filter((f) => f === file).length, 2, "a changed trend setting recomputes");
+  assert.notEqual(c, b);
+  delete process.env.FALCON_TREND_BASELINE_N;
+
+  const ledger = new RunLedger({ filePath: file, backoffMs: 1 });
+  assert.equal((await ledger.append(rec(12))).ok, true);
+  const e = await d.historySnapshot();
+  assert.equal(e.runs.length, 13, "a changed file is re-read");
+  assert.equal(e.runs[0].runId, uuid(12));
+});
+
 test("an invalid FALCON_TREND_* setting falls back to the defaults and the route still answers", async (t) => {
   const { d } = await fixture(t, { records: [rec(0), rec(1)], env: { FALCON_TREND_BASELINE_N: "banana" } });
   const r = await request(d.port, { headers: auth });
@@ -351,4 +398,63 @@ test("serve mode: a non-loopback host without a token exits 1 and never listens 
   assert.equal(result.code, 1);
   assert.ok(!/Dashboard ready/.test(s.out.stdout), s.out.stdout);
   assert.match(s.out.stdout + s.out.stderr, /DASHBOARD_TOKEN/);
+});
+
+// Bounded shutdown (stop() stubbed through a preload; the timeout is shortened through the test seam).
+function hangPreload(dir) {
+  const file = path.join(dir, "hang-preload.cjs");
+  fs.writeFileSync(file, `
+globalThis.__FALCON_TEST_SEAMS__ = Object.freeze({ runHistory: true, dashboardShutdownMs: 600 });
+const Dashboard = require(${JSON.stringify(path.join(root, "src/core/Dashboard"))});
+Dashboard.prototype.stop = function () { return new Promise(() => {}); };
+`);
+  return file;
+}
+
+function serveHanging(t) {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const child = spawn(process.execPath, ["--require", hangPreload(dir), SCRIPT], {
+    cwd: root,
+    env: { ...process.env, DASHBOARD_PORT: "0", DASHBOARD_HOST: "127.0.0.1", DASHBOARD_TOKEN: TOKEN, FALCON_RUN_HISTORY: "off" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  t.after(() => { if (child.exitCode === null) child.kill("SIGKILL"); });
+  let stdout = "";
+  child.stdout.on("data", (c) => (stdout += c));
+  child.stderr.on("data", (c) => (stdout += c));
+  const exited = new Promise((resolve) => child.on("exit", (code, signal) => resolve({ code, signal })));
+  const ready = new Promise((resolve, reject) => {
+    const check = () => { if (/Dashboard ready on/.test(stdout)) resolve(); };
+    child.stdout.on("data", check);
+    child.on("exit", () => reject(new Error(`exited before ready: ${stdout}`)));
+  });
+  const deadline = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${what} timed out: ${stdout}`)), ms).unref())]);
+  return { child, exited, ready, deadline, output: () => stdout };
+}
+
+test("serve mode: a stop() that never settles is abandoned with exit 1 and a warning", async (t) => {
+  const s = serveHanging(t);
+  await s.deadline(s.ready, 20_000, "readiness");
+  const started = Date.now();
+  s.child.kill("SIGTERM");
+  const result = await s.deadline(s.exited, 8_000, "bounded shutdown");
+  assert.deepEqual(result, { code: 1, signal: null });
+  assert.ok(Date.now() - started >= 500, "waited for the bound before giving up");
+  assert.match(s.output(), /did not stop within 600 ms/);
+});
+
+test("serve mode: a second signal during a hanging shutdown exits immediately with 1", async (t) => {
+  const s = serveHanging(t);
+  await s.deadline(s.ready, 20_000, "readiness");
+  s.child.kill("SIGINT");
+  await s.deadline(new Promise((resolve) => {
+    const poll = setInterval(() => { if (/Dashboard stopping/.test(s.output())) { clearInterval(poll); resolve(); } }, 10);
+  }), 5_000, "shutdown start");
+  const started = Date.now();
+  s.child.kill("SIGINT");
+  const result = await s.deadline(s.exited, 5_000, "second signal");
+  assert.deepEqual(result, { code: 1, signal: null });
+  assert.ok(Date.now() - started < 550, `exit took ${Date.now() - started} ms, the bound is 600 ms`);
+  assert.match(s.output(), /second SIGINT/);
 });

@@ -26,6 +26,15 @@ const path = require("node:path");
 const Logger = require(path.join("..", "utils", "Logger"));
 const Dashboard = require(path.join("..", "src", "core", "Dashboard"));
 
+// Shutdown is bounded: a stop() that has not settled in this long exits 1. Tests
+// may shorten it through the seam (a number only, never an environment variable).
+const SHUTDOWN_TIMEOUT_MS = 5000;
+function shutdownTimeoutMs() {
+  const seam = globalThis.__FALCON_TEST_SEAMS__;
+  const v = seam && seam.dashboardShutdownMs;
+  return Number.isInteger(v) && v > 0 ? v : SHUTDOWN_TIMEOUT_MS;
+}
+
 // DASHBOARD_PORT: unset, blank or not a port number -> 3000. 0 is honoured here
 // (an OS-assigned port, which is how the tests avoid clashes); falcon.js maps it to 3000.
 function portFromEnv(raw) {
@@ -60,16 +69,32 @@ async function main() {
   return new Promise((resolve) => {
     let stopping = false;
     const shutdown = async (signal) => {
-      if (stopping) return;
+      if (stopping) {
+        // A second signal while shutting down: stop waiting.
+        Logger.warning(`Dashboard shutdown interrupted by a second ${signal}`);
+        await Logger.flush();
+        process.exit(1);
+      }
       stopping = true;
       Logger.info(`Dashboard stopping (${signal})`);
+      // Later signals must reach this handler too (process.once removed the first).
+      process.on("SIGINT", sigint);
+      process.on("SIGTERM", sigterm);
+      const ms = shutdownTimeoutMs();
+      let timer;
+      const timedOut = new Promise((r) => { timer = setTimeout(() => r("timeout"), ms); });
       let code = 0;
       try {
-        await dashboard.stop();
+        const outcome = await Promise.race([dashboard.stop().then(() => "stopped"), timedOut]);
+        if (outcome === "timeout") {
+          Logger.warning(`Dashboard did not stop within ${ms} ms; exiting`);
+          code = 1;
+        }
       } catch (error) {
         Logger.error(`Dashboard did not stop cleanly (${error.message})`);
         code = 1;
       }
+      clearTimeout(timer);
       resolve(code);
     };
     onSignal = shutdown;
