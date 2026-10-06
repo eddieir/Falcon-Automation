@@ -65,11 +65,16 @@ async function describeLock(lock) {
 // guarantees the content and identity describe the same file, otherwise the
 // call conservatively returns false. If the moved file is not the inspected
 // one it is a live lock: it is linked back (link fails with EEXIST rather than
-// clobbering a lock someone created meanwhile) and the aside name is removed.
+// clobbering a lock someone created meanwhile) and the aside name is removed
+// once the path is held again. If link fails for any other reason (a
+// filesystem without hard links, a permission error) the moved lock is left
+// under its aside name rather than destroyed.
 // Residual case: if the path was re-taken, the moved lock's owner no longer has
 // its lock at that path, and its release only unlinks a lock carrying its own
 // token, so it cannot remove the new holder's lock. Two writers could then
-// overlap briefly; write() still rejects a lost update through its digest check.
+// overlap briefly. write()'s digest check narrows that overlap but does not
+// close it: it runs once, before the replace, so two holders can still
+// interleave between check and replace.
 // `hooks` is a test seam for the windows between the steps.
 const sameFile = (a, b) => a.dev === b.dev && a.ino === b.ino && a.mtimeMs === b.mtimeMs && a.size === b.size;
 
@@ -114,8 +119,16 @@ async function reclaimStale(lock, hooks = {}) {
 
   if (!movedStat || !sameFile(stat, movedStat)) {
     // A different (live) lock was swapped in between inspection and the move.
-    try { await fs.promises.link(aside, lock); } catch {}
-    try { await fs.promises.unlink(aside); } catch {}
+    let pathHeld = false;
+    try {
+      await fs.promises.link(aside, lock);
+      pathHeld = true;
+    } catch (e) {
+      pathHeld = e.code === "EEXIST";
+    }
+    if (pathHeld) {
+      try { await fs.promises.unlink(aside); } catch {}
+    }
     return false;
   }
 
