@@ -492,12 +492,11 @@ p.validateRecord = () => { throw new Error("SECRET-INTERNAL-DETAIL /Users/someon
   }
 });
 
-test("a reader that closes stdout early (EPIPE) ends the CLI cleanly with exit 0", async (t) => {
-  const { dir, file } = workdir(t);
-  await seed(file, Array.from({ length: 60 }, (_, i) => rec(i + 1)));
+// Runs the CLI with its stdout closed before it writes anything (EPIPE).
+function historyWithClosedStdout(dir, file, args) {
   const script = `
 const { spawn } = require("node:child_process");
-const child = spawn(process.execPath, ["--require", ${JSON.stringify(PRELOAD)}, ${JSON.stringify(CLI)}, "export", "--format=csv"],
+const child = spawn(process.execPath, ["--require", ${JSON.stringify(PRELOAD)}, ${JSON.stringify(CLI)}, ...${JSON.stringify(args)}],
   { env: { ...process.env, FALCON_TEST_RUN_HISTORY_PATH: ${JSON.stringify(file)} }, stdio: ["ignore", "pipe", "pipe"] });
 let err = "";
 child.stderr.on("data", (d) => { err += d; });
@@ -505,8 +504,22 @@ child.stdout.destroy(); // the reader is gone before the CLI writes anything
 child.on("close", (code) => { process.stdout.write(JSON.stringify({ code, err })); });
 `;
   const out = spawnSync(process.execPath, ["-e", script], { cwd: dir, encoding: "utf8", timeout: 15000 });
-  const { code, err } = JSON.parse(out.stdout);
+  return JSON.parse(out.stdout);
+}
+
+test("a reader that closes stdout early (EPIPE) ends the CLI cleanly with exit 0", async (t) => {
+  const { dir, file } = workdir(t);
+  await seed(file, Array.from({ length: 60 }, (_, i) => rec(i + 1)));
+  const { code, err } = historyWithClosedStdout(dir, file, ["export", "--format=csv"]);
   assert.equal(code, 0, err);
+  assert.equal(err, "");
+});
+
+test("EPIPE does not hide a flag: check --strict still exits 1 when the reader stops early", async (t) => {
+  const { dir, file } = workdir(t);
+  await flaggedLedger(file);
+  const { code, err } = historyWithClosedStdout(dir, file, ["check", "--strict"]);
+  assert.equal(code, 1, err);
   assert.equal(err, "");
 });
 
