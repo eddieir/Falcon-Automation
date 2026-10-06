@@ -465,3 +465,66 @@ test("FALCON_TEST_RUN_HISTORY_PATH is inert without the preload marker", async (
   const out = history(["list"], { file, preload: false });
   assert.ok(!out.stdout.includes("seeded-branch"), "the env var alone must not redirect the ledger");
 });
+
+// ---------------------------------------------------------------------------
+// Unexpected failures and the output formatters
+// ---------------------------------------------------------------------------
+
+test("an unexpected internal error exits 2 with a generic message, never 1 and never the error text", async (t) => {
+  const { dir, file } = workdir(t);
+  await seed(file, [rec(1), rec(2)]);
+  const boom = path.join(dir, "boom-preload.cjs");
+  fs.writeFileSync(boom, `
+const p = require(${JSON.stringify(path.join(root, "src/core/history/RunRecord.js"))});
+p.validateRecord = () => { throw new Error("SECRET-INTERNAL-DETAIL /Users/someone/path"); };
+`);
+  for (const args of [["list"], ["export", "--format=json"], ["check", "--strict"]]) {
+    const child = spawnSync(process.execPath, ["--require", PRELOAD, "--require", boom, CLI, ...args], {
+      cwd: dir,
+      env: { ...process.env, FALCON_TEST_RUN_HISTORY_PATH: file },
+      encoding: "utf8",
+      timeout: 15000,
+    });
+    assert.equal(child.error, undefined);
+    assert.equal(child.status, 2, `${args.join(" ")}: ${child.stdout}${child.stderr}`);
+    assert.match(child.stderr, /unexpected internal error/);
+    assert.doesNotMatch(child.stderr + child.stdout, /SECRET-INTERNAL-DETAIL|\/Users\/someone|\bat .*\.js:\d+/);
+  }
+});
+
+test("a reader that closes stdout early (EPIPE) ends the CLI cleanly with exit 0", async (t) => {
+  const { dir, file } = workdir(t);
+  await seed(file, Array.from({ length: 60 }, (_, i) => rec(i + 1)));
+  const script = `
+const { spawn } = require("node:child_process");
+const child = spawn(process.execPath, ["--require", ${JSON.stringify(PRELOAD)}, ${JSON.stringify(CLI)}, "export", "--format=csv"],
+  { env: { ...process.env, FALCON_TEST_RUN_HISTORY_PATH: ${JSON.stringify(file)} }, stdio: ["ignore", "pipe", "pipe"] });
+let err = "";
+child.stderr.on("data", (d) => { err += d; });
+child.stdout.destroy(); // the reader is gone before the CLI writes anything
+child.on("close", (code) => { process.stdout.write(JSON.stringify({ code, err })); });
+`;
+  const out = spawnSync(process.execPath, ["-e", script], { cwd: dir, encoding: "utf8", timeout: 15000 });
+  const { code, err } = JSON.parse(out.stdout);
+  assert.equal(code, 0, err);
+  assert.equal(err, "");
+});
+
+test("list and check formatters strip control bytes even from a record that bypassed validation (AC-23)", () => {
+  const { listRuns, checkRuns, exportCsv } = require("../../scripts/history.js");
+  const hostile = "\x1b[31mred\x1b]8;;http://evil\x07link\r\nINJECTED\x00\x7f\x9b";
+  const bad = rec(1, { branch: hostile });
+  Object.assign(bad, { branch: hostile, sha: hostile, result: hostile, timestamp: hostile, runId: hostile });
+  const settings = { baselineN: 10, minBaseline: 1 };
+  const noControl = (text, label) => {
+    // Only the newline separating rows and a trailing newline are allowed.
+    assert.doesNotMatch(text.replace(/\n/g, ""), /[\x00-\x1f\x7f-\x9f]/, label);
+    assert.doesNotMatch(text, /\r|\x1b/, label);
+  };
+  const list = listRuns([bad], 20);
+  noControl(list, "list");
+  assert.equal(list.trimEnd().split("\n").length, 2, "hostile LF must not add rows");
+  noControl(checkRuns([bad], settings).text, "check");
+  const csv = exportCsv([bad], settings);
+  assert.doesNotMatch(csv, /\x1b|\x00|\x07/, "csv");
+});
