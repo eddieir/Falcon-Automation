@@ -108,66 +108,101 @@ function evaluate(runs, current, opts = {}) {
       .sort(compare)
       .slice(-baselineN);
 
-    if (baseline.length < minBaseline) return { flags: [], suppressed: ["insufficient-baseline"] };
-
-    const coverages = baseline.filter((r) => r.coverage).map((r) => r.coverage.pagesTested);
-    if (coverages.length > 0) {
-      if (!now.coverage || now.coverage.pagesTested < COVERAGE_RATIO * median(coverages)) {
-        return { flags: [], suppressed: ["reduced-coverage"] };
-      }
-    } else if (!now.coverage) {
-      return { flags: [], suppressed: ["reduced-coverage"] };
-    }
-
-    const flags = [];
-    const suppressed = [];
-    const nowMetrics = metricsOf(now);
-    const baseMetrics = baseline.map(metricsOf);
-
-    // Rates: null denominators are skipped on both sides.
-    for (const [signal, key] of [["heal_rate", "heal_rate"], ["pass_rate", "pass_rate"]]) {
-      const value = nowMetrics[key];
-      if (value === null) continue;
-      const values = baseMetrics.map((m) => m[key]).filter((v) => v !== null);
-      if (values.length < minBaseline) {
-        suppressed.push(`insufficient-baseline:${signal}`);
-        continue;
-      }
-      const { m, band } = stats(values);
-      if (signal === "heal_rate") {
-        const threshold = m + Math.max(band, HEAL_FLOOR);
-        if (value >= HEAL_GATE && value > threshold) flags.push(flag(signal, value, m, threshold, "is above"));
-      } else {
-        const threshold = m - Math.max(band, PASS_FLOOR);
-        if (value < PASS_GATE && value < threshold) flags.push(flag(signal, value, m, threshold, "is below"));
-      }
-    }
-
-    const durations = stats(baseline.map((r) => r.durationMs));
-    const durationThreshold = durations.m + Math.max(durations.band, DURATION_FRACTION * durations.m, DURATION_FLOOR_MS);
-    if (now.durationMs > durationThreshold) {
-      flags.push(flag("duration", now.durationMs, durations.m, durationThreshold, "is above"));
-    }
-
-    const pending = baseline.map((r) => r.pendingDepth);
-    const pendingMedian = median(pending);
-    const last = pending.slice(-2);
-    const rising = last.length === 2 && last[0] < last[1] && last[1] < now.pendingDepth;
-    const pendingThreshold = pendingMedian + PENDING_MARGIN;
-    if (now.pendingDepth >= pendingThreshold && rising) {
-      flags.push(flag("pending_depth", now.pendingDepth, pendingMedian, pendingThreshold, "is above"));
-    }
-
-    const quarantineMedian = median(baseline.map((r) => r.quarantineCount));
-    const quarantineThreshold = quarantineMedian + QUARANTINE_MARGIN;
-    if (now.quarantineCount >= quarantineThreshold) {
-      flags.push(flag("quarantine_count", now.quarantineCount, quarantineMedian, quarantineThreshold, "is above"));
-    }
-
-    return { flags, suppressed };
+    return judge(now, baseline, minBaseline);
   } catch {
     return { flags: [], suppressed: ["evaluation-error"] };
   }
+}
+
+/** Rules shared by evaluate() and evaluateMany(): `now` is a valid complete record, `baseline` its eligible predecessors. */
+function judge(now, baseline, minBaseline) {
+  if (baseline.length < minBaseline) return { flags: [], suppressed: ["insufficient-baseline"] };
+
+  const coverages = baseline.filter((r) => r.coverage).map((r) => r.coverage.pagesTested);
+  if (coverages.length > 0) {
+    if (!now.coverage || now.coverage.pagesTested < COVERAGE_RATIO * median(coverages)) {
+      return { flags: [], suppressed: ["reduced-coverage"] };
+    }
+  } else if (!now.coverage) {
+    return { flags: [], suppressed: ["reduced-coverage"] };
+  }
+
+  const flags = [];
+  const suppressed = [];
+  const nowMetrics = metricsOf(now);
+  const baseMetrics = baseline.map(metricsOf);
+
+  // Rates: null denominators are skipped on both sides.
+  for (const [signal, key] of [["heal_rate", "heal_rate"], ["pass_rate", "pass_rate"]]) {
+    const value = nowMetrics[key];
+    if (value === null) continue;
+    const values = baseMetrics.map((m) => m[key]).filter((v) => v !== null);
+    if (values.length < minBaseline) {
+      suppressed.push(`insufficient-baseline:${signal}`);
+      continue;
+    }
+    const { m, band } = stats(values);
+    if (signal === "heal_rate") {
+      const threshold = m + Math.max(band, HEAL_FLOOR);
+      if (value >= HEAL_GATE && value > threshold) flags.push(flag(signal, value, m, threshold, "is above"));
+    } else {
+      const threshold = m - Math.max(band, PASS_FLOOR);
+      if (value < PASS_GATE && value < threshold) flags.push(flag(signal, value, m, threshold, "is below"));
+    }
+  }
+
+  const durations = stats(baseline.map((r) => r.durationMs));
+  const durationThreshold = durations.m + Math.max(durations.band, DURATION_FRACTION * durations.m, DURATION_FLOOR_MS);
+  if (now.durationMs > durationThreshold) {
+    flags.push(flag("duration", now.durationMs, durations.m, durationThreshold, "is above"));
+  }
+
+  const pending = baseline.map((r) => r.pendingDepth);
+  const pendingMedian = median(pending);
+  const last = pending.slice(-2);
+  const rising = last.length === 2 && last[0] < last[1] && last[1] < now.pendingDepth;
+  const pendingThreshold = pendingMedian + PENDING_MARGIN;
+  if (now.pendingDepth >= pendingThreshold && rising) {
+    flags.push(flag("pending_depth", now.pendingDepth, pendingMedian, pendingThreshold, "is above"));
+  }
+
+  const quarantineMedian = median(baseline.map((r) => r.quarantineCount));
+  const quarantineThreshold = quarantineMedian + QUARANTINE_MARGIN;
+  if (now.quarantineCount >= quarantineThreshold) {
+    flags.push(flag("quarantine_count", now.quarantineCount, quarantineMedian, quarantineThreshold, "is above"));
+  }
+
+  return { flags, suppressed };
+}
+
+/**
+ * Batch form of evaluate() for callers that already hold validated records.
+ * `sortedValidRuns` must be validateRecord() output sorted by (timestamp, runId);
+ * nothing is re-validated or re-sorted here. For each index the result equals
+ * evaluate(sortedValidRuns, sortedValidRuns[index], settings). Pure; never throws.
+ *
+ * @returns {Array<{flags:Array, suppressed:string[]}>} one entry per index, same order
+ */
+function evaluateMany(sortedValidRuns, indices, opts = {}) {
+  const o = opts && typeof opts === "object" ? opts : {};
+  const baselineN = validCount(o.baselineN, BASELINE_N);
+  const minBaseline = validCount(o.minBaseline, MIN_BASELINE);
+  const runs = Array.isArray(sortedValidRuns) ? sortedValidRuns : [];
+  return (Array.isArray(indices) ? indices : []).map((index) => {
+    try {
+      const now = runs[index];
+      if (!now) return { flags: [], suppressed: ["invalid-current"] };
+      if (now.incomplete) return { flags: [], suppressed: ["incomplete-run"] };
+      const baseline = [];
+      for (let j = index - 1; j >= 0 && baseline.length < baselineN; j--) {
+        const r = runs[j];
+        if (!r.incomplete && r.branch === now.branch && r.repeat === now.repeat && compare(r, now) < 0) baseline.push(r);
+      }
+      return judge(now, baseline.reverse(), minBaseline);
+    } catch {
+      return { flags: [], suppressed: ["evaluation-error"] };
+    }
+  });
 }
 
 /**
@@ -195,4 +230,4 @@ function parseTrendSettings(env = process.env) {
 }
 
 module.exports = { BASELINE_N, MIN_BASELINE, K, MAD_SCALE, COVERAGE_RATIO, HEAL_GATE, HEAL_FLOOR, PASS_GATE, PASS_FLOOR,
-  DURATION_FRACTION, DURATION_FLOOR_MS, PENDING_MARGIN, QUARANTINE_MARGIN, evaluate, parseTrendSettings };
+  DURATION_FRACTION, DURATION_FLOOR_MS, PENDING_MARGIN, QUARANTINE_MARGIN, evaluate, evaluateMany, parseTrendSettings };

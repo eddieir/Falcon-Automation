@@ -11,7 +11,7 @@ const ConfigManager = require("./ConfigManager");
 const { validateIntSetting } = require("./util/ConfigValidation");
 const { RunLedger, MAX_BYTES: RUN_LEDGER_MAX_BYTES, DEFAULT_FILE: RUN_LEDGER_DEFAULT_FILE } = require("./history/RunLedger");
 const { validateRecord, computeMetrics, SCHEMA_VERSION } = require("./history/RunRecord");
-const { evaluate, parseTrendSettings } = require("./history/TrendDetector");
+const { evaluateMany, parseTrendSettings } = require("./history/TrendDetector");
 
 // Upper bound on the in-memory event history. Every new tab replays this whole
 // list, and a long sweep emits events indefinitely, so the oldest entries are
@@ -313,6 +313,23 @@ class Dashboard {
         }
         if (stat.isSymbolicLink() || !stat.isFile()) return unavailable("not a regular file");
         if (stat.size > HISTORY_MAX_BYTES) return unavailable("file too large");
+        let settings;
+        try {
+            settings = parseTrendSettings(process.env);
+        } catch (e) {
+            if (!e || e.code !== "INVALID_CONFIG") throw e;
+            if (!this._warnedTrendSettings) {
+                this._warnedTrendSettings = true;
+                Logger.warning(`Dashboard: invalid ${e.setting || "FALCON_TREND_*"} setting — using the default trend settings`);
+            }
+            settings = undefined; // evaluate() falls back to its defaults
+        }
+
+        // Unchanged file + unchanged trend settings -> the same answer; skip the
+        // read, validation, sort and trend evaluation entirely.
+        const key = `${file}|${stat.dev}|${stat.ino}|${stat.size}|${stat.mtimeMs}|${JSON.stringify(settings || null)}`;
+        if (this._historyCache && this._historyCache.key === key) return this._historyCache.body;
+
         let parsed;
         try {
             const raw = await fs.promises.readFile(file);
@@ -332,30 +349,29 @@ class Dashboard {
             .map((v) => v.record)
             .sort((a, b) => (a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : a.runId < b.runId ? -1 : a.runId > b.runId ? 1 : 0));
 
-        let settings;
-        try {
-            settings = parseTrendSettings(process.env);
-        } catch (e) {
-            if (!e || e.code !== "INVALID_CONFIG") throw e;
-            if (!this._warnedTrendSettings) {
-                this._warnedTrendSettings = true;
-                Logger.warning(`Dashboard: invalid ${e.setting || "FALCON_TREND_*"} setting — using the default trend settings`);
-            }
-            settings = undefined; // evaluate() falls back to its defaults
-        }
-
-        const latest = runs.slice().reverse().find((r) => !r.incomplete);
-        const { flags, suppressed } = latest ? evaluate(runs, latest, settings) : { flags: [], suppressed: [] };
-        const recent = runs.slice(-HISTORY_LIMIT).reverse().map((record) => {
+        // Validated and sorted once; every row's flags are computed against this list.
+        const lastComplete = runs.map((r) => r.incomplete).lastIndexOf(false);
+        const first = Math.max(0, runs.length - HISTORY_LIMIT);
+        const indices = [];
+        for (let i = runs.length - 1; i >= first; i--) indices.push(i);
+        if (lastComplete >= 0 && lastComplete < first) indices.push(lastComplete);
+        const results = evaluateMany(runs, indices, settings);
+        // indices run newest-first, so row i sits at results[runs.length - 1 - i]; an older latest-complete run is appended last.
+        const latestResult = lastComplete < 0 ? null : lastComplete >= first ? results[runs.length - 1 - lastComplete] : results[results.length - 1];
+        const { flags, suppressed } = latestResult || { flags: [], suppressed: [] };
+        const recent = indices.filter((i) => i >= first).map((i, n) => {
+            const record = runs[i];
             const metrics = computeMetrics(record.counts, record.heals);
             return {
                 ...record,
                 pass_rate: metrics.pass_rate,
                 heal_rate: metrics.heal_rate,
-                flagged: record.incomplete ? [] : evaluate(runs, record, settings).flags.map((f) => f.signal),
+                flagged: record.incomplete ? [] : results[n].flags.map((f) => f.signal),
             };
         });
-        return { runs: recent, flags, suppressed };
+        const body = { runs: recent, flags, suppressed };
+        this._historyCache = { key, body };
+        return body;
     }
 
     /**

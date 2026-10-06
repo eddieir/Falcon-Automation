@@ -10,6 +10,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const T = require("../../src/core/history/TrendDetector.js");
+const { validateRecord } = require("../../src/core/history/RunRecord.js");
 
 const BASE_TS = Date.UTC(2026, 0, 1, 0, 0, 0);
 
@@ -321,4 +322,46 @@ test("parseTrendSettings lets INVALID_CONFIG propagate naming the setting", () =
   for (const [name, value] of bad) {
     assert.throws(() => T.parseTrendSettings({ [name]: value }), (e) => e.code === "INVALID_CONFIG" && e.setting === name, `${name}=${value}`);
   }
+});
+
+// ---- evaluateMany -------------------------------------------------------------
+
+test("evaluateMany equals evaluate() for every row of a mixed synthetic ledger", () => {
+  const runs = [];
+  for (let i = 0; i < 60; i++) {
+    const o = {};
+    if (i % 9 === 4) o.incomplete = true;
+    if (i % 11 === 5) o.branch = "dev";
+    if (i % 13 === 6) o.repeat = 3;
+    if (i % 17 === 8) o.coverage = null;
+    if (i === 25 || i === 40) o.heal = 40;
+    if (i === 33) o.failed = 30;
+    if (i === 45) o.duration = 400_000;
+    if (i === 50) o.coverage = cov(2);
+    o.heal = o.heal ?? (i % 4);
+    runs.push(rec(i, o));
+  }
+  // Same timestamp and different runIds, and an exact duplicate (timestamp, runId).
+  runs.push(rec(60, { timestamp: runs[59].timestamp, runId: uuid(999) }));
+  runs.push({ ...runs[10] });
+  const sorted = runs.map((r) => validateRecord(r)).filter((v) => v.ok).map((v) => v.record)
+    .sort((a, b) => (a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : a.runId < b.runId ? -1 : a.runId > b.runId ? 1 : 0));
+  deepFreeze(sorted);
+  const indices = sorted.map((_, i) => i).reverse();
+  for (const settings of [undefined, { baselineN: 5, minBaseline: 3 }, { baselineN: 20, minBaseline: 10 }]) {
+    const many = T.evaluateMany(sorted, indices, settings);
+    assert.equal(many.length, indices.length);
+    let nonEmpty = 0;
+    indices.forEach((idx, n) => {
+      assert.deepEqual(many[n], T.evaluate(sorted, sorted[idx], settings), `row ${idx} settings ${JSON.stringify(settings)}`);
+      if (many[n].flags.length) nonEmpty++;
+    });
+    assert.ok(nonEmpty > 0, "the synthetic ledger must actually produce flags");
+  }
+});
+
+test("evaluateMany never throws on bad input", () => {
+  assert.deepEqual(T.evaluateMany(null, [0, 1]).map((r) => r.suppressed), [["invalid-current"], ["invalid-current"]]);
+  assert.deepEqual(T.evaluateMany([], null), []);
+  assert.doesNotThrow(() => T.evaluateMany([rec(0)], [0, 5, -1, "x"], "nope"));
 });
