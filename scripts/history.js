@@ -30,7 +30,8 @@
  *       (FALCON_RUN_HISTORY=off prints "history: disabled"), and flags raised
  *       without --strict
  *   1 - `check --strict` and at least one flag
- *   2 - usage error (unknown subcommand or flag, path-like or extra argument,
+ *   2 - an unexpected internal error (a generic message is printed, never the
+ *       error's own text), or a usage error (unknown subcommand or flag, path-like or extra argument,
  *       invalid --limit or --format, invalid FALCON_TREND_* setting), or the
  *       ledger is unreadable, corrupt, oversized, has a newer schemaVersion, or
  *       is not a regular file
@@ -160,7 +161,7 @@ function listRuns(runs, limit) {
   const rows = runs.slice().reverse().slice(0, limit).map((r) => {
     const m = computeMetrics(r.counts, r.heals);
     return [
-      r.timestamp, sanitizeField(r.branch), sanitizeField(r.sha.slice(0, 7)), r.result,
+      sanitizeField(r.timestamp), sanitizeField(r.branch), sanitizeField(r.sha.slice(0, 7)), sanitizeField(r.result),
       pct(m.pass_rate), pct(m.heal_rate), `${(r.durationMs / 1000).toFixed(1)}s`,
       String(r.pendingDepth), String(r.quarantineCount),
     ];
@@ -194,7 +195,7 @@ function checkRuns(runs, settings) {
   const latest = runs.slice().reverse().find((r) => !r.incomplete);
   if (!latest) return { text: "no flags (no complete run recorded)\n", flagged: 0 };
   const { flags, suppressed } = evaluate(runs, latest, settings);
-  const head = `history check: ${sanitizeField(latest.sha.slice(0, 7))} on ${sanitizeField(latest.branch)} at ${latest.timestamp}\n`;
+  const head = `history check: ${sanitizeField(latest.sha.slice(0, 7))} on ${sanitizeField(latest.branch)} at ${sanitizeField(latest.timestamp)}\n`;
   if (flags.length === 0) {
     const why = suppressed.length ? ` (${suppressed.map(sanitizeField).join(", ")})` : "";
     return { text: `${head}no flags${why}\n`, flagged: 0 };
@@ -223,10 +224,32 @@ function main(argv) {
   return 0;
 }
 
-try {
-  process.exitCode = main(process.argv.slice(2));
-} catch (error) {
-  if (!(error instanceof CliError)) throw error;
-  process.stderr.write(`${sanitizeField(error.message)}\n${USAGE}\n`);
-  process.exitCode = error.exitCode;
+function fail(error) {
+  if (error instanceof CliError) {
+    process.stderr.write(`${sanitizeField(error.message)}\n${USAGE}\n`);
+    process.exitCode = error.exitCode;
+    return;
+  }
+  // Anything else is a bug or an environment fault. Print nothing from the
+  // error itself (it may carry paths or ledger content) and keep exit 1 for
+  // "--strict and flagged" only.
+  try { process.stderr.write("history: unexpected internal error.\n"); } catch { /* stderr gone */ }
+  process.exitCode = 2;
 }
+
+if (require.main === module) {
+  // A consumer that closes the pipe early (`| head`) has chosen to truncate the
+  // output, so EPIPE is a clean exit 0, even for `check --strict`. Any other
+  // stdout error is an internal error (exit 2).
+  process.stdout.on("error", (error) => {
+    if (error && error.code === "EPIPE") process.exitCode = 0;
+    else fail(error);
+  });
+  try {
+    process.exitCode = main(process.argv.slice(2));
+  } catch (error) {
+    fail(error);
+  }
+}
+
+module.exports = { listRuns, checkRuns, exportCsv, CSV_COLUMNS };

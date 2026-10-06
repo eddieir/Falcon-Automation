@@ -126,7 +126,7 @@ digest reader allows 8 MB; the ledger's own 1 MB cap is enforced separately, bel
   re-validated and invalid ones are dropped with a count (never their content) logged;
   `__proto__`/`constructor` keys are rejected. Records with a future `schemaVersion` inside a
   version-1 file are not read, but are kept on rewrite, capped at 2 KB each, and count toward the
-  500-record cap so the file cannot grow without bound. A file whose envelope has a future version,
+  500-record cap so the file cannot grow without bound. A future-version record over 2 KB is dropped with a warning, not kept: losing that newer data is deliberate, to keep the file bounded. A file whose envelope has a future version,
   or that cannot be read, makes the ledger read-only for that process. A symlink or non-regular file
   at the ledger path is refused, never followed. A bad file is moved aside with `rename` (so the
   sidecar is the original bytes and nothing is copied or deleted); if that fails, the ledger is
@@ -207,6 +207,8 @@ arguments; unknown flags are rejected; output goes to stdout only. Exit codes: 0
 under `--strict`, 2 usage or ledger error. A missing ledger is not an error (`list` prints nothing,
 `check` exits 0). Every string printed to a terminal goes through `sanitizeField`; CSV cells go
 through `csvCell`.
+An invalid `FALCON_TREND_*` setting makes `check` and `export --format=csv` exit 2, even on an empty
+ledger. `list` and `export --format=json` do not read those settings. A closed stdout (`| head`) exits 0.
 
 **Dashboard.** `GET /history` returns the last 50 records and current flags. GET only, behind the
 existing token check, Host/Origin guard and rate limiter. The History panel shows a table of the last
