@@ -97,7 +97,7 @@ One record per `falcon.js` run, built from a fixed allow-list. Anything not list
 | `heals` | `{t2, t25, t3}` integers |
 | `healFailures` | `{t25, t3, exhausted}` integers (`t25` covers every `LocatorMemory` failure status) |
 | `pendingDepth`, `quarantineCount` | integers |
-| `durationMs` | finite, ≥ 0 |
+| `durationMs` | finite, 0 to 7 days in ms |
 | `incomplete` | `true` on the crash path, else `false` |
 
 **Never recorded:** URLs, selectors, page text, error messages, scenario names, reviewer identities,
@@ -124,8 +124,13 @@ digest reader allows 8 MB; the ledger's own 1 MB cap is enforced separately, bel
   `RunLedger` writes its own byte-for-byte sidecar (`run_history.json.corrupt-<timestamp>-<pid>-<uuid>`,
   `wx`, 0600, the same naming as `AtomicJsonStore`) for oversized, unparsable or wrongly shaped files, then starts empty. Every record is
   re-validated and invalid ones are dropped with a count (never their content) logged;
-  `__proto__`/`constructor` keys are rejected; records with a future `schemaVersion` are skipped
-  with a warning and never rewritten.
+  `__proto__`/`constructor` keys are rejected. Records with a future `schemaVersion` inside a
+  version-1 file are not read, but are kept on rewrite, capped at 2 KB each, and count toward the
+  500-record cap so the file cannot grow without bound. A file whose envelope has a future version,
+  or that cannot be read, makes the ledger read-only for that process. A symlink or non-regular file
+  at the ledger path is refused, never followed. A bad file is moved aside with `rename` (so the
+  sidecar is the original bytes and nothing is copied or deleted); if that fails, the ledger is
+  read-only for the process.
 - A write failure logs a warning and never throws.
 - **Phase 16:** exactly one record per logical run, written by the aggregating process after shards
   finish. `RunLedger.merge(a, b)` deduplicates by `runId` and orders by `(timestamp, runId)`, so
@@ -162,8 +167,11 @@ Storage), so it cannot hold up the exit. It reads `HealingReport._instance.logs`
 Baseline: the previous **10** records on the **same branch** with the **same repeat count** and
 `incomplete: false`. For each signal, *m* = median, *band* = 3 × 1.4826 × MAD.
 
-**Suppress every flag** (and report why) when: the current run is incomplete; fewer than 10 eligible
-baseline runs exist; the current `pagesTested` is below 80% of the baseline median.
+**Suppress every flag** (and report why) when: the current run is incomplete (`incomplete-run`); it
+fails validation (`invalid-current`); fewer than 10 eligible baseline runs exist
+(`insufficient-baseline`); or its `pagesTested` is below 80% of the baseline median, or it has no
+coverage at all (`reduced-coverage`). A rate signal whose baseline has fewer than 10 non-null values
+is skipped on its own (`insufficient-baseline:<signal>`) while the other signals are still evaluated.
 
 | Signal | Flag when |
 |---|---|
