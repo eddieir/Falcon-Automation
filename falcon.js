@@ -47,7 +47,7 @@
  *   headless env var respected, --url= optional (defaults to saucedemo).
  */
 
-require("dotenv").config();
+require("dotenv").config({ quiet: true });
 const { chromium }    = require("playwright");
 const DOMIssueScanner = require("./src/core/DOMIssueScanner");
 const ClickExplorer   = require("./src/core/ClickExplorer");
