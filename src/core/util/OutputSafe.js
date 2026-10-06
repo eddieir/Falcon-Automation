@@ -210,4 +210,39 @@ function sanitizeField(value) {
     return scan(value, (ch, code) => VISIBLE_ESCAPE[code]);
 }
 
-module.exports = { stripControlChars, sanitizeField };
+const CSV_FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
+/**
+ * Render one value as a single RFC 4180 CSV cell that is safe to open in a
+ * spreadsheet (SEC-04). null/undefined become an empty cell; finite numbers
+ * are written as-is (a real number is not a formula, so a negative stays
+ * "-0.5"); non-finite numbers become empty. Strings first lose terminal
+ * escapes and control bytes (tab, CR and LF are kept for the next steps).
+ * A cell then starting with = + - @ tab or CR gets a leading apostrophe so a
+ * spreadsheet reads it as text, and a cell containing a comma, quote, CR or
+ * LF is wrapped in double quotes with embedded quotes doubled. Never throws.
+ *
+ * @param {*} value
+ * @returns {string}
+ */
+function csvCell(value) {
+    if (value === null || value === undefined) return "";
+    if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+    let text = stripControlChars(value);
+    if (CSV_FORMULA_PREFIX.test(text)) text = `'${text}`;
+    if (/[",\r\n]/.test(text)) text = `"${text.replace(/"/g, '""')}"`;
+    return text;
+}
+
+/**
+ * Join cells into one CSV record terminated by CRLF (RFC 4180).
+ *
+ * @param {Array} cells
+ * @returns {string}
+ */
+function csvRow(cells) {
+    const list = Array.isArray(cells) ? cells : [];
+    return `${list.map(csvCell).join(",")}\r\n`;
+}
+
+module.exports = { stripControlChars, sanitizeField, csvCell, csvRow };
