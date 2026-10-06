@@ -404,7 +404,8 @@ class LocatorMemory {
 
   _persist() {
     const snapshot = _clone(this._toPersistable());
-    this._queue = this._queue.then(() => this._writeState(snapshot));
+    // Chain off a rejection-proof tail so one failed write cannot poison later ones.
+    this._queue = this._queue.catch(() => {}).then(() => this._writeState(snapshot));
     return this._queue;
   }
 
@@ -672,8 +673,8 @@ class LocatorMemory {
       this.entries=stagedEntries;this.rejections=stagedRejections;this._buildRejectionIndex();
       return {ok:true,status:200,entry:{..._clone(entry),revision:this._revision(entry)},error:null};
     };
-    const result=this._queue.then(operation);
-    this._queue=result.then(()=>undefined);
+    const result=this._queue.catch(()=>{}).then(operation);
+    this._queue=result.then(()=>undefined,()=>undefined);
     return result;
   }
 
