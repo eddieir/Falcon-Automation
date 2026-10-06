@@ -732,36 +732,46 @@ it.
 
 ---
 
-## Phase 15 — Run history and trend
+## Phase 15 — Run history and trend — PLANNED
+
+The detailed plan of record is [phase-15-plan.md](phase-15-plan.md): definitions, run record,
+architecture and ADR, trend rules with worked examples, CLI, dashboard and serve mode, CI, security
+requirements SEC-01 to SEC-15, 36 acceptance criteria, test strategy, delivery plan, release gates
+and rollback.
 
 ### Why
 
 A QA manager's real question is "are we getting better or worse?" Falcon cannot answer it. The
 dashboard is live-only and evaporates when the process exits; `test-report.json` is overwritten every
-run. Phase 9 gave per-scenario history; there is nothing at suite level.
+run. Phase 9 gave per-scenario history; there is nothing at suite level, and no run records the
+commit it tested.
 
 ### Competitive angle
 
 Mabl and Testim's dashboards are their stickiest feature and the main thing the subscription buys.
-Falcon can offer the same trend intelligence as a local artifact the team owns, diffable in the repo,
-with no vendor holding the history hostage.
+Falcon can offer the same trend intelligence as a local artifact the team owns, with no vendor
+holding the history. `data/` is not committed, so the durable forms are the exported JSON/CSV in the
+CI artifact and the ledger itself in a per-branch cache.
 
-### Implementation specification
+### Implementation specification (summary)
 
-- An append-only run ledger (`data/run_history.json`, bounded, one record per run): timestamp, git
-  SHA and branch, pages tested, scenario counts by status, heal counts by tier, pending-review depth,
-  quarantine count, total duration.
-- A trend view in the dashboard that outlives the run, served from the ledger.
-- **Trend-level regression detection**, which is the most valuable part: a rising heal rate means
-  the application is drifting underneath the suite. That is a finding about the product, not about
-  the tests. Whether a competitor surfaces it that way was not established by the reviewed public
-  documentation, so this is stated as useful rather than as unique. Also flag duration regressions
-  and pass-rate decay.
-- Export (JSON + CSV) for the reporting a QA lead already has to produce.
+- A bounded run ledger, `data/run_history.json` (≤500 runs, ≤1 MB), one allow-listed record per
+  `node falcon.js` run: commit and branch, repeat count, outcome counts, coverage, heals and failed
+  heal attempts by tier, review-queue depth, quarantine count, duration, and an incomplete marker for
+  crashed runs. No URLs, selectors, page text, error messages, scenario names or identities.
+- **Trend-level regression detection**, the most valuable part: a rising heal rate means the
+  application is drifting underneath the suite. Also pass-rate decay, duration regression, review
+  backlog and quarantine growth. Rules use the median and MAD of the previous 10 complete runs on the
+  same branch with absolute floors, so a stable baseline does not flag a trivial change. Flags are
+  advisory and never change a run's exit code.
+- A History panel in the dashboard, and `npm run dashboard` to serve it without a run.
+- `history:list`, `history:export` (JSON/CSV, formula-safe) and `history:check [--strict]`.
 
 ### Acceptance criteria
 
 Ten consecutive runs produce a readable trend; a deliberately induced heal-rate spike is flagged.
+The full set of 36 criteria is in the detailed plan and will be enforced by
+`docs/phase-15-acceptance-criteria.json` and its traceability check.
 
 ---
 
