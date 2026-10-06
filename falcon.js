@@ -62,6 +62,76 @@ const HealingReport   = require("./src/core/AIHealer/HealingReport");
 const DEFAULT_URL = "https://www.saucedemo.com";
 
 /**
+ * Phase 15 — run history. Ledger options for this process.
+ *
+ * Normal runs use the ledger's own default path. FALCON_TEST_RUN_HISTORY_PATH is
+ * honoured only when a test preload has set globalThis.__FALCON_TEST_SEAMS__, so
+ * the variable does nothing otherwise. Under `node --test` (NODE_TEST_CONTEXT)
+ * with no seam, history is skipped so existing fixture-run tests never write to
+ * the repo's data/run_history.json. Returns null when history must be skipped.
+ */
+const historyLedgerOptions = () => {
+    const seam = globalThis.__FALCON_TEST_SEAMS__;
+    const override = process.env.FALCON_TEST_RUN_HISTORY_PATH;
+    if (seam && seam.runHistory === true && typeof override === "string" && override) {
+        return { filePath: override };
+    }
+    return process.env.NODE_TEST_CONTEXT ? null : {};
+};
+
+/**
+ * Append this run to the ledger and log trend flags. Never throws, never
+ * touches process.exitCode (SEC-11, SEC-12): history is advisory.
+ */
+const recordRun = async ({ incomplete, report, coverage, repeat, startedAt }) => {
+    try {
+        const { RunLedger } = require("./src/core/history/RunLedger");
+        if (!RunLedger.isEnabled(process.env)) return;
+        const ledgerOptions = historyLedgerOptions();
+        if (!ledgerOptions) return;
+        const { buildRunRecord } = require("./src/core/history/RunRecord");
+        const { getGitInfo } = require("./src/core/history/GitInfo");
+        const { evaluate, parseTrendSettings } = require("./src/core/history/TrendDetector");
+
+        let pendingDepth = 0;
+        let quarantineCount = 0;
+        try { pendingDepth = require("./src/core/AIHealer/HealingTrust").list().length; } catch { /* snapshot unavailable */ }
+        try {
+            quarantineCount = require("./src/core/FlakinessTracker").list().filter((e) => e && e.quarantined).length;
+        } catch { /* snapshot unavailable */ }
+
+        const record = buildRunRecord({
+            report,
+            coverage: incomplete ? null : coverage,
+            healLog: HealingReport._instance.logs,
+            pendingDepth,
+            quarantineCount,
+            repeat,
+            durationMs: Date.now() - startedAt,
+            incomplete,
+            git: getGitInfo(),
+        });
+        const ledger = new RunLedger(ledgerOptions);
+        const appended = await ledger.append(record);
+        if (!appended.ok) return;
+
+        let settings;
+        try {
+            settings = parseTrendSettings(process.env);
+        } catch (error) {
+            Logger.warning(`⚠️  ${error.setting || "FALCON_TREND_*"} is invalid — using the default trend settings.`);
+            settings = {};
+        }
+        const { flags } = evaluate(ledger.load().runs, record, settings);
+        if (flags.length > 0) {
+            Logger.info(`history: ${flags.length} flag(s): ${flags.map((f) => f.signal).join(", ")}`);
+        }
+    } catch (error) {
+        try { Logger.warning(`⚠️  Run history was not recorded (${error && error.code ? error.code : "error"}).`); } catch { /* never fail the run */ }
+    }
+};
+
+/**
  * Read a `--flag=<number>` argument.
  *
  * A typo'd or negative bound is treated as "not supplied" rather than as an
@@ -363,6 +433,7 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
     let browser;
     const reportManager = new ReportManager();
     reportManager.startRun();
+    const runStartedAt = Date.now();
 
     Logger.info(`🌍 Navigating to ${url}…`);
 
@@ -424,15 +495,21 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
             exploredPages: sweep.pages.map((p) => p.url),
         });
 
-        reportManager.generateReport({
+        const report = reportManager.generateReport({
             tests: results,
             uiIssues,
             healingEvents: HealingReport._instance.logs,
             coverage: sweep.coverage,
             pages: sweep.pages.map(pageBreakdown),
         });
+        await recordRun({
+            incomplete: false, report, coverage: sweep.coverage, repeat: repeatCount, startedAt: runStartedAt,
+        });
     } catch (error) {
-        reportManager.generateReport({ tests: [{ name: "falcon.js", status: "failed", error: error.message }] });
+        const crashReport = reportManager.generateReport({ tests: [{ name: "falcon.js", status: "failed", error: error.message }] });
+        await recordRun({
+            incomplete: true, report: crashReport, coverage: null, repeat: repeatCount, startedAt: runStartedAt,
+        });
         Logger.error(`❌ Fatal error: ${error.message}`);
         console.error(error);
         emit("testFail", { name: "falcon.js", error: error.message });
