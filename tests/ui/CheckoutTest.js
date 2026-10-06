@@ -84,8 +84,12 @@ class CheckoutTest extends BaseTest {
                 throw new Error(`Order confirmation page did not load — still on ${page.url()}`);
             });
 
+            // Client-side routing: the URL changes before the page renders,
+            // so wait (bounded) for the header instead of sampling it once.
             const header = page.locator(".complete-header");
-            const visible = await header.isVisible().catch(() => false);
+            const visible = await header
+                .waitFor({ state: "visible", timeout: 8000 })
+                .then(() => true, () => false);
             if (!visible) {
                 throw new Error("Order confirmation header is not visible on /checkout-complete.html");
             }

@@ -55,9 +55,14 @@ class LoginTest extends BaseTest {
                 );
             });
 
-            // 2. Product list must be visible — confirms full page render
+            // 2. Product list must be visible — confirms full page render.
+            // SauceDemo routes client-side, so the URL changes before the list
+            // renders and waitForURL can return with no list in the DOM yet.
+            // Wait for it (bounded) rather than sampling visibility once.
             const productList = page.locator(".inventory_list");
-            const isVisible = await productList.isVisible().catch(() => false);
+            const isVisible = await productList
+                .waitFor({ state: "visible", timeout: 8000 })
+                .then(() => true, () => false);
             if (!isVisible) {
                 throw new Error(
                     "Login assertion failed: /inventory.html loaded but .inventory_list is not visible. " +
