@@ -35,7 +35,10 @@
     "flaky:quarantine": "node scripts/flakiness/review.js quarantine",
     "flaky:unquarantine": "node scripts/flakiness/review.js unquarantine",
     "review:status": "node scripts/review/status.js",
-    "review:status:strict": "node scripts/review/status.js --fail-on-stale"
+    "review:status:strict": "node scripts/review/status.js --fail-on-stale",
+    "history:list": "node scripts/history.js list",
+    "history:export": "node scripts/history.js export",
+    "history:check": "node scripts/history.js check"
   },
   "keywords": [
     "AI",
