@@ -563,6 +563,56 @@
     color: var(--muted);
     margin: 8px 0 8px;
   }
+  /* ── Run history (Phase 15) ── */
+  #history-panel { margin: 0 24px 16px; }
+  #history-summary { cursor: pointer; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .8px; padding: 8px 0; }
+  #history-section {
+    padding: 0 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #history-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+  }
+  #history-status { color: var(--muted); font-size: 13px; }
+  #history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  #history-table th, #history-table td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  #history-table th {
+    color: var(--muted);
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: .6px;
+  }
+  #history-sparks { display: flex; gap: 24px; flex-wrap: wrap; }
+  .history-spark-label { color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+  .history-spark svg { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .history-spark polyline { fill: none; stroke: var(--info); stroke-width: 1.5; }
+  .history-spark circle { fill: var(--info); }
+  .history-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    background: var(--skip);
+    color: #0d1117;
+    font-size: 11px;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  #history-flags { margin: 0; padding-left: 18px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -643,6 +693,26 @@
     <div id="locator-legacy-empty">No quarantined legacy rows.</div>
   </div>
 </div>
+
+<details id="history-panel">
+<summary id="history-summary">Run history</summary>
+<div id="history-section">
+  <div id="history-header">
+    <span>Last 20 runs</span>
+    <div class="spacer"></div>
+    <button class="btn" id="history-refresh" type="button">Refresh</button>
+  </div>
+  <div id="history-status">Loading run history…</div>
+  <div id="history-sparks"></div>
+  <table id="history-table" style="display:none">
+    <thead>
+      <tr><th>Time</th><th>Branch</th><th>SHA</th><th>Result</th><th>Pass %</th><th>Heal %</th><th>Duration</th><th>Pending</th><th>Quarantine</th><th>Flags</th></tr>
+    </thead>
+    <tbody id="history-body"></tbody>
+  </table>
+  <ul id="history-flags"></ul>
+</div>
+</details>
 
 <div id="feed-section">
   <div id="feed-header">
@@ -1426,6 +1496,172 @@
       // Best-effort — socket events will still keep this in sync going forward
     }
   }
+
+  // ── Run history panel (Phase 15) ──
+  // Every value from the ledger is set with textContent or setAttribute on a
+  // number this code formatted itself; there is no innerHTML here.
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const HISTORY_ROWS = 20;
+  const HISTORY_EMPTY_TEXT = "No runs recorded yet. Run `node falcon.js` to start building history.";
+
+  function histNum(value) {
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  }
+
+  // Same definitions as RunRecord.computeMetrics; null when the denominator is 0.
+  function histMetrics(run) {
+    const c = run && run.counts && typeof run.counts === "object" ? run.counts : {};
+    const h = run && run.heals && typeof run.heals === "object" ? run.heals : {};
+    const n = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
+    const passed = n(c.passed);
+    const passDen = passed + n(c.failed) + n(c.unavailable);
+    const verified = passDen + n(c.quarantined);
+    const healed = n(h.t2) + n(h.t25) + n(h.t3);
+    return {
+      pass_rate: passDen > 0 ? passed / passDen : null,
+      heal_rate: verified > 0 ? healed / verified : null,
+    };
+  }
+
+  function histPct(value) {
+    const n = histNum(value);
+    return n === null ? "–" : `${(n * 100).toFixed(1)}%`;
+  }
+
+  function histDuration(value) {
+    const n = histNum(value);
+    return n === null ? "–" : `${(n / 1000).toFixed(1)}s`;
+  }
+
+  function histText(tag, text, className) {
+    const el = document.createElement(tag);
+    el.textContent = text;
+    if (className) el.className = className;
+    return el;
+  }
+
+  // One sparkline. `values` is oldest to newest; null (or anything not a finite
+  // number) leaves a gap: it is never plotted and never reaches an attribute.
+  function histSparkline(label, values) {
+    const width = 220, height = 44, pad = 4;
+    const wrap = document.createElement("div");
+    wrap.className = "history-spark";
+    wrap.appendChild(histText("div", label, "history-spark-label"));
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("width", String(width));
+    svg.setAttribute("height", String(height));
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", `${label} over the last ${values.length} runs`);
+    const known = values.map(histNum);
+    const present = known.filter((v) => v !== null);
+    svg.setAttribute("data-points", String(present.length));
+    const lo = present.length ? Math.min(...present) : 0;
+    const hi = present.length ? Math.max(...present) : 0;
+    const x = (i) => (values.length > 1 ? pad + (i / (values.length - 1)) * (width - 2 * pad) : width / 2);
+    const y = (v) => (hi === lo ? height / 2 : height - pad - ((v - lo) / (hi - lo)) * (height - 2 * pad));
+    let segment = [];
+    const flush = () => {
+      if (segment.length > 1) {
+        const line = document.createElementNS(SVG_NS, "polyline");
+        line.setAttribute("points", segment.join(" "));
+        svg.appendChild(line);
+      }
+      segment = [];
+    };
+    known.forEach((v, i) => {
+      if (v === null) { flush(); return; }
+      const px = x(i).toFixed(2), py = y(v).toFixed(2);
+      segment.push(`${px},${py}`);
+      const dot = document.createElementNS(SVG_NS, "circle");
+      dot.setAttribute("cx", px);
+      dot.setAttribute("cy", py);
+      dot.setAttribute("r", "2");
+      svg.appendChild(dot);
+    });
+    flush();
+    wrap.appendChild(svg);
+    return wrap;
+  }
+
+  function histRow(run) {
+    const tr = document.createElement("tr");
+    const flagged = Array.isArray(run.flagged) ? run.flagged : [];
+    const metrics = histMetrics(run);
+    const cells = [
+      String(run.timestamp ?? "").replace("T", " ").slice(0, 19),
+      run.branch,
+      String(run.sha ?? "").slice(0, 7),
+      run.result,
+      histPct(metrics.pass_rate),
+      histPct(metrics.heal_rate),
+      histDuration(run.durationMs),
+      run.pendingDepth,
+      run.quarantineCount,
+    ];
+    for (const cell of cells) tr.appendChild(histText("td", String(cell ?? "–")));
+    const flagCell = document.createElement("td");
+    for (const signal of flagged) flagCell.appendChild(histText("span", String(signal), "history-badge"));
+    tr.appendChild(flagCell);
+    return tr;
+  }
+
+  function renderHistory(payload) {
+    const status = $("history-status");
+    const table = $("history-table");
+    const sparks = $("history-sparks");
+    const flagList = $("history-flags");
+    const showMessage = (text) => {
+      status.textContent = text;
+      status.style.display = "block";
+      table.style.display = "none";
+      sparks.replaceChildren();
+      flagList.replaceChildren();
+    };
+    if (payload && payload.disabled === true) return showMessage("History is disabled (FALCON_RUN_HISTORY=off).");
+    if (payload && payload.error) return showMessage("History is unavailable.");
+    const runs = payload && Array.isArray(payload.runs) ? payload.runs : [];
+    if (runs.length === 0) return showMessage(HISTORY_EMPTY_TEXT);
+
+    const shown = runs.slice(0, HISTORY_ROWS);
+    const chronological = shown.slice().reverse();
+    status.textContent = "";
+    status.style.display = "none";
+    table.style.display = "table";
+    $("history-body").replaceChildren(...shown.map(histRow));
+    sparks.replaceChildren(
+      histSparkline("Pass rate", chronological.map((r) => histMetrics(r).pass_rate)),
+      histSparkline("Heal rate", chronological.map((r) => histMetrics(r).heal_rate)),
+      histSparkline("Duration (ms)", chronological.map((r) => r.durationMs)),
+    );
+    const flags = Array.isArray(payload.flags) ? payload.flags : [];
+    const items = flags.map((f) => histText("li", `${f.signal}: ${f.message}`));
+    if (items.length === 0) {
+      const suppressed = Array.isArray(payload.suppressed) ? payload.suppressed.map(String) : [];
+      items.push(histText("li", suppressed.length ? `No flags (${suppressed.join(", ")}).` : "No flags."));
+    }
+    flagList.replaceChildren(...items);
+  }
+
+  // One fetch per call: when the panel is opened and when Refresh is pressed. No polling.
+  async function refreshHistory() {
+    try {
+      const res = await fetch("/history", { headers: authHeaders() });
+      if (!res.ok) {
+        renderHistory({ error: "unavailable" });
+        return;
+      }
+      renderHistory(await res.json());
+    } catch {
+      renderHistory({ error: "unavailable" });
+    }
+  }
+
+  $("history-refresh").addEventListener("click", refreshHistory);
+  // Nothing is requested until the panel is opened.
+  $("history-panel").addEventListener("toggle", () => {
+    if ($("history-panel").open) refreshHistory();
+  });
 
   // Auth. The token never appears in page script: `GET /?token=` swaps it for
   // an HttpOnly cookie that the browser sends on same-origin requests and the
