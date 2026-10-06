@@ -337,13 +337,20 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
     const headless = process.env.HEADLESS !== "false";
 
     // ── Dashboard ─────────────────────────────────────────────────────────────
-    const dashboard = new Dashboard({ port: Number(process.env.DASHBOARD_PORT) || 3000 });
+    const dashboard = new Dashboard({ port: Number(process.env.DASHBOARD_PORT) || 3000 }); // host: DASHBOARD_HOST, default 127.0.0.1
     let dashboardUp = false;
     if (!noDashboard) {
         try {
             await dashboard.start(); // prints http://localhost:3000
             dashboardUp = true;
         } catch (error) {
+            // A refusal to expose an unauthenticated dashboard is a
+            // configuration error, not a transient failure: running on
+            // without it would hide the misconfiguration.
+            if (error.code === "DASHBOARD_EXPOSED_WITHOUT_TOKEN") {
+                Logger.error(`❌ ${error.message}`);
+                process.exit(1);
+            }
             Logger.warning(`⚠️  Dashboard failed to start (${error.message}) — continuing without it.`);
         }
     }

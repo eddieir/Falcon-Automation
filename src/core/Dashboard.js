@@ -10,6 +10,13 @@ const SharedLocatorMemory = require("./locator/sharedLocatorMemory");
 const ConfigManager = require("./ConfigManager");
 const { validateIntSetting } = require("./util/ConfigValidation");
 
+// Upper bound on the in-memory event history. Every new tab replays this whole
+// list, and a long sweep emits events indefinitely, so the oldest entries are
+// dropped once the cap is exceeded. A test emits roughly two to four events,
+// so the cap covers several thousand tests; a tab opened after trimming
+// derives its totals from the retained events only and undercounts.
+const MAX_EVENTS = 20000;
+
 const HEALING_PENDING_STALE_DAYS_DEFAULT = 14;
 const FLAKY_UNREVIEWED_STALE_DAYS_DEFAULT = 14;
 const REHAB_CANDIDATE_WINDOW_DEFAULT = 5;
@@ -54,15 +61,27 @@ const REHAB_CANDIDATE_WINDOW_DEFAULT = 5;
  *   When `DASHBOARD_TOKEN` is unset — the default, unchanged local-dev
  *   experience — none of this activates, but `start()` logs a loud warning
  *   so running unauthenticated isn't an accident nobody notices.
+ *
+ * Network exposure. The server binds to `DASHBOARD_HOST` (default 127.0.0.1,
+ *   this machine only), not to every interface. A non-loopback host (a LAN
+ *   address or 0.0.0.0) is only allowed together with `DASHBOARD_TOKEN`:
+ *   `start()` rejects with `error.code === "DASHBOARD_EXPOSED_WITHOUT_TOKEN"`
+ *   otherwise, so the unauthenticated approve/reject/emit routes can never be
+ *   reachable from the network by accident.
+ *
+ * History cap. At most MAX_EVENTS events are kept for replay (oldest dropped).
  */
 class Dashboard {
     /**
      * @param {Object} opts
      * @param {number} [opts.port=3000] - HTTP port to listen on
+     * @param {string} [opts.host] - Interface to bind; defaults to
+     *   DASHBOARD_HOST, else 127.0.0.1 (loopback only)
      */
-    constructor({ port = 3000, locatorMemory } = {}) {
+    constructor({ port = 3000, host = process.env.DASHBOARD_HOST || "127.0.0.1", locatorMemory } = {}) {
         this.port    = port;
-        this._events = []; // full history so late-joining tabs get replay
+        this.host    = host;
+        this._events = []; // recent history (capped at MAX_EVENTS) so late-joining tabs get replay
         this._io     = null;
         this._server = null;
         this._token  = process.env.DASHBOARD_TOKEN || null;
@@ -283,6 +302,15 @@ class Dashboard {
         return received.length === expected.length && crypto.timingSafeEqual(received, expected);
     }
 
+    /** True for 127.0.0.0/8, ::1 and localhost — hosts only this machine can reach. */
+    static isLoopbackHost(host) {
+        if (typeof host !== "string") return false;
+        const h = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
+        if (h === "localhost" || h === "::1") return true;
+        const mapped = h.startsWith("::ffff:") ? h.slice(7) : h;
+        return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(mapped);
+    }
+
     /** The URL to actually open — includes ?token= when auth is enabled. */
     get url() {
         const base = `http://localhost:${this.port}`;
@@ -293,6 +321,14 @@ class Dashboard {
      * Start the HTTP + WebSocket server and print the dashboard URL.
      */
     async start() {
+        if (!Dashboard.isLoopbackHost(this.host) && !this._token) {
+            const error = new Error(
+                `Refusing to start the dashboard on non-loopback host "${this.host}" without authentication — ` +
+                "set DASHBOARD_TOKEN, or unset DASHBOARD_HOST to bind 127.0.0.1 only."
+            );
+            error.code = "DASHBOARD_EXPOSED_WITHOUT_TOKEN";
+            throw error;
+        }
         // Lazy-require to avoid crashing processes that don't need the dashboard
         const express   = require("express");
         const socketIO  = require("socket.io");
@@ -584,7 +620,7 @@ class Dashboard {
 
         await new Promise((resolve, reject) => {
             this._server.once("error", reject);
-            this._server.listen(this.port, () => {
+            this._server.listen(this.port, this.host, () => {
                 this._server.removeListener("error", reject);
                 // Reflect the OS-assigned port back onto `this.port` — matters
                 // when the caller passed 0 (ephemeral port), otherwise `url`
@@ -600,7 +636,7 @@ class Dashboard {
             Logger.warning(
                 "⚠️  Dashboard running WITHOUT auth (DASHBOARD_TOKEN not set) — " +
                 "anyone who can reach this port can read and write test events. " +
-                "Fine for a local laptop; set DASHBOARD_TOKEN before exposing this beyond localhost."
+                "Fine while bound to loopback; DASHBOARD_TOKEN is required to bind a non-loopback DASHBOARD_HOST."
             );
         }
 
@@ -617,6 +653,9 @@ class Dashboard {
     emit(name, payload = {}) {
         const event = { name, payload, timestamp: Date.now() };
         this._events.push(event);
+        if (this._events.length > MAX_EVENTS) {
+            this._events.splice(0, this._events.length - MAX_EVENTS);
+        }
         if (name === "pageStart" || name === "pageComplete" || name === "sweepComplete") {
             try {
                 this._recordSweepEvent(name, payload);
@@ -649,3 +688,4 @@ class Dashboard {
 }
 
 module.exports = Dashboard;
+module.exports.MAX_EVENTS = MAX_EVENTS;
