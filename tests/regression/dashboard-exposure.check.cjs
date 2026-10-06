@@ -110,7 +110,9 @@ test("falcon.js exits non-zero with a clear message when the dashboard would be 
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const marker = path.join(dir, "launched");
-  const env = { ...process.env, FALCON_FIXTURE_MODE: "success", FALCON_LAUNCH_MARKER: marker, DASHBOARD_HOST: "0.0.0.0", DASHBOARD_PORT: "0" };
+  // CI=true turns the dashboard off unless --dashboard is passed, so both are
+  // pinned here: the test exercises the same path on a laptop and in CI.
+  const env = { ...process.env, CI: "true", FALCON_FIXTURE_MODE: "success", FALCON_LAUNCH_MARKER: marker, DASHBOARD_HOST: "0.0.0.0", DASHBOARD_PORT: "0" };
   delete env.DASHBOARD_TOKEN;
   // The shared CLI preload stubs Dashboard out; this test needs the real one,
   // so a local preload applies the shared mocks and then lets Dashboard through.
@@ -128,7 +130,7 @@ Module._load = function (name, ...rest) {
   );
   const child = spawnSync(
     process.execPath,
-    ["--require", preload, path.join(root, "falcon.js"), "--url=http://fixture.test/"],
+    ["--require", preload, path.join(root, "falcon.js"), "--dashboard", "--url=http://fixture.test/"],
     { cwd: dir, env, encoding: "utf8", timeout: 8000 },
   );
   assert.equal(child.error, undefined);
