@@ -300,7 +300,11 @@ needed" is not mistaken for "not considered."
 
 ### What Tier 3 sends to OpenAI
 
-Tier 3 sends a targeted DOM snapshot to `gpt-4o-mini` (temperature 0), not the full page. The snapshot includes all interactive elements (`input, button, a, select, textarea, label, [data-testid], [aria-label]`), serializing each element's tag name and **all of its HTML attributes**, then truncating to 6,000 characters. Element labels, IDs, test IDs, names, classes, URLs, and button text in that snapshot leave your network. Non-password attributes are sent as-is; password-field `value` attributes are specifically stripped. This means readable content and structural hints reach OpenAI to help the model find the right element. Tier 3 requires `OPENAI_API_KEY` to be set and does not fall back to lower tiers if the key is missing — it simply does not run, so Tier 3 is effectively opt-in. A run with no API key still passes Tiers 1 and 2; it just never reaches the LLM.
+Tier 3 sends `gpt-4o-mini` (temperature 0) a numbered list of candidate elements, not the page. Only elements that fit the failed action are listed: fillable fields for a type, `<select>` for a select, clickable elements for a click. Each must be visible and enabled; hidden, zero-opacity, `inert`, `pointer-events: none` and off-document elements are left out, and the list stops at 60. For each candidate it sends the tag name, a fixed set of attributes (`id`, `name`, `type`, `data-testid`, `data-test`, `data-qa`, `aria-label`, `role`, and the path of an `href`), and its text. Every value has control characters removed and is capped at 200 characters; password values are never sent. Those labels, IDs, test IDs and texts leave your network. The prompt also carries the original selector, the step description and the action, and states that page text is untrusted data whose instructions must not be followed.
+
+The model may answer only with a candidate's number, or `null`. It never writes a selector: the selector for each candidate is built locally, and the chosen one is re-checked in the page (still unique, same identifying attributes, still eligible) before Falcon acts on it. Any other answer is rejected and the heal fails exactly as an unresolved one would, with `status: "rejected"` and one of these reasons in the healing report: `no_eligible_candidates`, `model_declined`, `invalid_reply`, `index_out_of_range`, `selector_not_unique`. One limit remains: a page that controls visible, action-compatible elements can still bias which of them the model picks. Whatever is picked runs once in the current run and goes to review as pending; it is never reused without human approval.
+
+Tier 3 requires `OPENAI_API_KEY` to be set and does not fall back to lower tiers if the key is missing — it simply does not run, so Tier 3 is effectively opt-in. A run with no API key still passes Tiers 1 and 2; it just never reaches the LLM.
 
 ### Healing every action, demonstrated against the same real site
 
@@ -682,10 +686,12 @@ DASHBOARD_LINGER_MS=60000   # how long the dashboard stays up after a run finish
 # DASHBOARD_TOKEN=              # optional on the default loopback bind (unset =
                                  # unauthenticated, logs a warning on startup).
                                  # REQUIRED when DASHBOARD_HOST is not loopback —
-                                 # it's then required on
-                                 # POST /emit, GET /events, and the socket
-                                 # connection. Open the dashboard at
-                                 # http://localhost:3000/?token=<value> once set.
+                                 # it's then required on every API route and the
+                                 # socket connection, via an Authorization: Bearer
+                                 # or X-Dashboard-Token header or the dashboard cookie.
+                                 # ?token= is NOT accepted on API routes. Open
+                                 # http://localhost:3000/?token=<value> once; the
+                                 # dashboard sets an HttpOnly cookie and redirects.
 
 # PostgreSQL: required only for DB tests. Leave DB_HOST/DB_USER blank to
 # skip tests/db/*.js cleanly. Don't fill these in with placeholder text,
@@ -912,8 +918,8 @@ Node 20.19+ is required to actually run `test:coverage`/`test:regression` locall
 # Full autonomous pipeline with live dashboard
 node falcon.js
 
-# Same, with the dashboard requiring a token (see CHANGELOG.md#phase-7--dashboard-hardening); the printed
-# URL includes ?token=... automatically
+# Same, with the dashboard requiring a token (see CHANGELOG.md#phase-7--dashboard-hardening). Open the
+# printed URL once; it carries ?token=..., which the dashboard swaps for a cookie
 DASHBOARD_TOKEN=some-secret node falcon.js --dashboard
 
 # Autonomous pipeline without dashboard (CI / headless environments)

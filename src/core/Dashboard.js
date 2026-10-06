@@ -17,6 +17,8 @@ const { validateIntSetting } = require("./util/ConfigValidation");
 // derives its totals from the retained events only and undercounts.
 const MAX_EVENTS = 20000;
 
+const COOKIE_NAME = "falcon_dashboard_token";
+
 const HEALING_PENDING_STALE_DAYS_DEFAULT = 14;
 const FLAKY_UNREVIEWED_STALE_DAYS_DEFAULT = 14;
 const REHAB_CANDIDATE_WINDOW_DEFAULT = 5;
@@ -49,9 +51,13 @@ const REHAB_CANDIDATE_WINDOW_DEFAULT = 5;
  *   ones. Fine for a single laptop; not fine the moment this is pointed at
  *   from CI or a shared environment (see the Phase 6 DASHBOARD_URL flow).
  *
- *   When `DASHBOARD_TOKEN` is set, `POST /emit` and `GET /events` require it
- *   via an `X-Dashboard-Token` header or a `?token=` query param, and the
- *   socket.io handshake requires it via `auth: { token }` — an unauthorized
+ *   When `DASHBOARD_TOKEN` is set, every API route requires it via an
+ *   `Authorization: Bearer` or `X-Dashboard-Token` header, or the
+ *   `falcon_dashboard_token` cookie. A `?token=` query parameter is NOT
+ *   accepted on API routes (URLs leak into history, logs and Referer); it is
+ *   honoured only once, on `GET /`, which swaps it for an HttpOnly cookie and
+ *   redirects. The socket.io handshake requires it via `auth: { token }` or
+ *   the same header/cookie — an unauthorized
  *   socket connection is rejected outright (`connect_error`), not silently
  *   allowed through with no data. CORS is also restricted from `"*"` to
  *   `DASHBOARD_ALLOWED_ORIGIN` (default: this dashboard's own localhost
@@ -68,6 +74,11 @@ const REHAB_CANDIDATE_WINDOW_DEFAULT = 5;
  *   `start()` rejects with `error.code === "DASHBOARD_EXPOSED_WITHOUT_TOKEN"`
  *   otherwise, so the unauthenticated approve/reject/emit routes can never be
  *   reachable from the network by accident.
+ *
+ * DNS rebinding. While bound to loopback, requests whose Host header is not
+ *   localhost/127.0.0.1/[::1] on the listening port are refused (403), and a
+ *   state-changing request or socket handshake carrying a foreign Origin is
+ *   refused too. A request with no Origin (a Node reporter) is allowed.
  *
  * History cap. At most MAX_EVENTS events are kept for replay (oldest dropped).
  */
@@ -279,27 +290,86 @@ class Dashboard {
         return attempts.length > MAX_ATTEMPTS;
     }
 
-    /** Extract a token from either the X-Dashboard-Token header or a ?token= query param. */
+    /**
+     * Extract a token from request headers: `Authorization: Bearer`, then
+     * `X-Dashboard-Token`, then the `falcon_dashboard_token` cookie. Never
+     * from the URL — the query string is not consulted here.
+     */
+    static _tokenFromHeaders(headers = {}) {
+        const auth = headers.authorization;
+        if (typeof auth === "string") {
+            const m = /^Bearer\s+(.+)$/i.exec(auth.trim());
+            if (m) return m[1];
+        }
+        const custom = headers["x-dashboard-token"];
+        if (typeof custom === "string" && custom) return custom;
+        const cookie = headers.cookie;
+        if (typeof cookie === "string") {
+            for (const part of cookie.split(";")) {
+                const eq = part.indexOf("=");
+                if (eq < 0) continue;
+                if (part.slice(0, eq).trim() !== COOKIE_NAME) continue;
+                try {
+                    return decodeURIComponent(part.slice(eq + 1).trim());
+                } catch (_) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
     _tokenFromRequest(req) {
-        return req.headers["x-dashboard-token"] || req.query?.token || null;
+        return Dashboard._tokenFromHeaders(req.headers);
     }
 
     /**
      * True if `candidate` matches the configured token. No-op (always true)
-     * when auth is off. Uses a timing-safe comparison — a plain `===` leaks
-     * how many leading characters matched via response-time differences,
-     * which matters for an auth token even if the practical exploit window
-     * over a network is narrow. The length check up front is safe to do in
-     * variable time (length isn't the secret; the token's content is), and
-     * is required anyway since timingSafeEqual throws on mismatched buffer
-     * lengths rather than returning false.
+     * when auth is off. Both sides are hashed to a fixed 32 bytes first, so
+     * the timing-safe comparison never branches on length.
      */
     _isAuthorized(candidate) {
         if (!this._token) return true;
         if (typeof candidate !== "string") return false;
-        const received = Buffer.from(candidate);
-        const expected = Buffer.from(this._token);
-        return received.length === expected.length && crypto.timingSafeEqual(received, expected);
+        if (this._tokenHashFor !== this._token) {
+            this._tokenHash = crypto.createHash("sha256").update(this._token).digest();
+            this._tokenHashFor = this._token;
+        }
+        const received = crypto.createHash("sha256").update(candidate).digest();
+        return crypto.timingSafeEqual(received, this._tokenHash);
+    }
+
+    /** Host header values accepted while bound to loopback (port resolved lazily). */
+    _allowedHosts() {
+        const port = this._server?.address()?.port ?? this.port;
+        const hosts = [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`];
+        // A loopback DASHBOARD_HOST other than the defaults (e.g. 127.0.0.5)
+        // is how its own visitors address it, so it is allowed too.
+        const own = String(this.host || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
+        if (own) hosts.push(own.includes(":") ? `[${own}]:${port}` : `${own}:${port}`);
+        // Browsers omit the default port from Host, so on port 80 the bare
+        // names are what a legitimate request carries.
+        if (Number(port) === 80) hosts.push(...hosts.map((h) => h.replace(/:80$/, "")));
+        return [...new Set(hosts)];
+    }
+
+    /**
+     * DNS-rebinding guard. Returns true when the request may proceed. Only
+     * enforced on a loopback bind (a non-loopback bind always requires the
+     * token). `checkOrigin` additionally validates an Origin header if present.
+     */
+    _isRequestAllowed(headers, { checkOrigin }) {
+        if (!Dashboard.isLoopbackHost(this.host)) return true;
+        const hosts = this._allowedHosts();
+        const host = typeof headers.host === "string" ? headers.host.toLowerCase() : "";
+        if (!hosts.includes(host)) return false;
+        if (checkOrigin && headers.origin !== undefined) {
+            const origin = String(headers.origin).toLowerCase();
+            const configured = process.env.DASHBOARD_ALLOWED_ORIGIN;
+            const ok = hosts.some((h) => origin === `http://${h}`) || (configured && headers.origin === configured);
+            if (!ok) return false;
+        }
+        return true;
     }
 
     /** True for 127.0.0.0/8, ::1 and localhost — hosts only this machine can reach. */
@@ -311,7 +381,11 @@ class Dashboard {
         return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(mapped);
     }
 
-    /** The URL to actually open — includes ?token= when auth is enabled. */
+    /**
+     * The URL to open — includes ?token= when auth is enabled. This is a
+     * one-shot bootstrap: GET / exchanges the token for an HttpOnly cookie and
+     * redirects to a clean URL; the query token is rejected on every API route.
+     */
     get url() {
         const base = `http://localhost:${this.port}`;
         return this._token ? `${base}/?token=${encodeURIComponent(this._token)}` : base;
@@ -336,8 +410,18 @@ class Dashboard {
         const Middleware = require("./Middleware");
 
         const app = express();
+        app.use((req, res, next) => {
+            res.setHeader("Referrer-Policy", "no-referrer");
+            next();
+        });
+        // DNS-rebinding guard — first, so nothing (static files included) is
+        // served to a request addressed to an attacker-controlled name.
+        app.use((req, res, next) => {
+            const mutating = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
+            if (this._isRequestAllowed(req.headers, { checkOrigin: mutating })) return next();
+            res.status(403).json({ error: "Forbidden — unexpected Host or Origin." });
+        });
         app.use(express.json());
-        app.use(express.static(path.join(__dirname, "..", "dashboard")));
 
         // Phase 7 follow-up — CodeQL correctly flagged that the two routes
         // below perform authorization but had no rate limiting: with no cap
@@ -354,6 +438,19 @@ class Dashboard {
             legacyHeaders: false,
             message: { error: "Too many requests — slow down." },
         });
+
+        // Token bootstrap: the only place a ?token= is read. A valid one is
+        // swapped for an HttpOnly cookie and the URL is cleaned by redirect;
+        // anything else falls through to the static page.
+        app.get("/", authLimiter, (req, res, next) => {
+            const candidate = req.query?.token;
+            if (this._token && typeof candidate === "string" && this._isAuthorized(candidate)) {
+                res.setHeader("Set-Cookie", `${COOKIE_NAME}=${encodeURIComponent(candidate)}; HttpOnly; SameSite=Strict; Path=/`);
+                return res.redirect(303, "/");
+            }
+            next();
+        });
+        app.use(express.static(path.join(__dirname, "..", "dashboard")));
 
         app.get("/events", authLimiter, (req, res) => {
             if (!this._isAuthorized(this._tokenFromRequest(req))) {
@@ -599,6 +696,9 @@ class Dashboard {
         this._server = http.createServer(app);
         this._io     = new socketIO.Server(this._server, {
             cors: { origin: allowedOrigin },
+            allowRequest: (req, callback) => {
+                callback(null, this._isRequestAllowed(req.headers, { checkOrigin: true }));
+            },
         });
 
         // Reject unauthorized connections outright (fires `connect_error` on
@@ -608,7 +708,7 @@ class Dashboard {
             if (this._isSocketRateLimited(socket.handshake.address)) {
                 return next(new Error("Too many connection attempts — slow down."));
             }
-            const candidate = socket.handshake.auth?.token;
+            const candidate = socket.handshake.auth?.token ?? Dashboard._tokenFromHeaders(socket.request?.headers);
             if (this._isAuthorized(candidate)) return next();
             next(new Error("Unauthorized — missing or invalid DASHBOARD_TOKEN."));
         });

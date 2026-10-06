@@ -10,7 +10,9 @@ const { io } = require("socket.io-client");
  *      change for anyone just running `node falcon.js` locally.
  *   2. With DASHBOARD_TOKEN set, an unauthenticated POST /emit, GET /events,
  *      and socket.io connection are all rejected — and the correct token
- *      (via header, query param, or socket auth) is accepted.
+ *      (via Bearer or X-Dashboard-Token header, the HttpOnly cookie set by
+ *      GET /?token=, or socket auth) is accepted. A ?token= query on an API
+ *      route is rejected: URLs leak into history, logs and Referer.
  *
  * Runs a real Dashboard instance on an ephemeral port and makes real HTTP
  * requests and a real socket.io connection against it — no mocks. The token
@@ -29,7 +31,7 @@ function httpRequest(port, method, urlPath, headers = {}, jsonBody) {
             (res) => {
                 let body = "";
                 res.on("data", (chunk) => (body += chunk));
-                res.on("end", () => resolve({ statusCode: res.statusCode, body }));
+                res.on("end", () => resolve({ statusCode: res.statusCode, body, headers: res.headers }));
             }
         );
         req.on("error", reject);
@@ -45,13 +47,14 @@ function httpRequest(port, method, urlPath, headers = {}, jsonBody) {
     });
 }
 
-function connectSocket(port, token, { transports, timeout = 3000 } = {}) {
+function connectSocket(port, token, { transports, timeout = 3000, extraHeaders } = {}) {
     return new Promise((resolve) => {
         const socket = io(`http://localhost:${port}`, {
             auth: token !== undefined ? { token } : {},
             reconnection: false,
             timeout,
             ...(transports ? { transports } : {}),
+            ...(extraHeaders ? { extraHeaders, transports: transports || ["polling"] } : {}),
         });
         socket.on("connect", () => {
             socket.close();
@@ -122,8 +125,39 @@ async function testWithToken() {
     const rightHeaderEmit = await httpRequest(port, "POST", "/emit", { "X-Dashboard-Token": TOKEN });
     check("DASHBOARD_TOKEN set: correct token via header accepted (204)", rightHeaderEmit.statusCode === 204, `got ${rightHeaderEmit.statusCode}`);
 
-    const rightQueryEvents = await httpRequest(port, "GET", `/events?token=${TOKEN}`);
-    check("DASHBOARD_TOKEN set: correct token via query param accepted (200)", rightQueryEvents.statusCode === 200, `got ${rightQueryEvents.statusCode}`);
+    const rightQueryEvents = await httpRequest(port, "GET", `/events?token=${encodeURIComponent(TOKEN)}`);
+    check("DASHBOARD_TOKEN set: correct token via query param on an API route rejected (401)", rightQueryEvents.statusCode === 401, `got ${rightQueryEvents.statusCode}`);
+
+    const queryEmit = await httpRequest(port, "POST", `/emit?token=${encodeURIComponent(TOKEN)}`);
+    check("DASHBOARD_TOKEN set: query token on POST /emit rejected (401)", queryEmit.statusCode === 401, `got ${queryEmit.statusCode}`);
+
+    const bootstrap = await httpRequest(port, "GET", `/?token=${encodeURIComponent(TOKEN)}`);
+    const setCookie = [].concat(bootstrap.headers["set-cookie"] || []).join("; ");
+    check("GET /?token=right redirects 303 to /", bootstrap.statusCode === 303 && bootstrap.headers.location === "/", `got ${bootstrap.statusCode} ${bootstrap.headers.location}`);
+    check("bootstrap cookie is HttpOnly and SameSite=Strict", /HttpOnly/i.test(setCookie) && /SameSite=Strict/i.test(setCookie), setCookie);
+    check("bootstrap response sends Referrer-Policy: no-referrer", bootstrap.headers["referrer-policy"] === "no-referrer", bootstrap.headers["referrer-policy"]);
+
+    const badBootstrap = await httpRequest(port, "GET", "/?token=wrong");
+    check("GET /?token=wrong sets no cookie and does not redirect", badBootstrap.statusCode === 200 && !badBootstrap.headers["set-cookie"], `got ${badBootstrap.statusCode}`);
+    check("static page also carries Referrer-Policy: no-referrer", badBootstrap.headers["referrer-policy"] === "no-referrer");
+
+    const cookie = setCookie.split(";")[0];
+    const cookieEvents = await httpRequest(port, "GET", "/events", { Cookie: cookie });
+    check("cookie from the bootstrap authenticates GET /events (200)", cookieEvents.statusCode === 200, `got ${cookieEvents.statusCode}`);
+
+    const cookieSocket = await connectSocket(port, undefined, { extraHeaders: { Cookie: cookie } });
+    check("cookie from the bootstrap authenticates the socket", cookieSocket.connected === true, cookieSocket.message);
+
+    const badCookie = await httpRequest(port, "GET", "/events", { Cookie: "falcon_dashboard_token=%E0%A4%A" });
+    check("malformed cookie encoding is rejected (401) without throwing", badCookie.statusCode === 401, `got ${badCookie.statusCode}`);
+
+    const bearerEvents = await httpRequest(port, "GET", "/events", { Authorization: `Bearer ${TOKEN}` });
+    check("Authorization: Bearer authenticates GET /events (200)", bearerEvents.statusCode === 200, `got ${bearerEvents.statusCode}`);
+
+    for (const wrong of ["x", TOKEN.slice(0, -1), TOKEN + "extra", "y".repeat(5000)]) {
+        const res = await httpRequest(port, "GET", "/events", { "X-Dashboard-Token": wrong });
+        check(`wrong-length token (${wrong.length} chars) rejected (401), no throw`, res.statusCode === 401, `got ${res.statusCode}`);
+    }
 
     const noAuthCoverage = await httpRequest(port, "GET", "/coverage");
     check("DASHBOARD_TOKEN set: unauthenticated GET /coverage rejected (401)", noAuthCoverage.statusCode === 401, `got ${noAuthCoverage.statusCode}`);

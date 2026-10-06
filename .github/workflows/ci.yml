@@ -28,16 +28,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # Fails on known high/critical advisories in production dependencies.
+      - run: npm audit --omit=dev --audit-level=high
       - run: npx playwright install --with-deps chromium
       - run: npm run test:coverage
       - run: npm run test:browser
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: regression-reports
@@ -86,9 +88,9 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
           cache: "npm"
@@ -136,7 +138,7 @@ jobs:
       # "capture baseline" branch and compare() (the code that actually
       # detects a regression) never executes in CI.
       - name: Restore visual regression baselines
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: reports/baselines
           key: vr-baselines-${{ github.ref_name }}
@@ -190,7 +192,7 @@ jobs:
       # branch/ref they were approved on), never as a CI-config-only change.
       - name: Restore Falcon state (flakiness/quarantine/healing)
         id: restore-falcon-state
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             data/scenario_history.json
@@ -208,9 +210,9 @@ jobs:
       # Runs even if the pipeline step above failed — the exact case where a
       # new failure sample must be persisted for D2/quarantine to accumulate.
       # An explicit, unconditional save is used instead of relying on
-      # actions/cache@v4's automatic post-job save, whose behavior after a
+      # actions/cache's automatic post-job save, whose behavior after a
       # failing later step is unverified in this repo. continue-on-error is
-      # deliberately scoped to this step alone: actions/cache/save@v4 fails
+      # deliberately scoped to this step alone: actions/cache/save fails
       # with a Path Validation Error when none of the listed paths exist, so
       # with if: always() a cold run where falcon.js dies before writing any
       # state would otherwise turn the job red for a pure infrastructure
@@ -219,7 +221,7 @@ jobs:
       - name: Save Falcon state (flakiness/quarantine/healing)
         if: always()
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             data/scenario_history.json
@@ -260,7 +262,7 @@ jobs:
 
       # ── Upload all artefacts ────────────────────────────────────────────────
       - name: Upload test reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: falcon-reports
