@@ -120,3 +120,47 @@ test("a rejecting handle.close() neither rejects write() nor leaves the lock or 
   assert.equal(settled === undefined || settled.ok !== false, true);
   assert.ok(fs.readFileSync(f.file, "utf8").includes("#c"));
 });
+
+// Swaps the lock for a brand-new file (new inode, fresh mtime) with the given body.
+function swapLock(lock, body) {
+  const tmpName = `${lock}.swap`;
+  fs.writeFileSync(tmpName, body);
+  fs.renameSync(tmpName, lock);
+}
+
+test("reclaim never removes a live empty lock created between inspection and rename", async (t) => {
+  const f = tmp(t);
+  fs.writeFileSync(f.lock, "");
+  backdate(f.lock, 60e3);
+  const reclaimed = await Writer._reclaimStale(f.lock, { beforeRename: () => swapLock(f.lock, "") });
+  assert.equal(reclaimed, false);
+  assert.equal(fs.existsSync(f.lock), true, "the live lock must still be in place");
+  assert.equal(fs.readFileSync(f.lock, "utf8"), "");
+  assert.ok(Date.now() - fs.statSync(f.lock).mtimeMs < 30e3, "the fresh lock itself, not the backdated one");
+  assert.deepEqual(staleFiles(f.dir), []);
+});
+
+test("restoring a displaced live lock never clobbers a lock created in the meantime", async (t) => {
+  const f = tmp(t);
+  fs.writeFileSync(f.lock, "");
+  backdate(f.lock, 60e3);
+  const third = JSON.stringify({ token: "third", pid: process.pid });
+  const reclaimed = await Writer._reclaimStale(f.lock, {
+    beforeRename: () => swapLock(f.lock, ""),
+    afterRename: () => fs.writeFileSync(f.lock, third),
+  });
+  assert.equal(reclaimed, false);
+  assert.equal(fs.readFileSync(f.lock, "utf8"), third);
+  assert.deepEqual(staleFiles(f.dir), []);
+});
+
+test("a displaced live lock is put back when the path is still free", async (t) => {
+  const f = tmp(t);
+  fs.writeFileSync(f.lock, "");
+  backdate(f.lock, 60e3);
+  const live = JSON.stringify({ token: "live", pid: process.ppid });
+  const reclaimed = await Writer._reclaimStale(f.lock, { beforeRename: () => swapLock(f.lock, live) });
+  assert.equal(reclaimed, false);
+  assert.equal(fs.readFileSync(f.lock, "utf8"), live);
+  assert.deepEqual(staleFiles(f.dir), []);
+});

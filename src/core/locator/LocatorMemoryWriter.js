@@ -58,15 +58,29 @@ async function describeLock(lock) {
 //   - pid is this process: never reclaim (a live lock held by this process).
 //   - pid is a positive integer: reclaim only if that process is gone (ESRCH).
 //   - no usable pid: reclaim only if the file is older than LOCK_GRACE_MS.
-// The move is a rename to a unique name, so two racing reclaimers cannot both
-// succeed; the moved file is re-read and, if it is not what was inspected, it
-// was a different (live) lock and is put back when the path is still free.
-async function reclaimStale(lock) {
+// The moved file is identified by identity, never by content: the inspected
+// file's (dev, ino, mtimeMs, size) must equal the moved file's. Content alone is
+// unsound because an empty or corrupt stale lock matches a live writer's
+// just-created, still-empty lock. The stat/read/stat sequence at inspection
+// guarantees the content and identity describe the same file, otherwise the
+// call conservatively returns false. If the moved file is not the inspected
+// one it is a live lock: it is linked back (link fails with EEXIST rather than
+// clobbering a lock someone created meanwhile) and the aside name is removed.
+// Residual case: if the path was re-taken, the moved lock's owner no longer has
+// its lock at that path, and its release only unlinks a lock carrying its own
+// token, so it cannot remove the new holder's lock. Two writers could then
+// overlap briefly; write() still rejects a lost update through its digest check.
+// `hooks` is a test seam for the windows between the steps.
+const sameFile = (a, b) => a.dev === b.dev && a.ino === b.ino && a.mtimeMs === b.mtimeMs && a.size === b.size;
+
+async function reclaimStale(lock, hooks = {}) {
   let raw;
   let stat;
   try {
+    const before = await fs.promises.stat(lock);
     raw = await fs.promises.readFile(lock, "utf8");
     stat = await fs.promises.stat(lock);
+    if (!sameFile(before, stat)) return false;
   } catch (e) {
     return e.code === "ENOENT";
   }
@@ -84,25 +98,24 @@ async function reclaimStale(lock) {
     return false;
   }
 
+  if (hooks.beforeRename) await hooks.beforeRename();
   const aside = `${lock}.stale.${crypto.randomUUID()}`;
   try {
     await fs.promises.rename(lock, aside);
   } catch (e) {
     return e.code === "ENOENT";
   }
+  if (hooks.afterRename) await hooks.afterRename();
 
-  let moved = null;
+  let movedStat = null;
   try {
-    moved = await fs.promises.readFile(aside, "utf8");
+    movedStat = await fs.promises.stat(aside);
   } catch {}
 
-  if (moved !== raw) {
-    // A different lock was swapped in between inspection and the move.
-    try {
-      await fs.promises.access(lock);
-    } catch {
-      try { await fs.promises.rename(aside, lock); } catch {}
-    }
+  if (!movedStat || !sameFile(stat, movedStat)) {
+    // A different (live) lock was swapped in between inspection and the move.
+    try { await fs.promises.link(aside, lock); } catch {}
+    try { await fs.promises.unlink(aside); } catch {}
     return false;
   }
 
@@ -136,4 +149,4 @@ async function write(file,data,expected,atomic) {
     if(handle) { try {await handle.close();} catch {} try {const owner=JSON.parse(await fs.promises.readFile(lock,"utf8")); if(owner.token===token) await fs.promises.unlink(lock);} catch {} }
   }
 }
-module.exports={digestSync,readBoundedSync,write};
+module.exports={digestSync,readBoundedSync,write,_reclaimStale:reclaimStale};
