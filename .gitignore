@@ -3,6 +3,14 @@ node_modules/
 
 # Environment Variables
 .env
+.env.*
+!.env.example
+
+# Private keys and certificate material
+*.key
+*.pem
+*.p12
+*.pfx
 
 # Config Files (User-Specific)
 config/testConfig.json
@@ -36,6 +44,4 @@ Thumbs.db
 coverage/
 .npm/
 
-# Internal engineering handoff — not for public visibility (this repo is public).
-# Kept locally for continuity between engineers/sessions, never committed.
-#HANDOFF.md
+# HANDOFF.md is intentionally tracked and ships with the repo.
