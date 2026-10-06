@@ -46,22 +46,6 @@ function _browserTier3Candidates(args) {
     return typeof v === "string" && v.length > 0 ? v.slice(0, maxValue) : null;
   }
 
-  if (args.verify) {
-    var found;
-    try {
-      found = document.querySelectorAll(args.verify.selector);
-    } catch (e) {
-      return false;
-    }
-    if (found.length !== 1) return false;
-    var exp = args.verify.expect;
-    var node = found[0];
-    return node.tagName.toLowerCase() === exp.tagName &&
-      (attr(node, "id") || "") === (exp.id || "") &&
-      (attr(node, "name") || "") === (exp.name || "") &&
-      (attr(node, "type") || "") === (exp.type || "");
-  }
-
   var selectors = {
     type: 'input, textarea, [contenteditable]:not([contenteditable="false" i])',
     select: "select",
@@ -72,14 +56,22 @@ function _browserTier3Candidates(args) {
   function visible(el) {
     var rect = el.getBoundingClientRect();
     if (!rect || rect.width === 0 || rect.height === 0) return false;
+    // Entirely outside the document (negative-offset or far off-screen decoys).
+    var sx = window.pageXOffset || 0;
+    var sy = window.pageYOffset || 0;
+    var root = document.documentElement;
+    if (rect.right + sx <= 0 || rect.bottom + sy <= 0) return false;
+    if (rect.left + sx >= Math.max(root.scrollWidth, window.innerWidth)) return false;
+    if (rect.top + sy >= Math.max(root.scrollHeight, window.innerHeight)) return false;
+    if (typeof el.closest === "function" && el.closest("[inert]")) return false;
     for (var n = el; n; n = n.parentElement) {
       if (n.getAttribute("aria-hidden") === "true") return false;
       var cs = window.getComputedStyle(n);
       if (cs.display === "none") return false;
-      if (n === el && (cs.visibility === "hidden" || cs.visibility === "collapse")) return false;
+      if (parseFloat(cs.opacity) === 0) return false;
+      if (n === el && (cs.visibility === "hidden" || cs.visibility === "collapse" || cs.pointerEvents === "none")) return false;
     }
-    var own = window.getComputedStyle(el);
-    return own.visibility !== "hidden" && own.visibility !== "collapse";
+    return true;
   }
   function eligible(el) {
     var tag = el.tagName.toLowerCase();
@@ -127,6 +119,28 @@ function _browserTier3Candidates(args) {
     var tag = el.tagName.toLowerCase();
     if (tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable) return null;
     return bound(el.textContent, maxValue);
+  }
+
+  if (args.verify) {
+    var found;
+    try {
+      found = document.querySelectorAll(args.verify.selector);
+    } catch (e) {
+      return false;
+    }
+    if (found.length !== 1) return false;
+    var exp = args.verify.expect;
+    var node = found[0];
+    // Same eligibility and visibility rules as listing, so a node that was
+    // swapped or hidden after listing is not acted on.
+    if (!eligible(node)) return false;
+    return node.tagName.toLowerCase() === exp.tagName &&
+      (attr(node, "id") || "") === (exp.id || "") &&
+      (attr(node, "name") || "") === (exp.name || "") &&
+      (attr(node, "type") || "") === (exp.type || "") &&
+      (attr(node, "data-testid") || "") === (exp["data-testid"] || "") &&
+      (attr(node, "aria-label") || "") === (exp["aria-label"] || "") &&
+      (hrefPath(node) || "") === (exp.href || "");
   }
 
   var out = [];
@@ -678,7 +692,11 @@ class AIHealer {
      * The model never supplies a selector: candidates are listed with
      * selectors built locally by SelectorBuilder, and only a strictly numeric
      * in-range reply is accepted, then re-verified against the live DOM.
-     * Anything else returns null and records `_lastTier3Rejection`.
+     * Anything else returns null and records `_lastTier3Rejection`, one of:
+     * no_eligible_candidates, model_declined (null/empty reply), invalid_reply
+     * (unparseable), index_out_of_range, selector_not_unique (the chosen node
+     * no longer resolves to one element with the same identity, or is no
+     * longer eligible and visible).
      *
      * Uses gpt-4o-mini for low latency and cost. Temperature 0 keeps the
      * reply deterministic.
@@ -748,7 +766,12 @@ class AIHealer {
             });
 
             const reply = response.choices[0]?.message?.content;
-            const match = typeof reply === "string" ? /^\s*(\d{1,3})\s*$/.exec(reply) : null;
+            const trimmed = typeof reply === "string" ? reply.trim() : null;
+            if (trimmed !== null && (trimmed === "" || trimmed.toLowerCase() === "null")) {
+                this._lastTier3Rejection = "model_declined";
+                return null;
+            }
+            const match = trimmed === null ? null : /^(\d{1,3})$/.exec(trimmed);
             if (!match) {
                 this._lastTier3Rejection = "invalid_reply";
                 return null;
@@ -764,7 +787,10 @@ class AIHealer {
                 kind, max: TIER3_MAX_CANDIDATES, maxValue: TIER3_MAX_VALUE,
                 verify: {
                     selector: chosen.selector,
-                    expect: { tagName: chosen.descriptor.tagName, id: attrs.id, name: attrs.name, type: attrs.type },
+                    expect: {
+                        tagName: chosen.descriptor.tagName, id: attrs.id, name: attrs.name, type: attrs.type,
+                        "data-testid": attrs["data-testid"], "aria-label": attrs["aria-label"], href: attrs.href,
+                    },
                 },
             });
             if (stillUnique !== true) {
