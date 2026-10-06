@@ -18,7 +18,7 @@ Default to two concurrent tasks with disjoint edits, at most one retry per task,
 
 ## Repository facts
 
-- Runtime: Node.js >= 20.19; CI uses Node 24.
+- Runtime: Node.js >= 22; CI uses Node 24.
 - Framework: Playwright, CommonJS JavaScript.
 - Main entry point: `falcon.js`.
 - Core implementation: `src/core/`.

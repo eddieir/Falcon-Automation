@@ -250,7 +250,7 @@ const PACKAGE_JSON_PATH = path.join(root, "package.json");
 test("AC-53: package.json declares an engines.node floor matching the project's stated Node floor", () => {
   const pkg = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, "utf8"));
   assert.ok(pkg.engines && typeof pkg.engines.node === "string", "package.json must declare engines.node");
-  assert.equal(pkg.engines.node, ">=20.19.0", "engines.node must match the documented floor (Node >= 20.19)");
+  assert.equal(pkg.engines.node, ">=22.0.0", "engines.node must match the documented floor (Node >= 22)");
 });
 
 test("AC-53: package.json does not declare \"type\": \"module\" — the project stays CommonJS by default", () => {
