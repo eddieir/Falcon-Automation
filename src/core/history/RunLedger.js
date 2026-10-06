@@ -9,16 +9,22 @@
  * change a run's outcome or exit code (SEC-11).
  *
  * Load is defensive (SEC-10):
- *   - A file over 1 MB, unparsable, or of the wrong shape is copied byte-for-byte
- *     to `<file>.corrupt-<timestamp>-<pid>-<uuid>` (wx, 0600) and history restarts
- *     empty. Only the path and a count are logged, never file content.
+ *   - A file over 1 MB, unparsable, or of the wrong shape is MOVED aside with
+ *     fs.renameSync to `<file>.corrupt-<timestamp>-<pid>-<uuid>` (0600) and
+ *     history restarts empty. A rename is byte-for-byte by construction and never
+ *     copies. If the rename fails the file is left alone and appends are refused
+ *     for this process. Only the path and a count are logged, never content.
+ *   - A symlink or other non-regular file at the ledger path is never followed:
+ *     it is neither read, copied nor written, and appends are refused.
  *   - An envelope with a future schemaVersion is never touched: the ledger
  *     reports empty history and refuses appends for the rest of the process so a
  *     newer file cannot be overwritten. A file that cannot be read at all
  *     (EACCES and the like) gets the same treatment.
  *   - Each record goes through RunRecord.validateRecord. Invalid ones are
  *     dropped and counted. Records with a future schemaVersion are skipped on
- *     read but kept verbatim when the file is rewritten.
+ *     read but kept verbatim when the file is rewritten. They count toward the
+ *     500 cap, are evicted oldest-first together with valid records (unreadable
+ *     timestamp = oldest), and one larger than 2 KB is dropped with a warning.
  *
  * Writes go through LocatorMemoryWriter.write (cross-process lock, refuses if
  * the file changed since it was read) with AtomicJsonStore.writeJsonAtomic
@@ -41,8 +47,9 @@ const { validateRecord, SCHEMA_VERSION } = require("./RunRecord");
 
 const MAX_RUNS = 500;
 const MAX_BYTES = 1024 * 1024;
-// LocatorMemoryWriter's digest reader refuses files above this size.
-const WRITER_DIGEST_LIMIT = 8 * 1024 * 1024;
+// 500 x 2 KB stays under MAX_BYTES, so a full file of preserved records can
+// never trip the oversize quarantine.
+const MAX_PRESERVED_BYTES = 2048;
 const MAX_ATTEMPTS = 5;
 const DEFAULT_BACKOFF_MS = 40;
 const DEFAULT_FILE = path.join(__dirname, "..", "..", "..", "data", "run_history.json");
@@ -52,6 +59,14 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const isPlain = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const byTime = (a, b) => (a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1
   : a.runId < b.runId ? -1 : a.runId > b.runId ? 1 : 0);
+// Eviction order across valid and preserved records. Unreadable timestamp = oldest.
+const timeOf = (r) => {
+  const ms = isPlain(r) && typeof r.timestamp === "string" ? Date.parse(r.timestamp) : NaN;
+  return Number.isNaN(ms) ? -Infinity : ms;
+};
+const idOf = (r) => (isPlain(r) && typeof r.runId === "string" ? r.runId : "");
+const byAge = (a, b) => (timeOf(a) < timeOf(b) ? -1 : timeOf(a) > timeOf(b) ? 1
+  : idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0);
 
 class RunLedger {
   /**
@@ -64,7 +79,6 @@ class RunLedger {
     this._env = o.env || process.env;
     this._backoffMs = Number.isFinite(o.backoffMs) && o.backoffMs >= 0 ? o.backoffMs : DEFAULT_BACKOFF_MS;
     this._readOnly = false;
-    this._preserved = new Set();
   }
 
   static isEnabled(env = process.env) {
@@ -122,25 +136,37 @@ class RunLedger {
   }
 
   async _appendWithRetry(record) {
-    const preservedDigests = this._preserved;
     let lastError = "unknown";
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       if (this._readOnly) {
         Logger.warning("RunLedger: refusing to append; the ledger file is newer or unreadable and is left untouched");
         return { ok: false, error: "ledger is read-only for this process", count: 0 };
       }
-      const state = this._read(attempt === 1, preservedDigests, true);
+      const state = this._read(attempt === 1);
       if (state.refuse) return { ok: false, error: state.refuse, count: 0 };
+      if (state.conflict) {
+        lastError = "writer conflict: ledger changed while it was being set aside";
+        if (attempt < MAX_ATTEMPTS) await sleep(this._backoffMs * attempt * (0.5 + Math.random()));
+        continue;
+      }
 
-      const runs = state.runs.concat([record]);
-      let evicted = 0;
-      if (runs.length > MAX_RUNS) { evicted = runs.length - MAX_RUNS; runs.splice(0, evicted); }
-      const envelope = { schemaVersion: SCHEMA_VERSION, runs: state.preserved.concat(runs) };
+      // Valid and preserved records share one cap. The new record is never a candidate.
+      const kept = state.runs.concat(state.preserved);
+      const evicted = Math.max(0, kept.length + 1 - MAX_RUNS);
+      let survivors = kept;
+      if (evicted > 0) {
+        const drop = new Set(kept.slice().sort(byAge).slice(0, evicted));
+        survivors = kept.filter((r) => !drop.has(r));
+      }
+      const keepPreserved = new Set(state.preserved);
+      const preservedOut = survivors.filter((r) => keepPreserved.has(r));
+      const runs = survivors.filter((r) => !keepPreserved.has(r)).concat([record]);
+      const envelope = { schemaVersion: SCHEMA_VERSION, runs: preservedOut.concat(runs) };
 
       const result = await write(this.filePath, envelope, state.digest, writeJsonAtomic);
       if (result && result.ok) {
         if (evicted > 0) Logger.warning(`RunLedger: evicted ${evicted} oldest run record(s) to stay within ${MAX_RUNS}`);
-        return { ok: true, count: runs.length };
+        return { ok: true, count: envelope.runs.length };
       }
       lastError = (result && result.error) || "write failed";
       if (!/^writer conflict/.test(lastError)) {
@@ -157,26 +183,26 @@ class RunLedger {
    * Reads and validates the file. Returns
    * { runs, preserved, dropped, digest } or, when appends must not proceed,
    * { runs: [], preserved: [], dropped: 0, digest: null, refuse }.
-   * `digest` is the writer's expected digest: null when there is no file to guard.
+   * `conflict: true` means the file changed while it was being set aside; the
+   * caller retries. `digest` is the writer's expected digest: null when there is
+   * no file to guard.
    */
-  _read(warn, preservedDigests = this._preserved, forAppend = false) {
+  _read(warn) {
     const empty = { runs: [], preserved: [], dropped: 0, digest: null };
     const file = this.filePath;
     let stat;
     try {
-      stat = fs.statSync(file);
+      stat = fs.lstatSync(file); // never follow a symlink
     } catch (e) {
       if (e.code === "ENOENT" || e.code === "ENOTDIR") return empty;
       return this._unreadable(e, empty);
     }
+    if (stat.isSymbolicLink()) return this._unreadable({ code: "ESYMLINK" }, empty);
     if (!stat.isFile()) return this._unreadable({ code: "ENOTFILE" }, empty);
 
     if (stat.size > MAX_BYTES) {
-      if (warn) Logger.warning(`RunLedger: ${file} is larger than ${MAX_BYTES} bytes; preserving it as a corrupt sidecar and starting empty`);
-      this._sidecarCopy(file, null, preservedDigests, stat.size);
-      // The writer cannot digest files above its own limit, so clear the way.
-      if (forAppend && stat.size > WRITER_DIGEST_LIMIT) { try { fs.unlinkSync(file); } catch {} return empty; }
-      return forAppend ? { ...empty, digest: this._safeDigest(file) } : empty;
+      if (warn) Logger.warning(`RunLedger: ${file} is larger than ${MAX_BYTES} bytes; moving it aside and starting empty`);
+      return this._setAside(file, stat, empty);
     }
 
     let raw;
@@ -187,9 +213,8 @@ class RunLedger {
     }
     const digest = hash(raw);
     const corrupt = (why) => {
-      if (warn) Logger.warning(`RunLedger: ${why} in ${file}; preserving it as a corrupt sidecar and starting empty`);
-      this._sidecarCopy(file, raw, preservedDigests, raw.length);
-      return { ...empty, digest };
+      if (warn) Logger.warning(`RunLedger: ${why} in ${file}; moving it aside and starting empty`);
+      return this._setAside(file, stat, empty);
     };
     if (raw.length > MAX_BYTES) return corrupt("file grew past the size limit");
 
@@ -212,13 +237,17 @@ class RunLedger {
     const preserved = [];
     let dropped = 0;
     let future = 0;
+    let oversize = 0;
     for (const item of parsed.runs) {
       const v = validateRecord(item);
       if (v.ok) runs.push(v.record);
-      else if (v.reason === "unsupported_version") { future++; preserved.push(item); }
-      else dropped++;
+      else if (v.reason === "unsupported_version") {
+        if (Buffer.byteLength(JSON.stringify(item)) > MAX_PRESERVED_BYTES) { oversize++; dropped++; }
+        else { future++; preserved.push(item); }
+      } else dropped++;
     }
-    if (warn && dropped > 0) Logger.warning(`RunLedger: dropped ${dropped} invalid run record(s) from ${file}`);
+    if (warn && dropped - oversize > 0) Logger.warning(`RunLedger: dropped ${dropped - oversize} invalid run record(s) from ${file}`);
+    if (warn && oversize > 0) Logger.warning(`RunLedger: dropped ${oversize} run record(s) with an unsupported schemaVersion larger than ${MAX_PRESERVED_BYTES} bytes from ${file}`);
     if (warn && future > 0) Logger.warning(`RunLedger: skipped ${future} run record(s) with an unsupported schemaVersion in ${file}; they are kept as they are`);
     return { runs, preserved, dropped, digest };
   }
@@ -229,36 +258,27 @@ class RunLedger {
     return { ...empty, refuse: "ledger file is unreadable" };
   }
 
-  _safeDigest(file) {
-    try { return hash(fs.readFileSync(file)); } catch { return null; }
-  }
-
-  // Copies the original bytes to a unique sidecar (exclusive create, 0600).
-  // Failures are logged and swallowed: a failed audit copy must not stop the run.
-  _sidecarCopy(file, raw, preservedDigests, size) {
-    const key = raw ? hash(raw) : `size:${size}`;
-    if (preservedDigests.has(key)) return;
-    preservedDigests.add(key);
+  // Moves the bad file aside with one atomic rename: byte-for-byte by
+  // construction, no copy, no dedupe. The file is only moved if it is still the
+  // one that was inspected; otherwise the caller retries.
+  _setAside(file, stat, empty) {
     const sidecar = path.join(path.dirname(file),
       `${path.basename(file)}.corrupt-${Date.now()}-${process.pid}-${crypto.randomUUID()}`);
-    let out;
     try {
-      out = fs.openSync(sidecar, "wx", 0o600);
-      if (raw) {
-        fs.writeSync(out, raw);
-      } else {
-        const src = fs.openSync(file, "r");
-        try {
-          const buffer = Buffer.alloc(65536);
-          let n;
-          while ((n = fs.readSync(src, buffer, 0, buffer.length, null)) > 0) fs.writeSync(out, buffer, 0, n);
-        } finally { fs.closeSync(src); }
+      const now = fs.lstatSync(file);
+      if (now.ino !== stat.ino || now.size !== stat.size || now.mtimeMs !== stat.mtimeMs) {
+        return { ...empty, conflict: true };
       }
+      fs.renameSync(file, sidecar);
     } catch (e) {
-      Logger.warning(`RunLedger: failed to preserve a corrupt sidecar for ${file} (${e.code || "error"})`);
-    } finally {
-      if (out !== undefined) { try { fs.closeSync(out); } catch {} }
+      if (e.code === "ENOENT") return empty; // another process already moved it
+      this._readOnly = true;
+      Logger.warning(`RunLedger: could not move ${file} aside (${e.code || "error"}); leaving it untouched and not recording history in this process`);
+      return { ...empty, refuse: "could not move the corrupt ledger aside" };
     }
+    try { fs.chmodSync(sidecar, 0o600); } catch {}
+    Logger.warning(`RunLedger: moved the corrupt ledger to ${sidecar}`);
+    return empty;
   }
 }
 

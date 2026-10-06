@@ -229,7 +229,7 @@ function csvCell(value) {
     if (value === null || value === undefined) return "";
     if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
     let text = stripControlChars(value);
-    if (CSV_FORMULA_PREFIX.test(text)) text = `'${text}`;
+    if (CSV_FORMULA_PREFIX.test(text) || CSV_FORMULA_PREFIX.test(text.trimStart())) text = `'${text}`;
     if (/[",\r\n]/.test(text)) text = `"${text.replace(/"/g, '""')}"`;
     return text;
 }

@@ -29,6 +29,7 @@ const MAX_COUNT = 1_000_000;
 const MIN_REPEAT = 1;
 const MAX_REPEAT = 50;
 const MAX_BRANCH_LENGTH = 100;
+const MAX_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const UNKNOWN = "unknown";
 
 const RESULTS = Object.freeze(["PASSED", "FAILED", "PARTIAL", "NO_TESTS_RUN"]);
@@ -172,8 +173,10 @@ function boundedRepeat(value) {
   return Math.min(MAX_REPEAT, Math.max(MIN_REPEAT, value));
 }
 
+/** Finite number clamped to [0, 7 days]; anything else -> 0. */
 function boundedDuration(value) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return 0;
+  return Math.min(value, MAX_DURATION_MS);
 }
 
 function pick(source, keys) {
@@ -259,19 +262,41 @@ function countsObject(obj, keys) {
 }
 
 /**
+ * Copies a counts object once, or returns the input unchanged when it is not a
+ * well-formed plain object (countsObject then rejects it).
+ */
+function snapshotCounts(obj, keys) {
+  if (!isPlainObject(obj) || !hasExactKeys(obj, keys)) return obj;
+  const out = {};
+  for (const key of keys) out[key] = obj[key];
+  return out;
+}
+
+/**
  * @returns {{ok:true, record:object}|{ok:false, reason:string}}
  * Never throws. A future schemaVersion is reported as "unsupported_version" so
  * the ledger can skip it without rewriting it.
  */
-function validateRecord(raw) {
+function validateRecord(input) {
   try {
-    if (!isPlainObject(raw)) return { ok: false, reason: "not_an_object" };
-    if (Object.hasOwn(raw, "schemaVersion") && Number.isInteger(raw.schemaVersion) && raw.schemaVersion > 0
-      && raw.schemaVersion !== SCHEMA_VERSION) {
+    if (!isPlainObject(input)) return { ok: false, reason: "not_an_object" };
+    // Each property is read exactly once into a plain snapshot; every later
+    // check and the returned record use the snapshot, so a getter or Proxy
+    // cannot pass validation and then hand back a different value.
+    const version = Object.hasOwn(input, "schemaVersion") ? input.schemaVersion : undefined;
+    if (Number.isInteger(version) && version > 0 && version !== SCHEMA_VERSION) {
       return { ok: false, reason: "unsupported_version" };
     }
-    if (raw.schemaVersion !== SCHEMA_VERSION) return { ok: false, reason: "invalid_schema_version" };
-    if (!hasExactKeys(raw, RECORD_KEYS)) return { ok: false, reason: "unexpected_keys" };
+    if (version !== SCHEMA_VERSION) return { ok: false, reason: "invalid_schema_version" };
+    if (!hasExactKeys(input, RECORD_KEYS)) return { ok: false, reason: "unexpected_keys" };
+
+    const raw = {};
+    for (const key of RECORD_KEYS) raw[key] = input[key];
+    raw.schemaVersion = version;
+    raw.counts = snapshotCounts(raw.counts, COUNT_KEYS);
+    raw.coverage = raw.coverage === null ? null : snapshotCounts(raw.coverage, COVERAGE_KEYS);
+    raw.heals = snapshotCounts(raw.heals, HEAL_KEYS);
+    raw.healFailures = snapshotCounts(raw.healFailures, FAILURE_KEYS);
 
     const checks = [
       ["runId", typeof raw.runId === "string" && UUID_PATTERN.test(raw.runId)],
@@ -288,7 +313,8 @@ function validateRecord(raw) {
       ["healFailures", countsObject(raw.healFailures, FAILURE_KEYS)],
       ["pendingDepth", isCount(raw.pendingDepth)],
       ["quarantineCount", isCount(raw.quarantineCount)],
-      ["durationMs", typeof raw.durationMs === "number" && Number.isFinite(raw.durationMs) && raw.durationMs >= 0],
+      ["durationMs", typeof raw.durationMs === "number" && Number.isFinite(raw.durationMs)
+        && raw.durationMs >= 0 && raw.durationMs <= MAX_DURATION_MS],
       ["incomplete", typeof raw.incomplete === "boolean"],
     ];
     const bad = checks.find(([, ok]) => !ok);
