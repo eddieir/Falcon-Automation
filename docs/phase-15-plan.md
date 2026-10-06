@@ -208,7 +208,7 @@ under `--strict`, 2 usage or ledger error. A missing ledger is not an error (`li
 `check` exits 0). Every string printed to a terminal goes through `sanitizeField`; CSV cells go
 through `csvCell`.
 An invalid `FALCON_TREND_*` setting makes `check` and `export --format=csv` exit 2, even on an empty
-ledger. `list` and `export --format=json` do not read those settings. A closed stdout (`| head`) exits 0.
+ledger. `list` and `export --format=json` do not read those settings. A closed stdout (`| head`) is not an error: the command keeps the exit code it computed, so `check --strict` still exits 1 when flagged.
 
 **Dashboard.** `GET /history` returns the last 50 records and current flags. GET only, behind the
 existing token check, Host/Origin guard and rate limiter. The History panel shows a table of the last

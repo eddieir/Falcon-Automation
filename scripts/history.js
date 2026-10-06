@@ -239,11 +239,12 @@ function fail(error) {
 
 if (require.main === module) {
   // A consumer that closes the pipe early (`| head`) has chosen to truncate the
-  // output, so EPIPE is a clean exit 0, even for `check --strict`. Any other
-  // stdout error is an internal error (exit 2).
+  // output, so EPIPE is not an error: the exit code main() already computed
+  // stands. That keeps `check --strict` at 1 when a flag is raised even if the
+  // reader stopped early. Any other stdout error is an internal error (exit 2).
   process.stdout.on("error", (error) => {
-    if (error && error.code === "EPIPE") process.exitCode = 0;
-    else fail(error);
+    if (error && error.code === "EPIPE") return;
+    fail(error);
   });
   try {
     process.exitCode = main(process.argv.slice(2));
