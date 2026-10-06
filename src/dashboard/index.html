@@ -397,6 +397,93 @@
   .btn-quarantine { border-color: var(--quarantine); color: var(--quarantine); }
   .btn-quarantine:hover { background: var(--quarantine); color: var(--bg); }
 
+  /* ── Tier 2.5 scoped locator evidence panel (Phase 14) ──
+     Deliberately its own section/classes (`locator-*`), not reused from
+     `.pending-*`/`.flaky-*` above — Tier 2.5 entries carry a three-state
+     trust (trusted/unproven/revoked) that neither of those panels has, and
+     keeping the markup distinct keeps it visibly distinct from Tier 3. */
+  #locator-section {
+    padding: 0 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  #locator-header, #locator-legacy-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--muted);
+  }
+
+  #locator-empty, #locator-legacy-empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 12px 0;
+  }
+
+  .locator-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  .locator-row.trust-trusted { border-left-color: var(--pass); }
+  .locator-row.trust-unproven { border-left-color: var(--skip); }
+  .locator-row.trust-revoked { border-left-color: var(--fail); }
+
+  .locator-body { flex: 1; min-width: 200px; }
+
+  .locator-identity {
+    font-weight: 600;
+    word-break: break-all;
+  }
+
+  .locator-detail {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 2px;
+    word-break: break-all;
+  }
+
+  .locator-trust-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-right: 6px;
+  }
+
+  .locator-trust-badge.trust-trusted { color: var(--pass); border: 1px solid var(--pass); }
+  .locator-trust-badge.trust-unproven { color: var(--skip); border: 1px solid var(--skip); }
+  .locator-trust-badge.trust-revoked { color: var(--fail); border: 1px solid var(--fail); }
+
+  .locator-legacy-badge {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+
+  .locator-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
   /* ── Coverage panel (Phase 10) ── */
   #coverage-section {
     padding: 0 24px 24px;
@@ -542,6 +629,21 @@
   </div>
 </div>
 
+<div id="locator-section">
+  <div id="locator-header">
+    <span>Scoped locator evidence (Tier 2.5) — trusted / unproven / revoked</span>
+  </div>
+  <div id="locator-entries-list">
+    <div id="locator-empty">No scoped locator identities tracked yet.</div>
+  </div>
+  <div id="locator-legacy-header">
+    <span>Legacy rows — not usable for matching</span>
+  </div>
+  <div id="locator-legacy-list">
+    <div id="locator-legacy-empty">No quarantined legacy rows.</div>
+  </div>
+</div>
+
 <div id="feed-section">
   <div id="feed-header">
     <span>Event feed</span>
@@ -555,7 +657,7 @@
 </div>
 
 <script>
-  const state = { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map(), pages: new Map(), sweep: emptySweep() };
+  const state = { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map(), pages: new Map(), sweep: emptySweep(), locatorEntries: new Map(), locatorLegacy: new Map() };
 
   function emptySweep() {
     return { entryUrl: null, currentUrl: null, discovered: 0, budgetExhausted: false };
@@ -924,6 +1026,207 @@
     }
   }
 
+  // ── Tier 2.5 scoped locator evidence panel (Phase 14) ──
+  //
+  // Deliberately separate state/render/fetch functions from the Tier 3
+  // healing panel above — a Tier 2.5 entry is keyed by scoped identity and
+  // carries a three-state trust (trusted/unproven/revoked), not Tier 3's
+  // flat pending/approved/rejected shape, so merging the two listings would
+  // make trust state ambiguous to a reviewer. Nothing here ever reads
+  // `entry.signature` — that object's `role` and every `attributes` value
+  // are salted hashes (see ElementSignature.js) and must never be rendered,
+  // so the row only ever draws from identity fields (plaintext by
+  // construction: application id / origin / pathname / action / selector)
+  // and the pending candidate's proposed selector + numeric dimension
+  // scores, never from the trusted/candidate signature object itself.
+
+  function locatorTrustLabel(trust) {
+    return trust === "trusted" ? "Trusted" : trust === "revoked" ? "Revoked" : "Unproven";
+  }
+
+  function locatorIdentityLabel(identity) {
+    if (!identity) return "(unknown identity)";
+    return `${identity.action} "${identity.originalSelector}" on ${identity.origin}${identity.pathname}`;
+  }
+
+  function locatorContributionsLabel(contributions) {
+    if (!contributions || typeof contributions !== "object") return "";
+    // Fixed, known dimension keys only — never derived from the object's own
+    // keys — and every value is required to be a number before it is ever
+    // interpolated, so this can't become an injection vector even though it
+    // skips escapeHtml (the same posture the existing panels take with
+    // numeric fields like `entry.occurrences`).
+    const dims = ["attribute", "accessibleName", "structural", "text", "boundingBox"];
+    return dims
+      .filter((dim) => typeof contributions[dim] === "number")
+      .map((dim) => `${dim}=${contributions[dim]}`)
+      .join(" ");
+  }
+
+  function locatorRow(entry) {
+    const row = document.createElement("div");
+    row.className = `locator-row trust-${entry.trust}`;
+    const pending = entry.pendingCandidate;
+    const previouslyRejected = pending && pending.previouslyRejected;
+    const rejectedWarning = previouslyRejected && previouslyRejected.count > 0
+      ? `<div class="pending-rejected-warning">⚠ previously rejected ${previouslyRejected.count} time(s), last by ${escapeHtml(previouslyRejected.lastRejectedBy ?? "(unknown)")} at ${escapeHtml(previouslyRejected.lastRejectedAt ?? "")}</div>`
+      : "";
+    const pendingBlock = pending
+      ? `
+        <div class="locator-detail">pending candidate: ${escapeHtml(pending.selector)}</div>
+        <div class="locator-detail">proposal: ${escapeHtml(pending.proposalId)}</div>
+        <div class="locator-detail">margin: ${escapeHtml(pending.margin ?? "unavailable")} · runner-up: ${escapeHtml(pending.runnerUp?.selector ?? "none")}</div>
+        <div class="locator-detail">evidence: ${escapeHtml(JSON.stringify(pending.evidence || {}))}</div>
+        <div class="locator-detail">alternatives: ${escapeHtml(JSON.stringify(pending.alternativesConsidered || []))}</div>
+        <div class="locator-detail">scores: ${escapeHtml(locatorContributionsLabel(pending.contributions))}</div>
+        <div class="locator-detail">seen ${pending.occurrences}× · last ${fmt(new Date(pending.lastSeen).getTime())}</div>
+        ${rejectedWarning}
+      `
+      : `<div class="locator-detail">no pending candidate</div>`;
+    const canDecide = pending && entry.trust !== "revoked";
+    row.innerHTML = `
+      <div class="locator-body">
+        <span class="locator-trust-badge trust-${entry.trust}">${escapeHtml(locatorTrustLabel(entry.trust))}</span>
+        <span class="locator-identity">${escapeHtml(locatorIdentityLabel(entry.identity))}</span>
+        <div class="locator-detail">last seen ${escapeHtml(entry.lastSeen)}</div>
+        ${pendingBlock}
+      </div>
+      <div class="locator-actions">
+        ${canDecide
+          ? `<button class="btn btn-approve" data-action="approve" data-key="${escapeHtml(entry.key)}" data-proposal-id="${escapeHtml(pending.proposalId)}">Approve</button>
+             <button class="btn btn-reject" data-action="reject" data-key="${escapeHtml(entry.key)}" data-proposal-id="${escapeHtml(pending.proposalId)}">Reject</button>`
+          : ""}
+        <button class="btn btn-reject" data-action="rollback" data-key="${escapeHtml(entry.key)}" data-revision="${escapeHtml(entry.revision)}">Rollback</button>
+      </div>
+    `;
+    return row;
+  }
+
+  function renderLocatorEntries() {
+    const list = $("locator-entries-list");
+    const entries = [...state.locatorEntries.values()];
+    if (entries.length === 0) {
+      list.replaceChildren($("locator-empty") || makeLocatorEmpty());
+      return;
+    }
+    list.replaceChildren(...entries.map(locatorRow));
+  }
+
+  function makeLocatorEmpty() {
+    const div = document.createElement("div");
+    div.id = "locator-empty";
+    div.textContent = "No scoped locator identities tracked yet.";
+    return div;
+  }
+
+  function locatorLegacyRow(id, row) {
+    const div = document.createElement("div");
+    div.className = "locator-row";
+    div.innerHTML = `
+      <div class="locator-body">
+        <span class="locator-legacy-badge">legacy — not usable for matching</span>
+        <div class="locator-detail">reason: ${escapeHtml(row.reason)}</div>
+        <div class="locator-detail">loaded at ${escapeHtml(row.loadedAt)}</div>
+      </div>
+      <div class="locator-actions">
+        <button class="btn btn-reject" data-action="delete" data-id="${escapeHtml(id)}">Delete</button>
+      </div>
+    `;
+    return div;
+  }
+
+  function renderLocatorLegacy() {
+    const list = $("locator-legacy-list");
+    const rows = [...state.locatorLegacy.entries()];
+    if (rows.length === 0) {
+      list.replaceChildren($("locator-legacy-empty") || makeLocatorLegacyEmpty());
+      return;
+    }
+    list.replaceChildren(...rows.map(([id, row]) => locatorLegacyRow(id, row)));
+  }
+
+  function makeLocatorLegacyEmpty() {
+    const div = document.createElement("div");
+    div.id = "locator-legacy-empty";
+    div.textContent = "No quarantined legacy rows.";
+    return div;
+  }
+
+  $("locator-entries-list").addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-action]");
+    if (!button) return;
+    const { action, key } = button.dataset;
+    button.disabled = true;
+    try {
+      const extra = action === "rollback"
+        ? { expectedRevision: button.dataset.revision, note: prompt("Optional note for this rollback:") || undefined }
+        : { proposalId: button.dataset.proposalId };
+      await locatorDecision(action, key, extra);
+    } catch (err) {
+      button.disabled = false;
+      alert(`Failed to ${action}: ${err.message}`);
+    }
+  });
+
+  $("locator-legacy-list").addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-action]");
+    if (!button) return;
+    const { id } = button.dataset;
+    button.disabled = true;
+    try {
+      await locatorLegacyDelete(id);
+    } catch (err) {
+      button.disabled = false;
+      alert(`Failed to delete: ${err.message}`);
+    }
+  });
+
+  async function locatorDecision(action, key, extra = {}) {
+    const res = await fetch(`/locator/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ key, ...extra }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    // No live socket broadcast for locator decisions (LocatorMemory is a
+    // plain store with no event emitter, unlike HealingTrust/
+    // FlakinessTracker) — refetch directly instead of waiting on an event.
+    await refreshLocator();
+  }
+
+  async function locatorLegacyDelete(id) {
+    const res = await fetch("/locator/legacy/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ id }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    await refreshLocator();
+  }
+
+  async function refreshLocator() {
+    try {
+      const res = await fetch("/locator/entries", { headers: authHeaders() });
+      if (res.ok) {
+        const entries = await res.json();
+        state.locatorEntries = new Map(Object.entries(entries));
+        renderLocatorEntries();
+      }
+    } catch {
+      // Best-effort — the panel just stays on its last known state
+    }
+    try {
+      const res = await fetch("/locator/legacy", { headers: authHeaders() });
+      if (res.ok) {
+        const legacy = await res.json();
+        state.locatorLegacy = new Map(Object.entries(legacy));
+        renderLocatorLegacy();
+      }
+    } catch {
+      // Best-effort — the panel just stays on its last known state
+    }
+  }
+
   // ── Coverage panel (Phase 10) ──
   //
   // Mirrors the fold Dashboard.js does server-side: a sweep streams pageStart
@@ -1149,6 +1452,7 @@
     refreshHealing();
     refreshFlakiness();
     refreshCoverage();
+    refreshLocator();
   });
 
   socket.on("disconnect", () => {
@@ -1165,7 +1469,7 @@
 
   // Replay full history for late-joining tabs
   socket.on("replay", (events) => {
-    Object.assign(state, { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map(), pages: new Map(), sweep: emptySweep() });
+    Object.assign(state, { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map(), pages: new Map(), sweep: emptySweep(), locatorEntries: new Map(), locatorLegacy: new Map() });
     $("feed").replaceChildren();
     for (const id of ["bar-pass", "bar-fail", "bar-skip", "bar-quarantine"]) $(id).style.width = "0%";
     $("run-time").textContent = "–";
@@ -1173,6 +1477,8 @@
     renderPending();
     renderFlaky();
     renderCoverage();
+    renderLocatorEntries();
+    renderLocatorLegacy();
     events.forEach(handleEvent);
   });
 

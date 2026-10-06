@@ -1,0 +1,1362 @@
+{
+  "phase": 14,
+  "title": "Evidence-based element change detection and trusted locator memory",
+  "criteriaSource": "Phase 14 brief, section 7 (REQUIRED ACCEPTANCE CRITERIA), 70 criteria in 12 sections",
+  "purpose": [
+    "The 70 criteria were stated in the phase brief and nowhere in the repository.",
+    "Nothing could therefore check whether a criterion had an implementation or a test,",
+    "and AC-18 turned out to have neither: evidence was captured after the interaction,",
+    "so a click that navigated recorded a trusted fact about an element on the landing",
+    "page. This file is the register that absence allowed to go unnoticed.",
+    "tests/regression/p14-traceability.check.cjs asserts every row below resolves to a",
+    "file that exists and a test that is really present, so a criterion cannot silently",
+    "lose its coverage."
+  ],
+  "verifiedByMeaning": {
+    "test": "An executing regression test asserts the criterion. The named tests must exist.",
+    "platform": "The behaviour belongs to a third party, not to Falcon's code or config. Asserting it would assert someone else's platform semantics.",
+    "review": "A process criterion about the phase itself, evidenced by a recorded review verdict rather than by code."
+  },
+  "criteria": [
+    {
+      "id": "AC-01",
+      "section": "Identity and isolation",
+      "text": "Trusted memory is scoped by application, normalized origin, normalized page, action and original selector.",
+      "implementation": [
+        "src/core/locator/LocatorIdentity.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "buildIdentity produces the minimum required fields (AC-01/AC-05)"
+        }
+      ]
+    },
+    {
+      "id": "AC-02",
+      "section": "Identity and isolation",
+      "text": "Same selector on different pages is isolated.",
+      "implementation": [
+        "src/core/locator/LocatorIdentity.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "AC-02: same selector on a different page yields a different key"
+        }
+      ]
+    },
+    {
+      "id": "AC-03",
+      "section": "Identity and isolation",
+      "text": "Same selector for different actions is isolated.",
+      "implementation": [
+        "src/core/locator/LocatorIdentity.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "AC-03: same selector on the same page, different action, yields a different key"
+        }
+      ]
+    },
+    {
+      "id": "AC-04",
+      "section": "Identity and isolation",
+      "text": "URL credentials, fragments and sensitive query values are excluded.",
+      "implementation": [
+        "src/core/locator/LocatorIdentity.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "no query, no fragment captured in pathname (AC-04)"
+        },
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "credentials embedded in the URL never appear in origin, pathname, or applicationId"
+        }
+      ]
+    },
+    {
+      "id": "AC-05",
+      "section": "Storage",
+      "text": "The store has a versioned schema.",
+      "implementation": [
+        "src/core/locator/LocatorMemory.js",
+        "src/core/locator/LocatorIdentity.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "buildIdentity produces the minimum required fields (AC-01/AC-05)"
+        },
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "a row below the current identity schemaVersion is quarantined"
+        }
+      ]
+    },
+    {
+      "id": "AC-06",
+      "section": "Storage",
+      "text": "Writes are atomic using temp-file-plus-rename.",
+      "implementation": [
+        "src/core/util/AtomicJsonStore.js",
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-persistence.check.cjs",
+          "name": "writeJsonAtomic resolves {ok:true} on a successful write"
+        },
+        {
+          "file": "tests/regression/p14-persistence.check.cjs",
+          "name": "writeJsonAtomic resolves {ok:false, error} on failure and never rejects"
+        }
+      ]
+    },
+    {
+      "id": "AC-07",
+      "section": "Storage",
+      "text": "Malformed storage produces visible recovery evidence.",
+      "implementation": [
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "an unrecognised trust value on load is quarantined into legacy, never silently treated as trusted"
+        },
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "a row missing required identity fields is quarantined into legacy, never into entries, and never auto-promoted"
+        },
+        {
+          "file": "tests/regression/p14-memory-corrections.check.cjs",
+          "name": "a rejected envelope says so, names the reason, and leaves the file alone"
+        }
+      ],
+      "note": "Two distinct failures. A row that fails validation is quarantined and listable. A file whose whole envelope cannot be read parses into no rows at all, so quarantine is empty too — that case used to load in silence and is now reported through a warning and envelopeStatus(). Independent QA found the gap on the final revision."
+    },
+    {
+      "id": "AC-08",
+      "section": "Storage",
+      "text": "Write failure is visible and never reported as persisted success.",
+      "implementation": [
+        "src/core/util/AtomicJsonStore.js",
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "a blocked write directory is reported through hasUnpersistedWriteFailure()/lastWriteError(), not just swallowed"
+        },
+        {
+          "file": "tests/regression/p14-persistence.check.cjs",
+          "name": "WriteFailureTracker: a failure on one path is not cleared by a success on a different path"
+        }
+      ]
+    },
+    {
+      "id": "AC-09",
+      "section": "Storage",
+      "text": "Caps hold on load and mutation.",
+      "implementation": [
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "MAX_TRACKED_IDENTITIES is enforced on mutation, evicting least-recently-seen first, ties broken by ascending key"
+        },
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "MAX_TRACKED_IDENTITIES is enforced on load too, not only on mutation, and eviction is deterministic across repeated loads"
+        },
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "REJECTIONS_MAX_ROWS is enforced on load, trimming oldest rows and rebuilding the rejection index from only what survives"
+        }
+      ]
+    },
+    {
+      "id": "AC-10",
+      "section": "Storage",
+      "text": "Reads return defensive copies.",
+      "implementation": [
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "AC-10: mutating the object returned by recordEvidence does not corrupt the store's internal state"
+        },
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "AC-10: mutating the object returned by list() does not corrupt the store's internal state"
+        },
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "AC-10: mutating the object returned by getEntry()/getTrusted() across TWO separate calls never lets one call's mutation leak into the next"
+        }
+      ]
+    },
+    {
+      "id": "AC-11",
+      "section": "Storage",
+      "text": "Prototype-sensitive keys are safe.",
+      "implementation": [
+        "src/core/locator/LocatorIdentity.js",
+        "src/core/locator/LocatorMemory.js",
+        "src/core/locator/CandidateMatcher.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "AC-11: __proto__/constructor/prototype as env keys never leak into applicationId resolution"
+        },
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "AC-11: __proto__/constructor/prototype as attribute keys never leak through the allow-list"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "hostile attribute keys (__proto__, constructor, prototype) never leak via the prototype chain"
+        }
+      ]
+    },
+    {
+      "id": "AC-12",
+      "section": "Storage",
+      "text": "Approved decisions can be rolled back through an attributable operation.",
+      "implementation": [
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "rollback() revokes trust, preserves revocationHistory and the prior signature, and getTrusted returns nothing"
+        },
+        {
+          "file": "tests/regression/p14-surfaces.check.cjs",
+          "name": "locator routes: rollback revokes trust, and a revoked identity refuses re-approval over HTTP (loophole closure)"
+        }
+      ]
+    },
+    {
+      "id": "AC-13",
+      "section": "Migration",
+      "text": "Legacy formats are recognized and preserved for inspection.",
+      "implementation": [
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-surfaces.check.cjs",
+          "name": "locator routes: GET /locator/legacy is read-only and surfaces quarantined rows, deletable only via the explicit route"
+        },
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "deleteLegacy permanently removes a quarantined row and only that row"
+        }
+      ],
+      "note": "Preservation is at metadata level, deliberately: a quarantined row is kept as a digest plus the reason it was set aside, not as its original content, because retaining raw historical rows would reintroduce exactly the unbounded page-derived values this phase forbids storing. So an operator can see that a row was rejected and why, but cannot recover what it contained from this file. An unparseable file is the exception that keeps its bytes, in a .corrupt-* sidecar."
+    },
+    {
+      "id": "AC-14",
+      "section": "Migration",
+      "text": "Unscoped legacy entries are not silently treated as fully scoped trust.",
+      "implementation": [
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "AC-14/AC-15: unscoped legacy rows are quarantined, never silently trusted, and that classification is deterministic across independent LocatorMemory instances"
+        }
+      ]
+    },
+    {
+      "id": "AC-15",
+      "section": "Migration",
+      "text": "Migration is deterministic and recoverable.",
+      "implementation": [
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "AC-14/AC-15: unscoped legacy rows are quarantined, never silently trusted, and that classification is deterministic across independent LocatorMemory instances"
+        },
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "AC-15: reloading the SAME already-open instance via _reload() reproduces the identical classification as a fresh instance"
+        }
+      ]
+    },
+    {
+      "id": "AC-16",
+      "section": "Signature capture",
+      "text": "Successful original-selector interaction captures or refreshes a signature.",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-49: Tier 1 success: evidence is recorded in the background without changing the return value"
+        }
+      ]
+    },
+    {
+      "id": "AC-17",
+      "section": "Signature capture",
+      "text": "Successful trusted-alternative interaction refreshes the signature.",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-17: legacy alternatives cannot refresh scoped trusted evidence"
+        },
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-17 negative control: without a Tier 2 success, evidence is never refreshed at all (proves the refresh is caused by the success, not a timer)"
+        }
+      ]
+    },
+    {
+      "id": "AC-18",
+      "section": "Signature capture",
+      "text": "For destructive/navigation actions, capture occurs before action and persistence only after success.",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-18: a navigating Tier 1 click records evidence for the page the click happened on, describing the element clicked"
+        },
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-18: pre-captured evidence is persisted only after the action succeeds, never when it throws"
+        },
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-18: unscoped legacy alternatives cannot navigate or create scoped evidence"
+        }
+      ]
+    },
+    {
+      "id": "AC-19",
+      "section": "Signature capture",
+      "text": "Click, type and select share the signature policy.",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-19: a Tier 1 click success captures evidence under its own action scope"
+        },
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-19: a Tier 1 type success captures evidence under its own action scope"
+        },
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-19: a Tier 1 select success captures evidence under its own action scope"
+        }
+      ]
+    },
+    {
+      "id": "AC-20",
+      "section": "Signature capture",
+      "text": "Sensitive values and raw DOM are absent.",
+      "implementation": [
+        "src/core/locator/ElementSignature.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "AC-20/21: attribute values, text, and structural path depth are bounded"
+        },
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "D3: input/textarea values, passwords, and raw outerHTML are structurally never read by capture"
+        }
+      ]
+    },
+    {
+      "id": "AC-21",
+      "section": "Signature capture",
+      "text": "Signature size is bounded.",
+      "implementation": [
+        "src/core/locator/ElementSignature.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "AC-21: total serialised size is bounded even under pathological input"
+        }
+      ]
+    },
+    {
+      "id": "AC-22",
+      "section": "Matching",
+      "text": "Tier 2.5 compares bounded candidates with stored evidence.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "candidate count is bounded to MAX_CANDIDATES"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "identical candidate is accepted with full contributions"
+        }
+      ]
+    },
+    {
+      "id": "AC-23",
+      "section": "Matching",
+      "text": "Scores and contributions are deterministic.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "repeated identical inputs produce identical scores, ranking and explanation"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "P14-23 round 3: order independence — shuffling the candidate array never changes the verdict"
+        }
+      ]
+    },
+    {
+      "id": "AC-24",
+      "section": "Matching",
+      "text": "Below-threshold candidates are refused.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "total just below a configured MIN_CONFIDENCE refuses below_threshold"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "total exactly at MIN_CONFIDENCE is accepted (boundary is inclusive)"
+        }
+      ]
+    },
+    {
+      "id": "AC-25",
+      "section": "Matching",
+      "text": "Insufficient winner margin is refused.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "margin just under the configured WINNER_MARGIN refuses insufficient_margin"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "exact tie refuses as insufficient_margin (margin === 0)"
+        }
+      ]
+    },
+    {
+      "id": "AC-26",
+      "section": "Matching",
+      "text": "Action-incompatible candidates are refused.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "action-incompatible candidates are dropped; all-incompatible refuses with reason"
+        }
+      ]
+    },
+    {
+      "id": "AC-27",
+      "section": "Matching",
+      "text": "Candidate selector must be valid and unique.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js",
+        "src/core/locator/SelectorBuilder.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "invalid selector (caller-flagged) excludes the candidate"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "non-unique selector (caller-flagged match count) excludes the candidate"
+        }
+      ]
+    },
+    {
+      "id": "AC-28",
+      "section": "Matching",
+      "text": "Weak text or geometry alone cannot authorize a repair.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "pure geometry alone cannot authorise a repair"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "weak text alone cannot authorise a repair"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "geometry + text combined still cannot authorise (floor, not additive escape)"
+        }
+      ]
+    },
+    {
+      "id": "AC-29",
+      "section": "Matching",
+      "text": "Output includes winning score, runner-up score, margin, supporting evidence, changed evidence and contradictions.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "identical candidate is accepted with full contributions"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "alternativesConsidered output is bounded to MAX_ALTERNATIVES"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "contribution accounting sums to the total (or to 0 when the floor is applied)"
+        }
+      ]
+    },
+    {
+      "id": "AC-30",
+      "section": "Trust",
+      "text": "Tier 2.5 runs after Tier 1 and trusted Tier 2 fail.",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "Tier 2.5: no trusted evidence falls through to Tier 3 with zero DOM query"
+        },
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-18: unscoped legacy alternatives cannot navigate or create scoped evidence"
+        }
+      ]
+    },
+    {
+      "id": "AC-31",
+      "section": "Trust",
+      "text": "Tier 3 remains fallback.",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "Tier 2.5: a refused match falls through to Tier 3 without throwing"
+        },
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-38: Tier 2.5 refusal falls through to Tier 3, and ONLY THEN does HealingTrust see the call — proves the spy itself is wired correctly"
+        }
+      ]
+    },
+    {
+      "id": "AC-32",
+      "section": "Trust",
+      "text": "New Tier 2.5 results are never directly trusted.",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js",
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "Tier 2.5: an accepted new selector lands in pendingCandidate, not trusted"
+        },
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "recordPendingCandidate on a never-before-seen identity creates an entry with no usable trusted evidence"
+        }
+      ]
+    },
+    {
+      "id": "AC-33",
+      "section": "Trust",
+      "text": "Successful Tier 2.5 results become pending review.",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js",
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "Tier 2.5: an accepted new selector lands in pendingCandidate, not trusted"
+        },
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "recordPendingCandidate never touches trust or signature on an existing trusted entry"
+        }
+      ]
+    },
+    {
+      "id": "AC-34",
+      "section": "Trust",
+      "text": "Approval promotes the scoped proposal.",
+      "implementation": [
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "approve() promotes pendingCandidate into signature + trusted, and clears pendingCandidate"
+        },
+        {
+          "file": "tests/regression/p14-surfaces.check.cjs",
+          "name": "locator routes: full HTTP round trip — pending candidate, approve, now trusted"
+        }
+      ]
+    },
+    {
+      "id": "AC-35",
+      "section": "Trust",
+      "text": "Rejection does not promote it.",
+      "implementation": [
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "reject() clears pendingCandidate without ever writing it to signature, and records the rejection"
+        },
+        {
+          "file": "tests/regression/p14-surfaces.check.cjs",
+          "name": "locator routes: reject discards the candidate and leaves trust untouched"
+        }
+      ]
+    },
+    {
+      "id": "AC-36",
+      "section": "Trust",
+      "text": "A re-proposed, previously rejected candidate is surfaced as such.",
+      "implementation": [
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "list() exposes the previously-rejected signal for a re-proposed candidate through list() alone, and carries each entry's own key"
+        },
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "previouslyRejected is always recomputed from the rejection index, never trusted from a stored field"
+        }
+      ]
+    },
+    {
+      "id": "AC-37",
+      "section": "Trust",
+      "text": "A failed repaired action cannot become trusted.",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "Tier 2.5: accepted-then-failed action persists nothing and still reaches Tier 3"
+        },
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-18: pre-captured evidence is persisted only after the action succeeds, never when it throws"
+        }
+      ]
+    },
+    {
+      "id": "AC-38",
+      "section": "Trust",
+      "text": "Tier 2.5 decisions do not enter the Tier 3 trust ledger.",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-38: an accepted Tier 2.5 match never calls any HealingTrust method — only Tier 3 does"
+        },
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-38: Tier 2.5 refusal falls through to Tier 3, and ONLY THEN does HealingTrust see the call — proves the spy itself is wired correctly"
+        }
+      ]
+    },
+    {
+      "id": "AC-39",
+      "section": "Change fixtures",
+      "text": "Safe ID-only change can be proposed.",
+      "implementation": [
+        "src/core/locator/HealingBenchmark.js",
+        "tests/fixtures/benchmark/id-only-change"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "P14-23 round 2: id-only-change-f1 now correctly heals instead of refusing (gate narrowing changed this outcome)"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "P14-23 round 3: the round-2 single-candidate regenerated-id heal still works (this fix must not regress it)"
+        }
+      ]
+    },
+    {
+      "id": "AC-40",
+      "section": "Change fixtures",
+      "text": "Safe wrapper insertion can be proposed.",
+      "implementation": [
+        "src/core/locator/HealingBenchmark.js",
+        "tests/fixtures/benchmark/wrapper-insertion"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "loadCorpus: the published manifest loads, is deterministically ordered, and covers every required class"
+        },
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "runBenchmark: the four outcomes exactly partition N"
+        }
+      ]
+    },
+    {
+      "id": "AC-41",
+      "section": "Change fixtures",
+      "text": "Controlled text change can be proposed when stronger evidence remains.",
+      "implementation": [
+        "src/core/locator/HealingBenchmark.js",
+        "tests/fixtures/benchmark/controlled-text-change"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "loadCorpus: the published manifest loads, is deterministically ordered, and covers every required class"
+        },
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "runBenchmark: the per-case log reports every fixture, not only the favourable ones"
+        }
+      ]
+    },
+    {
+      "id": "AC-42",
+      "section": "Change fixtures",
+      "text": "Two equally plausible targets are refused.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js",
+        "tests/fixtures/benchmark/two-equally-plausible-targets"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "P14-23 round 4: two-equally-plausible-targets-f1 now refuses via insufficient_identity_evidence, not insufficient_margin (authorised reason change)"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "P14-23 round 2/3: THE FALSE-HEAL VECTOR (exact tie) — duplicate data-testid across two distinct elements must never be accepted"
+        }
+      ]
+    },
+    {
+      "id": "AC-43",
+      "section": "Change fixtures",
+      "text": "Contradictory role/action candidate is refused.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js",
+        "tests/fixtures/benchmark/contradictory-role-action"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "contradictory role excludes the candidate"
+        },
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "runBenchmark: both ambiguous/adversarial fixtures are refused, never accepted"
+        }
+      ]
+    },
+    {
+      "id": "AC-44",
+      "section": "Change fixtures",
+      "text": "Identical selectors in different application areas stay isolated.",
+      "implementation": [
+        "src/core/locator/LocatorIdentity.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "AC-44: login .submit and checkout .submit stay isolated"
+        }
+      ]
+    },
+    {
+      "id": "AC-45",
+      "section": "Explainability",
+      "text": "Dashboard shows source tier, scope, selector, confidence, runner-up, margin and evidence.",
+      "implementation": [
+        "src/core/Dashboard.js",
+        "src/dashboard/index.html"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-surfaces.check.cjs",
+          "name": "locator routes: GET /locator/entries carries the real hashed signature fields (API is data, not a render surface)"
+        },
+        {
+          "file": "tests/regression/p14-surfaces.check.cjs",
+          "name": "locator routes: full HTTP round trip — pending candidate, approve, now trusted"
+        }
+      ]
+    },
+    {
+      "id": "AC-46",
+      "section": "Explainability",
+      "text": "Dashboard content is escaped.",
+      "implementation": [
+        "src/dashboard/index.html"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-surfaces.check.cjs",
+          "name": "dashboard UI: locator entry fields render escaped — selector/identity/actor text never becomes markup"
+        },
+        {
+          "file": "tests/regression/p14-surfaces.check.cjs",
+          "name": "dashboard UI: legacy rows render read-only and labelled, with no raw markup from their fields"
+        }
+      ]
+    },
+    {
+      "id": "AC-47",
+      "section": "Explainability",
+      "text": "CLI shows equivalent evidence.",
+      "implementation": [
+        "scripts/healing/review.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-surfaces.check.cjs",
+          "name": "CLI: locator-list shows a pending candidate, locator-approve promotes it, locator-show reflects trusted state"
+        },
+        {
+          "file": "tests/regression/p14-surfaces.check.cjs",
+          "name": "CLI: Tier 3 subcommands keep working unchanged alongside the new Tier 2.5 ones"
+        }
+      ]
+    },
+    {
+      "id": "AC-48",
+      "section": "Explainability",
+      "text": "Approve, reject and rollback are attributable and auditable.",
+      "implementation": [
+        "src/core/locator/LocatorMemory.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-memory.check.cjs",
+          "name": "rollback() revokes trust, preserves revocationHistory and the prior signature, and getTrusted returns nothing"
+        },
+        {
+          "file": "tests/regression/p14-surfaces.check.cjs",
+          "name": "CLI: locator-reject discards the candidate; locator-rollback revokes and blocks re-approval"
+        }
+      ]
+    },
+    {
+      "id": "AC-49",
+      "section": "Compatibility",
+      "text": "Evidence capture never blocks or delays a Tier 1 success.",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-49: Tier 1 success: evidence capture never blocks or delays the Tier 1 return"
+        },
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-49/AC-18: a hanging collector delays Tier 1 by at most the documented pre-capture bound"
+        }
+      ]
+    },
+    {
+      "id": "AC-50",
+      "section": "Compatibility",
+      "text": "Report statuses and exit codes remain unchanged.",
+      "implementation": [
+        "src/core/ReportManager.js",
+        "src/core/AIHealer/HealingReport.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "HealingReport omits status/reason keys entirely when not supplied (additive, no shape change)"
+        },
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "AC-49: Tier 1 success: evidence is recorded in the background without changing the return value"
+        }
+      ]
+    },
+    {
+      "id": "AC-51",
+      "section": "Compatibility",
+      "text": "The Tier 2.5 decision path performs no network or LLM access.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js",
+        "src/core/locator/SelectorBuilder.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-traceability.check.cjs",
+          "name": "AC-51 static control: CandidateMatcher's require graph never references a network or OpenAI module"
+        },
+        {
+          "file": "tests/regression/p14-traceability.check.cjs",
+          "name": "AC-51 dynamic control: Tier 2.5 decision path is byte-identical with global.fetch and http/https.request stubbed to throw, OPENAI_API_KEY SET"
+        }
+      ]
+    },
+    {
+      "id": "AC-52",
+      "section": "Compatibility",
+      "text": "Missing signatures cause safe fallback.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js",
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-tier25.check.cjs",
+          "name": "Tier 2.5: quiet degradation when live facts are entirely unavailable"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "candidate missing a signature entirely is handled defensively"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "null storedSignature is handled defensively without throwing"
+        }
+      ]
+    },
+    {
+      "id": "AC-53",
+      "section": "Compatibility",
+      "text": "The implementation stays CommonJS on the project's declared Node floor.",
+      "implementation": [
+        "package.json",
+        "src/core/locator"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-traceability.check.cjs",
+          "name": "AC-53: package.json declares an engines.node floor matching the project's stated Node floor"
+        },
+        {
+          "file": "tests/regression/p14-traceability.check.cjs",
+          "name": "AC-53: every Phase 14 locator module is plain CommonJS — no import/export syntax, and node --check succeeds"
+        }
+      ]
+    },
+    {
+      "id": "AC-54",
+      "section": "CI",
+      "text": "The CI state cache restores only the approved Falcon state files.",
+      "implementation": [
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-traceability.check.cjs",
+          "name": "AC-54/AC-55: the CI cache restore step's path list is exactly the four approved Falcon state files, and carries the explanatory comment"
+        }
+      ]
+    },
+    {
+      "id": "AC-55",
+      "section": "CI",
+      "text": "The CI cache save list stays in lockstep with the restore list.",
+      "implementation": [
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-traceability.check.cjs",
+          "name": "AC-54/AC-55: the CI cache SAVE step's path list is exactly the four approved Falcon state files (restore and save stay in lockstep)"
+        }
+      ]
+    },
+    {
+      "id": "AC-56",
+      "section": "CI",
+      "text": "Unapproved state cannot become trusted through cache restoration.",
+      "implementation": [
+        ".github/workflows/ci.yml",
+        ".gitignore"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-traceability.check.cjs",
+          "name": "AC-56: data/locator_memory.json (Phase 14's evidence-based store) appears in NEITHER the restore nor the save cache path list"
+        },
+        {
+          "file": "tests/regression/p14-traceability.check.cjs",
+          "name": "AC-56 negative control: the SAME check catches data/locator_memory.json the moment it is added to a scratch copy of the restore list (proves the gate can fail)"
+        }
+      ]
+    },
+    {
+      "id": "AC-57",
+      "section": "CI",
+      "text": "Cache failure cannot hide test results.",
+      "implementation": [
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "platform",
+      "justification": "This is a property of GitHub Actions' own restore-step semantics — a failed restore does not fail the job — not of anything Falcon's code or configuration decides. A test asserting it would be asserting a third party's platform behaviour, which is a worse gap than an honest omission. The reasoning is recorded alongside the cache-policy gates in tests/regression/p14-traceability.check.cjs.",
+      "tests": []
+    },
+    {
+      "id": "AC-58",
+      "section": "CI",
+      "text": "Cross-run restoration is demonstrated on a later hosted run if claimed.",
+      "implementation": [
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "test",
+      "justification": "Conditional on a claim this phase deliberately does not make. Locator memory is excluded from the CI cache entirely (AC-56), so there is no cross-run restoration to demonstrate. The gate that keeps it excluded is what keeps this criterion satisfied; if the store is ever cached, this becomes a live requirement.",
+      "tests": [
+        {
+          "file": "tests/regression/p14-traceability.check.cjs",
+          "name": "AC-56: data/locator_memory.json (Phase 14's evidence-based store) appears in NEITHER the restore nor the save cache path list"
+        }
+      ]
+    },
+    {
+      "id": "AC-59",
+      "section": "Security",
+      "text": "Malicious DOM content cannot inject dashboard or CLI output.",
+      "implementation": [
+        "src/core/util/OutputSafe.js",
+        "src/dashboard/index.html"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-surfaces.check.cjs",
+          "name": "CLI: an ANSI-escape- and newline-laden selector is neutralised in real stdout — no raw ESC byte, no forged row, hash never shown"
+        },
+        {
+          "file": "tests/regression/p14-output-safety.check.cjs",
+          "name": "sanitizeField: escapes LF instead of passing it through (the row-forgery fix)"
+        },
+        {
+          "file": "tests/regression/p14-output-safety.check.cjs",
+          "name": "stripControlChars: neutralises a CSI sequence (e.g. clear screen)"
+        }
+      ]
+    },
+    {
+      "id": "AC-60",
+      "section": "Security",
+      "text": "Candidate processing is bounded.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "candidate count is bounded to MAX_CANDIDATES"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "very long hostile text values are bounded, not rejected outright"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "a hostile selector string is bounded in the output"
+        }
+      ]
+    },
+    {
+      "id": "AC-61",
+      "section": "Security",
+      "text": "Unsafe selectors are rejected.",
+      "implementation": [
+        "src/core/locator/SelectorBuilder.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "SelectorBuilder rejects control characters outright"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "isSafeSelectorString rejects raw XPath unless explicitly approved"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "isSafeSelectorString rejects unsupported pseudo-selectors"
+        }
+      ]
+    },
+    {
+      "id": "AC-62",
+      "section": "Security",
+      "text": "No planted secret appears in state, logs or reports.",
+      "implementation": [
+        "src/core/locator/ElementSignature.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "D3: a secret planted in every allow-listed field is hashed (identity fields) and absent from the persisted signature"
+        },
+        {
+          "file": "tests/regression/p14-identity.check.cjs",
+          "name": "D3: a realistic SHORT secret that does not match any redaction pattern survives in the plaintext similarity fields (honest residual risk, not hidden)"
+        }
+      ],
+      "note": "Not an unqualified pass, and the second test named here is why. Secrets are hashed out of every identity-bearing field, which the first test proves. But a short secret that matches no redaction pattern — an OTP, say — survives verbatim in accessibleNameApprox and textApprox, which are persisted. The second test asserts that survival on purpose, so it is evidence of a documented, accepted exception rather than of the criterion as literally worded. Read AC-62 as holding except for short pattern-unmatched values in those two fields. Independent QA flagged that citing it without this note overstated the criterion."
+    },
+    {
+      "id": "AC-63",
+      "section": "Security",
+      "text": "No P0/P1 remains.",
+      "implementation": [],
+      "verifiedBy": "review",
+      "justification": "A process criterion about the phase rather than a behaviour of the code, so no test can establish it. Risk acceptance for anything left open belongs to the human owner, not to this register. Evidence is the recorded review verdicts for the final revision, which live in the pull request thread for this phase (PR #29) and in the coordinator's run ledger under .git/production-cycle/, a path that is deliberately NOT tracked by git — so a reader working from a clone alone can locate the PR thread but not the ledger. Independent QA noted that the earlier wording cited a ledger it could not find in the repository.",
+      "tests": []
+    },
+    {
+      "id": "AC-64",
+      "section": "Competitive evidence",
+      "text": "Every competitive claim is linked to a dated, identified source.",
+      "implementation": [
+        "docs/research/competitor-matrix.json"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-claims.check.cjs",
+          "name": "AC-64: every claim cites at least one source, and every cited source id exists in the matrix's sources list"
+        }
+      ]
+    },
+    {
+      "id": "AC-65",
+      "section": "Competitive evidence",
+      "text": "A public or reproducible mutation corpus exercises identical classes of locator changes.",
+      "implementation": [
+        "tests/fixtures/benchmark/manifest.json",
+        "src/core/locator/HealingBenchmark.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "loadCorpus: the published manifest loads, is deterministically ordered, and covers every required class"
+        },
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "loadCorpus: rejects a manifest with a duplicate fixture id"
+        }
+      ]
+    },
+    {
+      "id": "AC-66",
+      "section": "Competitive evidence",
+      "text": "Falcon reports correct-heal, false-heal, refusal and no-candidate rates.",
+      "implementation": [
+        "src/core/locator/HealingBenchmark.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "runBenchmark: the four outcomes exactly partition N"
+        },
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "P14-23 round 2/3/4: the false-heal rate across the whole corpus is reported prominently"
+        },
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "runBenchmark: correctness is decided by ground-truth DOM identity, never by action success alone"
+        }
+      ]
+    },
+    {
+      "id": "AC-67",
+      "section": "Competitive evidence",
+      "text": "Ambiguous adversarial fixtures produce no silently accepted false heal.",
+      "implementation": [
+        "src/core/locator/CandidateMatcher.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "runBenchmark: both ambiguous/adversarial fixtures are refused, never accepted"
+        },
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "P14-23 round 3: THE FALSE-HEAL VECTOR (asymmetric, the real falsification case) — duplicate-test-id-asymmetric-f1 is refused even though the decoy genuinely outscores the ground truth"
+        },
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "P14-23 round 4: THE FALSIFICATION CASE — stable-key-absent-f1 (no id/data-testid/data-test anywhere) is refused via insufficient_identity_evidence, never accepted"
+        }
+      ]
+    },
+    {
+      "id": "AC-68",
+      "section": "Competitive evidence",
+      "text": "Repeated identical benchmark inputs produce identical rankings and explanations.",
+      "implementation": [
+        "src/core/locator/HealingBenchmark.js",
+        "src/core/locator/CandidateMatcher.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-benchmark.check.cjs",
+          "name": "runBenchmark: identical rankings and full explanations across two separate process invocations"
+        },
+        {
+          "file": "tests/regression/p14-matcher.check.cjs",
+          "name": "repeated identical inputs produce identical scores, ranking and explanation"
+        }
+      ]
+    },
+    {
+      "id": "AC-69",
+      "section": "Competitive evidence",
+      "text": "No prohibited superiority or uniqueness claim appears in the published documentation.",
+      "implementation": [
+        "docs/PHASE-PLANS.md",
+        "README.md",
+        "docs/research"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-claims.check.cjs",
+          "name": "AC-69 doc-lint: every tracked document carrying claims about Falcon or its competitors has no unqualified superiority or unsupported negative-competitor claim"
+        }
+      ]
+    },
+    {
+      "id": "AC-70",
+      "section": "Competitive evidence",
+      "text": "Features that could not be compared are reported UNKNOWN, not favourable to Falcon.",
+      "implementation": [
+        "docs/research/competitor-matrix.json"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p14-claims.check.cjs",
+          "name": "AC-70: every competitor-x-feature cell carries exactly one of the six allowed statuses"
+        }
+      ]
+    }
+  ]
+}

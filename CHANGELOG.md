@@ -842,3 +842,268 @@ External review identified capability claims that overstated what is AI, what is
 **Problem:** Terminal output transcript showed old class name and log lines that the Developer changed.
 
 **Fix:** Updated log lines to reflect new wording: DOMIssueScanner name, new log messages from the scanner ("Scanning the DOM for rule-based UI issues", "Rule-based scan flagged..."), new Step 4 wording ("Executing generated test scenarios" instead of "AI-generated"), and summary-writing log.
+
+---
+
+## Phase 14 — Evidence-based locator matching and scoped memory
+
+Phase 14 adds a deterministic local tier between the locator cache and the LLM, and gives it the
+authority to refuse. The entries below are the defects and design errors found while building it,
+each with how it was caught — several were found by the phase's own benchmark and review gates
+rather than by reading the code, which is the only reason they are written down here instead of
+shipping silently.
+
+### Trusted evidence was recorded for an element nobody had interacted with
+
+**Problem:** Evidence capture ran *after* the interaction it described. For a click that navigates —
+a submit button, a login button, any link-like control — the document had already been replaced by
+the time capture ran. `page.url()` returned the landing page, so the identity was built from the
+wrong page; `collectOne` re-resolved the original selector against the landing page, so the
+signature described whatever element happened to sit behind that selector there; and
+`recordEvidence` grants trust directly with no approval step, so the result was written
+`trust: "trusted"`. Meanwhile the page the click actually happened on got **no evidence at all**.
+
+Two consequences, and the second is the one that matters. The efficacy gap is that this tier
+silently never learned the most common healing targets in a real suite, since the controls that
+navigate are exactly the ones a test clicks. The integrity violation is that the store asserted
+ground-truth observation of a successful interaction with an element that had merely been *present*
+on a page where nothing was clicked — and "trust originates only from ground-truth observation" is
+the single provenance claim this store exists to be able to make.
+
+Reproduced with a page double whose click changes `url()` and whose landing page resolves the same
+selector to a different element: one entry written, keyed to the landing page, describing the
+landing page's element, `trust: "trusted"`, and zero entries for the page clicked.
+
+**Found by** writing the phase's 70 acceptance criteria down as a register. AC-18 specifies exactly
+this ordering — "for destructive/navigation actions, capture occurs before action and persistence
+only after success" — and had no implementation at all. Nothing caught it for the whole phase
+because the criteria lived only in the phase brief, so no check could ask whether a given criterion
+had been implemented. The full test suite passed over it throughout.
+
+**Fix:** The element is read *before* the interaction (`_preCaptureEvidence`, built from the
+pre-interaction URL) and persisted only once the interaction succeeds (`_persistCapturedEvidence`).
+Both tiers are covered — Tier 1 and the Tier 2 stored-alternative path — each failing on its own
+when the ordering is put back.
+
+That trade is deliberate and it is not free: the read now sits in front of every Tier 1/2 action
+rather than after it, so it is capped at 150 ms and every failure mode resolves to *no evidence*
+rather than a partial entry. A slow collector can cost a piece of evidence; it cannot delay the
+interaction or change its outcome. Persistence stays fire-and-forget afterwards, so AC-49's
+no-delay guarantee becomes a documented bound instead of zero, asserted as such. The pre-read is
+re-taken on every retry attempt, so a read from a failed attempt is always overwritten by the
+attempt that actually succeeds.
+
+Capture timing does not change what is observable, which is worth stating because reading earlier
+does see a form that navigation would later have discarded. `ElementFactsCollector` reads a fixed
+nine-key attribute allow-list that excludes `value`, and `ownText` reads only direct child text
+nodes — an `<input>` has none, and a `<textarea>`'s text node is its authored content, not the
+user's typed value. `el.value` is read once, to compute whether an expected `<select>` option
+exists, and the value itself is never returned or stored. The protection is structural, so it holds
+regardless of when capture runs.
+
+### Locator memory had never been atomic, and corruption was silent
+
+**Problem:** `LocatorStore._save()` called `fs.promises.writeFile` directly and swallowed every
+error in a bare catch, so a failed write to the Tier 2 cache was indistinguishable from a
+successful one. Its corrupt-file path was worse: `catch { /* Corrupt store — start fresh */ }`
+emitted **nothing at all**, so a store that had been truncated or hand-edited into invalid JSON
+silently became an empty one and healing quietly lost every alternative it had learned. The
+existing test "locator cache recovers from corrupt JSON" passed *because* recovery was silent.
+
+**Fix:** Migrated onto `AtomicJsonStore` (temp file plus rename, corrupt input moved aside to a
+`.corrupt-<timestamp>-<pid>-<uuid>` sidecar with a warning naming the path — never the parser
+message, which quotes the offending input). `writeJsonAtomic` now resolves `{ok, error?}` instead of
+`undefined` while still never rejecting, so the serialised write chain cannot be poisoned by a
+failure. External API unchanged. The corrupt-JSON test now asserts the warning and the sidecar; that
+is a required behaviour change, not a weakened test.
+
+### A failed write could be masked by a later successful one
+
+**Problem:** Several stores chain two writes to different paths. A naive per-write result handler
+lets the second write's success overwrite the first write's failure, so an unpersisted write
+reports as healthy. `FlakinessTracker` had exactly this shape in `quarantine()` and
+`unquarantine()`.
+
+**Fix:** `WriteFailureTracker`, a per-path failure ledger, with every one of the thirteen write sites
+across `HealingTrust` and `FlakinessTracker` recording against its own path. Caught by the
+coordinator reading the chain rather than by a test, then escalated by the security review, which
+added that the new store would inherit the same pattern unless the fix was generic.
+
+### The trust enum made the new tier's approval path inert
+
+**Problem:** The store was specified with two trust states. A candidate proposed for an identity
+with no prior ground truth had to be seeded as one of them, so it was seeded `revoked` — which left
+entries claiming a revocation by nobody, at no time, with an empty revocation history, in the one
+store whose purpose is an auditable trust trail. Worse, `approve()` guards on the literal string
+`"revoked"`, so **every first-time proposal was refused**: the primary path the whole tier exists to
+serve did not work.
+
+**Fix:** A third state, `unproven`. Proven by reproducing the old logic in isolation first, to
+establish that the bug failed closed rather than open — no revoked entry was ever wrongly promoted.
+The specification error was the coordinator's; the developer escalated it instead of working around
+it.
+
+### A dashboard approval destroyed evidence recorded during the run
+
+**Problem:** The healing chain and the dashboard each constructed their own store instance over the
+same file, and neither reloaded. In `falcon.js` the dashboard shares the test run's process, so the
+dashboard served a stale listing and a single approval serialised its stale map back over the file,
+deleting every entry written during the run. Two entries on disk became one.
+
+**Fix:** One shared instance behind a public accessor that both consumers default to, with injection
+retained for tests. Found by reading two independently reasonable decisions against each other —
+one task had chosen a process-wide singleton to avoid exactly this, the other had chosen
+per-instance for test isolation and had reasoned only about isolation.
+
+### A refusal's reason reached no audit record
+
+**Problem:** `HealingReport._log()` destructures a fixed field list and silently dropped `status`
+and `reason`. The new tier passed both on every refusal, so "refusal carries its reason" was true
+in the code and false in `reports/healing_logs.json` — the audit log that is supposed to show it.
+
+**Fix:** Persist both additively, in the same conditional-spread style as the existing optional
+fields, so no existing entry shape changes. Escalated by the developer, who correctly declined to
+edit a file outside its assigned scope.
+
+### Page text could rewrite the reviewer's terminal
+
+**Problem:** The review CLIs printed selectors and attribute-derived text — all ultimately page
+influenced — through bare `console.log` with no sanitising anywhere in the three CLIs or `Logger`.
+Nothing stops an application attribute from carrying ANSI escape sequences, so that text could clear
+the screen, reposition the cursor, retitle the terminal, or render an OSC-8 hyperlink whose visible
+label differs from its target. The screen it can rewrite is the one a human reads when deciding
+whether to approve a repair.
+
+**Fix:** `src/core/util/OutputSafe.js`, applied at the point of output rather than at capture, so a
+future render site cannot miss it. A single left-to-right scan drops C0/C1/DEL, consumes CSI and OSC
+sequences including both OSC terminators, and strips bidirectional overrides that let a selector
+display in an order its bytes do not support. No backtracking regex, so work stays linear: a
+4,000,000-character pathological payload processed in 192ms.
+
+### Escaping control characters was not enough: a newline forged a listing row
+
+**Problem:** The first fix preserved tab, newline and carriage return, on the reasoning that a
+newline can only add a line rather than erase one. The erasure half is true and the conclusion is
+wrong, because **adding a line is the attack** when the surface prints one entry per line: a single
+field's content forged a complete extra row reading as a separate, legitimate, trusted entry.
+
+**Fix:** A second narrower export, `sanitizeField`, escaping tab, newline and carriage return to
+visible two-character sequences for any value rendered as one line, with `stripControlChars` kept
+for output genuinely allowed to span lines. Escaping rather than deleting, so a field can still
+describe a newline without creating one — silently dropping it is its own form of misleading output.
+`Logger` takes the field variant too, since it emits one line per call to both the console and the
+execution log.
+
+### A regenerated id made the most common kind of selector rot unhealable
+
+**Problem:** The stable-identity gate excluded a candidate as soon as one of `id`, `data-testid` or
+`data-test` was present on both sides with differing values — before any scoring ran. So a button
+whose `id` the build had regenerated, but whose `data-testid` matched exactly, was removed from
+consideration entirely, a decoy label became the only candidate, and the single most ordinary kind
+of selector rot came back refused.
+
+**Fix:** The gate now scans all three keys and excludes only when one conflicts and none match
+exactly. Found by the phase's own benchmark on its first run, because the fixture was left as
+measured rather than tuned to pass.
+
+### Narrowing that gate introduced a false heal
+
+**Problem:** The narrowing rested on an exact authored-key match vouching for identity. When two
+candidates carry the same `data-testid` it vouches for neither, and nothing covered that: scoring
+and margin were left to handle it. They do not. The failing shape is asymmetric rather than a tie —
+the new tier runs *because* the original selector broke, so the real element has usually drifted too
+(copy reworded, DOM moved), while a stale duplicate elsewhere still matches the old evidence
+exactly. Measured at 0.90 for the wrong element against 0.55 for the right one, a margin of 0.175,
+clearing both the confidence floor and the margin requirement. Before the narrowing both candidates
+were excluded on their differing ids and the chain fell through to the LLM, so this was a regression
+introduced by the fix above. A second variant, duplicates sharing the stored test id with no `id`
+anywhere to conflict, scored 1.0 against 0.53 and predated the narrowing entirely.
+
+**Fix:** A structural rule: if the stored evidence has a value for a stable key and two or more
+surviving candidates match that value exactly, refuse with `ambiguous_stable_identity`. It reads
+neither the confidence floor nor the margin, so it survives any later recalibration of two constants
+that remain provisional, and being a count over a multiset it does not depend on candidate order. It
+stays narrow — one candidate matching still heals, duplicates sharing some other value do not
+trigger it, and the regenerated-`id` case still resolves to its declared ground-truth element.
+
+**Why the existing tests missed it:** both the adversarial matcher test and the first
+duplicate-test-id fixture construct the decoy as byte-identical to the true match in every scored
+non-attribute dimension, which manufactures an exact tie *by construction* and can only ever
+exercise the degenerate case. The corpus now carries an asymmetric fixture where the decoy wins by
+0.44, and its test asserts that margin explicitly, so narrowing this protection fails loudly rather
+than quietly.
+
+### Sources were committed as a binary blob
+
+**Problem:** `SelectorBuilder.js` was committed with `Bin 0 -> 15890 bytes`. One literal NUL byte sat
+inside a regex character class where `\xNN` escapes were intended. The code was correct — a literal
+control character in a character class matches exactly what its escape matches, and every test
+passed — but git classifies a file containing NUL as binary, so `git diff` showed no content and 384
+lines of security-relevant selector validation could not be reviewed.
+
+**Fix:** Rebuilt the affected characters from escape sequences and verified behaviour was preserved
+rather than assumed (a plain selector still accepted, NUL- and ESC-bearing selectors still
+rejected). Every source in the phase is now checked for a zero control-byte count before commit.
+Fixed forward in a new commit rather than by amending, so no history was rewritten; the earlier
+commit still contains the blob, while the branch diff that reviewers read is fully text.
+
+### Documentation claimed a posture it never stated
+
+**Problem:** The CI decision for this phase deliberately excludes `data/locator_memory.json` from the
+state cache, and made it a binding condition that every document say locator memory is local-only
+and not persisted by CI. Nothing did: the README had no mention of the tier at all and the dashboard
+panel carried no such note.
+
+**Fix:** Stated in the README, in `HANDOFF.md`'s environment reference, and in the phase plan,
+including *why* — the cache's exact key can never hit on restore, so every restore falls back to a
+branch prefix, and caching the file would let one branch inherit evidence another branch's reviewer
+approved. Found by the DevOps review holding itself to its own prior condition.
+
+### A wrong element could still be matched when the stored evidence had no stable identifier
+
+**Problem:** The ambiguity rule above counts how many candidates match the stored value for a stable
+key. When the stored signature carried none of `id`, `data-testid` or `data-test`, there was nothing
+to count — the scan returned early on every key and only the score cascade remained, which two
+independent reviews had already shown is not a safety net. Reproduced on ordinary markup: an email
+input identified by `name` and `type` alone, where the real field had drifted the way real fields do
+(label reworded, position moved) while an unrelated newsletter field elsewhere on the page still
+matched the stored snapshot exactly. The wrong field won at 0.90 against 0.707 and would have been
+typed into. Adding a shared test id to the identical shape produced a refusal, which is how the
+diagnosis was confirmed rather than guessed: the gap was the absence of an identifier, not anything
+about the scores.
+
+Not a regression from either earlier matcher change — neither touched this path, because nothing
+here ever conflicted on a stable key. It is the limit of what the evidence model can do: nothing can
+separate "the real element changed" from "a different element still matches the old snapshot" when
+the snapshot is all there is and it carries no identifier.
+
+**Fix:** The matcher now declines the question. With no stable key in the stored signature,
+`evaluate` refuses with `insufficient_identity_evidence` before any gating or scoring runs, and the
+chain falls through to the LLM tier as it would for any other refusal. The check reads the stored
+signature alone and never the candidates, so it needs no candidate to decide. Like the ambiguity
+rule it ignores the confidence floor and the margin, verified across both extremes and two
+pathological configurations. The corpus gained a fixture for the case, because a protection no
+fixture exercises is how both preceding defects reached review in the first place.
+
+Eight assertions moved, and the reason is worth recording. Six isolated a single scoring dimension by
+zeroing attributes on both sides, which now trips the precondition; they carry one stable key on the
+stored side only, absent rather than conflicting on the candidate, which satisfies it while leaving
+the attribute dimension at zero and the arithmetic unchanged. Their force was then confirmed by
+mutation rather than assumed: with the structural safety floor disabled, the three weak-evidence
+tests and the contribution-accounting test fail. They were not softened to pass.
+
+### Refusing on ambiguity is itself a suppression channel
+
+**Problem:** Found by the security review of the ambiguity rule, and disclosed rather than left
+implicit. Because a second element sharing the stored `data-testid` forces a refusal regardless of
+how well the real element scores, anyone able to inject a visible, action-compatible element into the
+page under test can disable this tier at will. Before the stable-identity gate was narrowed, such a
+duplicate would have been excluded on its differing `id` and the real element would have healed.
+
+**Resolution:** Accepted as a trade, with the reasoning recorded. The outcome is a refusal that falls
+through to Tier 3, never a wrong-element action, so it trades an availability surface to close a
+wrong-execution surface — the correct direction. The precondition, arbitrary DOM injection into the
+application under test, is already a far larger problem than suppressed self-healing. It also fires
+on honest applications that have accidentally duplicated a test id, which is the feature working as
+designed. Documented in the README and the phase plan so that "no fix needed" is not read as "not
+considered."

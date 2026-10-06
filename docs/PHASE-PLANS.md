@@ -28,13 +28,20 @@ The competitive landscape as it actually stands:
 
 Falcon's structural advantages, which every phase must compound rather than dilute:
 
-1. **Auditable healing.** Falcon is the only one of these where an AI-inferred locator is *quarantined
-   pending human approval* rather than silently trusted (Phase 8). That is the single most common
-   objection to AI-assisted QA, and Falcon answers it by design.
+1. **Auditable healing.** An AI-inferred locator is *quarantined pending human approval* rather than
+   silently trusted (Phase 8). Requiring approval before reuse is **not** a differentiator — Phase
+   14's competitive research verified that Katalon and Testsigma both document an approval step of
+   their own, so this is table stakes and this file previously claimed otherwise. What Phase 14's
+   research did leave standing is narrower and checkable: the decision is deterministic and local
+   with no model or network in its path, refusal is a first-class outcome that carries its reason,
+   evidence is stored as privacy-safe signatures the operator owns, scope prevents a selector on one
+   page authorising a repair on another, and the healing rates are published from a reproducible
+   corpus that includes the cases Falcon gets wrong.
 2. **Coverage without authorship.** Falcon crawls a live app and generates the suite. No recording
    session, no production traffic, no test authoring.
-3. **You own it.** Open source, self-hostable, no per-seat billing, no DOM leaving your network
-   (Phase 14 closes the last dependency here).
+3. **You own it.** Open source, self-hostable, no per-seat billing, no DOM leaving your network.
+   Phase 14 closed the dependency on an external call for healing itself; Phase 17 covers the case
+   where a team wants an LLM tier but not a vendor-hosted one.
 4. **Results that are true.** Real exit codes, real tallies, quarantine as its own visible bucket —
    not a green check that means "didn't crash" (Phases 6 and 9).
 
@@ -451,10 +458,12 @@ Both ledgers grow without bound.
 
 ### Competitive angle
 
-This is the phase that turns "human-in-the-loop" from a feature into a discipline. No competitor has
-this because no competitor exposes the decision at all — but a review queue nobody empties is exactly
-how good governance features die in practice, and Falcon should be the tool that refuses to let that
-happen quietly.
+This is the phase that turns "human-in-the-loop" from a feature into a discipline. Whether any
+competitor surfaces queue staleness was **not** established by the reviewed public documentation, so
+nothing here claims they do not — absence of evidence in a vendor's docs is not evidence the vendor
+lacks the capability. The defensible point stands on its own: a review queue nobody empties is
+exactly how good governance features die in practice, and Falcon should be the tool that refuses to
+let that happen quietly.
 
 ### Implementation specification
 
@@ -543,7 +552,187 @@ protected by explicit regression tests. Do NOT describe D12 as newly fixed in Ph
 
 ---
 
-## Phase 14 — Run history and trend
+## Phase 14 — Evidence-based locator matching and scoped memory — IMPLEMENTED, UNDER REVIEW
+
+Promoted ahead of run history, and ahead of the provider-adapter work it was originally bundled
+with, because the healing chain's weakest link was not its reporting: between a locator cache that
+only replays a selector it was handed and an LLM tier that needs a key and a network, there was
+nothing. An evaluator without `OPENAI_API_KEY` got two tiers, and the second only worked if the
+exact replacement had been approved earlier.
+
+### What shipped
+
+A deterministic local tier between the cache and the model. No model, no network and no randomness
+in the decision path — `CandidateMatcher` has no `require` statement at all, which is enforced as a
+structural property rather than a convention.
+
+- **Scoped identity.** An entry is keyed by application, origin, pathname, action and the original
+  selector, serialised through `JSON.stringify` so no delimiter can be smuggled through a selector
+  to collide two identities. A selector on one page therefore cannot authorise a repair on another.
+  `about:`, `data:` and `file:` are refused outright, because their origin is the literal string
+  `"null"` and every such page would otherwise share one scope.
+- **Signatures that are not the DOM.** Identity-bearing attribute values are stored as salted
+  HMAC-SHA256 hashes from a fixed allow-list. Accessible name and own text stay as bounded
+  plaintext, because fuzzy similarity cannot run on a hash. Never stored: input or textarea values,
+  passwords, hidden tokens, cookies, storage, authorization data, raw `outerHTML`, full DOM,
+  scripts, complete forms, URL credentials, raw queries, unrestricted `data-*`, unbounded text.
+- **Three trust states.** `trusted` evidence comes from a successful action with the developer's
+  own selector or explicit approval of the current scoped proposal. A score alone grants no trust. A candidate the
+  matcher accepts becomes `unproven` and is promoted solely by an explicit durable decision tied to
+  its proposal ID. The approved selector and decision channel remain in bounded audit history. `revoked`
+  stops reuse immediately while keeping the prior signature and an attributed revocation history,
+  and regains trust only through a fresh ground-truth pass, never by re-approving the evidence that
+  was rejected.
+- **Refusal as a first-class result, carrying its reason.** Below the confidence floor, inside the
+  margin, action-incompatible, contradictory role, ambiguous stable identity: each is reported
+  distinctly and persisted to the healing log, and each falls through to the LLM exactly as an empty
+  cache would. A refusal never fails a run.
+- **A published mutation benchmark**, scored against ground truth authored into each fixture rather
+  than against whether a click threw.
+
+### Acceptance criteria — validation required
+
+A locator that previously only the LLM tier could resolve is resolved locally with no network call;
+ambiguous matches are refused; repeated identical inputs produce identical rankings and identical
+score contributions across separate process invocations.
+
+### Measured results, including the unflattering ones
+
+The expanded corpus contains 27 cases. Run `npm run healing:benchmark` for current counts,
+per-case expected outcomes, false heals, repeat agreement, selector resolution and measured bytes
+of an actual persisted memory snapshot. Ground truth is fixture-authored, and these results do not
+establish a healing rate for arbitrary applications. Runtime regression tests separately cover
+actual actions, scope isolation and review persistence. No release verdict is implied by corpus
+results alone.
+
+### ADR — why a deterministic tier rather than a stronger Tier 3
+
+**Context.** Tier 2 replays a stored selector gated on it resolving exactly one element; Tier 3 asks
+a model. Between them sat the whole class of change where the element is plainly still present and
+recognisable — a regenerated id, an inserted wrapper, reworded copy — but no approved replacement
+exists yet.
+
+**Decision.** Insert a deterministic, local, evidence-based tier, and give it the authority to
+refuse. Keep it free of I/O so its verdict is reproducible from its inputs alone, and expose per-
+dimension score contributions so a human can see why a candidate won rather than being told that it
+did.
+
+**Alternatives rejected.** Tuning Tier 3's request to the model leaves the key and the network on
+the critical path, and a model's answer is not reproducible evidence. Auto-persisting any candidate
+above a confidence threshold was rejected outright: it is the one design that converts a scoring
+mistake into permanent trust, and it contradicts the approval gate Phase 8 exists to provide.
+Lowering Tier 2's uniqueness requirement would have widened an existing tier by weakening the only
+check it has.
+
+**Consequences, accepted.** `MIN_CONFIDENCE` 0.85 and `WINNER_MARGIN` 0.15 are provisional and
+uncalibrated; the benchmark is the instrument for calibrating them, and it already caused two
+changes to the matcher during this phase. Refusals remain expected, and the LLM tier still earns its place. Scoring sits behind a structural rule — a stable key shared by two candidates
+identifies neither, so that case refuses regardless of score or margin — specifically so the
+protection survives any later recalibration of those two constants.
+
+### Acceptance criteria
+
+The phase's 70 acceptance criteria are registered in
+`docs/phase-14-acceptance-criteria.json`, each with the file that implements it and the test that
+asserts it. `tests/regression/p14-traceability.check.cjs` checks the register itself: all 70 ids
+present with no gaps, every implementation path resolving to a real file, and every named test
+genuinely existing in the file that claims to hold it, with a negative control proving the check
+can fail. 68 are carried by executing tests. Two are not, and say why in their own words: AC-57
+is a property of GitHub Actions' restore-step semantics rather than of anything this project
+decides, and AC-63 ("no P0/P1 remains") is a process criterion evidenced by review verdicts.
+
+The register exists because its absence hid a real defect. The criteria lived only in the phase
+brief, so nothing could check whether any one of them had an implementation at all, and AC-18 did
+not — evidence was captured after the interaction, which for a click that navigates described an
+element on the page the browser had already moved to. Writing the register down is what surfaced
+it.
+
+### Honest limitations
+
+- **The salt sits with the hashes it protects** unless `FALCON_LOCATOR_SALT` is set. Low-entropy
+  values therefore remain brute-forceable offline by anyone who can read the file. The runtime says
+  so on first use. Hashed values are **not** irrecoverable, and nothing in this project may claim
+  they are.
+- **Redaction of accessible name and text is a shape heuristic, not a guarantee.** A short
+  OTP-style secret is not caught by it, and matches are replaced in place, so a meaningful prefix
+  can survive (`SUPER-SECRET-…` becomes `SUPER-[REDACTED]`). The phase's own tests assert this
+  rather than hiding it.
+- **Concurrent writers are detected, not merged.** An exclusive adjacent lock covers the durable
+  digest check and atomic replacement. A stale instance fails rather than overwriting new state;
+  restart it to reload. Recover a crashed lock manually only after verifying its owning process has
+  exited. Review decisions are installed only after persistence succeeds.
+- **Review is scoped and revision-bound.** Legacy `LocatorStore` and `HealingTrust` approvals do not
+  authorise automatic replay. Fresh scoped evidence and the current proposal ID are required.
+  Rollback requires the current revision. See the CLI examples in [README](../README.md#scoped-healing-and-review)
+  and the [correction ADR](architecture/phase-14-correction-decisions.md).
+- **Locator memory is local-only.** `data/locator_memory.json` is gitignored and is deliberately
+  **not** cached by CI, so it never crosses a branch boundary. The exact-key cache entry can never
+  hit on restore, so every restore falls back to a branch prefix — which would let one branch
+  inherit another's approved evidence. Revisit only alongside a same-branch-provenance check inside
+  the store itself, never as a CI configuration change.
+- **It acts only on elements carrying a stable identifier.** With no `id`, `data-testid`, `data-test` or
+  `data-qa` in the stored evidence it refuses with `insufficient_identity_evidence` before
+  scoring. This is a limit of the evidence model, not an omission: with no identifier in the stored
+  snapshot nothing can separate "the real element changed" from "a different element still matches
+  the old snapshot," and attempting it produced a wrong-element action on ordinary markup during
+  review. Applications without test ids will see this tier decline and Tier 3 do the work.
+- **Refusing on ambiguity is a suppression channel.** A second element sharing the stored
+  `data-testid` forces a refusal regardless of how well the real element scores, so anyone able to
+  inject a visible, action-compatible element into the page under test can disable this tier at
+  will. Assessed as an acceptable trade: the outcome is a refusal that falls through to Tier 3,
+  never a wrong-element action, and arbitrary DOM injection into the application under test is a
+  far larger problem on its own. Recorded so that "no fix needed" is not mistaken for "not
+  considered."
+- **This is matching, not comprehension.** Scores compare captured signals. No general DOM
+  understanding is involved.
+- **A quarantined row is kept as metadata, not as its contents.** A row that fails validation is
+  replaced on first load by a digest and the reason it was set aside, and that replacement is
+  written back, so the original content is gone from the file from then on. This is deliberate —
+  keeping raw historical rows would reintroduce exactly the unbounded, page-derived values this
+  phase forbids storing — but it does mean "preserved for inspection" is narrower than it sounds:
+  an operator can see that a row was rejected and why, and cannot recover what it held. The one
+  exception is a file that will not parse at all, whose bytes are kept in a `.corrupt-*` sidecar.
+  A file whose whole envelope is unreadable is reported separately, through a warning naming the
+  reason and through `envelopeStatus()`, because it parses into no rows and so has nothing to
+  quarantine — without that it was indistinguishable from an empty store.
+- **A DOM mutation between the read and the interaction is not detected.** The element is read
+  immediately before the interaction, so a re-render in that window — under 150 ms, and without a
+  URL change, since a navigation is handled correctly — can leave the stored evidence describing
+  the element that was behind the selector a moment earlier rather than the one finally acted on.
+  Reproduced during the final security review with a page double that flips the element between the
+  two steps. Neither ordering closes this: capturing after the action raced the same mutation from
+  the other side. `_matchCount` guards the Tier 2, Tier 2.5 and Tier 3 paths but deliberately not
+  Tier 1, which acts on the selector the developer wrote. Assessed P3 and left open rather than
+  papered over: closing it means re-reading identity after the action and comparing, which is a
+  slice of its own.
+- **Evidence capture is bounded, so it can be skipped.** The element is read before the interaction
+  it describes, because a click that navigates has already replaced the document by the time it
+  returns — reading afterwards described whatever the landing page put behind the same selector and
+  keyed it to the landing page's URL, which recorded a trusted fact about an element nobody had
+  interacted with and left the page the click happened on with no evidence at all. Reading first
+  puts that query in front of the interaction, so it is capped (150 ms) and every failure resolves
+  to "no evidence": on a slow page an interaction can legitimately produce no evidence at all,
+  and this tier then declines later for want of a stored signature. Losing evidence is always
+  preferred to delaying the interaction or recording a fact about the wrong element.
+- **This phase makes an existing `node --test` flake much likelier on single-file runs.** The
+  runner intermittently dies with `Unable to deserialize cloned data due to invalid or unsupported
+  version.`, with a stack entirely inside `node:internal/test_runner`'s IPC frame parser; the
+  signature is a varying total test count. It is pre-existing and reproduces on this phase's base
+  commit. Measured on `tests/regression/core.check.cjs`, which this phase does not modify:
+  2/10 runs failed at base `11657cb`, 9/10 at `b333584`. The cause is not output volume — that file
+  emits byte-for-byte the same 246 lines on both commits — and is unexplained; do not repeat the
+  Phase 8 console-silencing remedy here on the assumption that it is. Two things bound the impact.
+  Run under plain `node` instead of `node --test` and the same file passed 10/10, so the tests and
+  the code under them are sound and the fault is in the runner's IPC layer. CI never invokes a
+  single file: `test:coverage` runs the whole directory in one process, and on that measure this
+  phase is no worse than its base (2 failures in 4 full-suite runs at base, 1 in 4 at `b333584`,
+  both consistent with the pre-existing rate). So the practical cost is local iteration on one
+  file, with a working alternative. Investigating the runner itself was out of scope for this phase
+  and is not claimed to be done.
+
+---
+
+## Phase 15 — Run history and trend
 
 ### Why
 
@@ -563,10 +752,11 @@ with no vendor holding the history hostage.
   SHA and branch, pages tested, scenario counts by status, heal counts by tier, pending-review depth,
   quarantine count, total duration.
 - A trend view in the dashboard that outlives the run, served from the ledger.
-- **Trend-level regression detection**, which is the genuinely differentiated part: a rising heal
-  rate means the application is drifting underneath the suite. That is a finding about the product,
-  not about the tests, and no competitor surfaces it as such. Also flag duration regressions and
-  pass-rate decay.
+- **Trend-level regression detection**, which is the most valuable part: a rising heal rate means
+  the application is drifting underneath the suite. That is a finding about the product, not about
+  the tests. Whether a competitor surfaces it that way was not established by the reviewed public
+  documentation, so this is stated as useful rather than as unique. Also flag duration regressions
+  and pass-rate decay.
 - Export (JSON + CSV) for the reporting a QA lead already has to produce.
 
 ### Acceptance criteria
@@ -575,41 +765,33 @@ Ten consecutive runs produce a readable trend; a deliberately induced heal-rate 
 
 ---
 
-## Phase 15 — Healing without a third party
+## Phase 17 — Pluggable LLM providers
+
+Renumbered and reduced. This was "Healing without a third party", and the larger half of it — a
+deterministic local tier that heals with no external call — shipped as Phase 14. What remains is the
+provider question, which is a procurement blocker rather than a capability gap, so it no longer
+needs to sit ahead of run history or parallel execution.
 
 ### Why
 
-Falcon's own flagship demo honestly discloses that 7 of its 8 failures went unhealed for want of an
-`OPENAI_API_KEY`. For any evaluator who doesn't set one, the headline feature is inert — and for many
-organisations, sending DOM snapshots to a third party is a procurement blocker that ends the
-evaluation regardless of how good the tool is.
-
-### Competitive angle
-
-This is the phase with the largest commercial consequence. Testim, Mabl, Functionize and Autify are
-all SaaS: your DOM goes to their cloud, full stop. A Falcon that heals well with **no external call
-at all**, and can optionally use a self-hosted or Azure-tenanted model when you want the LLM tier, is
-deployable inside organisations that cannot legally evaluate any of them.
+For many organisations, sending DOM snapshots to a third party ends an evaluation regardless of how
+good the tool is. Phase 14 means such an organisation now gets three working tiers with no external
+call at all, rather than two. This phase is about the remaining case: teams that *do* want an LLM
+tier but cannot use a vendor-hosted one.
 
 ### Implementation specification
 
-- **Tier 2.5, a deterministic local matcher**, between the locator cache and the LLM. Score every
-  candidate element against the failed selector's last-known signature: normalized text, ARIA role,
-  accessible name, tag, stable attributes (`data-testid`, `name`, `type`), DOM-path distance and
-  geometric proximity. Require a configurable confidence margin between the best and second-best
-  candidate, and refuse to act on an ambiguous match — the same "ambiguity is a failure, not a guess"
-  rule the existing healer already applies.
-- Capture and persist the signature of every element Falcon successfully interacts with, so Tier 2.5
-  has something to match against on a later run.
-- **Route Tier 2.5 results through the Phase 8 approval gate.** A heuristic guess is still a guess.
-- **Pluggable LLM providers**: an adapter interface with OpenAI, Azure OpenAI, and
-  OpenAI-compatible/self-hosted endpoints, selected by config. No provider hardwired.
-- Publish measured healing rates with and without a key, so the demo numbers stay honest.
+- An adapter interface with OpenAI, Azure OpenAI, and OpenAI-compatible/self-hosted endpoints,
+  selected by config. No provider hardwired.
+- Keep the Phase 8 approval gate unchanged: whichever provider answers, an inferred selector is
+  still a guess and is still reviewed before reuse.
+- Publish measured healing rates with and without a key, so the demo numbers stay honest. Phase 14's
+  benchmark is the mechanism; this phase adds the provider dimension to it.
 
 ### Acceptance criteria
 
-A locator that only Tier 3 could previously resolve is resolved by Tier 2.5 with no network call;
-ambiguous matches are refused; the provider adapter passes the same suite against a mock endpoint.
+The adapter passes the same suite against a mock endpoint; no provider is reachable except the one
+configuration selects.
 
 ---
 
@@ -649,19 +831,24 @@ concurrent workers; a sharded CI run and a single-runner run produce identical a
 ## Sequencing
 
 ```
-Phase 10 ── Phase 11 ──┬── Phase 12 ──┬── Phase 13
-                       │              ├── Phase 14
+Phase 10 ── Phase 11 ──┬── Phase 12 ──┬── Phase 13 ── Phase 14 (delivered)
+                       │              ├── Phase 15
                        │              └── Phase 16
-                       └── (Phase 15 is independent and can run in parallel)
+                       └── (Phase 17 is independent and can run in parallel)
 ```
 
 Phase 10 first: it is the largest gap between what Falcon promises and what it ships, and it
 multiplies the data volume every later phase must survive. Phase 11 next, and ahead of everything
 else, because it is the only item on this list that can currently produce a green build over lost
 coverage — no amount of later work is worth building on top of a run that can report PASSED without
-having verified anything. Phase 12 before 13, 14 and 16: staleness signals, trend history and
-parallel workers are all only worth building on state guarantees that actually hold. Phase 15
-touches only the healing chain and can proceed independently at any point.
+having verified anything. Phase 12 before 13, 15 and 16: staleness signals, trend history and
+parallel workers are all only worth building on state guarantees that actually hold.
+
+Phase 14 was then taken out of order, ahead of run history, because the gap it closed was in the
+healing chain rather than in the reporting on top of it: an evaluator with no `OPENAI_API_KEY` had
+two usable tiers, and the second only fired when an approved replacement already existed. Phase 17
+is what remains of the phase Tier 2.5 was originally bundled with, and it is a procurement concern
+rather than a capability gap, so it can proceed independently at any point.
 
 ---
 

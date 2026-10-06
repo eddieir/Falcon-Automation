@@ -51,6 +51,11 @@ class HealingTrust {
         this.pendingPath   = path.join(__dirname, "..", "..", "..", "data", "healing_pending.json");
         this.decisionsPath = path.join(__dirname, "..", "..", "..", "data", "healing_decisions.json");
         this._queue = Promise.resolve();
+        // AC-08: per-path write-failure visibility. Keyed by path so a
+        // failed pendingPath write can never be masked by a later,
+        // unrelated decisionsPath success (or vice versa) — see
+        // AtomicJsonStore.WriteFailureTracker.
+        this._writeFailures = new AtomicJsonStore.WriteFailureTracker();
         // Logs the *first* ledger rotation (mutation-time cap) per process,
         // then stays silent — never a warning per push forever.
         this._decisionsRotationLogged = false;
@@ -108,7 +113,9 @@ class HealingTrust {
             // BOTH files oversized queues two writes, to two different paths,
             // one after the other on the same serialized chain — neither
             // skips nor overwrites the other.
-            this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
+            this._queue = this._queue
+                .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions))
+                .then((result) => this._writeFailures.record(this.decisionsPath, result));
         }
 
         const evictedCount = this._evictPendingIfNeeded();
@@ -116,7 +123,9 @@ class HealingTrust {
             // writeJsonAtomic never rejects by design (see AtomicJsonStore),
             // so this can't poison `_queue` — no `.catch` needed, same as
             // every other write queued in this file.
-            this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending));
+            this._queue = this._queue
+                .then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending))
+                .then((result) => this._writeFailures.record(this.pendingPath, result));
         }
 
         this._buildRejectionIndex();
@@ -312,7 +321,9 @@ class HealingTrust {
         };
         this._setPending(original, entry);
         this._evictPendingIfNeeded();
-        this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending));
+        this._queue = this._queue
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending))
+            .then((result) => this._writeFailures.record(this.pendingPath, result));
         Middleware.emit("healingPending", entry);
         return entry;
     }
@@ -336,7 +347,9 @@ class HealingTrust {
         const existing = this._getPending(original);
         if (!existing) return;
         this._setPending(original, { ...existing, tier3Invocations: (existing.tier3Invocations ?? 0) + 1 });
-        this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending));
+        this._queue = this._queue
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending))
+            .then((result) => this._writeFailures.record(this.pendingPath, result));
     }
 
     /**
@@ -400,7 +413,9 @@ class HealingTrust {
             }
         }
         this._buildRejectionIndex();
-        this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions));
+        this._queue = this._queue
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.decisionsPath, this.decisions))
+            .then((result) => this._writeFailures.record(this.decisionsPath, result));
     }
 
     /**
@@ -421,7 +436,9 @@ class HealingTrust {
 
         LocatorStore.addLocator(entry.original, entry.suggested);
         delete this.pending[original];
-        this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending));
+        this._queue = this._queue
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending))
+            .then((result) => this._writeFailures.record(this.pendingPath, result));
 
         const decision = { ...entry, decision: "approved", decidedAt: new Date().toISOString(), decidedBy: approvedBy };
         this._pushDecision(decision);
@@ -445,7 +462,9 @@ class HealingTrust {
         const entry = this._hydratePreviouslyRejected(raw);
 
         delete this.pending[original];
-        this._queue = this._queue.then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending));
+        this._queue = this._queue
+            .then(() => AtomicJsonStore.writeJsonAtomic(this.pendingPath, this.pending))
+            .then((result) => this._writeFailures.record(this.pendingPath, result));
 
         const decision = { ...entry, decision: "rejected", decidedAt: new Date().toISOString(), decidedBy: rejectedBy };
         this._pushDecision(decision);
@@ -488,6 +507,25 @@ class HealingTrust {
             else notStale.push(entry);
         }
         return { thresholdDays, stale, notStale };
+    }
+
+    /**
+     * AC-08: true if any of this store's tracked paths (pendingPath,
+     * decisionsPath) currently has a write that did not durably land on
+     * disk. Never reads from disk itself — reports only what the write
+     * queue has observed.
+     */
+    hasUnpersistedWriteFailure() {
+        return this._writeFailures.hasUnpersistedWriteFailure();
+    }
+
+    /**
+     * AC-08: the most recent unpersisted write failure across this store's
+     * tracked paths (`{path, error, at}`), or `null` if none is currently
+     * outstanding.
+     */
+    lastWriteError() {
+        return this._writeFailures.lastWriteError();
     }
 }
 

@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "id": "id-only-change-f1",
+      "mutationClass": "id-only-change",
+      "action": "click",
+      "groundTruthId": "id-only-change-f1",
+      "dir": "id-only-change/f1",
+      "mustRefuse": false,
+      "description": "The submit button's id attribute churns between deploys; data-testid, name, type, accessible name, structure, and text all stay the same.",
+      "expectedOutcome": "correct_heal"
+    },
+    {
+      "id": "wrapper-insertion-f1",
+      "mutationClass": "wrapper-insertion",
+      "action": "click",
+      "groundTruthId": "wrapper-insertion-f1",
+      "dir": "wrapper-insertion/f1",
+      "mustRefuse": false,
+      "description": "The checkout button gains two new wrapping div layers (a sticky-footer redesign) while every attribute and the visible text stay identical.",
+      "expectedOutcome": "correct_heal"
+    },
+    {
+      "id": "controlled-text-change-f1",
+      "mutationClass": "controlled-text-change",
+      "action": "click",
+      "groundTruthId": "controlled-text-change-f1",
+      "dir": "controlled-text-change/f1",
+      "mustRefuse": false,
+      "description": "Button copy changes from Add to Cart to Add to Bag; id, data-testid, and structure stay identical.",
+      "expectedOutcome": "correct_heal"
+    },
+    {
+      "id": "two-equally-plausible-targets-f1",
+      "mutationClass": "two-equally-plausible-targets",
+      "action": "click",
+      "groundTruthId": "two-equally-plausible-targets-f1",
+      "dir": "two-equally-plausible-targets/f1",
+      "mustRefuse": true,
+      "description": "A second cart row with an identical Remove button (no distinguishing attributes) appears alongside the original; nothing in the candidate set can disambiguate them, so Tier 2.5 must refuse rather than guess.",
+      "expectedOutcome": "refused"
+    },
+    {
+      "id": "contradictory-role-action-f1",
+      "mutationClass": "contradictory-role-action",
+      "action": "click",
+      "groundTruthId": "contradictory-role-action-f1",
+      "dir": "contradictory-role-action/f1",
+      "mustRefuse": true,
+      "description": "The archive control keeps its data-testid but is re-rendered as a link with role=link where the stored evidence recorded role=button; the attribute match alone must not be enough to accept.",
+      "expectedOutcome": "refused"
+    },
+    {
+      "id": "duplicate-test-id-f1",
+      "mutationClass": "duplicate-test-id",
+      "action": "click",
+      "groundTruthId": "duplicate-test-id-f1",
+      "dir": "duplicate-test-id/f1",
+      "mustRefuse": true,
+      "description": "The P14-23 round 2 false-heal vector: narrowing the conflicting-stable-identity gate (an exact data-testid match now outweighs a differing id) means a second, genuinely different row with the same duplicated data-testid must still never be accepted over the real target.",
+      "expectedOutcome": "refused"
+    },
+    {
+      "id": "duplicate-test-id-asymmetric-f1",
+      "mutationClass": "duplicate-test-id-asymmetric",
+      "action": "click",
+      "groundTruthId": "duplicate-test-id-asymmetric-f1",
+      "dir": "duplicate-test-id-asymmetric/f1",
+      "mustRefuse": true,
+      "description": "The realistic shape of the P14-23 round 3 false-heal vector, not the degenerate exact-tie: the ground-truth row's own copy and structure genuinely drift (wrapped, reworded) while an unrelated duplicate row keeps the SAME data-testid and still matches the OLD evidence byte-for-byte — so the decoy would outscore the real element outright without the structural ambiguity gate. Must refuse, never accept the higher-scoring decoy.",
+      "expectedOutcome": "refused"
+    },
+    {
+      "id": "stable-key-absent-f1",
+      "mutationClass": "stable-key-absent",
+      "action": "type",
+      "groundTruthId": "stable-key-absent-f1",
+      "dir": "stable-key-absent/f1",
+      "mustRefuse": true,
+      "description": "The P14-23 round 4 false-heal vector: an email field identified only by name/type (no id, no data-testid, no data-test anywhere) whose own evidence has genuinely drifted (reworded aria-label, wrapped, repositioned), while an unrelated duplicate field still matches the OLD stale evidence byte-for-byte. Without a stable key, nothing in the stored snapshot can distinguish 'the real field drifted' from 'a different field still matches the old snapshot' — must refuse.",
+      "expectedOutcome": "refused"
+    },
+    {
+      "id": "element-removed-f1",
+      "mutationClass": "element-removed",
+      "action": "click",
+      "groundTruthId": "element-removed-f1",
+      "dir": "element-removed/f1",
+      "mustRefuse": false,
+      "description": "The dismissible promo banner (and its close button) is removed from the page entirely; no interactive elements remain for collection to find.",
+      "expectedOutcome": "no_candidate"
+    },
+    {
+      "id": "class-rename-f1",
+      "mutationClass": "class-rename",
+      "action": "click",
+      "groundTruthId": "class-rename-f1",
+      "dir": "class-rename/f1",
+      "mustRefuse": false,
+      "expectedOutcome": "correct_heal",
+      "description": "Controlled class rename mutation; outcome specified before measurement."
+    },
+    {
+      "id": "test-id-retained-f1",
+      "mutationClass": "test-id-retained",
+      "action": "click",
+      "groundTruthId": "test-id-retained-f1",
+      "dir": "test-id-retained/f1",
+      "mustRefuse": false,
+      "expectedOutcome": "correct_heal",
+      "description": "Controlled test id retained mutation; outcome specified before measurement."
+    },
+    {
+      "id": "test-id-changed-f1",
+      "mutationClass": "test-id-changed",
+      "action": "click",
+      "groundTruthId": "test-id-changed-f1",
+      "dir": "test-id-changed/f1",
+      "mustRefuse": true,
+      "expectedOutcome": "refused",
+      "description": "Controlled test id changed mutation; outcome specified before measurement."
+    },
+    {
+      "id": "name-retained-f1",
+      "mutationClass": "name-retained",
+      "action": "click",
+      "groundTruthId": "name-retained-f1",
+      "dir": "name-retained/f1",
+      "mustRefuse": false,
+      "expectedOutcome": "correct_heal",
+      "description": "Controlled name retained mutation; outcome specified before measurement."
+    },
+    {
+      "id": "name-changed-f1",
+      "mutationClass": "name-changed",
+      "action": "click",
+      "groundTruthId": "name-changed-f1",
+      "dir": "name-changed/f1",
+      "mustRefuse": false,
+      "expectedOutcome": "correct_heal",
+      "description": "Controlled name changed mutation; outcome specified before measurement."
+    },
+    {
+      "id": "ancestor-change-f1",
+      "mutationClass": "ancestor-change",
+      "action": "click",
+      "groundTruthId": "ancestor-change-f1",
+      "dir": "ancestor-change/f1",
+      "mustRefuse": false,
+      "expectedOutcome": "correct_heal",
+      "description": "Controlled ancestor change mutation; outcome specified before measurement."
+    },
+    {
+      "id": "sibling-insertion-f1",
+      "mutationClass": "sibling-insertion",
+      "action": "click",
+      "groundTruthId": "sibling-insertion-f1",
+      "dir": "sibling-insertion/f1",
+      "mustRefuse": false,
+      "expectedOutcome": "correct_heal",
+      "description": "Controlled sibling insertion mutation; outcome specified before measurement."
+    },
+    {
+      "id": "element-movement-f1",
+      "mutationClass": "element-movement",
+      "action": "click",
+      "groundTruthId": "element-movement-f1",
+      "dir": "element-movement/f1",
+      "mustRefuse": false,
+      "expectedOutcome": "correct_heal",
+      "description": "Controlled element movement mutation; outcome specified before measurement."
+    },
+    {
+      "id": "hidden-decoy-f1",
+      "mutationClass": "hidden-decoy",
+      "action": "click",
+      "groundTruthId": "hidden-decoy-f1",
+      "dir": "hidden-decoy/f1",
+      "mustRefuse": false,
+      "expectedOutcome": "correct_heal",
+      "description": "Controlled hidden decoy mutation; outcome specified before measurement."
+    },
+    {
+      "id": "disabled-decoy-f1",
+      "mutationClass": "disabled-decoy",
+      "action": "click",
+      "groundTruthId": "disabled-decoy-f1",
+      "dir": "disabled-decoy/f1",
+      "mustRefuse": false,
+      "expectedOutcome": "correct_heal",
+      "description": "Controlled disabled decoy mutation; outcome specified before measurement."
+    },
+    {
+      "id": "implicit-role-change-f1",
+      "mutationClass": "implicit-role-change",
+      "action": "click",
+      "groundTruthId": "implicit-role-change-f1",
+      "dir": "implicit-role-change/f1",
+      "mustRefuse": true,
+      "expectedOutcome": "refused",
+      "description": "Controlled implicit role change mutation; outcome specified before measurement."
+    },
+    {
+      "id": "select-option-missing-f1",
+      "mutationClass": "select-option-missing",
+      "action": "select",
+      "groundTruthId": "select-option-missing-f1",
+      "dir": "select-option-missing/f1",
+      "mustRefuse": true,
+      "expectedOutcome": "refused",
+      "description": "Controlled select option missing mutation; outcome specified before measurement.",
+      "expectedSelectValue": "one"
+    },
+    {
+      "id": "hostile-attributes-f1",
+      "mutationClass": "hostile-attributes",
+      "action": "click",
+      "groundTruthId": "hostile-attributes-f1",
+      "dir": "hostile-attributes/f1",
+      "mustRefuse": false,
+      "expectedOutcome": "correct_heal",
+      "description": "Controlled hostile attributes mutation; outcome specified before measurement."
+    },
+    {
+      "id": "large-dom-f1",
+      "mutationClass": "large-dom",
+      "action": "click",
+      "groundTruthId": "large-dom-f1",
+      "dir": "large-dom/f1",
+      "mustRefuse": false,
+      "expectedOutcome": "correct_heal",
+      "description": "Controlled large dom mutation; outcome specified before measurement."
+    },
+    {
+      "id": "weak-text-only-f1",
+      "mutationClass": "weak-text-only",
+      "action": "click",
+      "groundTruthId": "weak-text-only-f1",
+      "dir": "weak-text-only/f1",
+      "mustRefuse": true,
+      "expectedOutcome": "refused",
+      "description": "Controlled weak text only mutation; outcome specified before measurement."
+    },
+    {
+      "id": "geometry-only-f1",
+      "mutationClass": "geometry-only",
+      "action": "click",
+      "groundTruthId": "geometry-only-f1",
+      "dir": "geometry-only/f1",
+      "mustRefuse": true,
+      "expectedOutcome": "refused",
+      "description": "Controlled geometry only mutation; outcome specified before measurement."
+    },
+    {
+      "id": "same-selector-different-action-f1",
+      "mutationClass": "same-selector-different-action",
+      "action": "type",
+      "groundTruthId": "same-selector-different-action-f1",
+      "dir": "same-selector-different-action/f1",
+      "mustRefuse": true,
+      "expectedOutcome": "refused",
+      "description": "Controlled same selector different action mutation; outcome specified before measurement."
+    },
+    {
+      "id": "ambiguous-redesign-f1",
+      "mutationClass": "ambiguous-redesign",
+      "action": "click",
+      "groundTruthId": "ambiguous-redesign-f1",
+      "dir": "ambiguous-redesign/f1",
+      "mustRefuse": true,
+      "expectedOutcome": "refused",
+      "description": "Controlled ambiguous redesign mutation; outcome specified before measurement."
+    }
+  ]
+}

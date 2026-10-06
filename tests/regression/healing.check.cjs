@@ -108,8 +108,39 @@ test("locator cache migrates legacy data", (t) => {
   assert.deepEqual(store.getAlternatives("#old"), ["#new"]);
   assert.equal(typeof store.data["#old"].lastUsed, "number");
 });
-test("locator cache recovers from corrupt JSON", (t) =>
-  assert.deepEqual(storeAt(t, "{").data, {}));
+// Phase 14 (AC-07): LocatorStore's corrupt-file recovery used to be
+// completely silent (`catch { /* Corrupt store — start fresh */ }`) — this
+// test previously asserted only `.data` came back as `{}`, which passed
+// *because* recovery was silent. That is no longer sufficient: recovery
+// must now also be visible (a Logger.warning naming the path and failure)
+// and the corrupt bytes must be preserved as a sidecar for inspection, per
+// AtomicJsonStore's existing readJsonSync contract that LocatorStore now
+// shares. This is a required, intended behaviour change (silent -> visible
+// recovery) — the assertion is strictly stronger than before, not weakened.
+test("locator cache recovers from corrupt JSON, logging a warning and preserving a sidecar", (t) => {
+  const RealLogger = require(path.join(root, "utils", "Logger.js"));
+  const realWarning = RealLogger.warning;
+  const warnings = [];
+  RealLogger.warning = (m) => warnings.push(m);
+  t.after(() => { RealLogger.warning = realWarning; });
+
+  const store = storeAt(t, "{");
+  assert.deepEqual(store.data, {}, "functional recovery to {} still happens");
+
+  assert.ok(
+    warnings.some((w) => w.includes(store.storePath) && w.toLowerCase().includes("invalid json")),
+    "a warning naming the store path and the failure kind must fire",
+  );
+  // Never log the parser's own message or the file contents — V8's
+  // JSON.parse error quotes a snippet of the offending input.
+  assert.ok(!warnings.some((w) => w.includes("{") && !w.includes("locator_store") && !w.includes(path.basename(store.storePath))),
+    "the corrupt file's raw content must never appear in the warning");
+
+  const dir = path.dirname(store.storePath);
+  const sidecars = fs.readdirSync(dir).filter((f) => f.includes(".corrupt-"));
+  assert.equal(sidecars.length, 1, "exactly one corrupt sidecar must be preserved");
+  assert.equal(fs.readFileSync(path.join(dir, sidecars[0]), "utf8"), "{", "the sidecar preserves the original corrupt bytes");
+});
 test("locator cache evicts least recently used entry at 500 keys", async (t) => {
   const store = storeAt(t);
   for (let i = 0; i < 500; i++)
@@ -126,7 +157,7 @@ test("locator cache tolerates write errors", async (t) => {
   await store._queue;
   assert.deepEqual(store.getAlternatives("#old"), ["#new"]);
 });
-function healer(page, alternatives = []) {
+function healer(page, alternatives = [], reviewed = []) {
   const events = [],
     saved = [],
     pending = [];
@@ -140,7 +171,20 @@ function healer(page, alternatives = []) {
     "./HealingTrust": { recordPending: (e) => pending.push(e), recordTier3Invocation: () => {} },
     "./AdaptiveRetry": Retry,
   });
-  const instance = new Healer(page);
+  const salt = "healing-regression-salt";
+  const Signature = require(path.join(root, "src/core/locator/ElementSignature.js"));
+  const facts = { tagName: "input", role: "textbox", accessibleName: "Field", ownText: "", attributes: { "data-testid": "reviewed-field", type: "text" }, structuralPath: ["form"], boundingBoxBucket: "top-left:small", state: { hidden: false, disabled: false, readonly: false } };
+  const signature = Signature.capture(facts, { salt });
+  const memory = {
+    salt, getTrusted: () => reviewed.length ? { signature } : null,
+    getApprovedAlternatives: identity => identity.action === "type" ? reviewed.map(selector => ({ selector, signature })) : [],
+    recordEvidence() { assert.fail("healing must not manufacture ground-truth evidence"); },
+    recordPendingCandidate() {},
+  };
+  const instance = new Healer(page, { locatorMemory: memory, elementFactsCollector: {
+    collect: async () => reviewed.length ? [{ ...facts, selector: reviewed[0] }] : [],
+    collectOne: async () => reviewed.length ? facts : null,
+  } });
   instance._retry = new Retry({ baseDelayMs: 0 });
   return { instance, events, saved, pending };
 }
@@ -158,25 +202,16 @@ test("direct healing succeeds without inference or persistence", async () => {
   assert.equal(events.length, 0);
   assert.equal(saved.length, 0);
 });
-test("stored alternatives are attempted in order and logged", async () => {
+test("legacy selector-only alternatives cannot authorize automatic replay", async () => {
   const clicked = [];
-  const { instance, events } = healer(
-    {
-      waitForSelector: async () => {
-        throw Error("invalid selector");
-      },
-      click: async (s) => {
-        clicked.push(s);
-        if (s === "#bad") throw Error("missing");
-      },
-    },
-    ["#bad", "#good"],
-  );
-  instance.getAlternativeSelector = () => assert.fail("unexpected inference");
-  await instance.healAndClick("#old", "Save");
-  assert.deepEqual(clicked, ["#bad", "#good"]);
-  assert.equal(events[0].tier, "LocatorStore");
-  assert.equal(events[0].resolved, "#good");
+  const { instance, events } = healer({
+    waitForSelector: async () => { throw Error("invalid selector"); },
+    click: async selector => clicked.push(selector),
+  }, ["#bad", "#good"]);
+  instance.getAlternativeSelector = async () => null;
+  await assert.rejects(instance.healAndClick("#old", "Save"), { code: "TARGET_UNAVAILABLE" });
+  assert.deepEqual(clicked, []);
+  assert.ok(events.every(event => event.tier !== "LocatorStore"));
 });
 test("Phase 8: inferred locator is clicked and sent for review, not auto-persisted", async () => {
   const clicked = [];
@@ -189,7 +224,7 @@ test("Phase 8: inferred locator is clicked and sent for review, not auto-persist
   // Not written to LocatorStore — an unreviewed Tier 3 guess is not trusted
   // for reuse just because it worked once.
   assert.equal(saved.length, 0);
-  assert.deepEqual(pending, [{ original: "#old", suggested: "#new", description: "Save" }]);
+  assert.deepEqual(pending, [{ original: "#old", suggested: "#new", description: "Save", scoped: false }]);
   assert.equal(events[0].resolved, "#new");
   assert.equal(events[0].trust, "pending");
 });
@@ -283,22 +318,23 @@ test("Phase 11: healAndSelect succeeds directly via selectOption, no inference",
   assert.deepEqual(selected, ["#choice", "it"]);
   assert.equal(events.length, 0);
 });
-test("Phase 11: Tier 2 stored alternative for type performs the actual fill, not a click", async () => {
+test("Phase 11: scoped approved type alternative performs the actual fill", async () => {
   const filled = [];
   const { instance, events } = healer(
     {
       waitForSelector: async () => {
         throw Error("gone");
       },
+      url: () => "https://example.com/form",
       fill: async (s, v) => {
         filled.push([s, v]);
       },
     },
-    ["#new-field"],
+    [], ["#new-field"],
   );
   await instance.healAndType("#old-field", "value", "Field");
   assert.deepEqual(filled, [["#new-field", "value"]]);
-  assert.equal(events[0].tier, "LocatorStore");
+  assert.equal(events.at(-1).tier, "LocatorMemory");
   assert.equal(events[0].action, "type");
 });
 test("Phase 11: Tier 3 inferred locator for select performs the actual selectOption, and goes to trust review, not LocatorStore", async () => {
@@ -313,23 +349,24 @@ test("Phase 11: Tier 3 inferred locator for select performs the actual selectOpt
   // straight to LocatorStore, whichever action it healed.
   assert.equal(saved.length, 0);
   assert.deepEqual(pending, [
-    { original: "#old-choice", suggested: "#new-choice", description: "Country" },
+    { original: "#old-choice", suggested: "#new-choice", description: "Country", scoped: false },
   ]);
   assert.equal(events[0].tier, "LLM");
   assert.equal(events[0].trust, "pending");
   assert.equal(events[0].action, "select");
 });
-test("Phase 11: the uniqueness guard applies to a stored type alternative exactly as it does for click", async () => {
+test("Phase 11: scoped approved type alternatives require live uniqueness", async () => {
   const filled = [];
   const { instance } = healer(
     {
       waitForSelector: async () => {
         throw Error("gone");
       },
+      url: () => "https://example.com/form",
       fill: async (s, v) => filled.push([s, v]),
       locator: (sel) => ({ count: async () => (sel === "#ambiguous" ? 2 : 1) }),
     },
-    ["#ambiguous", "#unique"],
+    [], ["#ambiguous", "#unique"],
   );
   await instance.healAndType("#old", "value", "Field");
   assert.deepEqual(filled, [["#unique", "value"]]);
@@ -1090,6 +1127,7 @@ test("healing trust: a decisions file containing exactly HEALING_DECISIONS_MAX_R
         writeCalls++;
         return RealAtomicJsonStore.writeJsonAtomic(...args);
       },
+      WriteFailureTracker: RealAtomicJsonStore.WriteFailureTracker,
     },
   });
   Trust.pendingPath = path.join(dir, "healing_pending.json");
@@ -1319,6 +1357,7 @@ test("healing trust: a pending file at or under PENDING_MAX_ENTRIES is left comp
         writeCalls++;
         return RealAtomicJsonStore.writeJsonAtomic(...args);
       },
+      WriteFailureTracker: RealAtomicJsonStore.WriteFailureTracker,
     },
   });
   Trust.pendingPath = pendingPath;
@@ -1462,7 +1501,20 @@ function healerWithRealTrust(t, page) {
     "./HealingTrust": Trust,
     "./AdaptiveRetry": Retry,
   });
-  const instance = new Healer(page);
+  const salt = "healing-regression-salt";
+  const Signature = require(path.join(root, "src/core/locator/ElementSignature.js"));
+  const facts = { tagName: "input", role: "textbox", accessibleName: "Field", ownText: "", attributes: { "data-testid": "reviewed-field", type: "text" }, structuralPath: ["form"], boundingBoxBucket: "top-left:small", state: { hidden: false, disabled: false, readonly: false } };
+  const signature = Signature.capture(facts, { salt });
+  const memory = {
+    salt, getTrusted: () => reviewed.length ? { signature } : null,
+    getApprovedAlternatives: identity => identity.action === "type" ? reviewed.map(selector => ({ selector, signature })) : [],
+    recordEvidence() { assert.fail("healing must not manufacture ground-truth evidence"); },
+    recordPendingCandidate() {},
+  };
+  const instance = new Healer(page, { locatorMemory: memory, elementFactsCollector: {
+    collect: async () => reviewed.length ? [{ ...facts, selector: reviewed[0] }] : [],
+    collectOne: async () => reviewed.length ? facts : null,
+  } });
   instance._retry = new Retry({ baseDelayMs: 0 });
   return { instance, trust: Trust };
 }
