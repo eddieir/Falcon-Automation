@@ -66,9 +66,8 @@ const DEFAULT_URL = "https://www.saucedemo.com";
  *
  * Normal runs use the ledger's own default path. FALCON_TEST_RUN_HISTORY_PATH is
  * honoured only when a test preload has set globalThis.__FALCON_TEST_SEAMS__, so
- * the variable does nothing otherwise. Under `node --test` (NODE_TEST_CONTEXT)
- * with no seam, history is skipped so existing fixture-run tests never write to
- * the repo's data/run_history.json. Returns null when history must be skipped.
+ * the variable does nothing otherwise. Tests that spawn falcon.js keep the repo's
+ * data/run_history.json untouched by running with FALCON_RUN_HISTORY=off.
  */
 const historyLedgerOptions = () => {
     const seam = globalThis.__FALCON_TEST_SEAMS__;
@@ -76,7 +75,7 @@ const historyLedgerOptions = () => {
     if (seam && seam.runHistory === true && typeof override === "string" && override) {
         return { filePath: override };
     }
-    return process.env.NODE_TEST_CONTEXT ? null : {};
+    return {};
 };
 
 /**
@@ -88,7 +87,6 @@ const recordRun = async ({ incomplete, report, coverage, repeat, startedAt }) =>
         const { RunLedger } = require("./src/core/history/RunLedger");
         if (!RunLedger.isEnabled(process.env)) return;
         const ledgerOptions = historyLedgerOptions();
-        if (!ledgerOptions) return;
         const { buildRunRecord } = require("./src/core/history/RunRecord");
         const { getGitInfo } = require("./src/core/history/GitInfo");
         const { evaluate, parseTrendSettings } = require("./src/core/history/TrendDetector");
