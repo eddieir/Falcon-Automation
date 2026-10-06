@@ -59,12 +59,17 @@ These are fixed in one place (`RunRecord.js`) so every surface agrees.
 - **pass_rate** = passed ÷ (passed + failed + unavailable). Quarantined outcomes are reported but
   excluded so a quarantine cannot make the rate look better. `null` when the denominator is 0.
   Deduplicated scenarios are not outcomes and never count.
-- **heals** = successful resolutions only: Tier 2 `LocatorStore` resolved; Tier 2.5 `LocatorMemory`
-  `accepted` or `approved_reuse`; Tier 3 `LLM` proposal acted on (trust `pending`). Tier 1 retry
-  successes are not heals.
-- **heal_failures** = Tier 2.5 `refused` / `no_candidate` / `failed`, Tier 3 `rejected` / unresolved,
-  and `exhausted`. Recorded separately, never added to heals.
-- **heal_rate** = heals ÷ verified. `null` when verified is 0.
+- **heals** = successful resolutions only, classified from the events `AIHealer` actually emits:
+  Tier 2 = `tier: "LocatorMemory"`, `status: "approved_reuse"` (scoped replay of an approved
+  selector); Tier 2.5 = `tier: "LocatorMemory"`, `status: "accepted"`; Tier 3 = `tier: "LLM"` with a
+  non-null `resolved` and `trust: "pending"`. Tier 1 retry successes are not heals. Nothing logs
+  `tier: "LocatorStore"` today (it appears only in a doc comment), so it is not a source.
+- **heal_failures** = `LocatorMemory` `refused` / `no_candidate` / `failed`; `LLM` with
+  `resolved: null` (rejected events carry `status: "rejected"`, unresolved ones carry no status, so
+  classification keys on `resolved === null`); and `tier: "exhausted"` (logged by `TestRunner`).
+  Recorded separately, never added to heals.
+- **heal_rate** = heals ÷ verified. `null` when verified is 0. It can exceed 1, because one scenario
+  can heal several interactions.
 - **durationMs** = run wall clock from `reportManager.startRun()` to the ledger write, excluding the
   dashboard linger.
 - **pendingDepth** and **quarantineCount** are point-in-time snapshots (HealingTrust pending entries;
@@ -87,7 +92,7 @@ One record per `falcon.js` run, built from a fixed allow-list. Anything not list
 | `counts` | `total, passed, failed, skipped, quarantined, deduped, unavailable` — integers 0–1,000,000 |
 | `coverage` | `pagesTested, pagesSkipped, pagesUnreachable` — integers, `null` on the crash path |
 | `heals` | `{t2, t25, t3}` integers |
-| `healFailures` | `{t25, t3, exhausted}` integers |
+| `healFailures` | `{t25, t3, exhausted}` integers (`t25` covers every `LocatorMemory` failure status) |
 | `pendingDepth`, `quarantineCount` | integers |
 | `durationMs` | finite, ≥ 0 |
 | `incomplete` | `true` on the crash path, else `false` |
@@ -100,15 +105,22 @@ tokens, environment values, hostnames, file paths.
 ### Storage (ADR-15-01)
 
 `data/run_history.json` holds `{ "schemaVersion": 1, "runs": [...] }`, written with
-`AtomicJsonStore` (temporary file, rename, mode 0600) under a cross-process lock that follows
-`LocatorMemoryWriter` (stale-lock reclaim included). Append = load → validate → push → evict
-oldest to **500 records** → write, all inside the lock.
+`AtomicJsonStore.writeJsonAtomic` (temporary file, rename, mode 0600) through
+`LocatorMemoryWriter.write(file, data, expectedDigest, atomic)`, which takes the cross-process lock
+and refuses if the file changed since it was read. That function does not wait: a held lock or a
+changed file returns `{ ok: false }` at once. `RunLedger.append` therefore runs a **bounded retry
+loop** — re-read, re-validate, recompute the digest, push, evict oldest to **500 records**, call
+`write` — up to 5 attempts with a short jittered back-off and a total wait under 2 s, then gives up
+with a warning. Without the loop, concurrent appends would lose records. Note that the writer's
+digest reader allows 8 MB; the ledger's own 1 MB cap is enforced separately, below.
 
-- Load is defensive: files over **1 MB** are treated as corrupt; every record is re-validated and
-  invalid ones are dropped with a count (never their content) logged; `__proto__`/`constructor`
-  keys are rejected; a corrupt file is moved to a sidecar (existing `AtomicJsonStore` behaviour) and
-  history restarts empty; records with a future `schemaVersion` are skipped with a warning and never
-  rewritten.
+- Load is defensive. `RunLedger` `stat`s the file first: over **1 MB** is treated as corrupt.
+  `AtomicJsonStore.readJsonSync` has no size bound and its corrupt-file preservation is internal, so
+  `RunLedger` writes its own byte-for-byte sidecar (`run_history.json.corrupt-<timestamp>-<pid>`,
+  `wx`, 0600) for oversized, unparsable or wrongly shaped files, then starts empty. Every record is
+  re-validated and invalid ones are dropped with a count (never their content) logged;
+  `__proto__`/`constructor` keys are rejected; records with a future `schemaVersion` are skipped
+  with a warning and never rewritten.
 - A write failure logs a warning and never throws.
 - **Phase 16:** exactly one record per logical run, written by the aggregating process after shards
   finish. `RunLedger.merge(a, b)` deduplicates by `runId` and orders by `(timestamp, runId)`, so
@@ -133,9 +145,10 @@ file cannot be validated as a whole); SQLite or an external database (non-goal, 
 
 ### Integration with `falcon.js`
 
-A `recordRun({ incomplete })` helper, wrapped in try/catch, is called right after each of the two
-`reportManager.generateReport(...)` calls (normal path, and the crash path with `incomplete: true`),
-before `Logger.flush()` and the dashboard linger. It reads `HealingReport._instance.logs`,
+A `recordRun({ incomplete })` helper, wrapped in try/catch and **awaited**, is called right after
+each of the two `reportManager.generateReport(...)` calls (normal path, and the crash path with
+`incomplete: true`), before `Logger.flush()` and the dashboard linger. Its lock wait is bounded (see
+Storage), so it cannot hold up the exit. It reads `HealingReport._instance.logs`,
 `HealingTrust`, `FlakinessTracker`, the report summary and coverage. It cannot change the exit code.
 `BaseTest` and other scripts never append.
 
@@ -152,13 +165,15 @@ baseline runs exist; the current `pagesTested` is below 80% of the baseline medi
 | Heal-rate spike | current ≥ 0.10 **and** current > *m* + max(*band*, 0.05) |
 | Pass-rate decay | current < 0.95 **and** current < *m* − max(*band*, 0.10) |
 | Duration regression | current > *m* + max(*band*, 0.25 × *m*, 30 000 ms) |
-| Review backlog | pendingDepth ≥ *m* + 5 **and** strictly rising over the last 3 runs |
+| Review backlog | pendingDepth ≥ *m* + 5 **and** strictly rising across the two previous runs and the current one |
 | Quarantine growth | quarantineCount ≥ *m* + 2 |
 
 The absolute floors are what stop a zero-variance baseline from flagging a trivial change, which
 plain mean ± σ rules do. Baseline size and minimum are overridable through `validateIntSetting`
 (`FALCON_TREND_BASELINE_N`, `FALCON_TREND_MIN_BASELINE`); the other constants are fixed so flags stay
-comparable over time.
+comparable over time. `validateIntSetting` throws `INVALID_CONFIG` on a bad value, so the settings are
+parsed outside `evaluate` (which stays pure and never throws): `falcon.js` logs a warning and uses the
+defaults, and the CLI exits 2 naming the setting, as `scripts/review/status.js` already does.
 
 A flag is `{ signal, current, baseline, threshold, message }`; the message is a fixed template
 containing numbers only.
@@ -291,19 +306,21 @@ asserts every row names an implementation file and a test that exists, following
 
 | File | Covers |
 |---|---|
-| `tests/regression/p15-record.check.cjs` | Allow-list, sanitisers, field bounds (AC-01, 02, 13, 14) |
+| `tests/regression/p15-record.check.cjs` | Allow-list, sanitisers, field bounds, tier map against real emitted events; dynamic half of AC-33 (stubbed `execFileSync`, `$(touch PWN)` branch) (AC-01, 02, 13, 14, 33) |
 | `tests/regression/p15-ledger.check.cjs` | Caps, corruption, versions, atomicity, lock, concurrency, kill switch (AC-04–11) |
 | `tests/regression/p15-trend.check.cjs` | The rule matrix from synthetic ledgers with fixed timestamps (AC-17–19) |
 | `tests/regression/p15-export-safety.check.cjs` | `csvCell`, terminal sanitisation (AC-22, 23) |
 | `tests/regression/p15-cli.check.cjs` | Child-process CLI, exit codes 0/1/2 (AC-20, 21) |
 | `tests/regression/p15-integration.check.cjs` | `falcon.js` via the CLI fixture preload: ten runs, spike, exit-code invariance, crash path (AC-03, 12, 15, 16) |
-| `tests/regression/p15-routes.check.cjs` | `/history` auth, Host, methods, limiter, secrets (AC-24, 32) |
+| `tests/regression/p15-routes.check.cjs` | `/history` auth, Host, methods, limiter, secrets; serve mode started as a child process: readiness line, no browser, refusal on a non-loopback host without a token, clean SIGINT exit (AC-24, 27, 32) |
 | `tests/regression/browser.spec.js` | History panel XSS, empty state, sparklines (AC-25, 26) |
-| `tests/regression/p15-traceability.check.cjs` | Register, git-without-shell static check, CI YAML assertions (AC-28–30, 33, 36) |
+| `tests/regression/p15-traceability.check.cjs` | Register, static check that no history module calls `exec`/`execSync`/`shell: true`, CI YAML assertions (AC-28–30, static half of 33, 36) |
+| `tests/regression/cli.check.cjs`, `tests/regression/review-status.check.cjs` (existing, unchanged) | Existing CLI exit codes still hold (AC-35) |
 
 - **Heal spike in fixture mode.** The CLI fixture stubs the sweep, so no heals happen. A new
   `tests/fixtures/p15-heal-preload.cjs` pushes N events into the real `HealingReport` before the run
   (`FALCON_FIXTURE_HEALS`), so the collector is exercised end to end.
+- **AC-34 (docs)** is verified by review: the Code Reviewer checks the final docs diff against the code.
 - **Fail before.** Every test is written to fail against an empty module first. Security controls
   are proven by mutation, with the red output recorded in the PR: remove CSV neutralisation, the
   allow-list, terminal sanitisation, `textContent`, the Host or token check on `/history`; change the
@@ -329,10 +346,10 @@ starts. At most two tasks run at once, and only on disjoint files.
 | V1 | QA + Code Reviewer + Security | read-only | T1, T2 | M1 gate |
 | **M2 — Trend, CLI, integration** | | | | |
 | T3 | Developer | `src/core/history/TrendDetector.js`, `src/core/util/OutputSafe.js`, `tests/regression/p15-trend.check.cjs`, `tests/regression/p15-export-safety.check.cjs` | T1 | AC-17–19, 22, 23 |
-| T4 | Developer | `scripts/history.js`, `falcon.js`, `package.json` (scripts only), `tests/fixtures/p15-heal-preload.cjs`, `tests/regression/p15-cli.check.cjs`, `tests/regression/p15-integration.check.cjs` | T2, T3 | AC-03, 12, 15, 16, 20, 21, 35 |
+| T4 | Developer | `scripts/history.js`, `falcon.js`, `package.json` (`history:*` scripts only), `tests/fixtures/p15-heal-preload.cjs`, `tests/regression/p15-cli.check.cjs`, `tests/regression/p15-integration.check.cjs` | T2, T3 | AC-03, 12, 15, 16, 20, 21, 35 |
 | V2 | QA + Code Reviewer | read-only | T3, T4 | M2 gate |
 | **M3 — Dashboard and serve mode** | | | | |
-| T5 | Developer | `src/core/Dashboard.js`, `scripts/dashboard.js`, `src/dashboard/index.html`, `tests/regression/p15-routes.check.cjs`, `tests/regression/browser.spec.js` | T2, T3 | AC-24–27, 32 |
+| T5 | Developer | `src/core/Dashboard.js`, `scripts/dashboard.js`, `package.json` (`dashboard` script only, after T4), `src/dashboard/index.html`, `tests/regression/p15-routes.check.cjs`, `tests/regression/browser.spec.js` | T4 | AC-24–27, 32 |
 | V3 | QA + Code Reviewer + Security | read-only | T5 | M3 gate |
 | **M4 — CI, docs, register** | | | | |
 | T6 | DevOps | `.github/workflows/ci.yml` | T4 | AC-28–30 |
@@ -344,7 +361,7 @@ starts. At most two tasks run at once, and only on disjoint files.
 | R1 | Release Manager | read-only | V5 | GO / NO-GO |
 
 **Concurrency.** T1 runs alone; T2 and T3 can pair (disjoint files, both need only T1); T4 follows
-T2 and T3; T5 and T6 can pair; T7 and T8 can pair.
+T2 and T3; T5 follows T4 (both touch `package.json`) and can pair with T6; T7 and T8 can pair.
 
 **Milestone gates.**
 
@@ -358,7 +375,7 @@ T2 and T3; T5 and T6 can pair; T7 and T8 can pair.
 - **M5:** unit, regression and browser suites green; mutation evidence recorded; hosted ledger cache
   miss then hit observed; release decision recorded.
 
-**Critical path:** T1 → T2 → T4 → T6 → V4 → V5 → R1.
+**Critical path:** T1 → T2 → T4 → T5 → V3 → V4 → V5 → R1 (T6 runs alongside T5).
 
 **Dispatch budget.** The repository's full tier allows 16 dispatches. This plan uses 14 (8 build
 tasks, 5 verification passes, 1 release decision), leaving 2 for rework, so a third repair round
@@ -410,7 +427,7 @@ and confirm the next run's exit code matches the pre-Phase-15 behaviour.
 | Suite growth looks like drift | Rates are normalised; reduced-coverage suppression |
 | A poisoned cache on `main` skews flags | Only writers to `main` can affect it; flags never gate anything |
 | Phase 16 concurrent writers | One record per logical run from the aggregator; `merge` by `runId` |
-| Heal counters lost on a crash | Crash runs are recorded as incomplete and excluded from baselines |
+| Coverage missing on a crash | The crash path still reads the heal log, but has no coverage; it is recorded as incomplete and excluded from baselines |
 
 ## 17. Rollback
 
