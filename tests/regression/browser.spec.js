@@ -160,7 +160,7 @@ test("autoheal infers from real DOM through a controlled provider, but does not 
           requests++;
           expect(req.messages[0].content).toContain("replacement");
           return {
-            choices: [{ message: { content: '[data-testid="replacement"]' } }],
+            choices: [{ message: { content: "0" } }],
           };
         },
       },
@@ -239,7 +239,7 @@ test("a renamed select target heals through Tier 3 inference via a controlled pr
     chat: {
       completions: {
         create: async () => ({
-          choices: [{ message: { content: '[data-testid="country-replacement"]' } }],
+          choices: [{ message: { content: "0" } }],
         }),
       },
     },
@@ -524,8 +524,8 @@ test('healing rejects an ambiguous inferred target without clicking, caching, or
 });
 test('provider DOM snapshot excludes entered credential values',async({page})=>{
  await page.setContent('<input id="password" type="password" value="fixture-sensitive-value"><button id="target">Submit</button>');const healer=new Healer(page);
- healer._getOpenAIClient=async()=>({chat:{completions:{create:async request=>{expect(request.messages[0].content).not.toContain('fixture-sensitive-value');return{choices:[{message:{content:'#target'}}]};}}}});
- expect(await healer.getAlternativeSelector('#old-target')).toBe('#target');
+ healer._getOpenAIClient=async()=>({chat:{completions:{create:async request=>{expect(request.messages[0].content).not.toContain('fixture-sensitive-value');return{choices:[{message:{content:'0'}}]};}}}});
+ expect(await healer.getAlternativeSelector('#old-target','Submit','click')).toBe('[id="target"]');
 });
 test('late appearing target succeeds through direct waiting',async({page})=>{
  await page.setContent('<main></main>');await page.evaluate(()=>setTimeout(()=>{const b=document.createElement('button');b.id='late';b.onclick=()=>window.clicked=true;document.body.append(b);},100));

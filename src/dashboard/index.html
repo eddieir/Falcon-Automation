@@ -877,8 +877,9 @@
     // updates state.pending and re-renders — no need to do it here too.
   }
 
+  // Same-origin requests carry the HttpOnly auth cookie; no token header.
   function authHeaders() {
-    return dashboardToken ? { "X-Dashboard-Token": dashboardToken } : {};
+    return {};
   }
 
   async function renderTrend() {
@@ -1426,25 +1427,12 @@
     }
   }
 
-  // Phase 7 — auth token. Read from ?token=, persist to localStorage so a
-  // refresh doesn't require re-pasting it, then strip it from the visible
-  // URL so it doesn't linger in browser history / get shared by accident.
-  // localStorage is best-effort — a private window or blocked storage just
-  // means the token has to come from the URL every time, which still works.
-  function resolveToken() {
-    const fromUrl = new URLSearchParams(location.search).get("token");
-    if (fromUrl) {
-      try { localStorage.setItem("falcon_dashboard_token", fromUrl); } catch {}
-      const url = new URL(location.href);
-      url.searchParams.delete("token");
-      history.replaceState(null, "", url);
-      return fromUrl;
-    }
-    try { return localStorage.getItem("falcon_dashboard_token") || undefined; } catch { return undefined; }
-  }
+  // Auth. The token never appears in page script: `GET /?token=` swaps it for
+  // an HttpOnly cookie that the browser sends on same-origin requests and the
+  // socket handshake. Drop the key an earlier version stored in localStorage.
+  try { localStorage.removeItem("falcon_dashboard_token"); } catch {}
 
-  const dashboardToken = resolveToken();
-  const socket = io({ auth: { token: dashboardToken } });
+  const socket = io();
 
   socket.on("connect", () => {
     $("status-dot").classList.add("live");

@@ -1139,3 +1139,29 @@ Fixes and hardening applied after Phase 14 merged, addressing network exposure, 
 **Problem:** The test job had no timeout, so a hung step could hold a runner for the 360-minute default. Superseded runs (multiple pushes to a branch) would all run to completion, wasting minutes on work already invalidated.
 
 **Fix:** Test job now has `timeout-minutes: 10` (covers typical 1.5–2 minute runs with headroom). CI workflow now cancels superseded runs on non-main branches via a `concurrency` group whose `cancel-in-progress` is false on `main`, so every commit on `main` keeps its recorded result. Allure test results are now uploaded as artifacts.
+
+---
+
+## Post-Phase-14 Security Follow-ups
+
+Closes the items the post-Phase-14 security review left open.
+
+### Tier 3 — the model chooses among listed elements, it no longer names one
+
+**Problem:** Tier 3 sent raw attribute text to the model, accepted any free-form selector that matched exactly one element, and acted on it immediately; human approval only gated reuse. With a stubbed reply, a "Submit" click landed on a delete-account link, a hidden `<div>` that was never in the snapshot was clicked, and injection text in a `title` attribute reached the prompt verbatim.
+
+**Fix:** The model is shown a numbered list of visible, enabled elements that fit the action (at most 60, with zero-opacity, `inert`, `pointer-events: none` and off-document decoys excluded) and may reply only with a number or `null`. Selectors are built locally and the chosen one is re-verified in the page before use. Values are control-stripped, capped at 200 characters and marked as untrusted page data. A rejection fails the heal with a recorded reason and persists nothing. Residual limit: a page that controls visible, action-compatible elements can still bias the choice among them; the result stays pending until approved.
+
+### Dashboard — token out of URLs, rebinding refused
+
+**Problem:** The token was accepted as `?token=` on every route and kept in `localStorage` by the UI, so it leaked into history, logs and `Referer`. The length check before `timingSafeEqual` leaked the token's length. On a loopback bind without a token, a page on another site could rebind its hostname to 127.0.0.1 and drive the review routes.
+
+**Fix:** API routes and the socket read the token only from `Authorization: Bearer`, `X-Dashboard-Token`, or the HttpOnly, SameSite=Strict cookie `falcon_dashboard_token` (the socket also accepts `auth: { token }`). `GET /?token=<value>` exchanges a valid token for that cookie and redirects to `/`. Both sides are hashed before comparison. Every response sends `Referrer-Policy: no-referrer`. On a loopback bind, a Host other than localhost, 127.0.0.1, [::1] or the configured loopback host on the listening port gets 403, and so do state-changing requests and socket handshakes with a foreign Origin.
+
+**Breaking:** scripts that passed `?token=` to `/events`, `/emit` or other API routes must send the header instead.
+
+### Dependencies and CI
+
+**Problem:** `npm audit` reported 32 advisories (10 critical), the report CLI `allure` was a runtime dependency, and workflow actions were referenced by movable tags.
+
+**Fix:** `npm audit fix` (no `--force`) brings both the full and production audits to zero; `allure` moves to devDependencies; Playwright moves to 1.63, so run `npx playwright install chromium` once after pulling. Every action is pinned to a commit SHA with its version in a comment, Dependabot proposes weekly updates for actions and npm, and CI fails on any high or critical production advisory.

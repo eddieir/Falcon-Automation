@@ -140,3 +140,134 @@ Module._load = function (name, ...rest) {
   assert.match(out, /Refusing to start the dashboard/);
   assert.equal(fs.existsSync(marker), false, "run must not proceed past the refusal");
 });
+
+// ── DNS rebinding: Host / Origin validation on a loopback bind ──────────────
+
+function rawRequest(port, { method = "GET", urlPath = "/", headers = {}, body, host = "127.0.0.1" } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host, port, path: urlPath, method, headers, timeout: 3000 }, (res) => {
+      let data = "";
+      res.on("data", (c) => (data += c));
+      res.on("end", () => resolve({ statusCode: res.statusCode, body: data }));
+    });
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("request timed out")));
+    req.end(body);
+  });
+}
+
+async function startLoopback(t) {
+  const d = withEnv({ DASHBOARD_HOST: undefined, DASHBOARD_TOKEN: undefined, DASHBOARD_ALLOWED_ORIGIN: undefined }, () => new Dashboard({ port: 0 }));
+  await d.start();
+  t.after(() => d.stop());
+  return d;
+}
+
+test("loopback bind: a foreign Host header is refused on / and /events", async (t) => {
+  const d = await startLoopback(t);
+  for (const urlPath of ["/", "/events"]) {
+    const res = await rawRequest(d.port, { urlPath, headers: { Host: `evil.com:${d.port}` } });
+    assert.equal(res.statusCode, 403, urlPath);
+    assert.match(res.body, /Forbidden/);
+  }
+  const wrongPort = await rawRequest(d.port, { urlPath: "/events", headers: { Host: `localhost:${d.port + 1}` } });
+  assert.equal(wrongPort.statusCode, 403);
+  const noPort = await rawRequest(d.port, { urlPath: "/events", headers: { Host: "localhost" } });
+  assert.equal(noPort.statusCode, 403);
+});
+
+test("loopback bind: a request with no Host header is refused", async (t) => {
+  const d = await startLoopback(t);
+  const raw = await new Promise((resolve, reject) => {
+    const net = require("node:net");
+    const sock = net.connect(d.port, "127.0.0.1", () => sock.write("GET /events HTTP/1.0\r\n\r\n"));
+    let out = "";
+    sock.on("data", (c) => (out += c));
+    sock.on("end", () => resolve(out));
+    sock.on("error", reject);
+  });
+  assert.match(raw, /^HTTP\/1\.\d 403/);
+});
+
+test("loopback bind: localhost, 127.0.0.1 and [::1] Host values are accepted", async (t) => {
+  const d = await startLoopback(t);
+  for (const h of ["localhost", "127.0.0.1", "[::1]", "LOCALHOST"]) {
+    const res = await rawRequest(d.port, { urlPath: "/events", headers: { Host: `${h}:${d.port}` } });
+    assert.equal(res.statusCode, 200, h);
+  }
+});
+
+test("bound to ::1: the [::1] Host is accepted", async (t) => {
+  const d = withEnv({ DASHBOARD_TOKEN: undefined }, () => new Dashboard({ port: 0, host: "::1" }));
+  try {
+    await d.start();
+  } catch (error) {
+    if (error.code === "EADDRNOTAVAIL" || error.code === "EAFNOSUPPORT") return t.skip("IPv6 loopback is not available on this platform");
+    throw error;
+  }
+  t.after(() => d.stop());
+  const ok = await rawRequest(d.port, { host: "::1", urlPath: "/events", headers: { Host: `[::1]:${d.port}` } });
+  assert.equal(ok.statusCode, 200);
+  const bad = await rawRequest(d.port, { host: "::1", urlPath: "/events", headers: { Host: `evil.com:${d.port}` } });
+  assert.equal(bad.statusCode, 403);
+});
+
+test("loopback bind: POST /emit with a foreign Origin is refused; no Origin and own Origin work", async (t) => {
+  const d = await startLoopback(t);
+  const body = JSON.stringify({ name: "testPass", payload: { name: "x" } });
+  const post = (origin) => rawRequest(d.port, {
+    method: "POST", urlPath: "/emit", body,
+    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body), ...(origin ? { Origin: origin } : {}) },
+  });
+  assert.equal((await post("http://evil.com")).statusCode, 403);
+  assert.equal((await post("null")).statusCode, 403);
+  assert.equal(d._events.length, 0, "a refused POST must not emit");
+  assert.equal((await post()).statusCode, 204, "a Node reporter sends no Origin");
+  assert.equal((await post(`http://localhost:${d.port}`)).statusCode, 204);
+});
+
+test("loopback bind: DASHBOARD_ALLOWED_ORIGIN is honoured for state-changing requests", async (t) => {
+  const d = await startLoopback(t);
+  const saved = process.env.DASHBOARD_ALLOWED_ORIGIN;
+  process.env.DASHBOARD_ALLOWED_ORIGIN = "http://ui.example.test";
+  t.after(() => { if (saved === undefined) delete process.env.DASHBOARD_ALLOWED_ORIGIN; else process.env.DASHBOARD_ALLOWED_ORIGIN = saved; });
+  const res = await rawRequest(d.port, { method: "POST", urlPath: "/emit", body: "{}", headers: { "Content-Type": "application/json", Origin: "http://ui.example.test" } });
+  assert.equal(res.statusCode, 204);
+});
+
+test("loopback bind: a socket with a foreign Host or Origin cannot connect", async (t) => {
+  const d = await startLoopback(t);
+  const attempt = (extraHeaders) => new Promise((resolve) => {
+    const socket = io(`http://127.0.0.1:${d.port}`, { transports: ["polling"], reconnection: false, extraHeaders });
+    socket.on("connect", () => { socket.close(); resolve(true); });
+    socket.on("connect_error", () => { socket.close(); resolve(false); });
+  });
+  // The socket.io client will not let a caller override Host, so the Host
+  // case is driven as a raw engine.io handshake request.
+  const handshake = (host) => rawRequest(d.port, { urlPath: "/socket.io/?EIO=4&transport=polling", headers: { Host: host } });
+  assert.equal((await handshake(`evil.com:${d.port}`)).statusCode, 403);
+  assert.equal((await handshake(`localhost:${d.port}`)).statusCode, 200);
+  assert.equal(await attempt({ Origin: "http://evil.com" }), false);
+  assert.equal(await attempt({}), true);
+});
+
+test("non-loopback bind skips the Host check (the token is mandatory there)", async (t) => {
+  const d = withEnv({ DASHBOARD_TOKEN: "throwaway-" + process.pid }, () => new Dashboard({ port: 0, host: "0.0.0.0" }));
+  await d.start();
+  t.after(() => d.stop());
+  const res = await rawRequest(d.port, { urlPath: "/events", headers: { Host: "dash.internal:80", "X-Dashboard-Token": "throwaway-" + process.pid } });
+  assert.equal(res.statusCode, 200);
+});
+
+test("loopback bind: a non-default loopback DASHBOARD_HOST and port 80 Host forms are accepted", () => {
+  const custom = withEnv({ DASHBOARD_TOKEN: undefined }, () => new Dashboard({ port: 4321, host: "127.0.0.5" }));
+  assert.ok(custom._isRequestAllowed({ host: "127.0.0.5:4321" }, { checkOrigin: false }));
+  assert.ok(custom._isRequestAllowed({ host: "localhost:4321" }, { checkOrigin: false }));
+  assert.ok(!custom._isRequestAllowed({ host: "127.0.0.6:4321" }, { checkOrigin: false }));
+  const v6 = withEnv({ DASHBOARD_TOKEN: undefined }, () => new Dashboard({ port: 4321, host: "::1" }));
+  assert.ok(v6._isRequestAllowed({ host: "[::1]:4321" }, { checkOrigin: false }));
+  const p80 = withEnv({ DASHBOARD_TOKEN: undefined }, () => new Dashboard({ port: 80 }));
+  assert.ok(p80._isRequestAllowed({ host: "localhost" }, { checkOrigin: false }));
+  assert.ok(p80._isRequestAllowed({ host: "localhost:80" }, { checkOrigin: false }));
+  assert.ok(!p80._isRequestAllowed({ host: "evil.com" }, { checkOrigin: false }));
+});

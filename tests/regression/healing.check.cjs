@@ -379,14 +379,24 @@ test("Phase 11: healAndClick keeps its existing two-argument signature and still
   await instance.healAndClick("#old", "Save");
   assert.equal(events[0].action, "click");
 });
-for (const [content, expected] of [
-  [" #new ", "#new"],
-  ["null", null],
-  ["", null],
-  [undefined, null],
+// Tier 3 replies are an index into a locally built candidate list, never a
+// free-form selector. The page double serves one candidate (an #new button)
+// and confirms uniqueness on the verification call.
+const tier3Page = () => ({
+  evaluate: async (_fn, args) =>
+    args.verify ? true : [{ tagName: "button", attributes: { id: "new" }, text: "New" }],
+});
+for (const [content, expected, rejection] of [
+  [" 0 ", '[id="new"]', null],
+  ["null", null, "model_declined"],
+  ["", null, "model_declined"],
+  [undefined, null, "invalid_reply"],
+  ["#new", null, "invalid_reply"],
+  ["0 and also 1", null, "invalid_reply"],
+  ["1", null, "index_out_of_range"],
 ]) {
   test(`inference response normalization: ${String(content)}`, async () => {
-    const { instance } = healer({ evaluate: async () => '<button id="new">' });
+    const { instance } = healer(tier3Page());
     instance._getOpenAIClient = async () => ({
       chat: {
         completions: {
@@ -398,9 +408,28 @@ for (const [content, expected] of [
         },
       },
     });
-    assert.equal(await instance.getAlternativeSelector("#old"), expected);
+    assert.equal(await instance.getAlternativeSelector("#old", "Old target", "click"), expected);
+    assert.equal(instance._lastTier3Rejection, rejection);
   });
 }
+test("inference with no eligible candidates never asks the model", async () => {
+  const { instance } = healer({ evaluate: async () => [] });
+  instance._getOpenAIClient = async () => ({
+    chat: { completions: { create: async () => assert.fail("model must not be asked") } },
+  });
+  assert.equal(await instance.getAlternativeSelector("#old", "Old target", "click"), null);
+  assert.equal(instance._lastTier3Rejection, "no_eligible_candidates");
+});
+test("inference rejects a chosen selector that no longer resolves to one matching element", async () => {
+  const { instance } = healer({
+    evaluate: async (_fn, args) => (args.verify ? false : [{ tagName: "button", attributes: { id: "new" } }]),
+  });
+  instance._getOpenAIClient = async () => ({
+    chat: { completions: { create: async () => ({ choices: [{ message: { content: "0" } }] }) } },
+  });
+  assert.equal(await instance.getAlternativeSelector("#old", "Old target", "click"), null);
+  assert.equal(instance._lastTier3Rejection, "selector_not_unique");
+});
 test("provider error becomes unresolved selector", async () => {
   const { instance } = healer({});
   instance._getOpenAIClient = async () => {
@@ -1484,6 +1513,9 @@ test("healing trust: a write failure (ENOTDIR — path points inside an existing
 
 // ── P13-20 FIX A: tier3Invocations only counts requests actually issued ──
 
+// Tier 3 candidate/verify double: one eligible button, chosen by index 0.
+const oneCandidate = (id) => async (_fn, args) => (args.verify ? true : [{ tagName: "button", attributes: { id } }]);
+
 function healerWithRealTrust(t, page) {
   const dir = temp();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -1538,9 +1570,9 @@ test("P13-20 FIX A: a Tier 3 attempt that fails at client init (no OPENAI_API_KE
   // Step 2: the same original selector heals successfully via a real Tier 3
   // request (client init and DOM snapshot both succeed this time).
   instance._getOpenAIClient = async () => ({
-    chat: { completions: { create: async () => ({ choices: [{ message: { content: "#new" } }] }) } },
+    chat: { completions: { create: async () => ({ choices: [{ message: { content: "0" } }] }) } },
   });
-  instance.page.evaluate = async () => "<button>";
+  instance.page.evaluate = oneCandidate("new");
   await instance.healSelector("#old", "Save");
 
   const entries = trust.list();
@@ -1558,9 +1590,9 @@ test("P13-20 FIX A: a Tier 3 attempt whose DOM snapshot throws does not inflate 
   await assert.rejects(instance.healSelector("#old2", "Save"));
   assert.equal(trust.list().length, 0, "no pending entry should exist yet");
 
-  instance.page.evaluate = async () => "<button>";
+  instance.page.evaluate = oneCandidate("new2");
   instance._getOpenAIClient = async () => ({
-    chat: { completions: { create: async () => ({ choices: [{ message: { content: "#new2" } }] }) } },
+    chat: { completions: { create: async () => ({ choices: [{ message: { content: "0" } }] }) } },
   });
   await instance.healSelector("#old2", "Save");
 
@@ -1571,11 +1603,11 @@ test("P13-20 FIX A: a Tier 3 attempt whose DOM snapshot throws does not inflate 
 
 test("P13-20 FIX A: a Tier 3 request that is actually issued still counts even when it throws or the model returns null", async (t) => {
   const { instance, trust } = healerWithRealTrust(t, { click: async () => {} });
-  instance.page.evaluate = async () => "<button>";
+  instance.page.evaluate = oneCandidate("new3");
 
   // First: a successful heal creates the pending entry, seeded at 1.
   instance._getOpenAIClient = async () => ({
-    chat: { completions: { create: async () => ({ choices: [{ message: { content: "#new3" } }] }) } },
+    chat: { completions: { create: async () => ({ choices: [{ message: { content: "0" } }] }) } },
   });
   await instance.healSelector("#old3", "Save");
   assert.equal(trust.pending["#old3"].tier3Invocations, 1);
@@ -1599,9 +1631,9 @@ test("P13-20 FIX A: a Tier 3 request that is actually issued still counts even w
 
 test("P13-20 FIX A: a second successful Tier 3 heal for the same selector increments tier3Invocations to 2, distinctly from occurrences, and it persists across a reload", async (t) => {
   const { instance, trust } = healerWithRealTrust(t, { click: async () => {} });
-  instance.page.evaluate = async () => "<button>";
+  instance.page.evaluate = oneCandidate("new4");
   instance._getOpenAIClient = async () => ({
-    chat: { completions: { create: async () => ({ choices: [{ message: { content: "#new4" } }] }) } },
+    chat: { completions: { create: async () => ({ choices: [{ message: { content: "0" } }] }) } },
   });
   await instance.healSelector("#old4", "Save");
   await instance.healSelector("#old4", "Save");
