@@ -1107,3 +1107,35 @@ application under test, is already a far larger problem than suppressed self-hea
 on honest applications that have accidentally duplicated a test id, which is the feature working as
 designed. Documented in the README and the phase plan so that "no fix needed" is not read as "not
 considered."
+
+---
+
+## Post-Phase-14 Maintenance Hardening
+
+Fixes and hardening applied after Phase 14 merged, addressing network exposure, process recovery, and healing reliability.
+
+### Dashboard — bound to loopback by default, explicit network exposure gate
+
+**Problem:** The dashboard listened on every interface while `DASHBOARD_TOKEN` stayed optional. With no token set, anyone on the same network could reach the review routes (approve, reject and roll back healed locators, unquarantine tests) as well as `POST /emit` and `GET /events`. Separately, the in-memory event history behind replay grew without bound.
+
+**Fix:** The dashboard binds to the new `DASHBOARD_HOST` setting, default 127.0.0.1 (this machine only). A non-loopback host is accepted only together with `DASHBOARD_TOKEN`; otherwise `start()` refuses with `DASHBOARD_EXPOSED_WITHOUT_TOKEN` and `node falcon.js` logs the reason and exits 1. Event replay history is capped at 20,000 events, oldest dropped; a tab opened after trimming derives its totals from the retained events only.
+
+**Behaviour change:** anyone who opened the dashboard from another machine without a token must now set both `DASHBOARD_HOST` and `DASHBOARD_TOKEN`.
+
+### LocatorMemoryWriter — automatic lock recovery for crashed writers
+
+**Problem:** A writer that crashed while holding a lock on `data/locator_memory.json` would block all subsequent writers permanently. Operators had to manually inspect the lock's PID and delete it by hand.
+
+**Fix:** The next writer now reclaims the lock only if: its recorded PID is dead (`process.kill(pid, 0)` returns `ESRCH`), or the lock is unreadable/empty and older than 30 seconds (allowing for a live writer in the process of creating the lock). A live owner is never displaced. The conflict message names the owner PID and lock age to aid diagnosis.
+
+### AIHealer — successful heals no longer fail on pending candidate recording
+
+**Problem:** When a heal succeeded but recording the pending candidate threw (e.g., identity rejection, decision in progress), the entire heal was reported as failed, even though the interaction had succeeded. This hid real healing evidence behind a false failure.
+
+**Fix:** Pending candidate recording is now wrapped in `_recordPendingCandidateSafe()`, called after a successful action. Its errors are logged as a warning and never reported as a heal failure. The trust record and success report are still written, and a failing action still fails with the same message as before.
+
+### CI — timeout bounds and superseded-run cancellation
+
+**Problem:** The test job had no timeout, so a hung step could hold a runner for the 360-minute default. Superseded runs (multiple pushes to a branch) would all run to completion, wasting minutes on work already invalidated.
+
+**Fix:** Test job now has `timeout-minutes: 10` (covers typical 1.5–2 minute runs with headroom). CI workflow now cancels superseded runs on non-main branches via a `concurrency` group whose `cancel-in-progress` is false on `main`, so runs there are never cancelled so each commit's result is recorded. Allure test results are now uploaded as artifacts.
