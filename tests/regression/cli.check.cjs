@@ -4,6 +4,15 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const { root, temp } = require("./helpers.cjs");
+
+// Fixed fixture clock for quarantine/rehabilitation scenarios. Rehabilitation
+// only counts history entries at or after quarantinedAt, so deriving both from
+// separate `new Date()` calls made the tests flaky: if the millisecond ticked
+// between building the history and stamping quarantinedAt, the results landed
+// "before" the quarantine and the scenario was not a candidate. Results are
+// stamped at the quarantine instant (the inclusive boundary) deterministically.
+const FIXTURE_QUARANTINED_AT = "2026-01-01T00:00:00.000Z";
+const FIXTURE_RESULT_AT = FIXTURE_QUARANTINED_AT;
 for (const [mode, expected] of [
   ["success", 0],
   ["query", 0],
@@ -86,7 +95,7 @@ function scenarioFixture(statuses, { locator = "#save" } = {}) {
       action: "click",
       locator,
       description: "Save",
-      history: statuses.map((status) => ({ status, timestamp: new Date().toISOString() })),
+      history: statuses.map((status) => ({ status, timestamp: FIXTURE_RESULT_AT })),
       classification: statuses.every((s) => s === "failed") ? "broken" : "flaky",
       flakeRate: statuses.filter((s) => s === "failed").length / statuses.length,
       sampleSize: statuses.length,
@@ -444,8 +453,8 @@ test("status.js: a pending fix whose rejection IS still in the ledger DOES print
 
 function rehabScenarioFixture({ locator = "#save", quarantined = true, recentAllPassed = true } = {}) {
   const key = `https://x.com::click::${locator}`;
-  const failedRun = { status: "failed", timestamp: new Date().toISOString() };
-  const passedRun = { status: "passed", timestamp: new Date().toISOString() };
+  const failedRun = { status: "failed", timestamp: FIXTURE_RESULT_AT };
+  const passedRun = { status: "passed", timestamp: FIXTURE_RESULT_AT };
   const history = recentAllPassed
     ? [failedRun, failedRun, passedRun, passedRun, passedRun, passedRun, passedRun]
     : [passedRun, failedRun, passedRun, failedRun, passedRun];
@@ -462,7 +471,7 @@ function rehabScenarioFixture({ locator = "#save", quarantined = true, recentAll
       sampleSize: history.length,
       lastUsed: Date.now(),
       quarantined,
-      quarantinedAt: quarantined ? new Date().toISOString() : null,
+      quarantinedAt: quarantined ? FIXTURE_QUARANTINED_AT : null,
       quarantinedBy: quarantined ? "cli" : null,
       flakySince: null,
     },
@@ -523,16 +532,16 @@ function windowSensitiveScenarioFixture({ locator = "#save" } = {}) {
       locator,
       description: "Save",
       history: [
-        { status: "failed", timestamp: new Date().toISOString() },
-        { status: "passed", timestamp: new Date().toISOString() },
-        { status: "passed", timestamp: new Date().toISOString() },
+        { status: "failed", timestamp: FIXTURE_RESULT_AT },
+        { status: "passed", timestamp: FIXTURE_RESULT_AT },
+        { status: "passed", timestamp: FIXTURE_RESULT_AT },
       ],
       classification: "flaky",
       flakeRate: 0.33,
       sampleSize: 3,
       lastUsed: Date.now(),
       quarantined: true,
-      quarantinedAt: new Date().toISOString(),
+      quarantinedAt: FIXTURE_QUARANTINED_AT,
       quarantinedBy: "cli",
       flakySince: null,
     },
