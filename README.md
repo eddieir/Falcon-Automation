@@ -1,6 +1,6 @@
 # Falcon-Automation: Self-Healing Test Automation with AI-Assisted Locator Recovery
 
-> **Status:** Active development · Phases 1–13 merged and verified on `main` at `11657cb`. Phase 10 covers every page of an app in one run; Phase 11 heals every action type; Phase 12 makes healing state and flaky decisions survive CI via cached state files; Phase 13 ("Decisions that can't rot") keeps review decisions from going stale. Phase 14 ("Evidence-based locator matching") adds a deterministic local healing tier that needs no model and no network, and is open for review. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
+> **Status:** Active development · Phases 1–14 merged and verified on `main` at `669750d`. Phase 10 covers every page of an app in one run; Phase 11 heals every action type; Phase 12 makes healing state and flaky decisions survive CI via cached state files; Phase 13 ("Decisions that can't rot") keeps review decisions from going stale; Phase 14 ("Evidence-based locator matching") adds a deterministic local healing tier that needs no model and no network. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
 
 ---
 
@@ -279,9 +279,11 @@ existing files or secure their containing directory.
 
 An adjacent exclusive lock covers the durable-file digest check and replacement. A stale store
 instance cannot overwrite another writer's work: restart it to reload current state after a writer
-conflict. A lock left by a crashed process requires manual recovery: stop writers, inspect the
-lock's PID and verify that the owning process has exited before removing the lock. There is no
-time-based lock stealing or automatic merge of competing snapshots.
+conflict. A lock left by a crashed process is automatically reclaimed: if its recorded PID is gone
+(verified via `process.kill(pid, 0)` returning `ESRCH`), or if the lock has no readable PID and is
+older than 30 seconds, the next writer moves it aside and retries once. A live owner is never
+displaced. The conflict message names the owner PID and age to aid diagnosis. There is no merge of
+competing snapshots.
 
 One consequence of refusing on ambiguity is worth stating rather than leaving for someone to
 discover. Because a second element sharing the stored `data-testid` forces a refusal regardless of
@@ -665,10 +667,21 @@ API_BASE_URL=https://jsonplaceholder.typicode.com
 
 # Live dashboard: optional
 DASHBOARD_PORT=3000         # port for `node falcon.js`'s live dashboard
+DASHBOARD_HOST=             # blank = 127.0.0.1 (this machine only). Set a LAN address
+                            # or 0.0.0.0 only together with DASHBOARD_TOKEN — the
+                            # dashboard refuses to start otherwise.
 DASHBOARD_LINGER_MS=60000   # how long the dashboard stays up after a run finishes
 # DASHBOARD_URL=http://localhost:3000  # set on a standalone test run (e.g.
                                         # `node tests/ui/LoginTest.js`) to report
                                         # its events into an already-running dashboard
+
+# DASHBOARD_TOKEN=              # optional on the default loopback bind (unset =
+                                 # unauthenticated, logs a warning on startup).
+                                 # REQUIRED when DASHBOARD_HOST is not loopback —
+                                 # it's then required on
+                                 # POST /emit, GET /events, and the socket
+                                 # connection. Open the dashboard at
+                                 # http://localhost:3000/?token=<value> once set.
 
 # PostgreSQL: required only for DB tests. Leave DB_HOST/DB_USER blank to
 # skip tests/db/*.js cleanly. Don't fill these in with placeholder text,
