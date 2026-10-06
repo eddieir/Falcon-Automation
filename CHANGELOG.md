@@ -1126,7 +1126,7 @@ Fixes and hardening applied after Phase 14 merged, addressing network exposure, 
 
 **Problem:** A writer that crashed while holding a lock on `data/locator_memory.json` would block all subsequent writers permanently. Operators had to manually inspect the lock's PID and delete it by hand.
 
-**Fix:** The next writer now reclaims the lock only if: its recorded PID is dead (`process.kill(pid, 0)` returns `ESRCH`), or the lock is unreadable/empty and older than 30 seconds (allowing for a live writer in the process of creating the lock). A live owner is never displaced. The conflict message names the owner PID and lock age to aid diagnosis.
+**Fix:** The next writer now reclaims the lock only if: its recorded PID is dead (`process.kill(pid, 0)` returns `ESRCH`), or the lock is unreadable/empty and older than 30 seconds (allowing for a live writer in the process of creating the lock). A lock naming a live PID, or the current process's own PID, is never reclaimed, so a reused PID still needs manual removal. A narrow window remains in which a displaced live owner can briefly overlap with the next holder; neither can remove the other's lock. The conflict message names the owner PID and lock age to aid diagnosis.
 
 ### AIHealer — successful heals no longer fail on pending candidate recording
 
@@ -1138,4 +1138,4 @@ Fixes and hardening applied after Phase 14 merged, addressing network exposure, 
 
 **Problem:** The test job had no timeout, so a hung step could hold a runner for the 360-minute default. Superseded runs (multiple pushes to a branch) would all run to completion, wasting minutes on work already invalidated.
 
-**Fix:** Test job now has `timeout-minutes: 10` (covers typical 1.5–2 minute runs with headroom). CI workflow now cancels superseded runs on non-main branches via a `concurrency` group whose `cancel-in-progress` is false on `main`, so runs there are never cancelled so each commit's result is recorded. Allure test results are now uploaded as artifacts.
+**Fix:** Test job now has `timeout-minutes: 10` (covers typical 1.5–2 minute runs with headroom). CI workflow now cancels superseded runs on non-main branches via a `concurrency` group whose `cancel-in-progress` is false on `main`, so every commit on `main` keeps its recorded result. Allure test results are now uploaded as artifacts.

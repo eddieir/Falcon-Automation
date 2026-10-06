@@ -281,9 +281,13 @@ An adjacent exclusive lock covers the durable-file digest check and replacement.
 instance cannot overwrite another writer's work: restart it to reload current state after a writer
 conflict. A lock left by a crashed process is automatically reclaimed: if its recorded PID is gone
 (verified via `process.kill(pid, 0)` returning `ESRCH`), or if the lock has no readable PID and is
-older than 30 seconds, the next writer moves it aside and retries once. A live owner is never
-displaced. The conflict message names the owner PID and age to aid diagnosis. There is no merge of
-competing snapshots.
+older than 30 seconds, the next writer moves it aside and retries once. A lock naming a live PID,
+or the current process's own PID, is never reclaimed. A reused PID, for example a container
+restarted with the same PID, therefore still needs manual recovery: stop writers, confirm the owner
+has exited, then remove the lock. A narrow window remains in which a live owner displaced
+mid-reclaim can briefly overlap with the next holder; neither can remove the other's lock. The
+conflict message names the owner PID and age to aid diagnosis. There is no merge of competing
+snapshots.
 
 One consequence of refusing on ambiguity is worth stating rather than leaving for someone to
 discover. Because a second element sharing the stored `data-testid` forces a refusal regardless of
