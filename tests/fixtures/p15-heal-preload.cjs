@@ -14,10 +14,17 @@
  *    run, so the real collector counts them. They are pushed straight into
  *    the in-memory log: HealingReport.log() would also write
  *    reports/healing_logs.json in the repo.
+ * 5. FALCON_FIXTURE_RECORD_THROW=1 makes GitInfo.getGitInfo throw, so a test can
+ *    prove an exception inside recordRun never reaches the run's exit code.
  */
 const path = require("node:path");
 
+// cli-preload switches history off unless the test set FALCON_RUN_HISTORY. These
+// tests exercise the ledger, so undo that default here; the ledger itself is
+// redirected to a temp path by the seam below.
+const requestedHistory = process.env.FALCON_RUN_HISTORY;
 require("./cli-preload.cjs");
+if (requestedHistory === undefined) delete process.env.FALCON_RUN_HISTORY;
 
 globalThis.__FALCON_TEST_SEAMS__ = Object.freeze({ runHistory: true });
 
@@ -48,4 +55,10 @@ if (heals > 0) {
       status: "accepted",
     });
   }
+}
+
+if (process.env.FALCON_FIXTURE_RECORD_THROW === "1") {
+  require(src("history", "GitInfo")).getGitInfo = () => {
+    throw new Error("fixture getGitInfo failure");
+  };
 }

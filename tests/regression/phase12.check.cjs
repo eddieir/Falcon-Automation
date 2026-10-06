@@ -113,7 +113,7 @@ function runSinglePageCLI(t, { extraArgs = [], resultStatuses = ["passed"] } = {
       "--single-page",
       ...extraArgs,
     ],
-    { cwd: dir, encoding: "utf8", timeout: 10000 },
+    { cwd: dir, env: { ...process.env, FALCON_RUN_HISTORY: "off" }, encoding: "utf8", timeout: 10000 },
   );
   assert.equal(child.error, undefined);
   return { child, dir, repeatCapture };

@@ -148,6 +148,26 @@ test("an invalid --repeat exits before the run and writes no record", (t) => {
   assert.equal(fs.existsSync(box.ledger), false, "no record for a run that never started");
 });
 
+// An exception inside recordRun must not change the exit code or the report.
+for (const [mode, exitCode] of MODES) {
+  test(`${mode}: a throw inside recordRun leaves exit ${exitCode} and the report unchanged and logs a warning (SEC-12)`, (t) => {
+    const control = sandbox(t);
+    const ok = falcon(control, mode, { env: { FALCON_RUN_HISTORY: "off" } });
+    const boxed = sandbox(t);
+    const bad = falcon(boxed, mode, { env: { FALCON_FIXTURE_RECORD_THROW: "1" } });
+    assert.equal(ok.status, exitCode, ok.stdout + ok.stderr);
+    assert.equal(bad.status, exitCode, bad.stdout + bad.stderr);
+    assert.match(bad.stdout + bad.stderr, /Run history was not recorded/);
+    assert.doesNotMatch(bad.stdout + bad.stderr, /fixture getGitInfo failure/, "the error text is not echoed");
+    assert.equal(fs.existsSync(boxed.ledger), false, "nothing is written when recording failed");
+    const read = (box) => {
+      const r = JSON.parse(fs.readFileSync(path.join(box.dir, "reports/test-report.json"), "utf8"));
+      return { result: r.result, summary: r.summary };
+    };
+    assert.deepEqual(read(boxed), read(control));
+  });
+}
+
 // ---------------------------------------------------------------------------
 // AC-12: the exit code does not depend on history
 // ---------------------------------------------------------------------------

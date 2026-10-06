@@ -1,3 +1,6 @@
+// Fixture runs must never write the repo's data/run_history.json. History is off
+// unless the test that spawned this process chose a value for it.
+if (process.env.FALCON_RUN_HISTORY === undefined) process.env.FALCON_RUN_HISTORY = "off";
 const Module = require("node:module");
 const fs = require("node:fs");
 const original = Module._load;
