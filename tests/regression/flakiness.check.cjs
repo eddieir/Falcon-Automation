@@ -1196,6 +1196,7 @@ test("quarantine ledger: a decisions file containing exactly QUARANTINE_DECISION
         writeCalls++;
         return RealAtomicJsonStore.writeJsonAtomic(...args);
       },
+      WriteFailureTracker: RealAtomicJsonStore.WriteFailureTracker,
     },
   });
   Tracker.historyPath = path.join(dir, "history.json");

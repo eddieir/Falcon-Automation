@@ -22,6 +22,7 @@ const path = require("path");
 const FlakinessTracker = require(path.join("..", "..", "src", "core", "FlakinessTracker"));
 const ConfigManager = require(path.join("..", "..", "src", "core", "ConfigManager"));
 const { validateIntSetting } = require(path.join("..", "..", "src", "core", "util", "ConfigValidation"));
+const { sanitizeField } = require(path.join("..", "..", "src", "core", "util", "OutputSafe"));
 
 const REHAB_CANDIDATE_WINDOW_DEFAULT = 5;
 
@@ -46,13 +47,13 @@ function printList(entries, rehabWindow) {
     console.log(`${entries.length} scenario(s):\n`);
     for (const entry of entries) {
         const rate = entry.classification === "broken" ? "always fails" : `${Math.round(entry.flakeRate * 100)}% fail rate`;
-        console.log(`  ${entry.key}`);
-        console.log(`    description: ${entry.description || "(none)"}`);
+        console.log(`  ${sanitizeField(entry.key)}`);
+        console.log(`    description: ${sanitizeField(entry.description || "(none)")}`);
         console.log(`    classification: ${entry.classification} (${rate}, ${entry.sampleSize} recent run(s))`);
-        console.log(`    quarantined: ${entry.quarantined ? `yes (by ${entry.quarantinedBy} at ${entry.quarantinedAt})` : "no"}`);
+        console.log(`    quarantined: ${entry.quarantined ? `yes (by ${sanitizeField(entry.quarantinedBy)} at ${entry.quarantinedAt})` : "no"}`);
         if (entry.flakySince) {
             const ageDays = Math.floor((Date.now() - Date.parse(entry.flakySince)) / 86400000);
-            console.log(`    flaky since: ${entry.flakySince} (${ageDays} day(s) ago)`);
+            console.log(`    flaky since: ${sanitizeField(entry.flakySince)} (${ageDays} day(s) ago)`);
         }
         if (rehabKeys.has(entry.key)) {
             console.log("    ⭐ rehabilitation candidate — recent runs while quarantined all passed");
@@ -68,10 +69,10 @@ function printRehab(candidates) {
     }
     console.log(`${candidates.length} rehabilitation candidate(s):\n`);
     for (const candidate of candidates) {
-        console.log(`  ${candidate.key}`);
-        console.log(`    description: ${candidate.description || "(none)"}`);
-        console.log(`    quarantined: ${candidate.quarantinedBy ? `by ${candidate.quarantinedBy} at ${candidate.quarantinedAt}` : `at ${candidate.quarantinedAt}`}`);
-        console.log(`    ${candidate.reason}`);
+        console.log(`  ${sanitizeField(candidate.key)}`);
+        console.log(`    description: ${sanitizeField(candidate.description || "(none)")}`);
+        console.log(`    quarantined: ${candidate.quarantinedBy ? `by ${sanitizeField(candidate.quarantinedBy)} at ${candidate.quarantinedAt}` : `at ${candidate.quarantinedAt}`}`);
+        console.log(`    ${sanitizeField(candidate.reason)}`);
         console.log("");
     }
 }
@@ -117,7 +118,7 @@ async function main() {
                 process.exitCode = 1;
                 return;
             }
-            console.log(`Quarantined "${arg}". Future failures report as "quarantined" instead of "failed" and won't block CI.`);
+            console.log(`Quarantined "${sanitizeField(arg)}". Future failures report as "quarantined" instead of "failed" and won't block CI.`);
             return;
         }
 
@@ -148,7 +149,7 @@ async function main() {
                 process.exitCode = 1;
                 return;
             }
-            console.log(`Unquarantined "${arg}". Failures will block the run again.`);
+            console.log(`Unquarantined "${sanitizeField(arg)}". Failures will block the run again.`);
             return;
         }
 

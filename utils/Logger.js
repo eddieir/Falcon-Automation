@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { sanitizeField } = require(path.join(__dirname, "..", "src", "core", "util", "OutputSafe"));
 
 /**
  * Logger — lightweight structured logging with async file I/O.
@@ -21,6 +22,22 @@ const path = require("path");
  *
  * The reports directory is created lazily on the first write so the Logger
  * can be imported before the directory exists.
+ *
+ * Render-boundary sanitisation (P14-20):
+ *   Logger is the single choke point for all production output, console and
+ *   file alike, and it has no colour codes or other deliberate ANSI styling
+ *   of its own to protect (confirmed by reading this file in full, not by
+ *   grep) — every byte after "INFO:"/"ERROR:"/"WARNING:" is caller-supplied
+ *   `message`. Each call also writes exactly one line, to the console AND to
+ *   execution.log, so a raw LF/CR inside `message` would forge an extra,
+ *   fabricated-looking log line (or, via CR, let trailing text overwrite
+ *   what was already written on the current line) — the same row-forgery
+ *   risk the three review CLIs have at their line-per-entry listings. That
+ *   makes `sanitizeField` (escapes TAB/LF/CR to \t/\n/\r rather than passing
+ *   them through) the correct choice here, not the multi-line-safe
+ *   `stripControlChars`. No existing call site in this codebase passes a
+ *   message containing an embedded newline, so this changes no current
+ *   output.
  */
 class Logger {
     static logFilePath = path.join(__dirname, "..", "reports", "execution.log");
@@ -28,18 +45,21 @@ class Logger {
     static _dirEnsured = false;
 
     static info(message) {
-        console.log(`🟢 INFO: ${message}`);
-        Logger._enqueue(`[INFO]    ${new Date().toISOString()} - ${message}\n`);
+        const safe = sanitizeField(message);
+        console.log(`🟢 INFO: ${safe}`);
+        Logger._enqueue(`[INFO]    ${new Date().toISOString()} - ${safe}\n`);
     }
 
     static error(message) {
-        console.error(`🔴 ERROR: ${message}`);
-        Logger._enqueue(`[ERROR]   ${new Date().toISOString()} - ${message}\n`);
+        const safe = sanitizeField(message);
+        console.error(`🔴 ERROR: ${safe}`);
+        Logger._enqueue(`[ERROR]   ${new Date().toISOString()} - ${safe}\n`);
     }
 
     static warning(message) {
-        console.warn(`🟡 WARNING: ${message}`);
-        Logger._enqueue(`[WARNING] ${new Date().toISOString()} - ${message}\n`);
+        const safe = sanitizeField(message);
+        console.warn(`🟡 WARNING: ${safe}`);
+        Logger._enqueue(`[WARNING] ${new Date().toISOString()} - ${safe}\n`);
     }
 
     /**
