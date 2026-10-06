@@ -440,3 +440,51 @@ test("GitInfo: static check, source uses execFileSync and never a shell", () => 
   assert.match(src, /execFileSync/);
   assert.doesNotMatch(src, /\bexecSync\b|\bspawnSync\b|\bexec\(|shell\s*:/);
 });
+
+test("durationMs is clamped to [0, 7 days] when building and rejected out of range when validating", () => {
+  const WEEK = 7 * 24 * 60 * 60 * 1000;
+  assert.equal(buildRunRecord(baseInput({ durationMs: 1e15 })).durationMs, WEEK);
+  assert.equal(buildRunRecord(baseInput({ durationMs: WEEK })).durationMs, WEEK);
+  assert.equal(buildRunRecord(baseInput({ durationMs: -1 })).durationMs, 0);
+  assert.equal(buildRunRecord(baseInput({ durationMs: Infinity })).durationMs, 0);
+  const ok = buildRunRecord(baseInput({ durationMs: WEEK }));
+  assert.equal(validateRecord(ok).ok, true);
+  for (const bad of [WEEK + 1, 1e15, -1, Infinity, NaN]) {
+    const v = validateRecord({ ...ok, durationMs: bad });
+    assert.equal(v.ok, false, String(bad));
+    assert.equal(v.reason, "invalid_durationMs");
+  }
+});
+
+test("validateRecord snapshots each field once, so a changing getter cannot slip a value past validation", () => {
+  const good = buildRunRecord(baseInput());
+  const flip = (read) => {
+    const o = { ...good };
+    let n = 0;
+    Object.defineProperty(o, read.key, { enumerable: true, get() { return n++ === 0 ? good[read.key] : read.second; } });
+    return o;
+  };
+  for (const c of [
+    { key: "durationMs", second: -5 },
+    { key: "result", second: "SECRET-TEXT" },
+    { key: "branch", second: "bad branch!\u001b[31m" },
+    { key: "repeat", second: 999 },
+    { key: "counts", second: { total: -1 } },
+  ]) {
+    const v = validateRecord(flip(c));
+    if (v.ok) assert.deepEqual(v.record[c.key], good[c.key], c.key);
+  }
+  // Nested object whose property getter changes after the first read.
+  let n = 0;
+  const counts = { ...good.counts };
+  Object.defineProperty(counts, "passed", { enumerable: true, get() { return n++ === 0 ? 1 : -7; } });
+  const v = validateRecord({ ...good, counts });
+  assert.equal(v.ok, true);
+  assert.equal(v.record.counts.passed, 1);
+  assert.equal(n, 1, "read exactly once");
+  // A Proxy that changes its answer is read once per field too.
+  const seen = {};
+  const proxy = new Proxy({ ...good }, { get(t, k) { seen[k] = (seen[k] || 0) + 1; return seen[k] === 1 ? t[k] : "evil"; } });
+  const pv = validateRecord(proxy);
+  if (pv.ok) assert.deepEqual(pv.record, good);
+});

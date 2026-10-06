@@ -96,3 +96,13 @@ test("existing sanitizeField and stripControlChars behaviour is unchanged", () =
   assert.equal(stripControlChars("a\nb\tc\x00"), "a\nb\tc");
   assert.equal(sanitizeField(null), "null");
 });
+
+test("csvCell neutralises a formula hidden behind leading spaces and keeps numbers unprefixed", () => {
+  assert.equal(csvCell("  =1+1"), "'  =1+1");
+  assert.equal(csvCell(" @SUM(A1)"), "'" + " @SUM(A1)");
+  assert.equal(csvCell("   -2+3"), "'   -2+3");
+  assert.equal(csvCell("  +1"), "'  +1");
+  assert.equal(csvCell("  plain"), "  plain");
+  assert.equal(csvCell(-5), "-5");
+  assert.equal(csvCell(3.5), "3.5");
+});

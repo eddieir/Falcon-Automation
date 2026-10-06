@@ -255,13 +255,17 @@ test("a stale lock from a dead pid is reclaimed and the append succeeds", async 
 
 test("two processes appending 20 records each produce 40 valid records", async (t) => {
   const { file, dir } = setup(t);
-  const go = path.join(dir, "go.flag");
+  const sync = path.join(dir, "sync");
+  fs.mkdirSync(sync);
+  const go = path.join(sync, "go");
   const script = `
     const fs = require("node:fs");
+    const path = require("node:path");
     const { RunLedger } = require(${JSON.stringify(path.join(ROOT, "src/core/history/RunLedger.js"))});
     const { buildRunRecord } = require(${JSON.stringify(path.join(ROOT, "src/core/history/RunRecord.js"))});
     (async () => {
-      const ledger = new RunLedger({ filePath: process.env.LEDGER });
+      const ledger = new RunLedger({ filePath: process.env.LEDGER, backoffMs: 60 });
+      fs.writeFileSync(path.join(process.env.SYNC, "ready-" + process.pid), "ready");
       while (!fs.existsSync(process.env.GO)) await new Promise((r) => setTimeout(r, 2));
       let failed = 0;
       for (let i = 0; i < 20; i++) {
@@ -271,11 +275,16 @@ test("two processes appending 20 records each produce 40 valid records", async (
       process.exit(failed ? 3 : 0);
     })();`;
   const run = () => new Promise((resolve) => {
-    const child = spawn(process.execPath, ["-e", script], { env: { ...process.env, LEDGER: file, GO: go }, stdio: "ignore" });
+    const child = spawn(process.execPath, ["-e", script], { env: { ...process.env, LEDGER: file, GO: go, SYNC: sync }, stdio: "ignore" });
     child.on("exit", (code) => resolve(code));
   });
   const children = [run(), run()];
-  await new Promise((r) => setTimeout(r, 400));
+  // Barrier: release both children only once each has written its ready file.
+  const deadline = Date.now() + 30000;
+  while (fs.readdirSync(sync).filter((n) => n.startsWith("ready-")).length < 2) {
+    assert.ok(Date.now() < deadline, "children never became ready");
+    await new Promise((r) => setTimeout(r, 5));
+  }
   fs.writeFileSync(go, "go");
   const codes = await Promise.all(children);
   assert.deepEqual(codes, [0, 0]);
@@ -283,7 +292,7 @@ test("two processes appending 20 records each produce 40 valid records", async (
   assert.equal(runs.length, 40);
   for (const r of runs) assert.equal(validateRecord(r).ok, true);
   assert.equal(new Set(runs.map((r) => r.runId)).size, 40);
-  assert.deepEqual(fs.readdirSync(dir).filter((n) => n !== "run_history.json" && n !== "go.flag"), []);
+  assert.deepEqual(fs.readdirSync(dir).filter((n) => n !== "run_history.json" && n !== "sync"), []);
 });
 
 test("the kill switch creates no file, no lock and no directory", async (t) => {
@@ -339,4 +348,105 @@ test("append never throws or rejects on a hostile record or an unwritable locati
   const bad = new RunLedger({ filePath: path.join(blocked, "run_history.json"), backoffMs: 5 });
   assert.equal((await bad.append(rec(0))).ok, false);
   assert.ok(warnings.length >= 1);
+});
+
+test("future-schema records count toward the cap, are evicted oldest-first and never grow the file past 1 MB", async (t) => {
+  const { ledger, file, dir } = setup(t);
+  const future = [];
+  for (let i = 0; i < 600; i++) {
+    future.push({ ...rec(i, { runId: undefined }), schemaVersion: 2, pad: "x".repeat(800) });
+  }
+  const valid = [rec(1000), rec(1001)];
+  fs.writeFileSync(file, JSON.stringify({ schemaVersion: 1, runs: [...future, ...valid] }));
+  assert.ok(fs.statSync(file).size < MAX_BYTES, "seed is a healthy sub-1 MB file");
+  const added = rec(1002);
+  const r = await ledger.append(added);
+  assert.equal(r.ok, true);
+  const runs = readRuns(file);
+  assert.ok(runs.length <= MAX_RUNS, `kept ${runs.length}`);
+  assert.equal(r.count, runs.length);
+  assert.ok(fs.statSync(file).size < MAX_BYTES, "file stays under 1 MB");
+  // The newest valid history survives; the oldest future records are what goes.
+  const ids = new Set(runs.map((x) => x.runId));
+  for (const v of [...valid, added]) assert.ok(ids.has(v.runId), "valid history kept");
+  assert.equal(runs.filter((x) => x.schemaVersion === 1).length, 3);
+  assert.ok(!runs.some((x) => x.runId === future[0].runId), "oldest future record evicted");
+  assert.ok(runs.some((x) => x.runId === future[599].runId), "newest future record kept");
+  // A second process still reads it as a healthy ledger: nothing was quarantined.
+  assert.deepEqual(sidecars(dir), []);
+  assert.equal(new RunLedger({ filePath: file }).load().runs.length, 3);
+});
+
+test("a future-schema record with an unreadable timestamp is treated as oldest, and an oversized one is dropped with a count", async (t) => {
+  const { ledger, file, warnings } = setup(t);
+  const noTs = { schemaVersion: 2, note: "no timestamp" };
+  const huge = { ...rec(0), schemaVersion: 2, pad: "SECRET-TEXT".repeat(1000) };
+  const fillers = [];
+  for (let i = 0; i < MAX_RUNS - 1; i++) fillers.push(rec(i + 10));
+  fs.writeFileSync(file, JSON.stringify({ schemaVersion: 1, runs: [noTs, huge, ...fillers] }));
+  assert.equal(ledger.load().dropped, 1);
+  assert.equal((await ledger.append(rec(9999))).ok, true);
+  const runs = readRuns(file);
+  assert.equal(runs.length, MAX_RUNS);
+  assert.ok(!runs.some((x) => x.note === "no timestamp"), "unreadable timestamp evicted first");
+  assert.ok(!runs.some((x) => x.pad), "oversized preserved record dropped");
+  assert.ok(warnings.some((w) => /larger than/.test(w) && /\b1\b/.test(w)));
+  assert.ok(!warnings.join("\n").includes("SECRET-TEXT"));
+});
+
+test("two different oversized files of equal size both survive as distinct sidecars", async (t) => {
+  const { file, dir } = setup(t);
+  const a = Buffer.alloc(MAX_BYTES + 10, "a");
+  const b = Buffer.alloc(MAX_BYTES + 10, "b");
+  for (const content of [a, b]) {
+    fs.writeFileSync(file, content);
+    assert.deepEqual(new RunLedger({ filePath: file }).load().runs, []);
+    assert.equal(fs.existsSync(file), false, "moved, not left behind");
+  }
+  const side = sidecars(dir);
+  assert.equal(side.length, 2);
+  const bodies = side.map((n) => fs.readFileSync(path.join(dir, n)));
+  assert.ok(bodies.some((x) => x.equals(a)) && bodies.some((x) => x.equals(b)));
+  for (const n of side) assert.equal(fs.statSync(path.join(dir, n)).mode & 0o777, 0o600);
+});
+
+test("a file over 8 MB is moved aside whole, not deleted, and the append proceeds", async (t) => {
+  const { ledger, file, dir } = setup(t);
+  const big = Buffer.alloc(9 * 1024 * 1024, "z");
+  fs.writeFileSync(file, big);
+  const r = await ledger.append(rec(0));
+  assert.equal(r.ok, true);
+  const side = sidecars(dir);
+  assert.equal(side.length, 1);
+  assert.ok(fs.readFileSync(path.join(dir, side[0])).equals(big));
+  assert.equal(readRuns(file).length, 1);
+});
+
+test("if the corrupt file cannot be moved aside it is left alone and appends are refused", async (t) => {
+  const { ledger, file, dir } = setup(t);
+  const bad = Buffer.from("not json SECRET-TEXT");
+  fs.writeFileSync(file, bad);
+  t.mock.method(fs, "renameSync", () => { const e = new Error("nope"); e.code = "EPERM"; throw e; });
+  const r = await ledger.append(rec(0));
+  assert.equal(r.ok, false);
+  assert.ok(fs.readFileSync(file).equals(bad));
+  assert.deepEqual(sidecars(dir), []);
+  assert.equal((await ledger.append(rec(1))).ok, false);
+});
+
+test("a symlink at the ledger path is never followed, copied or written", { skip: process.platform === "win32" }, async (t) => {
+  const { ledger, file, dir, warnings } = setup(t);
+  const target = path.join(dir, "target.txt");
+  const secret = Buffer.from("password=SECRET-TEXT");
+  fs.writeFileSync(target, secret);
+  fs.symlinkSync(target, file);
+  assert.deepEqual(ledger.load().runs, []);
+  const r = await ledger.append(rec(0));
+  assert.equal(r.ok, false);
+  assert.equal((await ledger.append(rec(1))).ok, false);
+  assert.ok(fs.readFileSync(target).equals(secret), "target unchanged");
+  assert.ok(fs.lstatSync(file).isSymbolicLink(), "link left in place");
+  assert.deepEqual(sidecars(dir), []);
+  assert.ok(warnings.length >= 1);
+  assert.ok(!warnings.join("\n").includes("SECRET-TEXT"));
 });
