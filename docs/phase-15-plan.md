@@ -217,17 +217,27 @@ sparklines for pass rate, heal rate and duration built with `createElementNS`, a
 Every value is set with `textContent`. Loaded once when the panel opens, with a Refresh button; no
 polling. Empty state: "No runs recorded yet. Run `node falcon.js` to start building history."
 
+The route validates and sorts the ledger once per request and computes every row's flags with
+`TrendDetector.evaluateMany`, which applies the same rules as `evaluate` (a test asserts identical
+results). The response is cached per process, keyed by the ledger path, its `dev`, `ino`, size and
+`mtimeMs`, and the trend settings. The ledger is only ever replaced by an atomic rename, which gives a
+new inode, so a replacement always misses the cache. Measured on a full 500-record ledger: about 4 ms
+uncached, well under 1 ms cached.
+
 **Serve mode.** `npm run dashboard` starts the existing `Dashboard` class unchanged — loopback
 default, refusal of a non-loopback host without a token, Host guard, rate limit — with no run and no
-browser, until Ctrl-C.
+browser, until Ctrl-C. Shutdown is bounded: if the server has not stopped within 5 seconds it exits 1,
+and a second signal exits immediately.
 
 ## 10. CI
 
 - A **separate** cache entry for the ledger: key `falcon-history-${{ github.ref_name }}-${{ github.run_id }}`,
   restored by prefix, path `data/run_history.json` only. Restored before the pipeline step; saved
   with `if: always()` and `continue-on-error: true`. Locator memory is never added to any cache.
-- `history:export` writes JSON and CSV to `reports/history/` (stdout redirect), covered by the
-  existing 14-day `falcon-reports` artifact.
+- `history:export` writes JSON and CSV to `reports/history/`, covered by the existing 14-day
+  `falcon-reports` artifact. Each format is written to `$RUNNER_TEMP` first and moved into place only
+  on success; a failure prints a `::warning::` with the exit code and leaves no partial file, so a bad
+  ledger never turns the job red.
 - `history:check` (never `--strict`) writes to `$GITHUB_STEP_SUMMARY`, fenced and truncated.
 - On `main` only: upload `data/run_history.json` as a `run-history` artifact, 90-day retention, as a
   recovery copy.

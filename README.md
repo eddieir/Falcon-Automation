@@ -914,7 +914,7 @@ View history without running a test:
 npm run dashboard              # serves the dashboard (incl. History panel) on localhost:3000; Ctrl-C to stop
 ```
 
-**Optional:** disable history recording with `FALCON_RUN_HISTORY=off`.
+**Optional:** disable history recording with `FALCON_RUN_HISTORY=off` (`0` and `false` also work).
 
 **In CI:** history is cached on a separate per-branch key; exports appear in `reports/history/` under the 14-day `falcon-reports` artifact; an advisory trend summary is written to the job page; `main` also uploads the ledger as a 90-day `run-history` artifact. Idle branches lose cached history after 7 days; PR runs start with an empty ledger.
 
