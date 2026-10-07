@@ -2,7 +2,7 @@
 
 > **For:** Any engineer or Claude Code session continuing this work
 > **Author:** Peyman Iravani — QA Manager / Tech Lead
-> **Last updated:** Phase 14 ("Evidence-based locator matching and scoped memory") merged on `main` at `669750d`. Phases 1–14 are now merged and verified.
+> **Last updated:** Phase 15 ("Run history and trend") implemented on `phase-15/run-history-and-trend` and open for review. Phases 1–14 are merged and verified on `main`.
 > **Repo:** https://github.com/eddieir/Falcon-Automation
 
 ---
@@ -23,7 +23,7 @@ Falcon is a Node.js test automation framework built on Playwright. Its different
 
 | Item | Value |
 |---|---|
-| `main` | Phases 1–14 merged and verified at `669750d`. |
+| `main` | Phases 1–14 merged and verified. Phase 15 is implemented on `phase-15/run-history-and-trend` and open for review, not merged. Its plan of record, including definitions, trend rules, acceptance criteria and release gates, is [docs/phase-15-plan.md](docs/phase-15-plan.md). |
 | Node version | 24 in CI (`node-version: "24"` in `ci.yml`, bumped in Phase 6). **Node 22+ required locally** — `package.json` declares `engines.node`. The floor was 20.19 (for the `node:test` flags used by `test:regression`/`test:coverage`) until the openai SDK 7 upgrade, which declares Node 22; Node 20 reached end of life in April 2026. |
 | Test target | https://www.saucedemo.com (UI/DB scenarios), https://jsonplaceholder.typicode.com (API scenarios), https://www.google.com (GoogleSearchTest — not run in CI, see §9), plus inline HTML fixtures for `tests/regression/*` suite (no real target site, deterministic) |
 
@@ -94,6 +94,15 @@ FALCON_LOCATOR_SALT=                  # HMAC salt for identity-bearing
                                        # Changing it invalidates every stored
                                        # signature (they simply stop matching
                                        # and fall through to Tier 3).
+
+# Phase 15 — run history and trend, all optional and blank by default.
+FALCON_RUN_HISTORY=              # blank = on. "off" (or "0"/"false") stops falcon.js
+                                 # recording runs to data/run_history.json and makes
+                                 # the history commands report "disabled".
+FALCON_TREND_BASELINE_N=         # blank = 10. How many previous complete runs on the
+                                 # same branch and repeat count form the baseline (1-500).
+FALCON_TREND_MIN_BASELINE=       # blank = 10. How many of those runs must exist
+                                 # before any trend flag can be raised (1-500).
 
 # ── PostgreSQL — required only for DB tests ────────────────────────────────
 DB_HOST=                     # blank = tests/db/*.js skip cleanly (exit 0). See QA-hardening

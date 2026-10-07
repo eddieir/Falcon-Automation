@@ -1,0 +1,905 @@
+{
+  "phase": 15,
+  "title": "Run history ledger and trend detection",
+  "criteriaSource": "docs/phase-15-plan.md section 12",
+  "purpose": [
+    "The 36 criteria are stated in docs/phase-15-plan.md section 12 and registered here so a criterion cannot silently lose its implementation or test.",
+    "tests/regression/p15-traceability.check.cjs asserts every row resolves to files that exist and to tests that are really registered, plus the static workflow and no-shell checks the plan assigns to it."
+  ],
+  "verifiedByMeaning": {
+    "test": "An executing regression test asserts the criterion. The named tests must exist. A name containing ${...} is the literal source title of a parameterised test registered in a loop.",
+    "platform": "The behaviour belongs to a third party platform. The Falcon-side wiring is tested; the platform outcome is evidenced on hosted runs.",
+    "review": "A documentation or process criterion evidenced by a recorded review verdict rather than by code."
+  },
+  "criteria": [
+    {
+      "id": "AC-01",
+      "section": "Ledger",
+      "priority": "Must",
+      "text": "Each `node falcon.js` run appends exactly one record with every section 6 field, and nothing else (SEC-01)",
+      "implementation": [
+        "src/core/history/RunRecord.js",
+        "falcon.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "record has exactly the section 6 keys and values"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "allow-list: extra keys, URLs, selectors and secrets never reach the record"
+        },
+        {
+          "file": "tests/regression/p15-integration.check.cjs",
+          "name": "${mode}: appends exactly one correct record and exits ${exitCode} (AC-01, 03, 12)"
+        }
+      ]
+    },
+    {
+      "id": "AC-02",
+      "section": "Ledger",
+      "priority": "Must",
+      "text": "`sha`/`branch` come from CI variables, then git, else `\"unknown\"`; invalid values become `\"unknown\"` (SEC-02, SEC-03)",
+      "implementation": [
+        "src/core/history/GitInfo.js",
+        "src/core/history/RunRecord.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "sanitiseSha table (lowercase hex only, 7-40)"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "sanitiseBranch table"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "GitInfo: environment values are preferred and no git is run"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "GitInfo: environment values pass the same validation"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "build applies the sanitisers to git values"
+        }
+      ]
+    },
+    {
+      "id": "AC-03",
+      "section": "Ledger",
+      "priority": "Must",
+      "text": "The crash path records `incomplete: true`, `coverage: null`, and is excluded from baselines",
+      "implementation": [
+        "src/core/history/RunRecord.js",
+        "falcon.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "crash path: incomplete true, coverage null, tolerates a missing report"
+        },
+        {
+          "file": "tests/regression/p15-integration.check.cjs",
+          "name": "${mode}: appends exactly one correct record and exits ${exitCode} (AC-01, 03, 12)"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "incomplete records in the baseline are excluded"
+        }
+      ]
+    },
+    {
+      "id": "AC-04",
+      "section": "Ledger",
+      "priority": "Must",
+      "text": "`runId` is unique across 100 appends",
+      "implementation": [
+        "src/core/history/RunLedger.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "runIds are unique over 100 appends"
+        }
+      ]
+    },
+    {
+      "id": "AC-05",
+      "section": "Ledger",
+      "priority": "Must",
+      "text": "The 501st append evicts the oldest record and logs one warning with the count",
+      "implementation": [
+        "src/core/history/RunLedger.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "the 501st append through the ledger itself evicts the oldest, keeps order, warns once with the count"
+        },
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "append onto ${start} records keeps ${expected} (evicts ${evicted})"
+        }
+      ]
+    },
+    {
+      "id": "AC-06",
+      "section": "Ledger",
+      "priority": "Must",
+      "text": "A ledger over 1 MB, malformed JSON, or the wrong shape is moved to a sidecar byte-for-byte; history restarts empty; the run continues",
+      "implementation": [
+        "src/core/history/RunLedger.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "a file over 1 MB is preserved byte-for-byte in a sidecar and the ledger restarts empty"
+        },
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "${name} is sidecarred, never logged, and the run continues"
+        }
+      ]
+    },
+    {
+      "id": "AC-07",
+      "section": "Ledger",
+      "priority": "Must",
+      "text": "Invalid records (NaN, negative, wrong type, oversized, prototype keys) are dropped with a count logged, never their content (SEC-10)",
+      "implementation": [
+        "src/core/history/RunLedger.js",
+        "src/core/history/RunRecord.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "invalid records are dropped with a count and their content is never logged"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "validateRecord rejects prototype keys, including from JSON.parse"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "validateRecord rejects each mutation without throwing"
+        }
+      ]
+    },
+    {
+      "id": "AC-08",
+      "section": "Ledger",
+      "priority": "Must",
+      "text": "Records with `schemaVersion` > 1 are skipped with a warning and never rewritten",
+      "implementation": [
+        "src/core/history/RunLedger.js",
+        "src/core/history/RunRecord.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "a record with a future schemaVersion is skipped, warned about and preserved on rewrite"
+        },
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "an envelope with a future schemaVersion is untouched and appends are refused"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "validateRecord: schemaVersion other than 1 is unsupported_version"
+        }
+      ]
+    },
+    {
+      "id": "AC-09",
+      "section": "Ledger",
+      "priority": "Must",
+      "text": "Writes are atomic, mode 0600, and leave no temporary file; two processes appending 20 records each produce 40 valid records (SEC-11)",
+      "implementation": [
+        "src/core/history/RunLedger.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "files and directories left behind: mode 0600 and no temp files"
+        },
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "two processes appending 20 records each produce 40 valid records"
+        }
+      ]
+    },
+    {
+      "id": "AC-10",
+      "section": "Ledger",
+      "priority": "Must",
+      "text": "A stale lock from a dead process is reclaimed; a live owner's lock is never displaced",
+      "implementation": [
+        "src/core/history/RunLedger.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "a stale lock from a dead pid is reclaimed and the append succeeds"
+        },
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "a lock held by a live process makes append retry and give up without corrupting anything"
+        }
+      ]
+    },
+    {
+      "id": "AC-11",
+      "section": "Ledger",
+      "priority": "Must",
+      "text": "`FALCON_RUN_HISTORY=off` writes nothing, creates no file or lock, and the CLI reports history as disabled",
+      "implementation": [
+        "src/core/history/RunLedger.js",
+        "scripts/history.js",
+        "falcon.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-ledger.check.cjs",
+          "name": "the kill switch creates no file, no lock and no directory"
+        },
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "FALCON_RUN_HISTORY=off prints 'history: disabled' and exits 0, reading nothing (AC-11)"
+        }
+      ]
+    },
+    {
+      "id": "AC-12",
+      "section": "Exit codes",
+      "priority": "Must",
+      "text": "`falcon.js` exits with the same code whether history is on, off, unwritable, or raising a flag, across the fixture modes pass / scenario-failure / navigation-failure / empty / launch-failure (SEC-12)",
+      "implementation": [
+        "falcon.js",
+        "src/core/history/RunLedger.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-integration.check.cjs",
+          "name": "${mode}: exit code is ${exitCode} with history on, off, unwritable and flagged (AC-12, SEC-12)"
+        },
+        {
+          "file": "tests/regression/p15-integration.check.cjs",
+          "name": "${mode}: a throw inside recordRun leaves exit ${exitCode} and the report unchanged and logs a warning (SEC-12)"
+        },
+        {
+          "file": "tests/regression/p15-integration.check.cjs",
+          "name": "a corrupt ledger does not change the exit code and is set aside"
+        }
+      ]
+    },
+    {
+      "id": "AC-13",
+      "section": "Metrics",
+      "priority": "Must",
+      "text": "pass_rate, heal_rate, heals, heal_failures and durationMs follow section 5 exactly, with `null` for zero denominators",
+      "implementation": [
+        "src/core/history/RunRecord.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "computeMetrics: definitions and null denominators"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "build counts heals and failures separately via the tier map"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "durationMs is clamped to [0, 7 days] when building and rejected out of range when validating"
+        }
+      ]
+    },
+    {
+      "id": "AC-14",
+      "section": "Metrics",
+      "priority": "Must",
+      "text": "The tier map is the only place event tiers and statuses are classified",
+      "implementation": [
+        "src/core/history/RunRecord.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "classifyHealEvent: table from real emitted shapes"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "classifyHealEvent: ignores everything else"
+        },
+        {
+          "file": "tests/regression/p15-integration.check.cjs",
+          "name": "FALCON_FIXTURE_HEALS events are counted by the real collector"
+        }
+      ]
+    },
+    {
+      "id": "AC-15",
+      "section": "Trend",
+      "priority": "Must",
+      "text": "Ten consecutive fixture runs produce ten listed records and no flags",
+      "implementation": [
+        "falcon.js",
+        "src/core/history/TrendDetector.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-integration.check.cjs",
+          "name": "ten consecutive runs give ten records, distinct runIds, no flags; a heal spike on the eleventh is flagged (AC-15, AC-16)"
+        },
+        {
+          "file": "tests/regression/p15-integration.check.cjs",
+          "name": "no flag line when nothing is flagged"
+        }
+      ]
+    },
+    {
+      "id": "AC-16",
+      "section": "Trend",
+      "priority": "Must",
+      "text": "An induced heal-rate spike on the eleventh run is flagged, and `history:check --strict` exits 1 naming `heal_rate`",
+      "implementation": [
+        "falcon.js",
+        "src/core/history/TrendDetector.js",
+        "scripts/history.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-integration.check.cjs",
+          "name": "ten consecutive runs give ten records, distinct runIds, no flags; a heal spike on the eleventh is flagged (AC-15, AC-16)"
+        },
+        {
+          "file": "tests/regression/p15-integration.check.cjs",
+          "name": "a raised flag is logged as one line with signal names only and never changes the exit code (AC-16)"
+        },
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "check exits 0 and prints the flag when flagged without --strict, 1 with --strict (AC-16)"
+        }
+      ]
+    },
+    {
+      "id": "AC-17",
+      "section": "Trend",
+      "priority": "Must",
+      "text": "Each section 8 rule has a positive and a negative case, including a zero-variance baseline that does not flag a trivial change",
+      "implementation": [
+        "src/core/history/TrendDetector.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "constants match section 8"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "heal-rate worked example: baseline 0.02 / MAD 0.01 gives threshold 0.07; 0.20 is flagged"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "pass-rate decay is flagged"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "duration regression is flagged"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "review backlog is flagged when pending rises strictly across the last three points"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "review backlog needs the rising run-up, not just a high value"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "quarantine growth is flagged at median + 2"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "stable noisy baseline: no flags"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "zero-variance baseline: a trivial change in each signal does not flag"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "heal rate at the gate but not above the threshold does not flag"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "spikes below the absolute floors do not flag"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "improvements never flag"
+        }
+      ]
+    },
+    {
+      "id": "AC-18",
+      "section": "Trend",
+      "priority": "Must",
+      "text": "Flags are suppressed, with the reason reported, for an incomplete run, fewer than 10 eligible baseline runs, reduced coverage, and a different repeat count",
+      "implementation": [
+        "src/core/history/TrendDetector.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "boundary pair: 9 eligible baseline runs suppress, 10 do not"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "incomplete current run suppresses every flag"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "reduced coverage suppresses every flag"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "null coverage on a complete current run is treated as reduced coverage"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "a different repeat count or branch is not baseline"
+        },
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "check reports the suppression reason when the baseline is too short"
+        }
+      ]
+    },
+    {
+      "id": "AC-19",
+      "section": "Trend",
+      "priority": "Must",
+      "text": "`evaluate` is deterministic, does not mutate its input, and never throws on empty, single-record or malformed input (SEC-14)",
+      "implementation": [
+        "src/core/history/TrendDetector.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "evaluate is deterministic and does not mutate its input"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "malformed rows are ignored and nothing throws on empty, single or hostile input"
+        },
+        {
+          "file": "tests/regression/p15-trend.check.cjs",
+          "name": "evaluateMany never throws on bad input"
+        }
+      ]
+    },
+    {
+      "id": "AC-20",
+      "section": "CLI",
+      "priority": "Must",
+      "text": "`list`, `export --format=json`, `export --format=csv` and `check` write to stdout only; stderr is empty on success",
+      "implementation": [
+        "scripts/history.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "list prints newest first, honours --limit, and writes nothing to stderr (AC-20)"
+        },
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "export --format=json is the valid runs array and nothing else (AC-20)"
+        },
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "export --format=csv has a header and one row per record, with rates and a flags column"
+        },
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "check with no flags says so and exits 0 even under --strict"
+        }
+      ]
+    },
+    {
+      "id": "AC-21",
+      "section": "CLI",
+      "priority": "Must",
+      "text": "Path arguments, unknown flags or a missing subcommand exit 2; a corrupt ledger exits 2; a missing ledger exits 0 (SEC-09)",
+      "implementation": [
+        "scripts/history.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "usage error exits 2 on stderr only: history ${args.join(\" \") || \"(no arguments)\"} (AC-21, SEC-09)"
+        },
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "a corrupt ledger (${name}) exits 2, stdout empty, and is left untouched (AC-21)"
+        },
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "list with a missing ledger prints nothing and exits 0 (AC-21)"
+        },
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "check with a missing ledger exits 0 even under --strict (AC-21)"
+        }
+      ]
+    },
+    {
+      "id": "AC-22",
+      "section": "CLI",
+      "priority": "Must",
+      "text": "CSV neutralises `=cmd`, `@SUM(1)`, `+1`, `-1`, a leading tab, and an embedded newline in `branch`, and re-parses to one row per record (SEC-04)",
+      "implementation": [
+        "src/core/util/OutputSafe.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-export-safety.check.cjs",
+          "name": "csvCell neutralises formula and control prefixes with a leading apostrophe"
+        },
+        {
+          "file": "tests/regression/p15-export-safety.check.cjs",
+          "name": "csvRow output round-trips to one row per record for hostile cells"
+        },
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "CSV neutralises formula-looking branches and re-parses to one row per record (AC-22)"
+        }
+      ]
+    },
+    {
+      "id": "AC-23",
+      "section": "CLI",
+      "priority": "Must",
+      "text": "ANSI, CR/LF and OSC sequences in `branch` never reach terminal output (SEC-05)",
+      "implementation": [
+        "src/core/util/OutputSafe.js",
+        "scripts/history.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "a raw-file record with ANSI, CR/LF and OSC in its branch never reaches terminal output (AC-23)"
+        },
+        {
+          "file": "tests/regression/p15-cli.check.cjs",
+          "name": "list and check formatters strip control bytes even from a record that bypassed validation (AC-23)"
+        },
+        {
+          "file": "tests/regression/p15-export-safety.check.cjs",
+          "name": "csvCell strips terminal escapes and control bytes"
+        }
+      ]
+    },
+    {
+      "id": "AC-24",
+      "section": "Dashboard",
+      "priority": "Must",
+      "text": "`GET /history` returns allow-listed records and flags; 401 without a token, 403 for a foreign Host, 404/405 for other methods, shares the rate limiter (SEC-08)",
+      "implementation": [
+        "src/core/Dashboard.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-routes.check.cjs",
+          "name": "401 without a token and with a wrong token (AC-24)"
+        },
+        {
+          "file": "tests/regression/p15-routes.check.cjs",
+          "name": "a token in the query string is rejected (SEC-08)"
+        },
+        {
+          "file": "tests/regression/p15-routes.check.cjs",
+          "name": "403 for a foreign Host, even with a valid token (AC-24)"
+        },
+        {
+          "file": "tests/regression/p15-routes.check.cjs",
+          "name": "POST, PUT, PATCH and DELETE are not served (AC-24)"
+        },
+        {
+          "file": "tests/regression/p15-routes.check.cjs",
+          "name": "the shared limiter answers 429 on /history (AC-24)"
+        },
+        {
+          "file": "tests/regression/p15-routes.check.cjs",
+          "name": "returns the newest 50 records, newest first, with only allow-listed keys (AC-24, 32)"
+        }
+      ]
+    },
+    {
+      "id": "AC-25",
+      "section": "Dashboard",
+      "priority": "Must",
+      "text": "The History panel renders a branch of `<img src=x onerror=...>` as text and runs no script (SEC-06)",
+      "implementation": [
+        "src/dashboard/index.html"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "history panel shows a branch of <img onerror> as text and runs no script"
+        }
+      ]
+    },
+    {
+      "id": "AC-26",
+      "section": "Dashboard",
+      "priority": "Must",
+      "text": "The panel shows the empty state, the run table, three sparklines with no `NaN` in SVG attributes for `null` values, and the flag list",
+      "implementation": [
+        "src/dashboard/index.html"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "history panel renders the seeded runs newest first with computed rates"
+        },
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "history panel empty state"
+        },
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "history sparklines plot only known values and never emit NaN"
+        },
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "history panel flags a flagged run with a badge"
+        }
+      ]
+    },
+    {
+      "id": "AC-27",
+      "section": "Dashboard",
+      "priority": "Must",
+      "text": "`npm run dashboard` serves history with no run and no browser, refuses a non-loopback host without a token, and exits cleanly on SIGINT (SEC-07)",
+      "implementation": [
+        "scripts/dashboard.js",
+        "src/core/Dashboard.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-routes.check.cjs",
+          "name": "serve mode: readiness line, /history works, no browser, SIGINT exits 0 (AC-27, SEC-07)"
+        },
+        {
+          "file": "tests/regression/p15-routes.check.cjs",
+          "name": "serve mode: SIGTERM exits 0 too"
+        },
+        {
+          "file": "tests/regression/p15-routes.check.cjs",
+          "name": "serve mode: a non-loopback host without a token exits 1 and never listens (SEC-07)"
+        }
+      ]
+    },
+    {
+      "id": "AC-28",
+      "section": "CI",
+      "priority": "Must",
+      "text": "The workflow caches only `data/run_history.json` under its own key, separate from the state-file cache (SEC-13)",
+      "implementation": [
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-traceability.check.cjs",
+          "name": "AC-28: the history cache entries use exactly data/run_history.json under a falcon-history- key, apart from the state cache"
+        }
+      ]
+    },
+    {
+      "id": "AC-29",
+      "section": "CI",
+      "priority": "Must",
+      "text": "Exports land in `reports/history/`; the advisory check reaches the step summary and never fails the job",
+      "implementation": [
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-traceability.check.cjs",
+          "name": "AC-29: exports land in reports/history/ and the advisory check reaches the step summary without --strict"
+        }
+      ]
+    },
+    {
+      "id": "AC-30",
+      "section": "CI",
+      "priority": "Should",
+      "text": "`main` runs upload the ledger as a 90-day artifact; PR runs do not",
+      "implementation": [
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-traceability.check.cjs",
+          "name": "AC-30: the run-history upload is main-only with retention-days 90"
+        }
+      ]
+    },
+    {
+      "id": "AC-31",
+      "section": "CI",
+      "priority": "Must",
+      "text": "Hosted evidence: two consecutive runs on one branch show a ledger cache miss then a hit with the record count growing (platform)",
+      "implementation": [
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "platform",
+      "justification": "A hosted-runner cache miss followed by a hit is GitHub Actions cache behaviour, not Falcon code. The workflow wiring is asserted by the AC-28 test (own key, exact path, restore and save entries); the miss-then-hit and the growing record count are evidenced in the PR from two consecutive hosted runs on one branch (restore step 'Cache not found' then 'Cache restored', ledger record count in the step summary growing between them).",
+      "tests": []
+    },
+    {
+      "id": "AC-32",
+      "section": "Safety and docs",
+      "priority": "Must",
+      "text": "Seeded `OPENAI_API_KEY`, `DASHBOARD_TOKEN` and a URL never appear in the ledger, exports or `/history` (SEC-15)",
+      "implementation": [
+        "src/core/history/RunRecord.js",
+        "src/core/Dashboard.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-routes.check.cjs",
+          "name": "seeded secrets and URLs never appear in the body (AC-32)"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "allow-list: extra keys, URLs, selectors and secrets never reach the record"
+        },
+        {
+          "file": "tests/regression/p15-integration.check.cjs",
+          "name": "${mode}: appends exactly one correct record and exits ${exitCode} (AC-01, 03, 12)"
+        }
+      ]
+    },
+    {
+      "id": "AC-33",
+      "section": "Safety and docs",
+      "priority": "Must",
+      "text": "Git is never invoked through a shell: static check plus a stubbed `execFileSync` and a branch value of `$(touch PWN)` that creates no file (SEC-03)",
+      "implementation": [
+        "src/core/history/GitInfo.js",
+        "scripts/history.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "GitInfo: git is called with a file, fixed argv arrays, no shell, bounded options"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "GitInfo: a hostile branch name is never executed and is sanitised (AC-33)"
+        },
+        {
+          "file": "tests/regression/p15-record.check.cjs",
+          "name": "GitInfo: static check, source uses execFileSync and never a shell"
+        },
+        {
+          "file": "tests/regression/p15-traceability.check.cjs",
+          "name": "AC-33: no history module or scripts/history.js reaches a shell; only GitInfo.js uses child_process, via execFileSync"
+        }
+      ]
+    },
+    {
+      "id": "AC-34",
+      "section": "Safety and docs",
+      "priority": "Must",
+      "text": "README, CHANGELOG, HANDOFF, `.env.example` and this plan describe the shipped behaviour; `FALCON_RUN_HISTORY` and the trend overrides are documented blank in `.env.example`",
+      "implementation": [
+        "README.md",
+        "CHANGELOG.md",
+        "HANDOFF.md",
+        ".env.example",
+        "docs/phase-15-plan.md"
+      ],
+      "verifiedBy": "review",
+      "justification": "A documentation criterion: README, CHANGELOG, HANDOFF, .env.example and the plan must describe shipped behaviour, which only a reader comparing the final docs diff with the code can judge. The Code Reviewer verdict on the docs diff is the evidence; no executing test is claimed.",
+      "tests": []
+    },
+    {
+      "id": "AC-35",
+      "section": "Safety and docs",
+      "priority": "Must",
+      "text": "Existing CLIs (`scripts/healing/review.js`, `scripts/review/status.js`) keep their exit codes",
+      "implementation": [
+        "scripts/healing/review.js",
+        "scripts/review/status.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/cli.check.cjs",
+          "name": "review CLI: quarantining a scenario that has never passed is refused and exits 1"
+        },
+        {
+          "file": "tests/regression/cli.check.cjs",
+          "name": "review CLI rehab: an invalid REHAB_CANDIDATE_WINDOW (0) exits 2 and names the setting"
+        },
+        {
+          "file": "tests/regression/review-status.check.cjs",
+          "name": "status.js: something stale with --fail-on-stale exits 1"
+        },
+        {
+          "file": "tests/regression/review-status.check.cjs",
+          "name": "status.js: nothing stale exits 0"
+        },
+        {
+          "file": "tests/regression/review-status.check.cjs",
+          "name": "status.js: an unrecognised argument exits 3 and names the offending argument"
+        }
+      ]
+    },
+    {
+      "id": "AC-36",
+      "section": "Safety and docs",
+      "priority": "Must",
+      "text": "Every criterion is registered and the traceability check passes",
+      "implementation": [
+        "docs/phase-15-acceptance-criteria.json",
+        "tests/regression/p15-traceability.check.cjs"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p15-traceability.check.cjs",
+          "name": "AC-36: all 36 criteria are present exactly once, numbered AC-01 to AC-36 with no gaps"
+        },
+        {
+          "file": "tests/regression/p15-traceability.check.cjs",
+          "name": "AC-36: every test-verified criterion names tests that are registered live, and platform/review rows justify themselves"
+        },
+        {
+          "file": "tests/regression/p15-traceability.check.cjs",
+          "name": "AC-36 negative control: a missing test name, a comment, a skip and a missing file are all reported (the gate can fail)"
+        }
+      ]
+    }
+  ]
+}
