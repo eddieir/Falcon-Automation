@@ -8,6 +8,13 @@ const { io } = require("socket.io-client");
 const { root, temp } = require("./helpers.cjs");
 
 const Dashboard = require("../../src/core/Dashboard");
+// Dashboard.start() logs through Logger, which writes straight to the console,
+// while node:test reads this process's stdout for its own messages. A raw line
+// landing mid-message corrupts the channel ("Unable to deserialize cloned
+// data"), failing the file intermittently with no test at fault. Muted the
+// same way as dashboard.check.cjs and reporting.check.cjs.
+console.log = () => {};
+console.warn = () => {};
 const { MAX_EVENTS } = Dashboard;
 
 // Constructed without DASHBOARD_HOST / DASHBOARD_TOKEN leaking in from the
