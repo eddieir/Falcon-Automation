@@ -1165,3 +1165,13 @@ Closes the items the post-Phase-14 security review left open.
 **Problem:** `npm audit` reported 32 advisories (10 critical), the report CLI `allure` was a runtime dependency, and workflow actions were referenced by movable tags.
 
 **Fix:** `npm audit fix` (no `--force`) brings both the full and production audits to zero; `allure` moves to devDependencies; Playwright moves to 1.63, so run `npx playwright install chromium` once after pulling. Every action is pinned to a commit SHA with its version in a comment, Dependabot proposes weekly updates for actions and npm, and CI fails on any high or critical production advisory.
+
+---
+
+## Phase 15 — Run history and trend
+
+**Problem:** Falcon could not answer "are we getting better or worse?" `reports/test-report.json` was overwritten on every run, the live dashboard disappeared when the process exited, history existed only per scenario, and no run recorded the commit it tested. A rising heal rate, which means the application is drifting underneath the suite, was invisible.
+
+**Fix:** Each `node falcon.js` run appends one validated record to `data/run_history.json` (at most 500 runs, 1 MB): commit and branch, repeat count, outcome counts, coverage, heals and failed heal attempts by tier, review queue depth, quarantine count and duration, plus an incomplete marker for crashed runs. Records come from a fixed allow-list, so URLs, selectors, page text, error messages and scenario names never reach the file. Writes are atomic, mode 0600, serialised by a cross-process lock with bounded retries; corrupt, oversized or symlinked files are moved aside or refused rather than followed or deleted; recording can never change the run's exit code. `FALCON_RUN_HISTORY=off` disables it.
+
+Trend flags for heal-rate spikes, pass-rate decay, duration regression, review backlog and quarantine growth compare each run with the median and MAD of the previous 10 complete runs on the same branch and repeat count, with absolute floors so a stable baseline does not flag a trivial change. They are advisory. `npm run history:list`, `history:export -- --format=json|csv` (formula-safe CSV) and `history:check [--strict]` read the ledger; `npm run dashboard` serves a History panel without a run, behind the dashboard's existing token and host checks. CI keeps the ledger in its own per-branch cache, exports it into the reports artifact, writes an advisory trend summary to the job page, and uploads a 90-day copy from `main`.
