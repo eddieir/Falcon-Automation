@@ -15,7 +15,7 @@ Before editing:
 3. State the files you expect to change and why.
 
 During implementation:
-- preserve CommonJS and Node >=20.19 compatibility;
+- preserve CommonJS and Node >=22 compatibility;
 - follow Falcon logging, configuration, OpenAI, async I/O, and exit-code conventions;
 - use the smallest coherent change;
 - add or update tests that prove behavior, including negative/error paths;
