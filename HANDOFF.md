@@ -24,7 +24,7 @@ Falcon is a Node.js test automation framework built on Playwright. Its different
 | Item | Value |
 |---|---|
 | `main` | Phases 1–14 merged and verified. Phase 15 is implemented on `phase-15/run-history-and-trend` and open for review, not merged. Its plan of record, including definitions, trend rules, acceptance criteria and release gates, is [docs/phase-15-plan.md](docs/phase-15-plan.md). |
-| Node version | 24 in CI (`node-version: "24"` in `ci.yml`, bumped in Phase 6). **Node 20.19+ required locally** — `package.json` declares `engines.node`, since `test:regression`/`test:coverage` use `node:test` flags that don't exist on older Node. |
+| Node version | 24 in CI (`node-version: "24"` in `ci.yml`, bumped in Phase 6). **Node 22+ required locally** — `package.json` declares `engines.node`. The floor was 20.19 (for the `node:test` flags used by `test:regression`/`test:coverage`) until the openai SDK 7 upgrade, which declares Node 22; Node 20 reached end of life in April 2026. |
 | Test target | https://www.saucedemo.com (UI/DB scenarios), https://jsonplaceholder.typicode.com (API scenarios), https://www.google.com (GoogleSearchTest — not run in CI, see §9), plus inline HTML fixtures for `tests/regression/*` suite (no real target site, deterministic) |
 
 Two things worth knowing about this history if you're new to the repo:
@@ -190,7 +190,7 @@ node tests/db/OrderDBTest.js
 
 npm run test:unit                 # 3 fast regression checks, no browser, no DB
 
-npm run test:regression           # 850 node:test cases (needs Node 20.19+)
+npm run test:regression           # node:test cases (needs Node 22+)
 npm run test:browser              # 43 Playwright specs against inline fixtures
 npm run test:coverage             # same as test:regression, with coverage
 

@@ -1,5 +1,5 @@
 const Logger = require("../../../utils/Logger");
-require("dotenv").config();
+require("dotenv").config({ quiet: true });
 
 /**
  * AIAnalyser — standalone helper that asks the LLM to suggest an alternative
