@@ -646,7 +646,7 @@ cd Falcon-Automation
 
 ### 2. Install dependencies
 
-Requires **Node 20.19+** (declared in `package.json`'s `engines` field). The regression suite's `node:test` scripts (`test:regression`, `test:coverage`) use flags that don't exist on older Node builds.
+Requires **Node 22+** (declared in `package.json`'s `engines` field). The openai SDK declares Node 22, and the regression suite's `node:test` scripts (`test:regression`, `test:coverage`) use flags that don't exist on older Node builds.
 
 ```sh
 npm install
@@ -908,7 +908,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 
 The full, current file is the source of truth; see `.github/workflows/ci.yml`. [CHANGELOG.md](CHANGELOG.md)'s Phase 3, Phase 6, and Phase 7 sections document why specific pieces of the `test` job exist (Allure's CLI quirks, the visual-regression cache, the Postgres service container, the three regression checks).
 
-Node 20.19+ is required to actually run `test:coverage`/`test:regression` locally (`--test-concurrency` and `--experimental-test-coverage` alongside `--test` both need it; see `engines` in `package.json`); CI is pinned to Node 24 and has always been fine, but an older local Node fails these two scripts with a plain `node: bad option` instead of a useful message.
+Node 22+ is required locally (the openai SDK's floor; `test:coverage`/`test:regression` also need a recent Node for `--test-concurrency` and `--experimental-test-coverage` alongside `--test`; see `engines` in `package.json`); CI is pinned to Node 24 and has always been fine, but an older local Node fails these two scripts with a plain `node: bad option` instead of a useful message.
 
 ---
 
@@ -957,7 +957,7 @@ node tests/db/OrderDBTest.js
 # Regression tests (no browser, no DB): safe to run anywhere, anytime
 npm run test:unit
 
-# The larger node:test + Playwright regression layer (needs Node 20.19+;
+# The larger node:test + Playwright regression layer (needs Node 22+;
 # see Installation). This is what the "regression" CI job runs.
 npm run test:regression   # 417 node:test cases, tests/regression/*.check.cjs
 npm run test:browser      # 38 Playwright specs, tests/regression/browser.spec.js
