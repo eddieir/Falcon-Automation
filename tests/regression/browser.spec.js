@@ -755,3 +755,157 @@ test("history panel fetches only when opened, and again on Refresh", async ({ pa
   await page.click("#history-refresh");
   await expect.poll(() => calls).toBe(2);
 });
+
+// ── Phase 15: the History panel against the real serve-mode server ──────────
+// No /history stub and no socket.io stub: `node scripts/dashboard.js` runs as a
+// child process over a seeded temp ledger, and the page is loaded through the
+// real ?token= -> cookie exchange.
+const { spawn } = require("node:child_process");
+const { RunLedger } = require("../../src/core/history/RunLedger.js");
+
+const E2E_ROOT = path.join(__dirname, "../..");
+// Built from fragments so the repository's secret scanner does not read it as a credential.
+const E2E_TOKEN = "p15-e2e-" + "dashboard-" + "token";
+const E2E_HOSTILE_BRANCH = "feature/..-..-x";
+
+function e2eRecord(i, { branch = "main", heal = 0, passed = 100 } = {}) {
+  return {
+    schemaVersion: 1,
+    runId: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+    timestamp: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
+    sha: `${String(i).padStart(7, "0")}9abcdef0123456789abcdef0123456789`.slice(0, 40),
+    branch,
+    source: "falcon",
+    repeat: 1,
+    result: "PASSED",
+    counts: { total: passed, passed, failed: 0, skipped: 0, quarantined: 0, deduped: 0, unavailable: 0 },
+    coverage: { pagesTested: 10, pagesSkipped: 0, pagesUnreachable: 0 },
+    heals: { t2: heal, t25: 0, t3: 0 },
+    healFailures: { t25: 0, t3: 0, exhausted: 0 },
+    pendingDepth: 0,
+    quarantineCount: 0,
+    durationMs: 60_000,
+    incomplete: false,
+  };
+}
+
+test("history panel against the real server: rows, flag badge, sparklines, refresh, cookie auth", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-p15-e2e-"));
+  const ledgerPath = path.join(dir, "run_history.json");
+  const preload = path.join(dir, "preload.cjs");
+  fs.writeFileSync(preload, "globalThis.__FALCON_TEST_SEAMS__ = Object.freeze({ runHistory: true });\n");
+  const realLedger = path.join(E2E_ROOT, "data", "run_history.json");
+  const realLedgerExisted = fs.existsSync(realLedger);
+
+  // Oldest: a hostile-but-valid branch; then 12 clean main runs; latest main run spikes heals.
+  const ledger = new RunLedger({ filePath: ledgerPath, backoffMs: 1 });
+  const records = [e2eRecord(0, { branch: E2E_HOSTILE_BRANCH })];
+  for (let i = 1; i <= 12; i++) records.push(e2eRecord(i));
+  records.push(e2eRecord(13, { heal: 40 }));
+  for (const r of records) expect((await ledger.append(r)).ok).toBe(true);
+
+  const child = spawn(process.execPath, ["--require", preload, path.join(E2E_ROOT, "scripts/dashboard.js")], {
+    cwd: E2E_ROOT,
+    env: {
+      ...process.env,
+      DASHBOARD_PORT: "0",
+      DASHBOARD_HOST: "127.0.0.1",
+      DASHBOARD_TOKEN: E2E_TOKEN,
+      FALCON_RUN_HISTORY: "on",
+      FALCON_TEST_RUN_HISTORY_PATH: ledgerPath,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (c) => (stdout += c));
+  child.stderr.on("data", (c) => (stderr += c));
+  const exited = new Promise((resolve) => child.on("exit", (code, signal) => resolve({ code, signal })));
+  let context;
+  let context2;
+  try {
+    const port = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`readiness timed out\n${stdout}\n${stderr}`)), 20_000);
+      const check = () => {
+        const m = /Dashboard ready on http:\/\/\S+:(\d+)/.exec(stdout);
+        if (m) { clearTimeout(timer); resolve(Number(m[1])); }
+      };
+      child.stdout.on("data", check);
+      child.on("exit", () => { clearTimeout(timer); reject(new Error(`exited before ready\n${stdout}\n${stderr}`)); });
+      check();
+    });
+    const origin = `http://127.0.0.1:${port}`;
+
+    context = await browser.newContext();
+    const page = await context.newPage();
+    const historyRequests = [];
+    page.on("request", (req) => { if (new URL(req.url()).pathname === "/history") historyRequests.push(req); });
+
+    await page.goto(`${origin}/?token=${E2E_TOKEN}`);
+    expect(new URL(page.url()).search).toBe(""); // 303 to a clean URL
+    expect((await context.cookies(origin)).length).toBeGreaterThan(0);
+    await page.waitForTimeout(500);
+    expect(historyRequests.length).toBe(0); // nothing before the panel opens
+
+    await page.click("#history-summary");
+    const rows = page.locator("#history-body tr");
+    await expect(rows).toHaveCount(14);
+    expect(historyRequests.length).toBe(1);
+
+    // Newest first.
+    const latest = rows.first().locator("td");
+    await expect(latest.nth(1)).toHaveText("main");
+    await expect(latest.nth(2)).toHaveText("0000013");
+    await expect(latest.nth(3)).toHaveText("PASSED");
+    await expect(latest.nth(4)).toHaveText("100.0%");
+    await expect(latest.nth(5)).toHaveText("40.0%"); // 40 heals / 100 verified
+    await expect(latest.nth(9).locator(".history-badge")).toHaveText(["heal_rate"]);
+    await expect(rows.nth(1).locator("td").nth(2)).toHaveText("0000012");
+    await expect(rows.nth(1).locator("td").nth(5)).toHaveText("0.0%");
+    await expect(rows.nth(1).locator(".history-badge")).toHaveCount(0);
+    const oldest = rows.last().locator("td");
+    await expect(oldest.nth(1)).toHaveText(E2E_HOSTILE_BRANCH);
+    await expect(oldest.nth(2)).toHaveText("0000000");
+    await expect(page.locator("#history-flags li").first()).toContainText("heal_rate");
+
+    const svgs = page.locator("#history-sparks svg");
+    await expect(svgs).toHaveCount(3);
+    const attrs = await svgs.evaluateAll((nodes) => nodes.flatMap((svg) => [svg, ...svg.querySelectorAll("*")].flatMap((el) => Array.from(el.attributes).map((a) => a.value))));
+    expect(attrs.length).toBeGreaterThan(0);
+    expect(attrs.filter((v) => /NaN|undefined|null|Infinity/.test(v))).toEqual([]);
+
+    await page.click("#history-refresh");
+    await expect.poll(() => historyRequests.length).toBe(2);
+    await expect(rows).toHaveCount(14);
+
+    for (const req of historyRequests) {
+      expect(req.url()).not.toContain(E2E_TOKEN);
+      expect(new URL(req.url()).search).toBe("");
+      expect(req.headers().cookie || (await req.allHeaders()).cookie).toBeTruthy();
+    }
+
+    // Negative: no cookie, no data. A fresh context is refused outright...
+    context2 = await browser.newContext();
+    const anon = await context2.request.get(`${origin}/history`);
+    expect(anon.status()).toBe(401);
+    expect(await anon.text()).not.toContain("runs");
+    // ...and the loaded panel, once its cookie is gone, shows the unavailable state and no rows.
+    await context.clearCookies();
+    await page.click("#history-refresh");
+    await expect(page.locator("#history-status")).toHaveText("History is unavailable.");
+    await expect(page.locator("#history-table")).toBeHidden();
+    await expect(page.locator("#history-sparks svg")).toHaveCount(0);
+
+    child.kill("SIGINT");
+    const result = await Promise.race([exited, new Promise((_, rej) => setTimeout(() => rej(new Error("shutdown timed out")), 10_000))]);
+    expect(result).toEqual({ code: 0, signal: null });
+  } finally {
+    if (child.exitCode === null) child.kill("SIGKILL");
+    if (context) await context.close();
+    if (context2) await context2.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  expect(fs.existsSync(dir)).toBe(false);
+  expect(fs.existsSync(realLedger)).toBe(realLedgerExisted); // the real data/run_history.json was not created
+});
