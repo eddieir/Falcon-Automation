@@ -885,6 +885,41 @@ The `by` field recorded in `data/quarantine_decisions.json` is a free-text opera
 
 ---
 
+## Run History and Trend
+
+Falcon records aggregate data from each `node falcon.js` run to track quality over time: pass rate, heal rate, test duration, review queue depth, and quarantine count. The ledger (`data/run_history.json`) holds up to 500 records, one per run, with no URLs, selectors, page text, error messages or scenario names — only outcome counts, coverage, tier-specific heal classifications, and commit/branch info.
+
+```sh
+npm run history:list                          # newest first; --limit=N for N ≤ 500 (default 20)
+npm run history:export -- --format=json       # all valid runs, oldest first
+npm run history:export -- --format=csv        # CSV with one row per run
+npm run history:check                         # advisory trend flags for the latest complete run
+npm run history:check -- --strict             # same, but exit 1 if any flag is raised
+```
+
+Exit codes: `0` success (including a missing ledger or `FALCON_RUN_HISTORY=off`); `1` from `history:check --strict` when a flag is raised; `2` on usage error, unreadable ledger, or invalid config.
+
+**Trend signals** (advisory only; never change `falcon.js`'s exit code):
+- **Heal-rate spike:** current ≥ 0.10 and rises above baseline
+- **Pass-rate decay:** current < 0.95 and falls below baseline
+- **Duration regression:** current grows beyond baseline
+- **Review backlog:** pending-approval count rises across runs
+- **Quarantine growth:** quarantine count exceeds baseline
+
+Flags require **10 complete baseline runs on the same branch with the same repeat count**. The 11th run is the first that can raise a flag. Baseline size and minimum are overridable via `FALCON_TREND_BASELINE_N` and `FALCON_TREND_MIN_BASELINE`. Flags are suppressed (with a reason reported) for incomplete runs, reduced coverage, or fewer than 10 eligible baselines.
+
+View history without running a test:
+
+```sh
+npm run dashboard              # serves the dashboard (incl. History panel) on localhost:3000; Ctrl-C to stop
+```
+
+**Optional:** disable history recording with `FALCON_RUN_HISTORY=off` (`0` and `false` also work).
+
+**In CI:** history is cached on a separate per-branch key; exports appear in `reports/history/` under the 14-day `falcon-reports` artifact; an advisory trend summary is written to the job page; `main` also uploads the ledger as a 90-day `run-history` artifact. Idle branches lose cached history after 7 days; PR runs start with an empty ledger.
+
+---
+
 ## CI/CD
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_era_Falcon`, `main`, `feat/**`, and `test/**` branches, and on every pull request targeting `New_era_Falcon` or `main`. It's two independent jobs, not one:
@@ -997,6 +1032,7 @@ Falcon's differentiator is genuine self-healing, not a hardcoded selector list, 
 Detailed plans for the phases ahead, with implementation specifications and acceptance criteria, are in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md).
 
 ✅ Shipped since the last update:
+- **Run history and trend analysis.** A QA lead's question is "are we getting better or worse?" Falcon now records a bounded ledger of aggregate data from each run (`data/run_history.json`, ≤500 records): pass rate, heal rate, duration, review queue depth, quarantine count, and commit/branch metadata. Advisory trend signals flag heal-rate spikes, pass-rate decay, duration regression, review backlog growth, and quarantine growth, raising a flag only after 10 complete baseline runs on the same branch. `npm run history:list|export|check` provides CLI access; `npm run dashboard` serves the history panel without a test run. CI caches the ledger per branch, exports it to the reports artifact, and uploads a 90-day recovery copy on main. Flags are advisory and never change the test run's exit code.
 - **Healing that needs no model, and refuses rather than guess.** Between scoped replay of an already-approved selector and an LLM tier that needs a key and a network, there was nothing — so an evaluator without `OPENAI_API_KEY` effectively had two tiers, the second of which only fired when the exact replacement had been approved earlier. Falcon now scores live candidates against the stored signature of the element it last interacted with, deterministically and entirely locally, and treats refusal as a first-class outcome that carries its reason. A candidate it accepts is a proposal, not trusted evidence: only a human approval, or a real successful interaction with the developer's own selector, creates trust. Identity values are stored as salted hashes, locator memory never leaves the machine, and the published mutation benchmark reports the cases Falcon gets wrong alongside the ones it gets right.
 - **Healing that covers every action, and a run that can't go green having verified nothing.** Healing used to apply to clicks alone: a renamed input was marked `skipped` before the healer was ever consulted, and because a skip isn't a failure, two skips beside one pass reported PASSED and exited 0. A renamed field quietly cost coverage and the build stayed green over it. `type` and `select` now go through the same three tiers a click does, with the same approval gate; an unresolvable target fails instead of skipping; and `passed`, `failed` and `quarantined` are the only statuses that count as a verdict, so a run without one of them exits 1 like an empty run. A scenario that navigates away also no longer leaves the rest of its plan running against the page it landed on.
 - **Coverage of the whole app, not just the page you pointed at.** Falcon used to crawl a site, discard every page it found, and generate tests for the entry URL alone. A run now sweeps every page it discovers, bounded by a page cap and a wall-clock budget, deduplicating the navigation that repeats on every page, and reporting each page it didn't cover along with why. Against a real 11-page site that's the difference between 1 page and 4 scenarios, and 6 pages and 91 scenarios, from the same command.

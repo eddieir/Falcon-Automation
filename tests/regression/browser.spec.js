@@ -631,3 +631,281 @@ test("one dead page does not abort the sweep", async ({ page }) => {
   expect(result.coverage.pagesTested).toBe(2);
   expect(result.pages.find((p) => p.url === "http://sweep.test/pricing").status).toBe("tested");
 });
+
+// ── Phase 15: the History panel in the real dashboard page ──────────────────
+// The shipped index.html is served from a stub origin with /history answered by
+// page.route(), so these cover the panel's rendering and escaping without
+// depending on the server. The socket.io client is replaced by a stub that only fires "connect".
+const DASHBOARD_HTML = fs.readFileSync(path.join(__dirname, "../../src/dashboard/index.html"), "utf8");
+
+function historyRun(i, over = {}) {
+  return {
+    schemaVersion: 1,
+    runId: `run-${i}`,
+    timestamp: `2026-01-${String(i + 1).padStart(2, "0")}T10:00:00.000Z`,
+    sha: "abcdef0123456789",
+    branch: "main",
+    result: "PASSED",
+    counts: { total: 10, passed: 8, failed: 2, skipped: 0, quarantined: 0, deduped: 0, unavailable: 0 },
+    heals: { t2: 1, t25: 0, t3: 1 },
+    pendingDepth: 3,
+    quarantineCount: 1,
+    durationMs: 1000 + i * 100,
+    incomplete: false,
+    flagged: [],
+    ...over,
+  };
+}
+
+async function openDashboard(page, historyPayload) {
+  await page.route("http://dash.test/**", (route) => {
+    const { pathname } = new URL(route.request().url());
+    if (pathname === "/") return route.fulfill({ contentType: "text/html", body: DASHBOARD_HTML });
+    if (pathname === "/socket.io/socket.io.js") {
+      return route.fulfill({ contentType: "text/javascript", body: "window.io=function(){return{on:function(n,f){if(n===\"connect\")setTimeout(f,0);},emit:function(){}}};" });
+    }
+    if (pathname === "/history") return route.fulfill({ contentType: "application/json", body: JSON.stringify(historyPayload) });
+    return route.fulfill({ contentType: "application/json", body: "[]" });
+  });
+  await page.goto("http://dash.test/");
+  await page.click("#history-summary");
+}
+
+test("history panel renders the seeded runs newest first with computed rates", async ({ page }) => {
+  const runs = Array.from({ length: 25 }, (_, i) => historyRun(24 - i, { branch: `b${24 - i}` }));
+  await openDashboard(page, { runs, flags: [{ signal: "heal_rate", message: "heal_rate 0.9 is above threshold 0.5" }], suppressed: [] });
+  const rows = page.locator("#history-body tr");
+  await expect(rows).toHaveCount(20);
+  const first = rows.first().locator("td");
+  await expect(first.nth(1)).toHaveText("b24");
+  await expect(first.nth(2)).toHaveText("abcdef0");
+  await expect(first.nth(4)).toHaveText("80.0%"); // 8 / (8 + 2 + 0)
+  await expect(first.nth(5)).toHaveText("20.0%"); // 2 / (8 + 2 + 0 + 0)
+  await expect(first.nth(7)).toHaveText("3");
+  await expect(first.nth(8)).toHaveText("1");
+  await expect(page.locator("#history-flags li")).toHaveText(["heal_rate: heal_rate 0.9 is above threshold 0.5"]);
+});
+
+test("history panel shows a branch of <img onerror> as text and runs no script", async ({ page }) => {
+  const evil = "<img src=x onerror=window.__x=1>";
+  await openDashboard(page, { runs: [historyRun(0, { branch: evil, flagged: ["<b>x</b>"] })], flags: [{ signal: evil, message: evil }], suppressed: [] });
+  await expect(page.locator("#history-body tr")).toHaveCount(1);
+  await expect(page.locator("#history-body tr td").nth(1)).toHaveText(evil);
+  expect(await page.evaluate(() => window.__x)).toBeUndefined();
+  expect(await page.locator("#history-section img").count()).toBe(0);
+  expect(await page.locator("#history-section b").count()).toBe(0);
+});
+
+test("history panel empty state", async ({ page }) => {
+  await openDashboard(page, { runs: [], flags: [], suppressed: [] });
+  await expect(page.locator("#history-status")).toHaveText("No runs recorded yet. Run `node falcon.js` to start building history.");
+  await expect(page.locator("#history-table")).toBeHidden();
+});
+
+test("history panel disabled and unavailable states", async ({ page }) => {
+  await openDashboard(page, { disabled: true, runs: [] });
+  await expect(page.locator("#history-status")).toHaveText("History is disabled (FALCON_RUN_HISTORY=off).");
+  await expect(page.locator("#history-table")).toBeHidden();
+});
+
+test("history panel unavailable state", async ({ page }) => {
+  await openDashboard(page, { runs: [], error: "unavailable" });
+  await expect(page.locator("#history-status")).toHaveText("History is unavailable.");
+  await expect(page.locator("#history-table")).toBeHidden();
+});
+
+test("history sparklines plot only known values and never emit NaN", async ({ page }) => {
+  const empty = { total: 0, passed: 0, failed: 0, skipped: 0, quarantined: 0, deduped: 0, unavailable: 0 };
+  // Newest first: runs 0 and 3 have no verified scenarios, so both rates are null.
+  const runs = [0, 1, 2, 3, 4].map((i) => historyRun(4 - i, i === 0 || i === 3 ? { counts: empty, durationMs: null } : {}));
+  await openDashboard(page, { runs, flags: [], suppressed: [] });
+  const svgs = page.locator("#history-sparks svg");
+  await expect(svgs).toHaveCount(3);
+  const info = await svgs.evaluateAll((nodes) => nodes.map((svg) => ({
+    circles: svg.querySelectorAll("circle").length,
+    attrs: [svg, ...svg.querySelectorAll("*")].flatMap((el) => Array.from(el.attributes).map((a) => a.value)),
+  })));
+  expect(info.map((s) => s.circles)).toEqual([3, 3, 3]);
+  for (const s of info) expect(s.attrs.filter((v) => /NaN|undefined|null|Infinity/.test(v))).toEqual([]);
+});
+
+test("history panel flags a flagged run with a badge", async ({ page }) => {
+  await openDashboard(page, { runs: [historyRun(1, { flagged: ["heal_rate"] }), historyRun(0)], flags: [], suppressed: [] });
+  const badges = page.locator("#history-body tr").first().locator(".history-badge");
+  await expect(badges).toHaveText(["heal_rate"]);
+  await expect(page.locator("#history-body tr").nth(1).locator(".history-badge")).toHaveCount(0);
+});
+
+test("history panel fetches only when opened, and again on Refresh", async ({ page }) => {
+  let calls = 0;
+  await page.route("http://dash.test/**", (route) => {
+    const { pathname } = new URL(route.request().url());
+    if (pathname === "/") return route.fulfill({ contentType: "text/html", body: DASHBOARD_HTML });
+    if (pathname === "/socket.io/socket.io.js") return route.fulfill({ contentType: "text/javascript", body: "window.io=function(){return{on:function(n,f){if(n===\"connect\")setTimeout(f,0);},emit:function(){}}};" });
+    if (pathname === "/history") { calls++; return route.fulfill({ contentType: "application/json", body: JSON.stringify({ runs: [historyRun(0)], flags: [], suppressed: [] }) }); }
+    return route.fulfill({ contentType: "application/json", body: "[]" });
+  });
+  await page.goto("http://dash.test/");
+  await page.waitForTimeout(500);
+  expect(calls).toBe(0); // nothing is requested until the panel is opened
+  await page.click("#history-summary");
+  await expect(page.locator("#history-body tr")).toHaveCount(1);
+  await page.waitForTimeout(500);
+  expect(calls).toBe(1);
+  await page.click("#history-refresh");
+  await expect.poll(() => calls).toBe(2);
+});
+
+// ── Phase 15: the History panel against the real serve-mode server ──────────
+// No /history stub and no socket.io stub: `node scripts/dashboard.js` runs as a
+// child process over a seeded temp ledger, and the page is loaded through the
+// real ?token= -> cookie exchange.
+const { spawn } = require("node:child_process");
+const { RunLedger } = require("../../src/core/history/RunLedger.js");
+
+const E2E_ROOT = path.join(__dirname, "../..");
+// Built from fragments so the repository's secret scanner does not read it as a credential.
+const E2E_TOKEN = "p15-e2e-" + "dashboard-" + "token";
+const E2E_HOSTILE_BRANCH = "feature/..-..-x";
+
+function e2eRecord(i, { branch = "main", heal = 0, passed = 100 } = {}) {
+  return {
+    schemaVersion: 1,
+    runId: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+    timestamp: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
+    sha: `${String(i).padStart(7, "0")}9abcdef0123456789abcdef0123456789`.slice(0, 40),
+    branch,
+    source: "falcon",
+    repeat: 1,
+    result: "PASSED",
+    counts: { total: passed, passed, failed: 0, skipped: 0, quarantined: 0, deduped: 0, unavailable: 0 },
+    coverage: { pagesTested: 10, pagesSkipped: 0, pagesUnreachable: 0 },
+    heals: { t2: heal, t25: 0, t3: 0 },
+    healFailures: { t25: 0, t3: 0, exhausted: 0 },
+    pendingDepth: 0,
+    quarantineCount: 0,
+    durationMs: 60_000,
+    incomplete: false,
+  };
+}
+
+test("history panel against the real server: rows, flag badge, sparklines, refresh, cookie auth", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-p15-e2e-"));
+  const ledgerPath = path.join(dir, "run_history.json");
+  const preload = path.join(dir, "preload.cjs");
+  fs.writeFileSync(preload, "globalThis.__FALCON_TEST_SEAMS__ = Object.freeze({ runHistory: true });\n");
+  const realLedger = path.join(E2E_ROOT, "data", "run_history.json");
+  const realLedgerExisted = fs.existsSync(realLedger);
+
+  // Oldest: a hostile-but-valid branch; then 12 clean main runs; latest main run spikes heals.
+  const ledger = new RunLedger({ filePath: ledgerPath, backoffMs: 1 });
+  const records = [e2eRecord(0, { branch: E2E_HOSTILE_BRANCH })];
+  for (let i = 1; i <= 12; i++) records.push(e2eRecord(i));
+  records.push(e2eRecord(13, { heal: 40 }));
+  for (const r of records) expect((await ledger.append(r)).ok).toBe(true);
+
+  const child = spawn(process.execPath, ["--require", preload, path.join(E2E_ROOT, "scripts/dashboard.js")], {
+    cwd: E2E_ROOT,
+    env: {
+      ...process.env,
+      DASHBOARD_PORT: "0",
+      DASHBOARD_HOST: "127.0.0.1",
+      DASHBOARD_TOKEN: E2E_TOKEN,
+      FALCON_RUN_HISTORY: "on",
+      FALCON_TEST_RUN_HISTORY_PATH: ledgerPath,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (c) => (stdout += c));
+  child.stderr.on("data", (c) => (stderr += c));
+  const exited = new Promise((resolve) => child.on("exit", (code, signal) => resolve({ code, signal })));
+  let context;
+  let context2;
+  try {
+    const port = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`readiness timed out\n${stdout}\n${stderr}`)), 20_000);
+      const check = () => {
+        const m = /Dashboard ready on http:\/\/\S+:(\d+)/.exec(stdout);
+        if (m) { clearTimeout(timer); resolve(Number(m[1])); }
+      };
+      child.stdout.on("data", check);
+      child.on("exit", () => { clearTimeout(timer); reject(new Error(`exited before ready\n${stdout}\n${stderr}`)); });
+      check();
+    });
+    const origin = `http://127.0.0.1:${port}`;
+
+    context = await browser.newContext();
+    const page = await context.newPage();
+    const historyRequests = [];
+    page.on("request", (req) => { if (new URL(req.url()).pathname === "/history") historyRequests.push(req); });
+
+    await page.goto(`${origin}/?token=${E2E_TOKEN}`);
+    expect(new URL(page.url()).search).toBe(""); // 303 to a clean URL
+    expect((await context.cookies(origin)).length).toBeGreaterThan(0);
+    await page.waitForTimeout(500);
+    expect(historyRequests.length).toBe(0); // nothing before the panel opens
+
+    await page.click("#history-summary");
+    const rows = page.locator("#history-body tr");
+    await expect(rows).toHaveCount(14);
+    expect(historyRequests.length).toBe(1);
+
+    // Newest first.
+    const latest = rows.first().locator("td");
+    await expect(latest.nth(1)).toHaveText("main");
+    await expect(latest.nth(2)).toHaveText("0000013");
+    await expect(latest.nth(3)).toHaveText("PASSED");
+    await expect(latest.nth(4)).toHaveText("100.0%");
+    await expect(latest.nth(5)).toHaveText("40.0%"); // 40 heals / 100 verified
+    await expect(latest.nth(9).locator(".history-badge")).toHaveText(["heal_rate"]);
+    await expect(rows.nth(1).locator("td").nth(2)).toHaveText("0000012");
+    await expect(rows.nth(1).locator("td").nth(5)).toHaveText("0.0%");
+    await expect(rows.nth(1).locator(".history-badge")).toHaveCount(0);
+    const oldest = rows.last().locator("td");
+    await expect(oldest.nth(1)).toHaveText(E2E_HOSTILE_BRANCH);
+    await expect(oldest.nth(2)).toHaveText("0000000");
+    await expect(page.locator("#history-flags li").first()).toContainText("heal_rate");
+
+    const svgs = page.locator("#history-sparks svg");
+    await expect(svgs).toHaveCount(3);
+    const attrs = await svgs.evaluateAll((nodes) => nodes.flatMap((svg) => [svg, ...svg.querySelectorAll("*")].flatMap((el) => Array.from(el.attributes).map((a) => a.value))));
+    expect(attrs.length).toBeGreaterThan(0);
+    expect(attrs.filter((v) => /NaN|undefined|null|Infinity/.test(v))).toEqual([]);
+
+    await page.click("#history-refresh");
+    await expect.poll(() => historyRequests.length).toBe(2);
+    await expect(rows).toHaveCount(14);
+
+    for (const req of historyRequests) {
+      expect(req.url()).not.toContain(E2E_TOKEN);
+      expect(new URL(req.url()).search).toBe("");
+      expect(req.headers().cookie || (await req.allHeaders()).cookie).toBeTruthy();
+    }
+
+    // Negative: no cookie, no data. A fresh context is refused outright...
+    context2 = await browser.newContext();
+    const anon = await context2.request.get(`${origin}/history`);
+    expect(anon.status()).toBe(401);
+    expect(await anon.text()).not.toContain("runs");
+    // ...and the loaded panel, once its cookie is gone, shows the unavailable state and no rows.
+    await context.clearCookies();
+    await page.click("#history-refresh");
+    await expect(page.locator("#history-status")).toHaveText("History is unavailable.");
+    await expect(page.locator("#history-table")).toBeHidden();
+    await expect(page.locator("#history-sparks svg")).toHaveCount(0);
+
+    child.kill("SIGINT");
+    const result = await Promise.race([exited, new Promise((_, rej) => setTimeout(() => rej(new Error("shutdown timed out")), 10_000))]);
+    expect(result).toEqual({ code: 0, signal: null });
+  } finally {
+    if (child.exitCode === null) child.kill("SIGKILL");
+    if (context) await context.close();
+    if (context2) await context2.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  expect(fs.existsSync(dir)).toBe(false);
+  expect(fs.existsSync(realLedger)).toBe(realLedgerExisted); // the real data/run_history.json was not created
+});

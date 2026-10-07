@@ -119,7 +119,7 @@ test("falcon.js exits non-zero with a clear message when the dashboard would be 
   const marker = path.join(dir, "launched");
   // CI=true turns the dashboard off unless --dashboard is passed, so both are
   // pinned here: the test exercises the same path on a laptop and in CI.
-  const env = { ...process.env, CI: "true", FALCON_FIXTURE_MODE: "success", FALCON_LAUNCH_MARKER: marker, DASHBOARD_HOST: "0.0.0.0", DASHBOARD_PORT: "0" };
+  const env = { ...process.env, CI: "true", FALCON_RUN_HISTORY: "off", FALCON_FIXTURE_MODE: "success", FALCON_LAUNCH_MARKER: marker, DASHBOARD_HOST: "0.0.0.0", DASHBOARD_PORT: "0" };
   delete env.DASHBOARD_TOKEN;
   // The shared CLI preload stubs Dashboard out; this test needs the real one,
   // so a local preload applies the shared mocks and then lets Dashboard through.
