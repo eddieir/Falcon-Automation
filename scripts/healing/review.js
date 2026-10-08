@@ -169,7 +169,8 @@ async function main() {
                 process.exitCode = 1;
                 return;
             }
-            const decision = HealingTrust.approve(arg, { approvedBy: "cli" });
+            const shown = HealingTrust.list().find((e) => e.original === arg);
+            const decision = HealingTrust.approve(arg, { approvedBy: "cli", suggested: shown?.suggested });
             await HealingTrust._queue;
             if (!decision) {
                 console.error(`No pending entry for "${arg}".`);
@@ -199,7 +200,7 @@ async function main() {
 
         case "approve-all": {
             const entries = HealingTrust.list();
-            for (const entry of entries) HealingTrust.approve(entry.original, { approvedBy: "cli" });
+            for (const entry of entries) HealingTrust.approve(entry.original, { approvedBy: "cli", suggested: entry.suggested });
             await HealingTrust._queue;
             console.log(`Approved ${entries.length} pending fix(es).`);
             return;

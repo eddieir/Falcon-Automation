@@ -223,7 +223,7 @@ test("healing trust: full HTTP round trip — pending, approve, and it disappear
   assert.equal(before.body.length, 1);
   assert.equal(before.body[0].original, "#old");
 
-  const approve = await httpJSON(d.port, "POST", "/healing/approve", auth, { original: "#old" });
+  const approve = await httpJSON(d.port, "POST", "/healing/approve", auth, { original: "#old", suggested: "#new" });
   assert.equal(approve.statusCode, 200);
   assert.equal(approve.body.decision, "approved");
 
@@ -313,7 +313,7 @@ test("healing trust: approving a selector whose name collides with Object.protot
   const pending = await httpJSON(d.port, "GET", "/healing/pending", auth);
   assert.equal(pending.body.length, 2);
 
-  const approve = await httpJSON(d.port, "POST", "/healing/approve", auth, { original: "__proto__" });
+  const approve = await httpJSON(d.port, "POST", "/healing/approve", auth, { original: "__proto__", suggested: "#fix" });
   assert.equal(approve.statusCode, 200);
   assert.equal(approve.body.decision, "approved");
 
@@ -352,7 +352,7 @@ test("healing trust: an approve/reject/pending/trend event over HTTP is broadcas
   assert.equal(pendingEvt.payload.original, "#live");
 
   const approved = once(socket, "event");
-  const approve = await httpJSON(d.port, "POST", "/healing/approve", auth, { original: "#live" });
+  const approve = await httpJSON(d.port, "POST", "/healing/approve", auth, { original: "#live", suggested: "#live-fix" });
   assert.equal(approve.statusCode, 200);
   const [approvedEvt] = await approved;
   assert.equal(approvedEvt.name, "healingApproved");

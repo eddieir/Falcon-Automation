@@ -908,7 +908,7 @@
           ${rejectedWarning}
         </div>
         <div class="pending-actions">
-          <button class="btn btn-approve" data-action="approve" data-selector="${escapeHtml(entry.original)}">Approve</button>
+          <button class="btn btn-approve" data-action="approve" data-selector="${escapeHtml(entry.original)}" data-suggested="${escapeHtml(entry.suggested)}">Approve</button>
           <button class="btn btn-reject" data-action="reject" data-selector="${escapeHtml(entry.original)}">Reject</button>
         </div>
       `;
@@ -926,21 +926,21 @@
   $("healing-pending-list").addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-action]");
     if (!button) return;
-    const { action, selector } = button.dataset;
+    const { action, selector, suggested } = button.dataset;
     button.disabled = true;
     try {
-      await healingDecision(action, selector);
+      await healingDecision(action, selector, suggested);
     } catch (err) {
       button.disabled = false;
       alert(`Failed to ${action}: ${err.message}`);
     }
   });
 
-  async function healingDecision(action, original) {
+  async function healingDecision(action, original, suggested) {
     const res = await fetch(`/healing/${action}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ original }),
+      body: JSON.stringify(action === "approve" ? { original, suggested } : { original }),
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
     // The socket "healingApproved"/"healingRejected" event that follows
