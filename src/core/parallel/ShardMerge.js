@@ -361,6 +361,7 @@ async function merge({ inputDir, expectTotal, expectRunId, expectCommit, paths, 
         const count = (d) => table.filter((t) => t.pg.disposition === d).length;
         const healingEvents = Reducers.buildHealingLog(events);
         const coverage = {
+            pagesDiscovered: table.length,
             pagesTested: table.filter((t) => t.pg.disposition === "completed" && t.status === "ok").length,
             pagesSkipped: count("skipped"),
             pagesUnreachable: table.filter((t) => t.pg.disposition === "task-failed" || (t.pg.disposition === "completed" && t.status !== "ok")).length,

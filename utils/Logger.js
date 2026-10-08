@@ -54,11 +54,14 @@ function redactUrlUserinfo(text) {
         let end = start;
         let at = -1;
         let colon = -1;
+        // The authority ends at the first '/', '?', '#' or whitespace. The
+        // credentials end at the LAST '@' inside it, so a password that itself
+        // contains '@' is masked completely.
         while (end < text.length) {
             const ch = text[end];
-            if (ch === "@") { at = end; break; }
-            if (ch === "/" || ch === " " || ch === "\n" || ch === "\r" || ch === "\t") break;
-            if (ch === ":" && colon === -1) colon = end;
+            if (ch === "/" || ch === "?" || ch === "#" || ch === " " || ch === "\n" || ch === "\r" || ch === "\t") break;
+            if (ch === "@") at = end;
+            else if (ch === ":" && colon === -1 && at === -1) colon = end;
             end++;
         }
         if (at !== -1 && colon !== -1) {

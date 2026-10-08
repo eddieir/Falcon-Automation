@@ -10,6 +10,8 @@ const { AsyncLocalStorage } = require("node:async_hooks");
  * they always have. Human decisions never consult this module.
  */
 const als = new AsyncLocalStorage();
+// A process runs one sweep at a time, so a plain flag is enough; callers that
+// nest (the runner and the sweep itself) restore the previous value.
 let active = false;
 
 const ParallelMode = {

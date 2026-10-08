@@ -92,7 +92,8 @@ Source: `docs/benchmarks/phase-16-parallel-benchmark.md`.
 
 - **Merge failed (exit 2 or 3):** fix the input or the storage problem and run the same `merge` command again. Inputs are preserved until the merge succeeds. A successful merge is idempotent.
 - **Merge crashed:** re-run the same `merge` command. The receipt is written last, so reduction runs again and converges.
-- **Shard job re-run in CI:** the new bundle uses an incremented attempt number. The aggregate keeps only the latest attempt per shard.
+- **Re-running CI after a shard failure:** use "Re-run all jobs". The run id includes the attempt number and the aggregate is told to expect it, so "Re-run failed jobs" leaves the passing shards' bundles under the previous attempt and the merge rejects the set (exit 2, unexpected run id). That is the safe failure; nothing is published.
+- **Mixed plan digests (`MIXED_PLANDIGEST`):** every shard analyses all pages and records a digest of the plan. If shards reach the `--budget-ms` deadline at different points during analysis, their digests differ and the merge rejects the set (exit 2). CI does not use `--budget-ms`. When using it locally, give the budget enough room for analysis, or run without it when sharding.
 - **Clean up bundles:** delete `reports/shards` and `reports/merge`. Neither directory holds canonical state.
 - **Return to sequential:** stop passing `--workers`, `--shard` and `--run-id`. Canonical files written by a Phase 16 run are readable by the earlier build.
 
@@ -103,3 +104,6 @@ Source: `docs/benchmarks/phase-16-parallel-benchmark.md`.
 - The CI Postgres service image (`postgres` Alpine layer) has a known zlib finding (BL-001, SNYK-ALPINE324-ZLIB-20541555). It is a CI-only service container.
 
 Sources: `docs/architecture/phase-16-parallel-execution.md`, `docs/security/phase-16-baseline-security-assessment.md`.
+
+## Known difference from a sequential report
+A merged report matches a sequential one on test names and statuses, page statuses and coverage counts, with one gap: `coverage.linksOutOfScope` (links skipped as cross-origin or non-page) is not carried through the bundle, so the merged report does not include it. The merged report also adds `execution` and `stateMerge` blocks.

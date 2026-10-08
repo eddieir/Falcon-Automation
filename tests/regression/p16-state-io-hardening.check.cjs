@@ -154,3 +154,19 @@ test("Logger: redaction stays linear on adversarial input and still masks URL cr
     assert.ok(!lines[1].includes("pw9"), lines[1]);
     assert.ok(lines[1].includes("[redacted]"), lines[1]);
 });
+
+test("Logger: a password containing '@' is masked completely and path-only text is kept", () => {
+    const Logger = require("../../utils/Logger");
+    const lines = [];
+    const realLog = console.log;
+    console.log = (line) => lines.push(String(line));
+    try {
+        Logger.info("db " + ["postgres", "//svc:p" + "@ss@host:5432/app"].join(":"));
+        Logger.info("see " + ["http", "//example.test/a?x=1:2@3"].join(":"));
+    } finally {
+        console.log = realLog;
+    }
+    assert.ok(!lines[0].includes("ss@host") && !lines[0].includes("p@ss"), lines[0]);
+    assert.ok(lines[0].includes("[redacted]@host"), lines[0]);
+    assert.ok(lines[1].includes("x=1:2@3"), lines[1]);
+});

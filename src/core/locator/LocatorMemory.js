@@ -399,6 +399,9 @@ class LocatorMemory {
    */
   async applyMerge(events, runId, snapshotAt) {
     const { reduceLocatorMemory } = require("../parallel/LocatorMemoryMerge");
+    // A write queued earlier in this process (for example the first-use salt
+    // header) holds the writer lock; let it finish before taking it ourselves.
+    await this._queue.catch(() => {});
     this._reload();
     if (this._blockedEnvelope) {
       return {ok:false, changed:false, conflicts:[{code:"envelope_blocked", key:null, detail:this._blockedEnvelopeReason}], error:"locator memory envelope is blocked"};
