@@ -225,12 +225,15 @@
       "verifiedBy": "test",
       "tests": [
         {
-          "file": "tests/regression/p16-sweep.check.cjs",
-          "name": "bounded contexts, failed page row, dedupe order, bundle roundtrip, canonical state untouched"
+          "file": "tests/regression/p16-gaps.check.cjs",
+          "name": "AC-09: a storageState over 1 MiB refuses to start with AUTH_STATE_TOO_LARGE; none is written"
+        },
+        {
+          "file": "tests/regression/p16-gaps.check.cjs",
+          "name": "AC-09: a smaller storageState is cloned per context, isolated, and never written to a file"
         }
       ],
-      "status": "partial",
-      "note": "storageState is passed to newContext in ParallelSweep.js, but no test asserts the size cap, absence of a written state file, or cross-context mutation isolation as the criterion requires."
+      "status": "done"
     },
     {
       "id": "P16-AC-10",
@@ -651,12 +654,11 @@
       "verifiedBy": "test",
       "tests": [
         {
-          "file": "tests/regression/p16-merge.check.cjs",
-          "name": "clean merge: code 1 (a deduped+failed page), report and state written, fragments removed"
+          "file": "tests/regression/p16-gaps.check.cjs",
+          "name": "AC-25: a merge appends exactly one run record; replay and crash-rerun never add another; shards never append"
         }
       ],
-      "status": "partial",
-      "note": "Merge writes run history once, but no test asserts exactly one run_history record after merge versus one per shard."
+      "status": "done"
     },
     {
       "id": "P16-AC-26",
@@ -774,7 +776,8 @@
       "implementation": [
         "src/core/parallel/Schemas.js",
         "src/core/parallel/Reducers.js",
-        "src/core/parallel/LocatorMemoryMerge.js"
+        "src/core/parallel/LocatorMemoryMerge.js",
+        "src/core/locator/LocatorMemoryWriter.js"
       ],
       "verifiedBy": "test",
       "tests": [
@@ -797,9 +800,22 @@
         {
           "file": "tests/regression/p16-diversion.check.cjs",
           "name": "HealingTrust.recordPending / recordTier3Invocation divert; approve/reject never do"
+        },
+        {
+          "file": "tests/regression/p16-lock-host.check.cjs",
+          "name": "T17: a lock from another host is not reclaimed, even with a dead pid"
+        },
+        {
+          "file": "tests/regression/p16-gaps.check.cjs",
+          "name": "T13: every CI cache key carries the branch ref and no cache path includes locator_memory.json"
+        },
+        {
+          "file": "tests/regression/p16-gaps.check.cjs",
+          "name": "T13: the aggregate state save is restricted to the default branch and non-fork runs"
         }
       ],
-      "status": "done"
+      "status": "done",
+      "note": "T17 implemented: lock files carry host, pid and creation time; pid probing only on the same host; a foreign-host lock fails closed with LOCK_FOREIGN_HOST (LocatorMemoryWriter, also used by RunLedger). Legacy pid-only locks still use the pid probe; locks with no usable owner use a 60 s grace. T13 is met by per-branch CI caches, journals bound by runId/commit/configFp and --expect-run-id/--expect-commit, and no cached locator_memory.json; approval semantics unchanged. Residual: local copies of data/ shared between branches by hand, accepted only when the owner says so."
     },
     {
       "id": "P16-AC-30",
@@ -1091,10 +1107,13 @@
         {
           "file": "tests/regression/p16-cli.check.cjs",
           "name": "default parsing is unchanged: --workers=1 and unrelated flags are accepted by the parser"
+        },
+        {
+          "file": "tests/regression/p16-gaps.check.cjs",
+          "name": "AC-41: after a merge, deleting the shard and merge trees changes nothing else and the sequential run still works"
         }
       ],
-      "status": "partial",
-      "note": "Rollback is documented (architecture section 10) and the default sequential path is tested, but there is no dedicated test of returning from parallel to sequential with canonical state intact."
+      "status": "done"
     },
     {
       "id": "P16-AC-42",
@@ -1130,7 +1149,7 @@
       "verifiedBy": "review",
       "tests": [],
       "status": "planned",
-      "note": "Rule documented in the the approved tool assessment; operator run not yet performed or reviewed."
+      "note": "Rule documented in the GitHub code scanning and secret scanning assessment; operator run not yet performed or reviewed."
     },
     {
       "id": "P16-AC-103",
@@ -1166,7 +1185,7 @@
       "verifiedBy": "review",
       "tests": [],
       "status": "planned",
-      "note": "No the approved tool findings exist yet."
+      "note": "No GitHub code scanning, secret scanning or npm audit findings exist yet."
     },
     {
       "id": "P16-AC-106",
@@ -1178,7 +1197,7 @@
       "verifiedBy": "review",
       "tests": [],
       "status": "planned",
-      "note": "Depends on the approved tool results."
+      "note": "Depends on the GitHub code scanning, secret scanning and npm audit results."
     },
     {
       "id": "P16-AC-107",
@@ -1190,7 +1209,7 @@
       "verifiedBy": "review",
       "tests": [],
       "status": "planned",
-      "note": "Depends on baseline and final the approved tool runs."
+      "note": "Depends on baseline and final GitHub code scanning, secret scanning and npm audit runs."
     },
     {
       "id": "P16-AC-108",
@@ -1310,7 +1329,7 @@
       "verifiedBy": "review",
       "tests": [],
       "status": "planned",
-      "note": "BL-003 owner disposition and the approved tool runs outstanding."
+      "note": "BL-003 owner disposition and the GitHub code scanning, secret scanning and npm audit runs outstanding."
     },
     {
       "id": "P16-AC-117",
@@ -1396,7 +1415,7 @@
       "verifiedBy": "review",
       "tests": [],
       "status": "partial",
-      "note": "Document exists; the approved tool source and dynamic scan evidence not yet recorded."
+      "note": "Document exists; the GitHub code scanning and secret scanning evidence not yet recorded."
     },
     {
       "id": "P16-AC-123",

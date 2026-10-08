@@ -1,6 +1,6 @@
 # Phase 16 operations: parallel runs, shards and merge
 
-Status: **in review, not merged.** The behaviour below is implemented on branch `phase-16/parallel-execution`. Sequential runs (no flags) are the default and are unchanged. Hosted CI results for the Phase 16 jobs are not yet recorded.
+Status: **in review, not merged.** The behaviour below is implemented on branch `phase-16/parallel-execution`. Sequential runs (no flags) are the default and are unchanged. Hosted CI for head 42fac1a47a3c967ccbb0e9bfa55614e645e85005 (run 37792596841, Falcon CI): all seven jobs succeeded (regression, shards 1-3, test, aggregate, shard-negative).
 
 Audience: engineers who run Falcon locally or in CI, and reviewers approving the merge.
 

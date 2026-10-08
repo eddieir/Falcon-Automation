@@ -1,6 +1,6 @@
 # Phase 16 — Deterministic Parallel Execution and Safe CI Sharding
 
-Status: planning. Branch `phase-16/parallel-execution`, base `origin/main` d13be7f (Phase 15 merged). Risk tier: full.
+Status: implemented, in review, not merged (see docs/phase-16-operations.md). Branch `phase-16/parallel-execution`, base `origin/main` d13be7f (Phase 15 merged). Risk tier: full.
 
 ## 1. Objective
 Run independent application pages concurrently on one machine (`--workers=N`) and split pages across CI shards (`--shard=I/N`) with a dedicated merge step, while keeping results, exit codes, page ownership, shared state and reports deterministic and auditable. Sequential execution stays the default and remains byte-compatible.
@@ -28,5 +28,5 @@ Registered in `docs/phase-16-acceptance-criteria.json`: `P16-AC-01`–`P16-AC-42
 ## 7. Known constraints and decisions
 - Benchmark speedup thresholds are reported as evidence on a delay-dominated fixture and do not gate CI (QA review P16-QA-1).
 - Budget is a scheduling deadline with bounded in-flight work, not a hard wall-clock cap.
-- The Phase 16 security gate uses the repository's GitHub security checks on the PR (code scanning, GitGuardian, secret scanning, dependency alerts) plus `npm audit` in CI. Missing or failing evidence means release NO-GO.
+- The Phase 16 security gate uses the repository's GitHub security checks on the PR (code scanning, secret scanning, dependency alerts) plus `npm audit` in CI. Missing or failing evidence means release NO-GO.
 - Competitor statements marked PARTIALLY VERIFIED in the source register must be re-opened before any public citation.
