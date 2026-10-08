@@ -1430,11 +1430,13 @@
       "title": "Owner decisions recorded",
       "priority": "Must",
       "text": "Owner decisions for BL-003 and the T13/T17 residual risks are recorded",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Awaiting owner."
+      "status": "partial",
+      "note": "Owner decided on 2026-10-08: rotate the historical key (no history rewrite) and mark the GitGuardian fixture incident as a false positive. Written acceptance of the T13/T17 residual risks is still outstanding; key rotation is pending."
     }
   ]
 }
