@@ -309,3 +309,27 @@ test("P3: analysis honours the deadline: no page is analysed after it and none i
     for (const p of r.pages) { assert.equal(p.reason, "budget-exhausted"); assert.equal(p.disposition, "skipped"); }
     assert.equal(r.budgetExhausted, true);
 });
+
+test("applyMerge waits for the writer queue: a first-use salt write never makes the merge conflict with itself", async () => {
+    const os = require("node:os");
+    const LocatorMemory = require("../../src/core/locator/LocatorMemory");
+    const Identity = require("../../src/core/locator/LocatorIdentity");
+    const Signature = require("../../src/core/locator/ElementSignature");
+    const identity = { schemaVersion: Identity.SCHEMA_VERSION, applicationId: "app", origin: "https://x.test", pathname: "/a", action: "click", originalSelector: "#go" };
+    const signature = { schemaVersion: Signature.SCHEMA_VERSION, capturedAt: "2026-02-03T04:05:06.000Z", tagName: "button", role: null, accessibleNameApprox: null, attributes: {}, structuralPath: [], textApprox: null, boundingBoxBucket: null };
+    const event = { pageOrdinal: 0, seq: 1, id: "e1", type: "locatorMemory.evidence", scn: null, rep: null, at: "2026-02-03T04:05:07.000Z", p: { identity, signature } };
+    let failures = 0;
+    for (let i = 0; i < 25; i++) {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p16-am-"));
+        try {
+            const memory = new LocatorMemory({ memoryPath: path.join(dir, "locator_memory.json"), env: {} });
+            // No external salt: construction queues a write of the generated salt header.
+            memory._persist();
+            const r = await memory.applyMerge([event], "run-aaaaaa", "2026-02-03T04:05:06.000Z");
+            if (!r.ok) failures++;
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    }
+    assert.equal(failures, 0, `${failures} of 25 merges conflicted with the process's own queued write`);
+});
