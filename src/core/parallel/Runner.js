@@ -16,6 +16,9 @@ const ParallelSweep = require("./ParallelSweep");
 const ShardMerge = require("./ShardMerge");
 const SafeFs = require("./SafeFs");
 
+const TIMINGS_FILE = "timings.json";
+const nowMs = () => Number(process.hrtime.bigint()) / 1e6;
+
 const MERGE_FLAG = /^--(input|expect-total)=/;
 
 /** Directories used by merge. Test seam only honoured under a test preload. */
@@ -40,15 +43,31 @@ function checkMergeArgv(argv) {
 
 async function runMerge({ merge, paths }) {
     try {
+        const t0 = nowMs();
         const r = await ShardMerge.merge({
             inputDir: path.resolve(merge.input), expectTotal: merge.expectTotal === null ? undefined : merge.expectTotal, paths,
         });
+        if (!r.replay && (r.code === 0 || r.code === 1) && r.reportPath) await addMergeMs(r.reportPath, Math.max(0, Math.round(nowMs() - t0)));
         if (r.code === 0 || r.code === 1) Logger.info(`merge: report ${r.reportPath}, code ${r.code}`);
         else for (const d of (r.diagnostics || []).slice(0, 5)) Logger.error(`merge: ${d.code} ${d.where}`);
         return r.code;
     } catch (error) {
         Logger.error(`merge: unexpected failure (${String(error && error.code || "error").slice(0, 40)})`);
         return 3;
+    }
+}
+
+/** Best effort: add the merge wall time (VOLATILE) to a report that already carries execution.timings. */
+async function addMergeMs(reportPath, mergeMs) {
+    try {
+        const report = JSON.parse(await fs.promises.readFile(reportPath, "utf8"));
+        if (!report.execution || !report.execution.timings) return;
+        report.execution.timings.mergeMs = mergeMs;
+        const tmp = `${reportPath}.${process.pid}.tmp`;
+        await fs.promises.writeFile(tmp, JSON.stringify(report, null, 2));
+        await fs.promises.rename(tmp, reportPath);
+    } catch {
+        Logger.warning("merge: could not record mergeMs");
     }
 }
 
@@ -89,6 +108,13 @@ async function run({ browser, parsed, url, sweepOpts, emit, repoRoot, commit, st
         ParallelMode.setActive(false);
     }
 
+    if (result.timings) {
+        // Sidecar next to the manifest: the manifest timing allow-list is closed.
+        await fs.promises.writeFile(path.join(bundleDir, TIMINGS_FILE), JSON.stringify(result.timings)).catch(() => {
+            Logger.warning("could not write shard timings");
+        });
+    }
+
     const mine = result.pages.filter((p) => p.assigned);
     emit("runPlan", { mode, workers, shard: shard ? { index: shard.index, total: shard.total } : null, pagesTotal: result.pages.length });
     emit("workerState", {
@@ -105,4 +131,4 @@ async function run({ browser, parsed, url, sweepOpts, emit, repoRoot, commit, st
     return runMerge({ merge: { input: root, expectTotal: 1 }, paths: defaultPaths(repoRoot) });
 }
 
-module.exports = { run, runMerge, checkMergeArgv, defaultPaths, newRunId };
+module.exports = { TIMINGS_FILE, run, runMerge, checkMergeArgv, defaultPaths, newRunId };

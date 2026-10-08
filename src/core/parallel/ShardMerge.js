@@ -222,6 +222,27 @@ function buildRows(rows) {
     }));
 }
 
+const TIMING_KEYS = ["discoveryMs", "analysisMs", "executionMs"];
+
+/** Per-stage max across shards (shards run concurrently); null unless every shard has valid numbers. */
+async function readTimings(shards) {
+    const out = {};
+    for (const k of TIMING_KEYS) out[k] = 0;
+    for (const s of shards) {
+        let t;
+        try {
+            const r = await SafeFs.readBoundedJson(SafeFs.resolveUnder(s.dir, "timings.json"), { maxBytes: 4096, maxDepth: 3 });
+            if (!r.ok) return null;
+            t = r.value;
+        } catch { return null; }
+        for (const k of TIMING_KEYS) {
+            if (!t || !Number.isFinite(t[k]) || t[k] < 0 || t[k] > 7 * 24 * 3600 * 1000) return null;
+            out[k] = Math.max(out[k], t[k]);
+        }
+    }
+    return out;
+}
+
 async function merge({ inputDir, expectTotal, paths, beforeStep, env } = {}) {
     const step = async (name) => { if (typeof beforeStep === "function") await beforeStep(name); };
     const rejected = (e) => {
@@ -332,8 +353,9 @@ async function merge({ inputDir, expectTotal, paths, beforeStep, env } = {}) {
             ordinal: t.ordinal, url: t.url, disposition: t.pg.disposition,
             status: t.pg.disposition === "skipped" ? "skipped" : t.status === "ok" ? "tested" : "failed",
         }));
+        const timings = await readTimings(shards);
         const report = ReportManager.buildReport({
-            tests, uiIssues: payload.uiIssues, healingEvents, coverage, pages,
+            tests, uiIssues: payload.uiIssues, healingEvents, coverage, pages, timings,
             runId, duration: `${(wallMs / 1000).toFixed(2)}s`,
         });
         report.stateMerge = { eventsApplied: stateMerge.eventsApplied, duplicates: stateMerge.duplicates, conflicts: stateMerge.conflicts };
