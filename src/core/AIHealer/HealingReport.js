@@ -1,6 +1,7 @@
 const fs   = require("fs");
 const path = require("path");
 const Middleware = require("../Middleware");
+const ParallelMode = require("../parallel/ParallelMode");
 
 /**
  * HealingReport — append-only audit log for self-healing events.
@@ -63,6 +64,21 @@ class HealingReport {
     }
 
     _log({ original, resolved, tier, description = "", error = null, trust = null, action = null, status = null, reason = null }) {
+        const divert = ParallelMode.divertTarget();
+        if (divert) {
+            divert.record("healing.log", {
+                original,
+                resolved: resolved ?? null,
+                tier,
+                description: String(description ?? "").slice(0, 120),
+                ...(error ? { error: String(error).slice(0, 300) } : {}),
+                ...(trust ? { trust } : {}),
+                ...(action ? { action } : {}),
+                ...(status ? { status } : {}),
+                ...(reason ? { reason: String(reason).slice(0, 100) } : {}),
+            });
+            return;
+        }
         const entry = {
             timestamp:   new Date().toISOString(),
             original,
