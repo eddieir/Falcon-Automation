@@ -85,7 +85,6 @@ Source: `docs/benchmarks/phase-16-parallel-benchmark.md`.
 - `.github/workflows/ci.yml` has a `shards` matrix job, an `aggregate` job, and a `shard-negative` job.
 - The `aggregate` job runs with `if: always()`, downloads the shard artifacts, runs `merge --expect-total=N`, and uploads the merged report. It is the only job that saves the state cache, on main for non-fork runs, even when the merge fails. The save skips when no state file exists and is the only step allowed to fail without failing the job. Shard artifacts are named `falcon-shard-<i>-of-3-<attempt>` so a re-run does not collide, and the merge receives the expected run id and commit.
 - The `shard-negative` job checks that a missing shard is rejected.
-- `.github/workflows/security.yml` runs the Snyk job. It pins the Snyk CLI (`snyk@1.1307.4`), requires the `SNYK_TOKEN` secret, and is skipped with a notice for forks and Dependabot runs (no secrets); a missing token on a trusted ref fails.
 - Local runs do not exercise the matrix. CI is the authority for these jobs.
 
 ## 6. Recovery and rollback
@@ -99,9 +98,8 @@ Source: `docs/benchmarks/phase-16-parallel-benchmark.md`.
 
 ## 7. Known open items
 
-- Snyk Code is not enabled for the organisation, so the Snyk Code scan has not run. Owner action required.
 - A historical private key (`client.key`, commits `8d1cff4` and `ef4b32c`, removed in `58cd66a`) is in git history. Owner disposition pending.
-- The CI Postgres service image (`postgres` Alpine layer) has a known zlib finding (BL-001, SNYK-ALPINE324-ZLIB-20541555). It is a CI-only service container.
+- The CI Postgres service image is pinned by digest; no image vulnerability scan has been run.
 
 Sources: `docs/architecture/phase-16-parallel-execution.md`, `docs/security/phase-16-baseline-security-assessment.md`.
 
