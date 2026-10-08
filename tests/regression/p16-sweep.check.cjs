@@ -1,4 +1,7 @@
 "use strict";
+// A fixed salt keeps the locator-memory header from being generated (and written)
+// on first use, so the canonical-state assertion below can be exact.
+process.env.FALCON_LOCATOR_SALT = process.env.FALCON_LOCATOR_SALT || "p16-sweep-test-salt";
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
