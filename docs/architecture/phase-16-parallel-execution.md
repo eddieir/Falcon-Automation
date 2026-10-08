@@ -191,7 +191,7 @@ Never allowed anywhere (journal, manifest, fragment): raw DOM or page text beyon
 | `--workers` | integer 1..16, default 1 |
 | `--shard=I/N` | N 1..64, I 1..N; one occurrence only |
 | Flag value echoed in error | first 40 characters, sanitized; whole message <=300 chars |
-| `runId` | `^[a-z0-9][a-z0-9-]{5,62}$` (7..63 chars) |
+| `runId` | `^[a-z0-9][a-z0-9-]{5,62}$` (6..63 chars) |
 | Pages per parallel/shard run (`maxPages` ceiling) | 1000 (sequential unchanged) |
 | Manifest | <=256 KiB, depth <=6, arrays <=1000, strings <=2048, keys <=64 chars |
 | Fragment (per page) | <=1 MiB; <=2000 result rows; error text <=500 chars; uiIssues <=200 items, each <=1 KiB |
