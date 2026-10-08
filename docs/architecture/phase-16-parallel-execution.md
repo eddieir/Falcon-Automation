@@ -179,7 +179,7 @@ Global event order for reducers: tuple (pageOrdinal, scn ?? -1, rep ?? 0, seq). 
 | `healing.log` | `original`, `resolved` (null ok), `tier` in {LocatorStore,LLM,LocatorMemory,exhausted,...existing tier strings, validated against a fixed list}, `description`, optional `error`, `trust`, `action`, `status`, `reason` | selectors <=300; description <=120; error <=300; reason <=100; all `sanitizeField`-normalized |
 | `locatorStore.use` | `original` | <=300 |
 | `locatorMemory.evidence` | `identity` (passes `V.identity`), `signature` (passes `V.signature`) | existing validator bounds (signature total bytes per ElementSignature) |
-| `locatorMemory.candidate` | `identity`, `candidate` (passes `V.proposal`), `baseRevision` (hex64 or null) | candidate <=12,000 bytes, evidence <=8,192 bytes (existing) |
+| `locatorMemory.candidate` | `identity`, `candidate` (passes `V.proposal`), `baseRevision` (hex64 or null) | candidate <=12,000 bytes, evidence <=8,192 bytes (existing); payload cap for this event type is 20,448 bytes |
 | `task.end` | `status` in {ok,failed}, `eventCount` int | must equal `count - 1` |
 
 Never allowed anywhere (journal, manifest, fragment): raw DOM or page text beyond the labeled fields above, cookies, storageState, authorization or headers, input values (`scenario.value`), env values, API keys, userinfo in URLs, stack traces, free-form error text beyond the capped sanitized fields. Unknown keys at any level, `__proto__`/`prototype`/`constructor` keys, non-finite numbers, control characters, and unknown event types are rejected. Workers cannot emit decision events (`approve`, `reject`, `quarantine`, `unquarantine`, `rollback`, `locatorStore.add`): these types are not in the enum (AC-29).
