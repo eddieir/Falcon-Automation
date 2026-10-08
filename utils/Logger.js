@@ -39,25 +39,40 @@ const { sanitizeField } = require(path.join(__dirname, "..", "src", "core", "uti
  *   message containing an embedded newline, so this changes no current
  *   output.
  */
+const SECRET_ENV_NAME = /TOKEN|KEY|SECRET|PASSWORD/i;
+
+function redact(message) {
+    if (typeof message !== "string") return message;
+    let out = message;
+    for (const [name, value] of Object.entries(process.env)) {
+        if (typeof value === "string" && value.length >= 8 && SECRET_ENV_NAME.test(name)) {
+            out = out.split(value).join("[redacted]");
+        }
+    }
+    out = out.replace(/(token=)[^\s&"',;]+/gi, "$1[redacted]");
+    out = out.replace(/(Bearer\s+)[^\s"',;]+/gi, "$1[redacted]");
+    return out;
+}
+
 class Logger {
     static logFilePath = path.join(__dirname, "..", "reports", "execution.log");
     static _writeQueue = Promise.resolve(); // serialise async writes
     static _dirEnsured = false;
 
     static info(message) {
-        const safe = sanitizeField(message);
+        const safe = sanitizeField(redact(message));
         console.log(`🟢 INFO: ${safe}`);
         Logger._enqueue(`[INFO]    ${new Date().toISOString()} - ${safe}\n`);
     }
 
     static error(message) {
-        const safe = sanitizeField(message);
+        const safe = sanitizeField(redact(message));
         console.error(`🔴 ERROR: ${safe}`);
         Logger._enqueue(`[ERROR]   ${new Date().toISOString()} - ${safe}\n`);
     }
 
     static warning(message) {
-        const safe = sanitizeField(message);
+        const safe = sanitizeField(redact(message));
         console.warn(`🟡 WARNING: ${safe}`);
         Logger._enqueue(`[WARNING] ${new Date().toISOString()} - ${safe}\n`);
     }
@@ -78,7 +93,7 @@ class Logger {
                 await fs.promises.mkdir(dir, { recursive: true });
                 Logger._dirEnsured = true;
             }
-            await fs.promises.appendFile(Logger.logFilePath, line, "utf8");
+            await fs.promises.appendFile(Logger.logFilePath, line, { encoding: "utf8", mode: 0o600 });
         } catch {
             // Swallow write errors — logging must never crash the test process
         }
