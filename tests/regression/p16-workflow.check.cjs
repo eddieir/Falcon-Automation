@@ -70,7 +70,7 @@ test("ci.yml: shard matrix artifacts are unique and include the shard index", ()
     const j = jobs(files["ci.yml"]);
     assert.match(j.shards, /shard:\s*\[1, 2, 3\]/);
     assert.match(j.shards, /fail-fast:\s*false/);
-    assert.match(j.shards, /name:\s*falcon-shard-\$\{\{ matrix\.shard \}\}-of-3/);
+    assert.match(j.shards, /name:\s*falcon-shard-\$\{\{ matrix\.shard \}\}-of-3-\$\{\{ github\.run_attempt \}\}/);
     assert.match(j.shards, /retention-days:\s*7/);
     assert.ok(!/secrets\./.test(j.shards), "shards must not see secrets");
     const names = [...files["ci.yml"].matchAll(/^\s+name:\s*(falcon-\S+|regression-reports|run-history)\s*$/gm)].map((m) => m[1]);
@@ -82,8 +82,18 @@ test("ci.yml: aggregate needs shards, runs always, exit code is the merge's", ()
     assert.match(a, /^ {4}needs: shards$/m);
     assert.match(a, /^ {4}if: always\(\)$/m);
     assert.match(a, /falcon\.js merge --input=shards-in --expect-total=3/);
-    assert.ok(!/continue-on-error/.test(a));
-    assert.match(a, /steps\.merge\.outcome == 'success'/);
+    assert.match(a, /pattern:\s*falcon-shard-\*-of-3-\$\{\{ github\.run_attempt \}\}/);
+    assert.match(a, /EXPECT_RUN_ID: gh-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
+    assert.match(a, /EXPECT_COMMIT: \$\{\{ github\.sha \}\}/);
+    assert.match(a, /--expect-run-id="\$EXPECT_RUN_ID" --expect-commit="\$EXPECT_COMMIT"/);
+    const run = a.slice(a.indexOf("falcon.js merge"), a.indexOf("falcon.js merge") + 200);
+    assert.ok(!/\$\{\{/.test(run), "no inline expression in the merge command");
+    // continue-on-error only on the cache save step, which runs on always()
+    assert.strictEqual((stripComments(a).match(/continue-on-error/g) || []).length, 1);
+    const save = a.slice(a.indexOf("- name: Save Falcon state"));
+    assert.match(save.split("- uses:")[0], /if: always\(\) && steps\.state-files\.outputs\.found == 'true'[^\n]*refs\/heads\/main/);
+    assert.match(save.split("- uses:")[0], /continue-on-error: true/);
+    assert.ok(!/merge\.outcome/.test(a));
     assert.ok(!/locator_memory/.test(stripComments(a)));
 });
 
@@ -91,4 +101,16 @@ test("ci.yml: OPENAI_API_KEY is not job-level; negative shard check expects exit
     const j = jobs(files["ci.yml"]);
     assert.ok(!/^ {4}env:(?:\n {6}.*)*\n {6}OPENAI_API_KEY/m.test(j.test), "job-level OPENAI_API_KEY");
     assert.match(j["shard-negative"], /-ne 2/);
+    assert.match(j["shard-negative"], /pattern:\s*falcon-shard-\*-of-3-\$\{\{ github\.run_attempt \}\}/);
+    assert.match(j["shard-negative"], /--expect-run-id="\$EXPECT_RUN_ID" --expect-commit="\$EXPECT_COMMIT"/);
+});
+
+test("security.yml: dependabot runs skip snyk with a notice; trusted refs still fail on a missing token", () => {
+    const s = stripComments(files["security.yml"]);
+    const snykIf = s.match(/^ {2}snyk:\n {4}if: (.*)$/m)[1];
+    assert.match(snykIf, /github\.actor != 'dependabot\[bot\]'/);
+    const fork = s.match(/^ {2}fork-notice:\n {4}if: (.*)$/m)[1];
+    assert.match(fork, /github\.actor == 'dependabot\[bot\]'/);
+    assert.match(s, /::notice::Snyk skipped/);
+    assert.match(s, /if \[ -z "\$SNYK_TOKEN" \]; then[\s\S]*?exit 1/);
 });

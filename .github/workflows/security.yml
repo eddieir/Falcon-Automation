@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   snyk:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -103,7 +103,7 @@ jobs:
           exit "$fail"
 
   fork-notice:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    if: github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -116,4 +116,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm audit --omit=dev --audit-level=high
-      - run: echo "Snyk awaiting trusted execution"
+      # Forks and Dependabot runs get no repository secrets, so Snyk cannot
+      # authenticate. Skip it with a visible notice instead of failing on a
+      # missing token; trusted refs still fail when the token is missing.
+      - run: echo "::notice::Snyk skipped, no secrets for this actor. Snyk awaiting trusted execution"

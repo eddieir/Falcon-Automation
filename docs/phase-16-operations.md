@@ -33,7 +33,7 @@ Merge the shard bundles into one report and one history record:
 node falcon.js merge --input=reports/shards/local-run-1 --expect-total=2
 ```
 
-`merge` takes `--input=<dir>` (required) and optionally `--expect-total=N` (1 to 64). It cannot be combined with `--workers`, `--shard` or `--run-id`.
+`merge` takes `--input=<dir>` (required) and optionally `--expect-total=N` (1 to 64), `--expect-run-id=<id>` and `--expect-commit=<sha>`. The last two are strict: a bundle whose run id or commit differs is rejected with exit 2. CI passes both. It cannot be combined with `--workers`, `--shard` or `--run-id`.
 
 ### Merge exit codes
 
@@ -65,7 +65,7 @@ A shard exits 0 unless a verdict is `failed` or `unavailable`, or the shard hits
 - VisualRegression is rejected under parallel mode.
 - Page order can differ from a sequential run when the frontier is larger than `--max-pages`.
 - If a page that owns a deduplicated scenario fails, later pages keep the scenario deduplicated, and the run fails.
-- `--budget-ms` is a scheduling deadline, not a hard wall-clock cap. No new page starts after the deadline, but pages already running finish.
+- `--budget-ms` is a scheduling deadline. The deadline is checked before starting each page task in analysis and execution; a task that has already started runs to completion.
 - Evidence recorded in a parallel run does not raise locator trust until a sequential run has confirmed it.
 
 ## 4. Benchmark
@@ -83,9 +83,9 @@ Source: `docs/benchmarks/phase-16-parallel-benchmark.md`.
 ## 5. CI
 
 - `.github/workflows/ci.yml` has a `shards` matrix job, an `aggregate` job, and a `shard-negative` job.
-- The `aggregate` job runs with `if: always()`, downloads the shard artifacts, runs `merge --expect-total=N`, and uploads the merged report. It is the only job that saves the state cache, and only on success.
+- The `aggregate` job runs with `if: always()`, downloads the shard artifacts, runs `merge --expect-total=N`, and uploads the merged report. It is the only job that saves the state cache, on main for non-fork runs, even when the merge fails. The save skips when no state file exists and is the only step allowed to fail without failing the job. Shard artifacts are named `falcon-shard-<i>-of-3-<attempt>` so a re-run does not collide, and the merge receives the expected run id and commit.
 - The `shard-negative` job checks that a missing shard is rejected.
-- `.github/workflows/security.yml` runs the Snyk job. It pins the Snyk CLI (`snyk@1.1307.4`), requires the `SNYK_TOKEN` secret, and is skipped for forks.
+- `.github/workflows/security.yml` runs the Snyk job. It pins the Snyk CLI (`snyk@1.1307.4`), requires the `SNYK_TOKEN` secret, and is skipped with a notice for forks and Dependabot runs (no secrets); a missing token on a trusted ref fails.
 - Local runs do not exercise the matrix. CI is the authority for these jobs.
 
 ## 6. Recovery and rollback
