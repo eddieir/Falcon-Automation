@@ -1,6 +1,7 @@
 # Phase 15 — Run history and trend: detailed plan
 
-Status: **planned, not started.** Plan of record for the phase summarised in
+Status: **delivered.** Merged on `main` at `6e7f5f1` via #46. The first `main` run recorded the
+ledger's first record and uploaded the 90-day `run-history` artifact (AC-30). Plan of record for the phase summarised in
 [PHASE-PLANS.md](PHASE-PLANS.md#phase-15--run-history-and-trend). It consolidates the product
 framing, acceptance criteria, threat model, CI plan, architecture, test strategy and delivery plan
 produced by the product, security, DevOps, architecture, QA and project-management reviews.

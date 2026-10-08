@@ -1,6 +1,6 @@
 # Falcon-Automation: Self-Healing Test Automation with AI-Assisted Locator Recovery
 
-> **Status:** Active development · Phases 1–14 merged and verified on `main` at `669750d`. Phase 10 covers every page of an app in one run; Phase 11 heals every action type; Phase 12 makes healing state and flaky decisions survive CI via cached state files; Phase 13 ("Decisions that can't rot") keeps review decisions from going stale; Phase 14 ("Evidence-based locator matching") adds a deterministic local healing tier that needs no model and no network. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
+> **Status:** Active development · Phases 1–15 merged and verified on `main` at `6e7f5f1`. Phase 10 covers every page of an app in one run; Phase 11 heals every action type; Phase 12 makes healing state and flaky decisions survive CI via cached state files; Phase 13 ("Decisions that can't rot") keeps review decisions from going stale; Phase 14 ("Evidence-based locator matching") adds a deterministic local healing tier that needs no model and no network; Phase 15 ("Run history and trend") records every run and flags when quality is drifting. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
 
 ---
 
