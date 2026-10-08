@@ -194,9 +194,35 @@ test("T13: every CI cache key carries the branch ref and no cache path includes 
     const key = /^\s+key:\s*(.+)$/m.exec(s);
     assert.ok(key, `cache step without key:\n${s}`);
     assert.match(key[1], /\$\{\{\s*github\.ref_name\s*\}\}/, `key lacks the branch ref: ${key[1]}`);
-    const block = /^\s+path:\s*(?:\|\s*\n((?:\s+.+\n?)+?)(?=\s+\w[\w-]*:)|(.+))/m.exec(s);
-    assert.ok(block, "cache step without path");
-    assert.ok(!/locator_memory\.json/.test(block[0]), `cache path includes locator_memory.json:\n${block[0]}`);
+    const lines = s.split("\n");
+    const pathIndex = lines.findIndex((ln) => /^\s+path:\s*/.test(ln));
+    let pathText = null;
+    if (pathIndex !== -1) {
+      const line = lines[pathIndex];
+      const m = /^(\s+)path:\s*(.*)$/.exec(line);
+      if (m) {
+        const baseIndent = m[1].length;
+        const rest = m[2];
+        if (rest === "|" || rest === "|-" || rest === "|+") {
+          const collected = [];
+          for (let i = pathIndex + 1; i < lines.length; i++) {
+            const ln = lines[i];
+            if (!ln.trim()) {
+              collected.push(ln);
+              continue;
+            }
+            const indent = ln.match(/^\s*/)[0].length;
+            if (indent <= baseIndent && /^\s+\w[\w-]*:/.test(ln)) break;
+            collected.push(ln);
+          }
+          pathText = [line, ...collected].join("\n");
+        } else {
+          pathText = line;
+        }
+      }
+    }
+    assert.ok(pathText, "cache step without path");
+    assert.ok(!/locator_memory\.json/.test(pathText), `cache path includes locator_memory.json:\n${pathText}`);
   }
   assert.ok(!/^path:[^\n]*\n(?:[ \t]+[^\n:]+\n)*[ \t]+data\/locator_memory\.json$/m.test(ci.replace(/#[^\n]*/g, "")), "locator_memory.json appears in a path list");
 });
