@@ -52,7 +52,7 @@ Trust boundaries:
 
 ## 4. Threats, controls, verification, owner
 
-Common to all threats: any failure to persist, parse or validate is reported as failed, never as durable or green. A missing or unverifiable input fails the aggregate closed. Each test idea below is to be written as an automated test, and each must fail on the unfixed behavior (CLAUDE.md regression rule).
+Common to all threats: any failure to persist, parse or validate is reported as failed, never as durable or green. A missing or unverifiable input fails the aggregate closed. Each test idea below is to be written as an automated test, and each must fail on the unfixed behavior (the repository regression-test rule).
 
 | # | Threat | Control (requirement) | Verifying test idea | Owner | AC |
 |---|---|---|---|---|---|
