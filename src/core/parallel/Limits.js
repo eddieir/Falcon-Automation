@@ -30,6 +30,8 @@ const Limits = Object.freeze({
     JOURNAL_MAX_EVENTS: 5000,
     JOURNAL_MAX_PAYLOAD_BYTES: 8 * KiB,
     JOURNAL_MAX_DEPTH: 6,
+    // File-level cap: envelope (root > events > event) adds 3 levels above the payload.
+    JOURNAL_FILE_MAX_DEPTH: 9,
     JOURNAL_MAX_ARRAY: 50,
     JOURNAL_MAX_STRING: 2048,
 

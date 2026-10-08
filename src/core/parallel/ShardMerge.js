@@ -47,20 +47,15 @@ function runUuid(runId) {
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
-async function readJson(file, maxBytes, maxDepth, where) {
-    const r = await SafeFs.readBoundedJson(file, { maxBytes, maxDepth });
-    if (!r.ok) throw new Reject(r.code, where);
-    return r.value;
-}
-
-async function readChecked(shardDir, sub, ref, maxBytes, where) {
+async function readChecked(shardDir, sub, ref, maxBytes, maxDepth, where) {
     let file;
     try { file = SafeFs.resolveUnder(shardDir, sub, ref.name); } catch (e) { throw new Reject(e.code || "PATH_INVALID", where); }
-    const value = await readJson(file, maxBytes, Limits.FRAGMENT_MAX_DEPTH, where);
-    const buf = await fs.promises.readFile(file);
-    if (buf.length !== ref.bytes) throw new Reject("BYTES_MISMATCH", where);
-    if (sha(buf) !== ref.sha256) throw new Reject("SHA_MISMATCH", where);
-    return value;
+    // One bounded read: the bytes that are hashed are the bytes that were parsed.
+    const r = await SafeFs.readBoundedJson(file, { maxBytes, maxDepth });
+    if (!r.ok) throw new Reject(r.code, where);
+    if (r.bytes !== ref.bytes) throw new Reject("BYTES_MISMATCH", where);
+    if (r.sha256 !== ref.sha256) throw new Reject("SHA_MISMATCH", where);
+    return r.value;
 }
 
 /** The writer digests only analysed pages (those below --max-pages), so trailing unanalysed pages carry no signatures. */
@@ -94,7 +89,7 @@ async function checkAnalysis(dir, m, name) {
 }
 
 /** Stage A: list shard dirs and validate manifests only. */
-async function loadManifests(inputDir, expectTotal) {
+async function loadManifests(inputDir, expectTotal, expect) {
     let names;
     try { names = (await fs.promises.readdir(inputDir)).filter((n) => SHARD_DIR.test(n)).sort(); } catch { throw new Reject("INPUT_DIR_UNREADABLE", "inputDir"); }
     if (names.length === 0) throw new Reject("NO_SHARDS", "inputDir");
@@ -106,12 +101,16 @@ async function loadManifests(inputDir, expectTotal) {
         if (st.isSymbolicLink() || !st.isDirectory()) throw new Reject("SHARD_DIR_INVALID", name);
         let file;
         try { file = SafeFs.resolveUnder(dir, "manifest.json"); } catch (e) { throw new Reject(e.code || "PATH_INVALID", name); }
-        const raw = await readJson(file, Limits.MANIFEST_MAX_BYTES, Limits.MANIFEST_MAX_DEPTH, `${name}/manifest.json`);
+        const mr = await SafeFs.readBoundedJson(file, { maxBytes: Limits.MANIFEST_MAX_BYTES, maxDepth: Limits.MANIFEST_MAX_DEPTH });
+        if (!mr.ok) throw new Reject(mr.code, `${name}/manifest.json`);
+        const raw = mr.value;
         const v = Schemas.validateManifest(raw);
         if (!v.ok) throw new Reject("MANIFEST_" + v.code, `${name}${v.path.slice(1)}`);
         const [, i, n] = SHARD_DIR.exec(name);
         if (raw.shard.index !== Number(i) || raw.shard.total !== Number(n)) throw new Reject("SHARD_NAME_MISMATCH", name);
-        const digest = sha(await fs.promises.readFile(file));
+        const digest = mr.sha256;
+        if (expect && expect.runId && raw.runId !== expect.runId) throw new Reject("UNEXPECTED_RUNID", name);
+        if (expect && expect.commit && raw.commit !== expect.commit) throw new Reject("UNEXPECTED_COMMIT", name);
         await checkAnalysis(dir, raw, name);
         shards.push({ name, dir, m: raw, digest });
     }
@@ -132,13 +131,13 @@ async function loadManifests(inputDir, expectTotal) {
 /** Page table + ownership checks. Returns pages by ordinal with owner shard. */
 function buildPageTable(shards, total) {
     const first = shards[0].m.pages;
-    const table = first.map((p, i) => ({ ordinal: p.ordinal, url: p.url, owner: null, ref: null }));
+    const table = first.map((p) => ({ ordinal: p.ordinal, url: Schemas.storedUrl(p.url), rawUrl: p.url, urlId: p.urlId, owner: null, ref: null }));
     table.forEach((p, i) => { if (p.ordinal !== i) throw new Reject("BAD_ORDINAL", `ordinal ${p.ordinal}`); });
     for (const s of shards) {
         if (s.m.pages.length !== table.length) throw new Reject("PAGE_TABLE_MISMATCH", s.name);
         s.m.pages.forEach((pg, i) => {
             const t = table[i];
-            if (pg.ordinal !== t.ordinal || pg.url !== t.url) throw new Reject("PAGE_TABLE_MISMATCH", `${s.name} page ${i}`);
+            if (pg.ordinal !== t.ordinal || pg.url !== t.rawUrl || pg.urlId !== t.urlId) throw new Reject("PAGE_TABLE_MISMATCH", `${s.name} page ${i}`);
             const mine = Planning.shardOf(pg.ordinal, total) === s.m.shard.index;
             if (pg.assigned !== mine) throw new Reject("BAD_ASSIGNMENT", `${s.name} page ${i}`);
             if (!pg.assigned) {
@@ -166,21 +165,22 @@ async function loadPayloads(table, runId) {
         const { owner, pg } = t;
         const h = owner.m;
         const where = `page ${t.ordinal}`;
-        const frag = await readChecked(owner.dir, "fragments", pg.fragment, Limits.FRAGMENT_MAX_BYTES, where + " fragment");
+        const frag = await readChecked(owner.dir, "fragments", pg.fragment, Limits.FRAGMENT_MAX_BYTES, Limits.FRAGMENT_MAX_DEPTH, where + " fragment");
         const fv = Schemas.validateFragment(frag);
         if (!fv.ok) throw new Reject("FRAGMENT_" + fv.code, where);
         if (frag.runId !== runId || frag.pageOrdinal !== t.ordinal || frag.shard.index !== h.shard.index || frag.shard.total !== h.shard.total) throw new Reject("FRAGMENT_HEADER_MISMATCH", where);
         bytes += pg.fragment.bytes;
         frag.results.forEach((r, idx) => rows.push({ t, r, idx }));
-        frag.uiIssues.forEach((u) => uiIssues.push({ ...u, page: t.url }));
+        frag.uiIssues.forEach((u) => uiIssues.push({ ...u, message: Schemas.redactText(u.message), page: t.url }));
         t.status = frag.status;
+        t.fragError = typeof frag.error === "string" ? frag.error : null;
         // A page that never ran tasks (unreachable, analysis failure) has no journal; a page that
         // reports ok must have one.
         if (pg.journal === null) {
             if ((pg.disposition === "completed" || pg.disposition === "task-failed") && frag.status !== "failed") throw new Reject("JOURNAL_MISSING", where);
             continue;
         }
-        const j = await readChecked(owner.dir, "journals", pg.journal, Limits.JOURNAL_MAX_BYTES, where + " journal");
+        const j = await readChecked(owner.dir, "journals", pg.journal, Limits.JOURNAL_MAX_BYTES, Limits.JOURNAL_FILE_MAX_DEPTH, where + " journal");
         const jv = Schemas.validateJournal(j);
         if (!jv.ok) throw new Reject("JOURNAL_" + jv.code, `${where}${jv.path.slice(1)}`);
         for (const k of ["runId", "commit", "configFp", "planDigest"]) if (j[k] !== h[k]) throw new Reject("JOURNAL_HEADER_MISMATCH", where);
@@ -205,7 +205,25 @@ function checkEvents(events) {
     }
 }
 
-function readStore(file, fallback) { return AtomicJsonStore.readJsonSync(file, fallback); }
+const STORE_MAX_BYTES = 8 * 1024 * 1024;
+
+class StoreUnreadable extends Error {
+    constructor(code) { super(code); this.name = "StoreUnreadable"; this.code = code; }
+}
+
+/** Missing file = empty. A present but oversize/symlinked/non-regular/unreadable file fails closed. */
+function readStore(file, fallback) {
+    let st;
+    try { st = fs.lstatSync(file); } catch (e) {
+        if (e && e.code === "ENOENT") return fallback;
+        throw new StoreUnreadable("STORE_STAT_FAILED");
+    }
+    if (st.isSymbolicLink()) throw new StoreUnreadable("STORE_SYMLINK");
+    if (!st.isFile()) throw new StoreUnreadable("STORE_NOT_REGULAR");
+    if (st.size > STORE_MAX_BYTES) throw new StoreUnreadable("STORE_TOO_LARGE");
+    try { fs.accessSync(file, fs.constants.R_OK); } catch { throw new StoreUnreadable("STORE_UNREADABLE"); }
+    return AtomicJsonStore.readJsonSync(file, fallback, { maxBytes: STORE_MAX_BYTES });
+}
 
 async function persistIfChanged(file, fresh, next) {
     if (Schemas.canonicalJson(fresh) === Schemas.canonicalJson(next)) return { ok: true };
@@ -217,7 +235,7 @@ function buildRows(rows) {
     rows.sort((a, b) => { const ka = key(a); const kb = key(b); for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i] - kb[i]; return 0; });
     return rows.map(({ t, r }) => ({
         name: r.scenario, status: r.status, duration: r.durationMs, page: t.url, pageOrdinal: t.ordinal,
-        scn: r.scn, rep: r.rep, ...(r.error ? { error: r.error } : {}), ...(r.errorType ? { errorType: r.errorType } : {}),
+        scn: r.scn, rep: r.rep, ...(r.error ? { error: Schemas.redactText(r.error) } : {}), ...(r.errorType ? { errorType: r.errorType } : {}),
         ...(r.description ? { description: r.description } : {}),
     }));
 }
@@ -243,7 +261,7 @@ async function readTimings(shards) {
     return out;
 }
 
-async function merge({ inputDir, expectTotal, paths, beforeStep, env } = {}) {
+async function merge({ inputDir, expectTotal, expectRunId, expectCommit, paths, beforeStep, env } = {}) {
     const step = async (name) => { if (typeof beforeStep === "function") await beforeStep(name); };
     const rejected = (e) => {
         Logger.error(`ShardMerge: input rejected (${clean(e.rejectCode || e.code, 60)})`);
@@ -259,7 +277,7 @@ async function merge({ inputDir, expectTotal, paths, beforeStep, env } = {}) {
     let payload;
     let receiptFile;
     try {
-        loaded = await loadManifests(inputDir, expectTotal);
+        loaded = await loadManifests(inputDir, expectTotal, { runId: expectRunId, commit: expectCommit });
         if (!Limits.RUN_ID_PATTERN.test(loaded.runId)) throw new Reject("RUN_ID_INVALID", "runId");
         receiptFile = path.join(receiptPath, `${loaded.runId}.json`);
         const rc = await SafeFs.readBoundedJson(receiptFile, { maxBytes: 64 * 1024, maxDepth: 6 });
@@ -347,7 +365,7 @@ async function merge({ inputDir, expectTotal, paths, beforeStep, env } = {}) {
             pagesSkipped: count("skipped"),
             pagesUnreachable: table.filter((t) => t.pg.disposition === "task-failed" || (t.pg.disposition === "completed" && t.status !== "ok")).length,
             scenariosGenerated: tests.length, scenariosDeduplicated: tests.filter((t) => t.status === "deduped").length,
-            budgetExhausted: false,
+            budgetExhausted: table.some((t) => t.pg.disposition === "skipped" && t.fragError === "budget-exhausted"),
         };
         const pages = table.map((t) => ({
             ordinal: t.ordinal, url: t.url, disposition: t.pg.disposition,
@@ -386,9 +404,10 @@ async function merge({ inputDir, expectTotal, paths, beforeStep, env } = {}) {
         await step("report");
         w = await AtomicJsonStore.writeJsonAtomic(reportPath, report);
         if (!w.ok) return fail3("report", w.error);
+        const dropReport = async () => { try { await fs.promises.unlink(reportPath); } catch { /* best effort */ } };
         await step("receipt");
         w = await AtomicJsonStore.writeJsonAtomic(receiptFile, { schema: "falcon.merge-receipt", v: 1, runId, inputDigest: loaded.inputDigest, code, stateMerge: report.stateMerge });
-        if (!w.ok) return fail3("receipt", w.error);
+        if (!w.ok) { await dropReport(); return fail3("receipt", w.error); }
 
         // 6. delete state-carrying bundle files only now
         await step("cleanup");
@@ -402,6 +421,7 @@ async function merge({ inputDir, expectTotal, paths, beforeStep, env } = {}) {
         return { code, reportPath, stateMerge: report.stateMerge };
     } catch (e) {
         if (e && e.name === "ReducerError") return fail3("reducer", e.code);
+        if (e && e.name === "StoreUnreadable") return fail3("state_read", e.code);
         throw e;
     }
 }

@@ -33,8 +33,8 @@ function toRow(r, scnByName, fallbackRep) {
     const errorType = raw === "quarantined" ? "quarantined"
         : (status === "failed" || status === "unavailable") && r.errorType ? clean(r.errorType, 40).toLowerCase().replace(/[^a-z0-9_-]/g, "-") || null
             : raw && status !== raw ? clean(raw, 40).toLowerCase().replace(/[^a-z0-9_-]/g, "-") : null;
-    const name = clean(r && r.name, 200) || "unnamed";
-    let error = r && r.error ? clean(r.error, Limits.FRAGMENT_MAX_ERROR) : null;
+    const name = clean(Schemas.stripUrlQueries(r && r.name), 200) || "unnamed";
+    let error = r && r.error ? clean(Schemas.redactText(r.error), Limits.FRAGMENT_MAX_ERROR) : null;
     if (status === "deduped" && r.firstRunOn) error = clean(`firstRunOn ${r.firstRunOn}`, Limits.FRAGMENT_MAX_ERROR);
     const scn = scnByName && scnByName.has(name) ? scnByName.get(name) : null;
     const rep = Number.isInteger(r && r.repetition) ? r.repetition : status === "deduped" ? null : fallbackRep;
@@ -46,7 +46,7 @@ function toRow(r, scnByName, fallbackRep) {
 }
 
 function toIssue(u) {
-    const o = { type: clean(u && u.type, 40) || "unknown", message: clean(u && (u.message || u.description), Limits.ERROR_MAX) };
+    const o = { type: clean(u && u.type, 40) || "unknown", message: clean(Schemas.redactText(u && (u.message || u.description)), Limits.ERROR_MAX) };
     if (u && u.selector) o.selector = clean(u.selector, Limits.SELECTOR_MAX) || undefined;
     if (u && u.severity) o.severity = clean(u.severity, 20);
     if (o.selector === undefined) delete o.selector;
@@ -56,7 +56,7 @@ function toIssue(u) {
 
 function buildFragment({ runId, shard, page }) {
     const scnByName = new Map();
-    (page.scenarioNames || []).forEach((n, i) => { if (!scnByName.has(n)) scnByName.set(n, i); });
+    (page.scenarioNames || []).forEach((n, i) => { const k = clean(Schemas.stripUrlQueries(n), 200); if (!scnByName.has(k)) scnByName.set(k, i); });
     const rows = (page.results || []).slice(0, Limits.FRAGMENT_MAX_ROWS).map((r) => toRow(r, scnByName, 1));
     const status = page.disposition === "completed" ? (page.status === "unreachable" || page.taskFailed ? "failed" : "ok")
         : page.disposition === "task-failed" ? "failed" : "not-run";
@@ -65,7 +65,7 @@ function buildFragment({ runId, shard, page }) {
         results: rows,
         uiIssues: (page.uiIssues || []).slice(0, Limits.FRAGMENT_MAX_UI_ISSUES).map(toIssue),
     };
-    const err = page.reason && status !== "ok" ? clean(page.reason, Limits.FRAGMENT_MAX_ERROR) : null;
+    const err = page.reason && status !== "ok" ? clean(Schemas.redactText(page.reason), Limits.FRAGMENT_MAX_ERROR) : null;
     if (err) f.error = err;
     return f;
 }
@@ -113,7 +113,7 @@ async function write(opts) {
             jRef = { name, bytes: Buffer.byteLength(text), sha256: sha(text), events: page.journal.count };
         }
         manifestPages.push({
-            ordinal: page.ordinal, url: page.url, assigned: !!page.assigned,
+            ordinal: page.ordinal, url: Schemas.storedUrl(page.url), urlId: Schemas.urlId(page.url), assigned: !!page.assigned,
             disposition: page.disposition, fragment: fragRef, journal: jRef,
         });
     }
@@ -121,8 +121,8 @@ async function write(opts) {
     const analysis = {
         schema: "falcon.shard-analysis", v: 1, runId,
         pages: pages.map((p) => ({
-            ordinal: p.ordinal, url: p.url, status: p.analysisStatus || p.status,
-            reason: p.analysisReason ? clean(p.analysisReason, Limits.ERROR_MAX) : null,
+            ordinal: p.ordinal, url: Schemas.storedUrl(p.url), urlId: Schemas.urlId(p.url), status: p.analysisStatus || p.status,
+            reason: p.analysisReason ? clean(Schemas.redactText(p.analysisReason), Limits.ERROR_MAX) : null,
             signatures: (p.signatures || []).map((s) => clean(s, Limits.MANIFEST_MAX_STRING)),
         })),
     };
@@ -153,8 +153,7 @@ async function readJson(dir, rel, maxBytes, maxDepth, errCode) {
     try { file = SafeFs.resolveUnder(dir, ...rel); } catch (e) { throw new BundleError(errCode, e.code); }
     const r = await SafeFs.readBoundedJson(file, { maxBytes, maxDepth });
     if (!r.ok) throw new BundleError(errCode, `${r.code} ${rel.join("/")}`);
-    const raw = await fs.promises.readFile(file, "utf8");
-    return { value: r.value, bytes: Buffer.byteLength(raw), sha256: sha(raw) };
+    return { value: r.value, bytes: r.bytes, sha256: r.sha256 };
 }
 
 async function read(dir) {
@@ -177,7 +176,7 @@ async function read(dir) {
             fragments.set(pg.ordinal, f.value);
         }
         if (pg.journal) {
-            const j = await readJson(dir, ["journals", pg.journal.name], Limits.JOURNAL_MAX_BYTES, Limits.JOURNAL_MAX_DEPTH, "BUNDLE_JOURNAL_UNREADABLE");
+            const j = await readJson(dir, ["journals", pg.journal.name], Limits.JOURNAL_MAX_BYTES, Limits.JOURNAL_FILE_MAX_DEPTH, "BUNDLE_JOURNAL_UNREADABLE");
             if (j.sha256 !== pg.journal.sha256 || j.bytes !== pg.journal.bytes) throw new BundleError("BUNDLE_JOURNAL_DIGEST_MISMATCH", pg.journal.name);
             const jv = Schemas.validateJournal(j.value);
             if (!jv.ok) throw new BundleError("BUNDLE_JOURNAL_INVALID", `${jv.code} ${jv.path}`);

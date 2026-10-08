@@ -44,6 +44,38 @@ function canonicalJson(v) {
 const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 const byteLen = (v) => Buffer.byteLength(JSON.stringify(v), "utf8");
 
+const SECRET_PATTERNS = [
+    [/(https?:\/\/[^\s?#"'<>]+)[?#][^\s"'<>]*/gi, "$1"],
+    [/\bBearer\s+[A-Za-z0-9._~+\/=-]+/gi, "Bearer [redacted]"],
+    [/\bAuthorization\s*[:=]\s*\S+(?:\s+\S+)?/gi, "Authorization: [redacted]"],
+    [/\b((?:access_|refresh_|id_|api_?)?token|password|passwd|secret|api[_-]?key)\s*[=:]\s*[^\s&;,"']+/gi, "$1=[redacted]"],
+    [/[A-Za-z0-9+\/_=-]{32,}/g, "[redacted]"],
+];
+
+/** Redact token-like substrings from text that is about to be persisted. */
+function redactText(text) {
+    let s = String(text === undefined || text === null ? "" : text);
+    for (const [re, to] of SECRET_PATTERNS) s = s.replace(re, to);
+    return s;
+}
+
+/** Remove query strings and fragments from any http(s) URL inside free text. */
+function stripUrlQueries(text) {
+    return String(text === undefined || text === null ? "" : text).replace(SECRET_PATTERNS[0][0], SECRET_PATTERNS[0][1]);
+}
+
+/** Stored form of a page URL: origin + path only (no query, fragment or userinfo). */
+function storedUrl(url) {
+    try {
+        const u = new URL(url);
+        u.search = ""; u.hash = ""; u.username = ""; u.password = "";
+        return u.href;
+    } catch { return redactText(url); }
+}
+
+/** Stable short id of the full normalised URL; keeps stored identity unique when stored forms collide. */
+function urlId(fullUrl) { return sha256(`falcon-url:${fullUrl}`).slice(0, 16); }
+
 function eventId(runId, pageOrdinal, scn, rep, type, seq) {
     return sha256(`${runId}|${pageOrdinal}|${scn}|${rep}|${type}|${seq}`).slice(0, 32);
 }
@@ -145,9 +177,15 @@ function _manifest(m) {
     hex64(m.planDigest, "$.planDigest");
     arr(m.pages, "$.pages", Limits.MAX_PAGES);
     let last = -1;
+    const seenUrlIds = new Set();
     m.pages.forEach((pg, i) => {
         const p = `$.pages[${i}]`;
-        obj(pg, p, ["ordinal", "url", "assigned", "disposition", "fragment", "journal"]);
+        obj(pg, p, ["ordinal", "url", "assigned", "disposition", "fragment", "journal"], ["urlId"]);
+        if (pg.urlId !== undefined) {
+            str(pg.urlId, p + ".urlId", 16, { pattern: /^[0-9a-f]{16}$/ });
+            if (seenUrlIds.has(pg.urlId)) rej("DUPLICATE_URL_ID", p + ".urlId");
+            seenUrlIds.add(pg.urlId);
+        }
         int(pg.ordinal, p + ".ordinal", 0, Limits.MAX_PAGES - 1);
         if (pg.ordinal <= last) rej("ORDER", p + ".ordinal");
         last = pg.ordinal;
@@ -361,5 +399,5 @@ const validateEventPayload = (type, p) => wrap((x) => _payload(type, x))(p);
 module.exports = {
     validateManifest, validateFragment, validateJournal, validateEventPayload,
     canonicalJson, sha256, eventId, EVENT_TYPES, HEALING_TIERS, DISPOSITIONS,
-    PAYLOAD_MAX_BYTES,
+    PAYLOAD_MAX_BYTES, redactText, stripUrlQueries, storedUrl, urlId,
 };

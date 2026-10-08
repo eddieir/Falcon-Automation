@@ -15,11 +15,14 @@ const ParallelMode = require("./ParallelMode");
 const ParallelSweep = require("./ParallelSweep");
 const ShardMerge = require("./ShardMerge");
 const SafeFs = require("./SafeFs");
+const Limits = require("./Limits");
+
+const RUN_ID_PATTERN = Limits.RUN_ID_PATTERN;
 
 const TIMINGS_FILE = "timings.json";
 const nowMs = () => Number(process.hrtime.bigint()) / 1e6;
 
-const MERGE_FLAG = /^--(input|expect-total)=/;
+const MERGE_FLAG = /^--(input|expect-total|expect-run-id|expect-commit)=/;
 
 /** Directories used by merge. Test seam only honoured under a test preload. */
 function defaultPaths(repoRoot, env = process.env) {
@@ -41,11 +44,32 @@ function checkMergeArgv(argv) {
     return null;
 }
 
+/** Strict --expect-run-id / --expect-commit parsing for merge. Returns {ok, expectRunId, expectCommit} or {ok:false, message}. */
+function parseMergeExpect(argv) {
+    const out = { ok: true, expectRunId: null, expectCommit: null };
+    const seen = new Set();
+    for (const a of argv.slice(1)) {
+        const m = /^--(expect-run-id|expect-commit)=([\s\S]*)$/.exec(a);
+        if (!m) continue;
+        if (seen.has(m[1])) return { ok: false, message: `Duplicate flag --${m[1]}` };
+        seen.add(m[1]);
+        if (m[1] === "expect-run-id") {
+            if (!RUN_ID_PATTERN.test(m[2])) return { ok: false, message: "--expect-run-id must match ^[a-z0-9][a-z0-9-]{5,62}$" };
+            out.expectRunId = m[2];
+        } else {
+            if (!/^[0-9a-f]{40}$/.test(m[2])) return { ok: false, message: "--expect-commit must be 40 lowercase hex characters" };
+            out.expectCommit = m[2];
+        }
+    }
+    return out;
+}
+
 async function runMerge({ merge, paths }) {
     try {
         const t0 = nowMs();
         const r = await ShardMerge.merge({
-            inputDir: path.resolve(merge.input), expectTotal: merge.expectTotal === null ? undefined : merge.expectTotal, paths,
+            inputDir: path.resolve(merge.input), expectTotal: merge.expectTotal === null ? undefined : merge.expectTotal,
+            expectRunId: merge.expectRunId || undefined, expectCommit: merge.expectCommit || undefined, paths,
         });
         if (!r.replay && (r.code === 0 || r.code === 1) && r.reportPath) await addMergeMs(r.reportPath, Math.max(0, Math.round(nowMs() - t0)));
         if (r.code === 0 || r.code === 1) Logger.info(`merge: report ${r.reportPath}, code ${r.code}`);
@@ -63,9 +87,8 @@ async function addMergeMs(reportPath, mergeMs) {
         const report = JSON.parse(await fs.promises.readFile(reportPath, "utf8"));
         if (!report.execution || !report.execution.timings) return;
         report.execution.timings.mergeMs = mergeMs;
-        const tmp = `${reportPath}.${process.pid}.tmp`;
-        await fs.promises.writeFile(tmp, JSON.stringify(report, null, 2));
-        await fs.promises.rename(tmp, reportPath);
+        const w = await SafeFs.writeAtomicPrivate(reportPath, JSON.stringify(report, null, 2));
+        if (!w.ok) throw new Error(w.error);
     } catch {
         Logger.warning("merge: could not record mergeMs");
     }
@@ -110,9 +133,8 @@ async function run({ browser, parsed, url, sweepOpts, emit, repoRoot, commit, st
 
     if (result.timings) {
         // Sidecar next to the manifest: the manifest timing allow-list is closed.
-        await fs.promises.writeFile(path.join(bundleDir, TIMINGS_FILE), JSON.stringify(result.timings)).catch(() => {
-            Logger.warning("could not write shard timings");
-        });
+        const w = await SafeFs.writeAtomicPrivate(path.join(bundleDir, TIMINGS_FILE), JSON.stringify(result.timings));
+        if (!w.ok) Logger.warning("could not write shard timings");
     }
 
     const mine = result.pages.filter((p) => p.assigned);
@@ -131,4 +153,4 @@ async function run({ browser, parsed, url, sweepOpts, emit, repoRoot, commit, st
     return runMerge({ merge: { input: root, expectTotal: 1 }, paths: defaultPaths(repoRoot) });
 }
 
-module.exports = { TIMINGS_FILE, run, runMerge, checkMergeArgv, defaultPaths, newRunId };
+module.exports = { TIMINGS_FILE, run, runMerge, checkMergeArgv, parseMergeExpect, addMergeMs, defaultPaths, newRunId };
