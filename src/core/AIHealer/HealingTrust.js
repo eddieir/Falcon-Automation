@@ -3,6 +3,7 @@ const LocatorStore = require("./LocatorStore");
 const Middleware   = require("../Middleware");
 const AtomicJsonStore = require("../util/AtomicJsonStore");
 const Logger = require("../../../utils/Logger");
+const ParallelMode = require("../parallel/ParallelMode");
 
 /**
  * HealingTrust — Phase 8 approval gate for Tier 3 (LLM-inferred) selector
@@ -295,6 +296,11 @@ class HealingTrust {
      * @param {string} [opts.description]
      */
     recordPending({ original, suggested, description = "" }) {
+        const divert = ParallelMode.divertTarget();
+        if (divert) {
+            divert.record("healing.pending", { original, suggested, description: String(description ?? "").slice(0, 120) });
+            return;
+        }
         const existing = this._getPending(original);
 
         const rejectionKey = JSON.stringify([original, suggested]);
@@ -344,6 +350,11 @@ class HealingTrust {
      * brand-new entry's `tier3Invocations` at 1 for exactly that request.
      */
     recordTier3Invocation(original) {
+        const divert = ParallelMode.divertTarget();
+        if (divert) {
+            divert.record("healing.tier3", { original });
+            return;
+        }
         const existing = this._getPending(original);
         if (!existing) return;
         this._setPending(original, { ...existing, tier3Invocations: (existing.tier3Invocations ?? 0) + 1 });

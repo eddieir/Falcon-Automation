@@ -8,6 +8,7 @@ const AtomicJsonStore = require("../util/AtomicJsonStore");
 const LocatorIdentity = require("./LocatorIdentity");
 const ElementSignature = require("./ElementSignature");
 const Logger = require("../../../utils/Logger");
+const ParallelMode = require("../parallel/ParallelMode");
 
 /** Scoped trusted evidence and explicit review decisions.
  * Authored-selector evidence is trusted; matched candidates remain pending.
@@ -419,6 +420,11 @@ class LocatorMemory {
     if(this._decisionInProgress) throw new Error("locator decision in progress");
     if (!V.identity(identity) || !V.signature(signature)) throw new Error("invalid locator evidence");
     identity = _clone(identity); signature = _clone(signature);
+    const divert = ParallelMode.divertTarget();
+    if (divert) {
+      divert.record("locatorMemory.evidence", { identity, signature });
+      return null;
+    }
     const key = LocatorIdentity.serialiseIdentity(identity);
     const existing = this.entries.get(key);
     const now = new Date().toISOString();
@@ -459,6 +465,11 @@ class LocatorMemory {
     const proposed = V.proposal(candidate);
     const key = LocatorIdentity.serialiseIdentity(identity);
     const existing = this.entries.get(key);
+    const divert = ParallelMode.divertTarget();
+    if (divert) {
+      divert.record("locatorMemory.candidate", { identity, candidate: proposed, baseRevision: existing ? this._revision(existing) : null });
+      return existing ? _clone(existing) : null;
+    }
     const now = new Date().toISOString();
     const priorCandidate = existing ? existing.pendingCandidate : null;
     const sameProposal = priorCandidate && priorCandidate.proposalId === proposed.proposalId;
