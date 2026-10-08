@@ -976,8 +976,7 @@
       "priority": "Must",
       "text": "Actions pinned to full SHAs, minimal permissions, timeouts, no fork secrets, no external sites, locator_memory.json excluded from cross-branch cache",
       "implementation": [
-        ".github/workflows/ci.yml",
-        ".github/workflows/security.yml"
+        ".github/workflows/ci.yml"
       ],
       "verifiedBy": "platform",
       "tests": [
@@ -1112,359 +1111,330 @@
     {
       "id": "P16-AC-101",
       "section": "Security program",
-      "title": "Pinned Snyk version",
+      "title": "Code scanning runs on the PR head",
       "priority": "Must",
-      "text": "Exactly one pinned Snyk CLI version is used locally and in CI; never unpinned latest",
-      "implementation": [
-        ".github/workflows/security.yml"
-      ],
+      "text": "GitHub code scanning (CodeQL JavaScript/TypeScript and Actions) runs on the PR head commit",
+      "implementation": [],
       "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "Pinned snyk CLI checked statically by p16-workflow test; local/CI version parity not independently reviewed."
+      "status": "planned",
+      "note": "Pin and install method documented in the skeleton; no run recorded."
     },
     {
       "id": "P16-AC-102",
       "section": "Security program",
-      "title": "Token handling",
+      "title": "Tokens and keys stay in the environment",
       "priority": "Must",
-      "text": "SNYK_TOKEN is used only from the environment; never printed, logged, committed, or passed in arguments",
-      "implementation": [
-        ".github/workflows/security.yml"
-      ],
+      "text": "Tokens and keys reach the code only through environment or repository secrets; none is printed, committed or passed in command arguments",
+      "implementation": [],
       "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "SNYK_TOKEN confined to env by the workflow test; no security review verdict recorded."
+      "status": "planned",
+      "note": "Rule documented in the the approved tool assessment; operator run not yet performed or reviewed."
     },
     {
       "id": "P16-AC-103",
       "section": "Security program",
-      "title": "Baseline scans complete",
+      "title": "Baseline and head code-scanning comparison",
       "priority": "Must",
-      "text": "Baseline outputs for dependency, Code, applicable IaC and digest-pinned container scans exist with distinct paths, recorded exit codes, command lines and SHA-256 hashes, produced on a clean detached checkout of the recorded origin/main SHA",
-      "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md"
-      ],
+      "text": "Open code-scanning alerts on the final head are compared with the baseline commit and recorded with the exact SHAs",
+      "implementation": [],
       "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "Baseline exists, but Snyk Code is BLOCKED (exit 2, not supported for the organization, BL-002); incomplete scan set."
+      "status": "planned",
+      "note": "Results: NOT YET RUN."
     },
     {
       "id": "P16-AC-104",
       "section": "Security program",
-      "title": "Baseline classification",
+      "title": "Secret scanning on the PR head",
       "priority": "Must",
-      "text": "Every baseline finding is individually classified with the required fields",
-      "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md"
-      ],
+      "text": "GitGuardian and GitHub secret scanning run on the PR head and their results are recorded",
+      "implementation": [],
       "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "Findings BL-001..BL-005 classified; BL-003 (historical client.key in git history) awaits owner disposition; BL-004/BL-005 unconfirmed."
+      "status": "planned",
+      "note": "Results: NOT YET RUN."
     },
     {
       "id": "P16-AC-105",
       "section": "Security program",
-      "title": "Blocker remediation",
+      "title": "Every alert classified",
       "priority": "Must",
-      "text": "Confirmed exploitable critical/high baseline findings are fixed in separate commits before feature work",
-      "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md"
-      ],
+      "text": "Every code-scanning or secret-scanning alert is individually classified (confirmed, false-positive, duplicate) with severity and disposition",
+      "implementation": [],
       "verifiedBy": "review",
       "tests": [],
       "status": "planned",
-      "note": "BL-001 (container zlib) remediation scheduled, not done; BL-003 owner action pending."
+      "note": "No the approved tool findings exist yet."
     },
     {
       "id": "P16-AC-106",
       "section": "Security program",
-      "title": "Identical final scan set",
+      "title": "Confirmed critical/high resolved",
       "priority": "Must",
-      "text": "Final scans repeat the exact baseline scan set on the final candidate SHA",
-      "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md"
-      ],
+      "text": "Confirmed critical or high alerts are fixed with regression tests or explicitly accepted by the owner",
+      "implementation": [],
       "verifiedBy": "review",
       "tests": [],
       "status": "planned",
-      "note": "Final scans on candidate SHA not run."
+      "note": "Depends on the approved tool results."
     },
     {
       "id": "P16-AC-107",
       "section": "Security program",
-      "title": "Stable delta",
+      "title": "No new critical/high/medium alerts",
       "priority": "Must",
-      "text": "security-delta.md maps baseline/head SHAs, CLI version and finding identities",
-      "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md"
-      ],
+      "text": "The final head introduces no new critical, high or medium alert relative to the baseline",
+      "implementation": [],
       "verifiedBy": "review",
       "tests": [],
       "status": "planned",
-      "note": "security-delta.md not produced."
+      "note": "Depends on baseline and final the approved tool runs."
     },
     {
       "id": "P16-AC-108",
       "section": "Security program",
-      "title": "No new critical/high/medium",
+      "title": "npm audit production and all clean",
       "priority": "Must",
-      "text": "Phase 16 introduces none",
+      "text": "npm audit at the high level passes for production dependencies in the CI regression job, and for all dependencies when run locally",
       "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md"
+        ".github/workflows/ci.yml"
       ],
-      "verifiedBy": "review",
+      "verifiedBy": "test",
       "tests": [],
-      "status": "planned",
-      "note": "Depends on final scan set; not yet evidenced."
+      "status": "partial",
+      "note": "Production audit runs in CI; the all-dependencies audit is run locally only."
     },
     {
       "id": "P16-AC-109",
       "section": "Security program",
-      "title": "Operational errors handled",
+      "title": "Secret scans of tree and history",
       "priority": "Must",
-      "text": "Snyk exit codes 2 and 3 are never treated as clean",
+      "text": "Current-tree and git-history secret scans are recorded with findings classified (BL-003 and others)",
       "implementation": [
         "docs/security/phase-16-baseline-security-assessment.md"
       ],
       "verifiedBy": "review",
       "tests": [],
       "status": "partial",
-      "note": "Baseline records Snyk Code exit 2 as BLOCKED, not clean; CI-side handling not independently verified."
+      "note": "Baseline records a clean current-tree scan and classified history findings BL-003..BL-005; BL-003 awaits owner disposition; final-head scan not run."
     },
     {
       "id": "P16-AC-110",
       "section": "Security program",
-      "title": "Hosted Snyk gate",
+      "title": "CodeQL green on final head",
       "priority": "Must",
-      "text": "Dedicated CI security job on Node 24 with pinned CLI, timeouts, minimal permissions and policy-based failure",
-      "implementation": [
-        ".github/workflows/security.yml"
-      ],
-      "verifiedBy": "review",
+      "text": "CodeQL JavaScript/TypeScript and Actions analyses are green on the final head",
+      "implementation": [],
+      "verifiedBy": "platform",
       "tests": [],
-      "status": "partial",
-      "note": "security.yml exists with static checks; no hosted run."
+      "status": "planned",
+      "note": "Baseline commit was green; final head not evidenced."
     },
     {
       "id": "P16-AC-111",
       "section": "Security program",
-      "title": "Fork secret isolation",
+      "title": "GitGuardian green or documented",
       "priority": "Must",
-      "text": "Forks never receive SNYK_TOKEN; no pull_request_target running fork code with secrets",
-      "implementation": [
-        ".github/workflows/security.yml",
-        ".github/workflows/ci.yml"
-      ],
-      "verifiedBy": "review",
+      "text": "GitGuardian is green on the final head, or a false positive is documented",
+      "implementation": [],
+      "verifiedBy": "platform",
       "tests": [],
-      "status": "partial",
-      "note": "No pull_request_target asserted by the workflow test; fork secret behaviour needs review and a hosted run."
+      "status": "planned",
+      "note": "No result recorded."
     },
     {
       "id": "P16-AC-112",
       "section": "Security program",
-      "title": "No broad suppression",
+      "title": "Immutable action SHAs",
       "priority": "Must",
-      "text": "No broad .snyk ignores; any narrow ignore has ID, scope, evidence, owner, reason, expiry",
+      "text": "Every workflow action reference is pinned to a full 40-hex commit SHA",
       "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md"
+        ".github/workflows/ci.yml"
       ],
-      "verifiedBy": "review",
-      "tests": [],
-      "status": "planned",
-      "note": "No .snyk review recorded."
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "workflows: every action reference is pinned to a full commit SHA"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-113",
       "section": "Security program",
-      "title": "Secret scanning",
+      "title": "No secrets in forks and minimal permissions",
       "priority": "Must",
-      "text": "Current-tree and Git-history secret scans are clean",
+      "text": "Workflows use no pull_request_target, hold contents: read only and expose no secrets to fork runs",
       "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md"
+        ".github/workflows/ci.yml"
       ],
-      "verifiedBy": "review",
+      "verifiedBy": "test",
       "tests": [],
       "status": "partial",
-      "note": "History scan has finding BL-003 (private key) open; secret scan not clean."
+      "note": "Asserted statically; fork behaviour on a hosted run not recorded."
     },
     {
       "id": "P16-AC-114",
       "section": "Security program",
-      "title": "Separate code scanning evidence",
+      "title": "Hosted CI green on final head",
       "priority": "Must",
-      "text": "CodeQL JS/TS, CodeQL Actions and GitGuardian reported separately and green",
-      "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md"
-      ],
-      "verifiedBy": "review",
+      "text": "Hosted CI (regression, test, shards, shard-negative, aggregate) is green on the exact final head",
+      "implementation": [],
+      "verifiedBy": "platform",
       "tests": [],
       "status": "planned",
-      "note": "CodeQL and GitGuardian results not recorded; Snyk Code BLOCKED."
+      "note": "No hosted run on the final head recorded."
     },
     {
       "id": "P16-AC-115",
       "section": "Security program",
-      "title": "Immutable action SHAs",
+      "title": "Exact-head Security Engineer verdict",
       "priority": "Must",
-      "text": "All workflow actions pinned to full SHAs",
-      "implementation": [
-        ".github/workflows/ci.yml",
-        ".github/workflows/security.yml"
-      ],
-      "verifiedBy": "review",
-      "tests": [],
-      "status": "partial",
-      "note": "Full-SHA pinning asserted by p16-workflow test; Security review verdict not recorded."
-    },
-    {
-      "id": "P16-AC-116",
-      "section": "Security program",
-      "title": "Exact-head Security verdict",
-      "priority": "Must",
-      "text": "Independent Security Engineer verdict covers the exact final head",
-      "implementation": [
-        "docs/security/phase-16-threat-model.md"
-      ],
+      "text": "The Security Engineer records a verdict on the exact final head",
+      "implementation": [],
       "verifiedBy": "review",
       "tests": [],
       "status": "planned",
       "note": "No exact-head Security verdict."
     },
     {
-      "id": "P16-AC-117",
+      "id": "P16-AC-116",
       "section": "Security program",
-      "title": "No P0/P1 security defects",
+      "title": "No unresolved P0/P1",
       "priority": "Must",
-      "text": "None unresolved",
-      "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md",
-        "docs/security/phase-16-threat-model.md"
-      ],
+      "text": "No unresolved P0 or P1 security defect remains at release",
+      "implementation": [],
       "verifiedBy": "review",
       "tests": [],
       "status": "planned",
-      "note": "Open blockers BL-002 and BL-003 prevent claiming none unresolved."
+      "note": "BL-003 owner disposition and the approved tool runs outstanding."
+    },
+    {
+      "id": "P16-AC-117",
+      "section": "Security program",
+      "title": "Artifacts sanitized and retention-bounded",
+      "priority": "Must",
+      "text": "Security artifacts are sanitized and uploaded with bounded retention and unique names",
+      "implementation": [],
+      "verifiedBy": "test",
+      "tests": [],
+      "status": "planned",
+      "note": "Name and retention asserted; content sanitisation not reviewed."
     },
     {
       "id": "P16-AC-118",
       "section": "Security program",
-      "title": "Safe Snyk artifacts",
+      "title": "Evidence records exact SHAs",
       "priority": "Must",
-      "text": "Artifacts are sanitized, uniquely named, retention-bounded",
+      "text": "Security evidence records the exact commit SHAs scanned",
       "implementation": [
-        ".github/workflows/security.yml"
+        "docs/security/phase-16-baseline-security-assessment.md"
       ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Artifact sanitisation/retention not reviewed."
+      "status": "partial",
+      "note": "Baseline records its SHA; final-head evidence does not exist yet."
     },
     {
       "id": "P16-AC-119",
       "section": "Security program",
-      "title": "Exact SHAs in evidence",
+      "title": "Service image pinned by digest",
       "priority": "Must",
-      "text": "Every scan output records the SHA it covers",
+      "text": "The CI Postgres service image is pinned by digest and its vulnerability status is recorded by the owner's approved process",
       "implementation": [
+        ".github/workflows/ci.yml",
         "docs/security/phase-16-baseline-security-assessment.md"
       ],
-      "verifiedBy": "review",
-      "tests": [],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "ci.yml: postgres image is digest pinned"
+        }
+      ],
       "status": "partial",
-      "note": "Baseline records the SHA; final scans do not exist yet."
+      "note": "Digest pin asserted; image vulnerability scan not yet run."
     },
     {
       "id": "P16-AC-120",
       "section": "Security program",
-      "title": "Immutable container digest",
+      "title": "Release Manager receives evidence",
       "priority": "Must",
-      "text": "Container scan uses a resolved sha256 digest, with tag, platform and date recorded",
-      "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md",
-        ".github/workflows/security.yml"
-      ],
+      "text": "The Release Manager receives the complete security evidence set",
+      "implementation": [],
       "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "Digest pinning asserted by the workflow test; resolved-digest record (tag, platform, date) review pending."
+      "status": "planned",
+      "note": "Not yet handed over."
     },
     {
       "id": "P16-AC-121",
       "section": "Security program",
-      "title": "Release Manager evidence",
+      "title": "Baseline assessment document",
       "priority": "Must",
-      "text": "Release Manager receives the security evidence directly",
+      "text": "A baseline security assessment of the Phase 15 baseline commit is recorded",
       "implementation": [
         "docs/security/phase-16-baseline-security-assessment.md"
       ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Release Manager packet not assembled."
+      "status": "partial",
+      "note": "Document exists with npm audit, secret scan, CodeQL and GitGuardian baseline results."
     },
     {
       "id": "P16-AC-122",
       "section": "Security program",
-      "title": "Baseline assessment doc",
+      "title": "Threat model document",
       "priority": "Must",
-      "text": "The container scan target is of the form image@sha256:<64 hex>; the record lists the original tag, platform and resolution date; a static check rejects any tag-only container scan reference",
-      "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md",
-        ".github/workflows/security.yml"
-      ],
-      "verifiedBy": "review",
-      "tests": [],
-      "status": "partial",
-      "note": "Baseline doc present; static tag-only rejection check covers security.yml digest, not an explicit check of the record."
-    },
-    {
-      "id": "P16-AC-123",
-      "section": "Security program",
-      "title": "Threat model doc",
-      "priority": "Must",
-      "text": "The Release Manager input packet lists each security artifact path and hash; the Release Manager verdict quotes those hashes",
+      "text": "A Phase 16 threat model maps assets, actors, threats, controls and tests",
       "implementation": [
         "docs/security/phase-16-threat-model.md"
       ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Threat model exists; artifact path/hash packet for Release Manager not assembled."
+      "status": "partial",
+      "note": "Document exists; the approved tool source and dynamic scan evidence not yet recorded."
+    },
+    {
+      "id": "P16-AC-123",
+      "section": "Security program",
+      "title": "Workflow security review",
+      "priority": "Must",
+      "text": "The workflows are reviewed for pinning, permissions, secrets and untrusted input",
+      "implementation": [
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "test",
+      "tests": [],
+      "status": "partial",
+      "note": "Static checks exist; no recorded Security review verdict."
     },
     {
       "id": "P16-AC-124",
       "section": "Security program",
-      "title": "Workflow security review",
+      "title": "Dependency and supply-chain review",
       "priority": "Must",
-      "text": "Full workflow review covers every listed class and separates AI-triage failures from real CodeQL",
-      "implementation": [
-        "docs/security/phase-16-threat-model.md",
-        ".github/workflows/ci.yml",
-        ".github/workflows/security.yml"
-      ],
+      "text": "New dependencies and install steps are reviewed; the lockfile is consistent with npm ci",
+      "implementation": [],
       "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "Threat model exists; full workflow review verdict not recorded."
+      "status": "planned",
+      "note": "Not yet reviewed."
     },
     {
       "id": "P16-AC-125",
       "section": "Security program",
-      "title": "Hosted CI Snyk on exact head",
+      "title": "Owner decisions recorded",
       "priority": "Must",
-      "text": "Green hosted Snyk run on the exact final head",
-      "implementation": [
-        ".github/workflows/security.yml"
-      ],
+      "text": "Owner decisions for BL-003 and the T13/T17 residual risks are recorded",
+      "implementation": [],
       "verifiedBy": "review",
       "tests": [],
       "status": "planned",
-      "note": "No green hosted Snyk run on the exact head."
+      "note": "Awaiting owner."
     }
   ]
 }

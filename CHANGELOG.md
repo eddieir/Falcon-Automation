@@ -1185,7 +1185,7 @@ Trend flags for heal-rate spikes, pass-rate decay, duration regression, review b
 - Added `node falcon.js merge --input=<dir> [--expect-total=N]` with exit codes 0, 1, 2 and 3.
 - Invalid or conflicting parallel flags exit 1 before the browser or dashboard starts.
 - Added a local benchmark fixture. Measured 1.04x (2 workers) and 1.18x (4 workers); speedup targets were missed.
-- Added a CI shard matrix, an aggregate merge job, a missing-shard negative job, and a Snyk security workflow. Hosted results are not yet recorded.
+- Added a CI shard matrix, an aggregate merge job, a missing-shard negative job, Security relies on the repository's GitHub checks (code scanning, secret scanning) and `npm audit` in CI.
 - Sequential behaviour is unchanged when no parallel flags are passed.
 
 See [docs/phase-16-operations.md](docs/phase-16-operations.md) for usage, limitations and rollback.

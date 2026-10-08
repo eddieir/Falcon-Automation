@@ -7,7 +7,7 @@ const path = require("node:path");
 
 const dir = path.join(__dirname, "..", "..", ".github", "workflows");
 const load = (n) => fs.readFileSync(path.join(dir, n), "utf8");
-const files = { "ci.yml": load("ci.yml"), "security.yml": load("security.yml") };
+const files = { "ci.yml": load("ci.yml") };
 
 // Split the jobs: block into { name: text } by two-space-indented keys.
 function jobs(text) {
@@ -38,29 +38,12 @@ for (const [name, text] of Object.entries(files)) {
     test(`${name}: every job has timeout-minutes`, () => {
         for (const [j, body] of Object.entries(jobs(text))) assert.match(body, /^ {4}timeout-minutes:\s*\d+/m, `job ${j}`);
     });
-    test(`${name}: SNYK_TOKEN only in env, never in a command or echo`, () => {
-        const lines = stripComments(text).split("\n");
-        for (const l of lines) {
-            if (!/SNYK_TOKEN/.test(l)) continue;
-            if (/^\s+if \[ -z "\$SNYK_TOKEN" \]; then\s*$/.test(l)) continue; // emptiness test only, prints nothing
-            assert.match(l, /^\s+SNYK_TOKEN:\s*\$\{\{ secrets\.SNYK_TOKEN \}\}\s*$/, `SNYK_TOKEN outside env: ${l}`);
-        }
-    });
     test(`${name}: no latest and no untrusted context in run`, () => {
         assert.ok(!/@latest|:latest\b/.test(stripComments(text)));
         const body = stripComments(text);
         assert.ok(!/github\.(head_ref|event\.pull_request\.title|event\.pull_request\.head\.ref|event\.issue\.title)/.test(body));
     });
 }
-
-test("security.yml: no continue-on-error, exact snyk pin, container digest", () => {
-    const s = stripComments(files["security.yml"]);
-    assert.ok(!/continue-on-error/.test(s));
-    assert.match(s, /npm install --global snyk@\d+\.\d+\.\d+\s*$/m);
-    assert.match(s, /snyk container test postgres@sha256:[0-9a-f]{64}/);
-    assert.match(s, /Snyk awaiting trusted execution/);
-    assert.match(s, /head\.repo\.full_name == github\.repository/);
-});
 
 test("ci.yml: postgres image is digest pinned", () => {
     assert.match(stripComments(files["ci.yml"]), /image:\s*postgres:\S+@sha256:[0-9a-f]{64}/);
@@ -105,12 +88,10 @@ test("ci.yml: OPENAI_API_KEY is not job-level; negative shard check expects exit
     assert.match(j["shard-negative"], /--expect-run-id="\$EXPECT_RUN_ID" --expect-commit="\$EXPECT_COMMIT"/);
 });
 
-test("security.yml: dependabot runs skip snyk with a notice; trusted refs still fail on a missing token", () => {
-    const s = stripComments(files["security.yml"]);
-    const snykIf = s.match(/^ {2}snyk:\n {4}if: (.*)$/m)[1];
-    assert.match(snykIf, /github\.actor != 'dependabot\[bot\]'/);
-    const fork = s.match(/^ {2}fork-notice:\n {4}if: (.*)$/m)[1];
-    assert.match(fork, /github\.actor == 'dependabot\[bot\]'/);
-    assert.match(s, /::notice::Snyk skipped/);
-    assert.match(s, /if \[ -z "\$SNYK_TOKEN" \]; then[\s\S]*?exit 1/);
+test("workflows: every action reference is pinned to a full commit SHA", () => {
+    for (const [name, text] of Object.entries(files)) {
+        const uses = [...stripComments(text).matchAll(/^\s*(?:-\s+)?uses:\s*(\S+)/gm)].map((m) => m[1]);
+        assert.ok(uses.length > 0, name);
+        for (const u of uses) assert.match(u, /@[0-9a-f]{40}$/, `${name}: unpinned action ${u}`);
+    }
 });

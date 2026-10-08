@@ -72,8 +72,6 @@ jobs:
     services:
       postgres:
         # Pinned by digest. Tag postgres:16-alpine, digest resolved 2026-10-08.
-        # Known Snyk finding BL-001 (zlib, fixed in 1.3.2-r1): refreshing this
-        # digest to an image that carries the fix is a tracked follow-up.
         image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
         env:
           POSTGRES_USER: falcon

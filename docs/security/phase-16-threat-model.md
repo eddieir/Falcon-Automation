@@ -6,7 +6,7 @@ No secret values appear in this document or are needed to verify it.
 
 ## 1. Scope and method
 
-Phase 16 adds parallel workers and shards, per-worker journals, manifests, a merger and an aggregate output, plus a Snyk/security CI job. This model maps assets, actors, entry points and trust boundaries, then threats with a control, a verifying test and an owner for each. It ends with the weaknesses already in the code that parallelism would amplify.
+Phase 16 adds parallel workers and shards, per-worker journals, manifests, a merger and an aggregate output, plus the existing GitHub security checks (code scanning, secret scanning) and `npm audit` in CI. This model maps assets, actors, entry points and trust boundaries, then threats with a control, a verifying test and an owner for each. It ends with the weaknesses already in the code that parallelism would amplify.
 
 Owners: DEV = Developer, SEC = Security Engineer, DEVOPS = DevOps/CI owner, QA = Test Engineer, HUMAN = repository owner (the only role that can accept risk).
 
@@ -14,7 +14,7 @@ Owners: DEV = Developer, SEC = Security Engineer, DEVOPS = DevOps/CI owner, QA =
 
 | ID | Asset | Where it lives | Sensitivity |
 |---|---|---|---|
-| A1 | Secrets: DASHBOARD_TOKEN, OPENAI_API_KEY, SNYK_TOKEN, DB creds | env, ci.yml:57, Dashboard.js:107 | Critical |
+| A1 | Secrets: DASHBOARD_TOKEN, OPENAI_API_KEY, DB creds | env, ci.yml:57, Dashboard.js:107 | Critical |
 | A2 | Healing state: pending, decisions, approved locators | data/healing_*.json, data/locator_store.json | High (integrity) |
 | A3 | Quarantine and flakiness state | data/quarantine_decisions.json, data/scenario_history.json | Medium (integrity) |
 | A4 | Locator memory: trusted, unproven, revoked evidence | data/locator_memory.json, .lock file | High (integrity) |
@@ -69,17 +69,17 @@ Common to all threats: any failure to persist, parse or validate is reported as 
 | T11 | Approval/revocation conflict | Only the coordinator process can apply approve/revoke. Workers can only propose. A revocation always wins and fails closed on conflict. Approval is bound to a proposal id and revision (see W-3). | Concurrent approve and revoke of one entry. Assert the final state is revoked. Approve a stale proposal and assert refusal. | DEV/SEC | 29 |
 | T12 | Cache or artifact poisoning | Never restore locator memory or quarantine state across branches for trust decisions. Treat restored files as untrusted and validate them against the schema. Do not execute anything from caches or artifacts. Keep the locator memory exclusion from ci.yml:~170-200. | Plant a forged cache file with trusted entries. Assert the entries load as unproven or are rejected. | DEVOPS/DEV | 29, 118 |
 | T13 | Branch trust inheritance | Provenance (branch/ref plus signing run) is stored with approvals, and an approval is honored only for the same ref. A PR cannot read approvals made on another branch. | Load approvals recorded for branch X while running as Y. Assert they are ignored. | DEV/SEC | 29 |
-| T14 | Secret or Snyk-token leakage | Token only via env `SNYK_TOKEN`, never in argv, files, logs or artifacts. Redact secrets in Logger (see W-5). Forks never receive it. Scrub canaries in journals, manifests and reports. | Plant a canary in env and in page data. Grep journals, manifests, reports, logs and uploaded artifacts for it; assert absent. Lint the workflow for token in `run:` args. | SEC/DEVOPS | 30, 102, 111, 119 |
+| T14 | Secret or LLM-key leakage | Keys only via environment, never in argv, files, logs or artifacts. Redact secrets in Logger (see W-5). Forks never receive secrets. Scrub canaries in journals, manifests and reports. | Plant a canary in env and in page data. Grep journals, manifests, reports, logs and uploaded artifacts for it; assert absent. Lint the workflow for token in `run:` args. | SEC/DEVOPS | 30, 102, 111, 119 |
 | T15 | Shell, HTML and log injection | Use `spawn`/`execFile` argument arrays only. Escape on output (`textContent`, `sanitizeField`). Never interpolate branch names or artifact data into a shell string or `${{ }}` in a `run:` block. | Branch named `$(touch PWN)` and `"; rm`. Assert no side effects. Journal with ANSI, CR/LF and `<script>`. Assert escaped output. | DEV/DEVOPS | 28 |
 | T16 | Worker, browser, file and temp exhaustion | Hard caps on workers, contexts, shards, retries, open files, temp bytes and runtime. Close contexts in `finally`. Kill process groups on timeout. Remove temp dirs on exit and on crash recovery. | Request N+1 workers and assert rejection. Kill a worker and assert no orphan process or temp dir. | DEV/QA | 28 |
 | T17 | Stale lock | Locks carry pid, host and a creation time, with a bounded grace period. Reclaim only when provably dead. A lock from another host must not be reclaimed by pid probing (see H-1). | Stale lock with a dead pid, an empty lock, and a lock from a foreign host. Assert the documented reclaim behavior. | DEV | 29 |
 | T18 | TOCTOU file replacement | Open then `fstat` on the descriptor (never stat-then-open). Create with `wx`. Write to a temp file in the same directory, then rename. Re-verify identity after the rename where possible. | Swap a file for a symlink between check and use via a test hook. Assert refusal. | DEV | 27 |
 | T19 | Partial canonical writes | Write via temp + rename only. Fsync before the rename for canonical files. Report `ok:false` on failure and never claim durability. Readers reject truncated files. | Inject a write failure after temp creation. Assert the canonical file is unchanged and the result is `ok:false`. | DEV | 28 |
 | T20 | Malicious URLs or error text | Validate the origin and protocol (http/https) of recorded URLs. Strip credentials and query strings from stored URLs. Bound and sanitize error text before it enters journals or logs. | URL with userinfo, `javascript:` and a 1 MB error string. Assert rejection or truncation. | DEV | 28 |
-| T21 | Dependency install scripts, supply chain | Review each new dependency (publisher, scripts, license, typo-squat). Lockfile consistent, `npm ci` clean. Prefer no new runtime dependency. Snyk installed as a pinned global CLI only. | `npm ci --ignore-scripts` comparison. Diff of the lockfile. Snyk and npm audit gates. | SEC/DEVOPS | 101, 103 |
-| T22 | Mutable images and unpinned actions | Pin the postgres service image by digest (ci.yml:75 uses a tag). Pin all actions to full SHAs (already true for existing actions). Scan the digest with Snyk container. | CI lint that rejects `image:` without `@sha256:` and `uses:` without a 40-hex SHA. | DEVOPS | 117, 123 |
+| T21 | Dependency install scripts, supply chain | Review each new dependency (publisher, scripts, license, typo-squat). Lockfile consistent, `npm ci` clean. Prefer no new runtime dependency. No scanning tool is installed in CI. | `npm ci --ignore-scripts` comparison. Diff of the lockfile. Code scanning and npm audit gates. | SEC/DEVOPS | 101, 103 |
+| T22 | Mutable images and unpinned actions | Pin the postgres service image by digest (ci.yml:75 uses a tag). Pin all actions to full SHAs (already true for existing actions). Image vulnerability status is not scanned in this phase. | CI lint that rejects `image:` without `@sha256:` and `uses:` without a 40-hex SHA. | DEVOPS | 117, 123 |
 | T23 | Dashboard abuse by a worker or remote client | Keep token auth, timing-safe compare, rate limits, Host/Origin checks, socket auth and the replay cap. Add an event-name allow-list and payload bounds (see W-1, W-2). | Existing tests/unit/DashboardAuth.check.js plus unknown event names, oversized payloads and forged `healingApproved`. | DEV/QA | 29 |
-| T24 | Fork or PR runs obtain secrets | The Snyk job runs only for trusted refs. No `pull_request_target` with fork code. Fork runs run non-secret checks and report Snyk as awaiting trusted execution. | Workflow lint for `pull_request_target` and secret use under fork conditions. | DEVOPS/SEC | 111, 112 |
+| T24 | Fork or PR runs obtain secrets | Workflows reference no secrets beyond the existing test job. No `pull_request_target` with fork code. | Workflow lint for `pull_request_target` and secret use under fork conditions. | DEVOPS/SEC | 111, 112 |
 | T25 | Workflow permissions and cache scope | Minimum `permissions` per job. The security job gets `contents: read` only. Cache keys that include the branch. Uploads use bounded retention and unique names. | Workflow lint for permissions and retention. | DEVOPS | 115, 119 |
 
 ## 5. Secure implementation requirements (security program section 6 mapping)
@@ -115,7 +115,7 @@ Severity is provisional pending Security Engineer triage; none was exploited.
 - W-8 (Low-Medium): CI state caches restore by branch prefix (ci.yml:145, 203, 221). GitHub also lets a branch read caches from the default branch, so a PR run inherits `main` state for healing pending, decisions, quarantine and scenario history. Locator memory is deliberately excluded, but the restored files are read with `readJsonSync` and no provenance check (W-4). Parallel shards that restore and save the same keys would also race. Fix: provenance fields plus per-shard keys, or no restore for trust-bearing files.
 - W-9 (Low): mutable service image `postgres:16-alpine` (ci.yml:75). The security program requires a digest. It is a throwaway CI database with disposable credentials.
 - W-10 (Low): `FALCON_TEST_RUN_HISTORY_PATH` can redirect the ledger path, but only when `globalThis.__FALCON_TEST_SEAMS__` is set by a test preload (falcon.js:69-80). This is guarded and acceptable; keep the same pattern for any new test seam (no env or flag may set journal/manifest roots in production).
-- W-11 (Low): `npx allure awesome ... || true` (ci.yml:335) hides report-generation failure. Advisory today but must not be copied into the aggregate or Snyk gates.
+- W-11 (Low): `npx allure awesome ... || true` (ci.yml:335) hides report-generation failure. Advisory today but must not be copied into the aggregate or security gates.
 
 ### Hypotheses (not demonstrated)
 
@@ -128,7 +128,7 @@ Severity is provisional pending Security Engineer triage; none was exploited.
 
 - A trusted user with write access to the repository directory can still alter state files; the model defends against stale, buggy or hostile inputs, not against a malicious maintainer.
 - Same-host workers share a filesystem; lock reclaim has a documented narrow overlap window (H-1) that the digest check narrows but does not close.
-- Snyk and secret-scanning coverage depends on external services and entitlements; absence is BLOCKED, never clean.
+- CodeQL and secret-scanning coverage depends on GitHub services; absence is BLOCKED, never clean.
 - Zero-day or unscanned dependencies cannot be ruled out.
 All residual risk acceptance belongs to the human owner (HUMAN). No agent may accept it.
 
@@ -140,4 +140,4 @@ All residual risk acceptance belongs to the human owner (HUMAN). No agent may ac
 
 ## 10. Verification traceability
 
-AC-27: T1, T2, T6, T18. AC-28: T2, T3, T4, T9, T15, T16, T19, T20. AC-29: T5-T8, T10-T13, T17, T23. AC-30: T14 (with W-5, W-7). AC-101..125: T14, T21, T22, T24, T25 and the Snyk/CodeQL/GitGuardian/delta evidence sections of the security program.
+AC-27: T1, T2, T6, T18. AC-28: T2, T3, T4, T9, T15, T16, T19, T20. AC-29: T5-T8, T10-T13, T17, T23. AC-30: T14 (with W-5, W-7). AC-101..125: T14, T21, T22, T24, T25 and the CodeQL/GitGuardian evidence and the baseline-to-head comparison.
