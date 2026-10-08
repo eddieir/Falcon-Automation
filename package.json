@@ -39,7 +39,9 @@
     "history:list": "node scripts/history.js list",
     "history:export": "node scripts/history.js export",
     "history:check": "node scripts/history.js check",
-    "dashboard": "node scripts/dashboard.js"
+    "dashboard": "node scripts/dashboard.js",
+    "fixture:serve": "node scripts/fixture/server.js",
+    "bench:parallel": "node scripts/benchmark/parallel.js"
   },
   "keywords": [
     "AI",
