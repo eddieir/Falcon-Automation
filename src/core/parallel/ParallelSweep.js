@@ -51,7 +51,7 @@ async function withContext(browser, auth, fn) {
     }
 }
 
-async function run(opts) {
+async function runInJournalMode(opts) {
     const {
         context, entryUrl, runId, commit = "unknown", bundleDir = null,
         maxPages = 20, dedupe = true, sameOriginOnly = true, repeat = 1, pageTimeoutMs = 20000,
@@ -253,6 +253,21 @@ async function run(opts) {
         result.bundleDir = bundleDir;
     }
     return result;
+}
+
+/**
+ * Run the staged sweep with journal mode forced on, so a direct caller can
+ * never let a page task write canonical state. The previous mode is restored
+ * afterwards.
+ */
+async function run(opts) {
+    const previous = ParallelMode.isActive();
+    ParallelMode.setActive(true);
+    try {
+        return await runInJournalMode(opts);
+    } finally {
+        ParallelMode.setActive(previous);
+    }
 }
 
 module.exports = { run, configFingerprint };
