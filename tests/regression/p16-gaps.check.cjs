@@ -224,7 +224,14 @@ test("T13: every CI cache key carries the branch ref and no cache path includes 
     assert.ok(pathText, "cache step without path");
     assert.ok(!/locator_memory\.json/.test(pathText), `cache path includes locator_memory.json:\n${pathText}`);
   }
-  assert.ok(!/^path:[^\n]*\n(?:[ \t]+[^\n:]+\n)*[ \t]+data\/locator_memory\.json$/m.test(ci.replace(/#[^\n]*/g, "")), "locator_memory.json appears in a path list");
+  assert.ok(!/^[ \t]*path:[^\n]*\n(?:[ \t]+[^\n:]+\n)*[ \t]+data\/locator_memory\.json$/m.test(ci.replace(/#[^\n]*/g, "")), "locator_memory.json appears in a path list");
+});
+test("T13 negative control: the path-list pattern flags a cache path that includes locator_memory.json", () => {
+  const re = /^[ \t]*path:[^\n]*\n(?:[ \t]+[^\n:]+\n)*[ \t]+data\/locator_memory\.json$/m;
+  const bad = "        with:\n          path: |\n            data/scenario_history.json\n            data/locator_memory.json\n          key: k\n";
+  const good = "        with:\n          path: |\n            data/scenario_history.json\n          key: k\n";
+  assert.ok(re.test(bad), "must flag a path list that includes locator_memory.json");
+  assert.ok(!re.test(good), "must not flag a clean path list");
 });
 test("T13: the aggregate state save is restricted to the default branch and non-fork runs", () => {
   const save = steps().find((s) => /actions\/cache\/save@/.test(s) && /falcon-state-agg-/.test(s));
