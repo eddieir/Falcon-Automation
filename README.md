@@ -947,6 +947,22 @@ Node 22+ is required locally (the openai SDK's floor; `test:coverage`/`test:regr
 
 ---
 
+## Parallel execution and sharding (Phase 16, in review)
+
+Status: in review on `phase-16/parallel-execution`, not merged. Sequential runs remain the default.
+
+```bash
+node falcon.js --url=https://your-app.example --workers=2          # page-level parallelism, 1 to 16
+node falcon.js --url=https://your-app.example --shard=1/2 --run-id=local-run-1
+node falcon.js merge --input=reports/shards/local-run-1 --expect-total=2
+```
+
+- `--workers=N` runs pages in parallel. Scenarios within a page stay sequential.
+- `--shard=I/N --run-id=<id>` runs one shard and writes a bundle only. The merge command combines bundles into one report and one history record.
+- Benchmark on a local fixture: 1.04x (2 workers) and 1.18x (4 workers). The speedup targets were missed, and the numbers do not show linear scaling.
+
+Limitations, merge exit codes and CI details: [docs/phase-16-operations.md](docs/phase-16-operations.md).
+
 ## Running Tests
 
 ```sh

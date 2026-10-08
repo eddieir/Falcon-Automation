@@ -807,6 +807,8 @@ configuration selects.
 
 ## Phase 16 — Parallel execution
 
+**Status: in review, not merged.** Branch `phase-16/parallel-execution`. Hosted CI results not yet recorded.
+
 ### Why
 
 184 scenarios one at a time is a demo, not a pipeline. Phase 10 makes this acute: covering every page
