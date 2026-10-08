@@ -4,7 +4,8 @@
   "criteriaSource": "docs/phase-16-plan.md section 6; security criteria from the Phase 16 security program",
   "purpose": [
     "Registered so no criterion silently loses its implementation or test.",
-    "implementation/tests are empty until the work lands; status moves from planned to done only with evidence. A traceability check will fail on any done row whose paths or tests do not exist."
+    "status 'done' requires real implementation and a real test; 'partial' means implemented but the criterion's full evidence is missing (see note); 'planned' means not built or not evidenced.",
+    "tests/regression/p16-traceability.check.cjs fails on any done or partial row whose paths or tests do not exist."
   ],
   "verifiedByMeaning": {
     "test": "An executing regression test asserts the criterion.",
@@ -18,10 +19,26 @@
       "title": "Default and compatibility",
       "priority": "Must",
       "text": "Without --workers/--shard, behaviour, report shape (modulo documented additive fields) and exit codes match Phase 15; default workers is 1",
-      "implementation": [],
+      "implementation": [
+        "falcon.js",
+        "src/core/parallel/Args.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-cli.check.cjs",
+          "name": "default parsing is unchanged: --workers=1 and unrelated flags are accepted by the parser"
+        },
+        {
+          "file": "tests/regression/p16-args.check.cjs",
+          "name": "defaults"
+        },
+        {
+          "file": "tests/regression/p16-report.check.cjs",
+          "name": "buildReport is byte-identical to the previous implementation"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-02",
@@ -29,10 +46,30 @@
       "title": "Strict flag validation",
       "priority": "Must",
       "text": "Invalid, duplicate, conflicting, empty, fractional, negative, zero or excessive --workers/--shard values (workers 1..16, shard total 1..64, index 1..total; bounds finalized in the architecture doc) exit non-zero before dashboard or browser start; messages are sanitized and at most 300 characters and never echo the raw value beyond 40 characters",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Args.js",
+        "falcon.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-args.check.cjs",
+          "name": "invalid workers values rejected"
+        },
+        {
+          "file": "tests/regression/p16-args.check.cjs",
+          "name": "shard validation"
+        },
+        {
+          "file": "tests/regression/p16-args.check.cjs",
+          "name": "echo is bounded and sanitized"
+        },
+        {
+          "file": "tests/regression/p16-cli.check.cjs",
+          "name": "invalid parallel flags exit 1 quickly with no browser"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-03",
@@ -40,10 +77,27 @@
       "title": "Merge command",
       "priority": "Must",
       "text": "A dedicated merge command exists with strict arguments and non-zero exit on any rejection",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Args.js",
+        "src/core/parallel/ShardMerge.js",
+        "falcon.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-cli.check.cjs",
+          "name": "merge command: unknown, duplicate, empty and missing args exit 2"
+        },
+        {
+          "file": "tests/regression/p16-cli.check.cjs",
+          "name": "merge command exit codes: 0 passed, 1 failed run, 2 rejected input and unexpected total"
+        },
+        {
+          "file": "tests/regression/p16-args.check.cjs",
+          "name": "merge command"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-04",
@@ -51,10 +105,17 @@
       "title": "Canonical ordinals",
       "priority": "Must",
       "text": "Entry page is ordinal 0; remaining pages follow an explicitly documented total order independent of discovery timing",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Planning.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-planning.check.cjs",
+          "name": "canonicalOrder: entry first, code-unit sort, unique, input-order independent"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-05",
@@ -62,10 +123,22 @@
       "title": "Canonical-order dedupe",
       "priority": "Must",
       "text": "Deduplication runs after analysis in canonical page order; worker completion order never decides ownership, counts or trust",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Planning.js",
+        "src/core/parallel/ParallelSweep.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-planning.check.cjs",
+          "name": "dedupeInOrder: first owner keeps, same output for shuffled input"
+        },
+        {
+          "file": "tests/regression/p16-sweep.check.cjs",
+          "name": "reverse completion order does not change page order or dedupe owners"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-06",
@@ -73,10 +146,27 @@
       "title": "Budget semantics",
       "priority": "Must",
       "text": "After the deadline no new work starts, bounded in-flight work finishes, never-started work is budget-exhausted, completed verdicts are kept, actual duration is reported, and docs do not call it a hard cap",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Scheduler.js",
+        "src/core/parallel/ParallelSweep.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-scheduler.check.cjs",
+          "name": "deadline marks remainder not-started; in-flight finishes"
+        },
+        {
+          "file": "tests/regression/p16-scheduler.check.cjs",
+          "name": "deadline already passed starts nothing"
+        },
+        {
+          "file": "tests/regression/p16-sweep.check.cjs",
+          "name": "budget deadline marks never-started pages budget-exhausted; max-pages cut is skipped"
+        }
+      ],
+      "status": "done",
+      "note": "Docs wording (\"not a hard cap\") checked by review under AC-38, not by this test."
     },
     {
       "id": "P16-AC-07",
@@ -84,10 +174,21 @@
       "title": "Bounded scheduler",
       "priority": "Must",
       "text": "Active tasks never exceed --workers; queue order is deterministic; no unbounded Promise.all",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Scheduler.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-scheduler.check.cjs",
+          "name": "never exceeds limit active, with random delays"
+        },
+        {
+          "file": "tests/regression/p16-scheduler.check.cjs",
+          "name": "dispatch follows index order"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-08",
@@ -95,10 +196,22 @@
       "title": "Context isolation and cleanup",
       "priority": "Must",
       "text": "Every active page task uses its own browser context; contexts, pages, timers and handles are released in finally on success, failure and abort",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/ParallelSweep.js",
+        "src/core/parallel/Scheduler.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-sweep.check.cjs",
+          "name": "a failing task is isolated and every context is closed"
+        },
+        {
+          "file": "tests/regression/p16-sweep.check.cjs",
+          "name": "bounded contexts, failed page row, dedupe order, bundle roundtrip, canonical state untouched"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-09",
@@ -106,10 +219,18 @@
       "title": "Auth state handling",
       "priority": "Should",
       "text": "With authenticated discovery, a test asserts each worker context starts with a bounded in-memory copy of storageState (size cap in the architecture doc), that no storageState file is written by default, and that a state mutation in one context is not visible in another",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/ParallelSweep.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-sweep.check.cjs",
+          "name": "bounded contexts, failed page row, dedupe order, bundle roundtrip, canonical state untouched"
+        }
+      ],
+      "status": "partial",
+      "note": "storageState is passed to newContext in ParallelSweep.js, but no test asserts the size cap, absence of a written state file, or cross-context mutation isolation as the criterion requires."
     },
     {
       "id": "P16-AC-10",
@@ -117,10 +238,27 @@
       "title": "Partial failure salvage",
       "priority": "Must",
       "text": "A crashed or failed worker task keeps completed verdicts and records the failure; the run never exits 0 with missing verdicts",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Scheduler.js",
+        "src/core/parallel/ParallelSweep.js",
+        "src/core/parallel/ShardBundle.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-scheduler.check.cjs",
+          "name": "throwing task is isolated and error is bounded"
+        },
+        {
+          "file": "tests/regression/p16-sweep.check.cjs",
+          "name": "bounded contexts, failed page row, dedupe order, bundle roundtrip, canonical state untouched"
+        },
+        {
+          "file": "tests/regression/p16-bundle.check.cjs",
+          "name": "bundle roundtrip validates and exit code reflects failures"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-11",
@@ -128,10 +266,25 @@
       "title": "Exact page coverage",
       "priority": "Must",
       "text": "For any frontier and N, every eligible page belongs to exactly one shard, deterministically",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Planning.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-planning.check.cjs",
+          "name": "shardOf partitions exactly with balanced counts for N 1..64"
+        },
+        {
+          "file": "tests/regression/p16-planning.check.cjs",
+          "name": "assignShards gives each ordinal exactly one shard"
+        },
+        {
+          "file": "tests/regression/p16-sweep.check.cjs",
+          "name": "shards cover every page exactly once and bundles validate"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-12",
@@ -139,10 +292,27 @@
       "title": "Manifest",
       "priority": "Must",
       "text": "Each shard emits a versioned manifest with run, commit and config identity, shard index/total, assigned/completed/incomplete page identities, fragment and journal references, exit status and safe timing; the manifest is capped at a numeric size set in the architecture doc and the reader accepts the maximum and rejects maximum+1",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/ShardBundle.js",
+        "src/core/parallel/Schemas.js",
+        "src/core/parallel/Limits.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "manifest: valid accepted"
+        },
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "manifest: byte size max accepted, max+1 rejected"
+        },
+        {
+          "file": "tests/regression/p16-bundle.check.cjs",
+          "name": "bundle roundtrip validates and exit code reflects failures"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-13",
@@ -150,10 +320,35 @@
       "title": "Merge rejection",
       "priority": "Must",
       "text": "Missing, duplicate, mixed-run/total/SHA/config, duplicate or missing page ownership, unknown schema, bad status/ordinal, oversized, malformed, traversal or symlink inputs are rejected: non-zero exit, no PASSED report, no canonical mutation, inputs preserved",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/ShardMerge.js",
+        "src/core/parallel/ShardBundle.js",
+        "src/core/parallel/SafeFs.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-merge-reject.check.cjs",
+          "name": "reject: ${name} -> code 2, canonical files unchanged, inputs kept"
+        },
+        {
+          "file": "tests/regression/p16-merge-reject.check.cjs",
+          "name": "same event id with a different payload is rejected by the guard"
+        },
+        {
+          "file": "tests/regression/p16-merge-reject.check.cjs",
+          "name": "expectTotal mismatch is rejected"
+        },
+        {
+          "file": "tests/regression/p16-bundle.check.cjs",
+          "name": "tampered fragment, journal, manifest and analysis are rejected"
+        },
+        {
+          "file": "tests/regression/p16-bundle.check.cjs",
+          "name": "invalid inputs are refused before anything is referenced"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-14",
@@ -161,10 +356,17 @@
       "title": "Byte-identical merge",
       "priority": "Must",
       "text": "Identical fragments merge to byte-identical output regardless of input order",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/ShardMerge.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-merge.check.cjs",
+          "name": "shuffled shard creation order gives byte-identical report and state"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-15",
@@ -172,10 +374,22 @@
       "title": "Sequential/parallel/sharded equivalence",
       "priority": "Must",
       "text": "Controlled runs are semantically identical after removing only documented volatile timestamps and durations",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/ShardMerge.js",
+        "src/core/ReportManager.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-e2e.check.cjs",
+          "name": "p16 e2e: N=1 and N=3 merge to the same semantic report; shuffle, missing shard, crash-rerun"
+        },
+        {
+          "file": "tests/regression/p16-timings.check.cjs",
+          "name": "parallel sweep records numeric stage timings; merge carries them; volatile stripping keeps comparison stable"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-16",
@@ -183,10 +397,28 @@
       "title": "Exit codes and single report",
       "priority": "Must",
       "text": "Aggregate exit code reflects all shards; only the coordinator writes reports/test-report.json",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/ShardMerge.js",
+        "src/core/parallel/Runner.js",
+        "falcon.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-cli.check.cjs",
+          "name": "merge command exit codes: 0 passed, 1 failed run, 2 rejected input and unexpected total"
+        },
+        {
+          "file": "tests/regression/p16-bundle.check.cjs",
+          "name": "shard with only passes exits 0 even with no tests run"
+        },
+        {
+          "file": "tests/regression/p16-merge.check.cjs",
+          "name": "clean merge: code 1 (a deduped+failed page), report and state written, fragments removed"
+        }
+      ],
+      "status": "done",
+      "note": "Single-writer property (only the coordinator writes reports/test-report.json) is exercised indirectly through merge/e2e, not by a dedicated assertion."
     },
     {
       "id": "P16-AC-17",
@@ -194,10 +426,34 @@
       "title": "Journal envelope",
       "priority": "Must",
       "text": "Journals and manifests are validated against a per-event-type allow-list schema with explicit numeric bounds on every field; planted canary values in every disallowed class never appear in output",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/StateJournal.js",
+        "src/core/parallel/Schemas.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "every event type: valid payload accepted"
+        },
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "payload: missing key, unknown key, wrong type, bad enum"
+        },
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "canaries in disallowed fields are never accepted"
+        },
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "journal: structural tamper rejected"
+        },
+        {
+          "file": "tests/regression/p16-journal.check.cjs",
+          "name": "canaries never appear in a finished journal"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-18",
@@ -205,10 +461,30 @@
       "title": "Idempotent crash-safe merge",
       "priority": "Must",
       "text": "Replay, reverse order, duplicates, interruption and retry yield one canonical result; no partial success; failed inputs preserved; journals deleted only after durable persistence. Failure to persist after journals are written leaves journals in place and the run reports non-durable state with a non-zero exit",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/ShardMerge.js",
+        "src/core/parallel/Reducers.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-merge.check.cjs",
+          "name": "replaying the merge is a no-op returning the recorded outcome"
+        },
+        {
+          "file": "tests/regression/p16-merge.check.cjs",
+          "name": "persist failure gives code 3, bundle files kept, no report"
+        },
+        {
+          "file": "tests/regression/p16-merge.check.cjs",
+          "name": "crash before ${step} then rerun converges to the clean-run bytes"
+        },
+        {
+          "file": "tests/regression/p16-merge.check.cjs",
+          "name": "receipt with a different input digest is rejected"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-19",
@@ -216,10 +492,25 @@
       "title": "Flakiness reducer",
       "priority": "Must",
       "text": "Union by stable event ID, deterministic order, no retry inflation, cap after merge",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Reducers.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-reducers.check.cjs",
+          "name": "flakiness: retry events (same id) do not inflate; also not across a different run id"
+        },
+        {
+          "file": "tests/regression/p16-reducers.check.cjs",
+          "name": "flakiness: input order does not change the output"
+        },
+        {
+          "file": "tests/regression/p16-reducers.check.cjs",
+          "name": "flakiness: history trimmed to newest 20 after all appends (existing items first)"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-20",
@@ -227,10 +518,26 @@
       "title": "Quarantine and healing decisions",
       "priority": "Must",
       "text": "Immutable attributed events; explicit decisions only; newer valid decision wins by documented rule",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Reducers.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-reducers.check.cjs",
+          "name": "flakiness: events never change quarantined; a human ledger decision wins either way"
+        },
+        {
+          "file": "tests/regression/p16-diversion.check.cjs",
+          "name": "FlakinessTracker diversion surfaces bad payloads (negative path) and quarantine is never diverted"
+        },
+        {
+          "file": "tests/regression/p16-diversion.check.cjs",
+          "name": "LocatorMemory decisions are never diverted"
+        }
+      ],
+      "status": "done",
+      "note": "Healing-decision precedence is covered through the pending/locator-memory reducers; no standalone test for healing_decisions.json newer-wins."
     },
     {
       "id": "P16-AC-21",
@@ -238,10 +545,25 @@
       "title": "Healing pending reducer",
       "priority": "Must",
       "text": "Earliest firstSeen, latest lastSeen, idempotent occurrences, rejection re-derived from decisions",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Reducers.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-reducers.check.cjs",
+          "name": "pending: create sets firstSeen=min, lastSeen=max, occurrences=distinct ids, tier3=1+distinct tier3 ids"
+        },
+        {
+          "file": "tests/regression/p16-reducers.check.cjs",
+          "name": "pending: previouslyRejected re-derived from the fresh ledger; stale cache replaced"
+        },
+        {
+          "file": "tests/regression/p16-reducers.check.cjs",
+          "name": "pending: replay twice and shuffled input are byte-identical; marker is FIFO 8"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-22",
@@ -249,10 +571,25 @@
       "title": "LocatorStore reducer",
       "priority": "Must",
       "text": "Deterministic alternative union, lastUsed and caps; no completion-order eviction",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Reducers.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-reducers.check.cjs",
+          "name": "locatorStore: use raises lastUsed to max only for an existing key; absent key ignored"
+        },
+        {
+          "file": "tests/regression/p16-reducers.check.cjs",
+          "name": "locatorStore: alternative union preserves order, appends new, keeps newest 5, replay is a no-op"
+        },
+        {
+          "file": "tests/regression/p16-reducers.check.cjs",
+          "name": "locatorStore: cap 500 evicts by (lastUsed, key); order of use events does not matter"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-23",
@@ -260,10 +597,29 @@
       "title": "LocatorMemory reducer",
       "priority": "Must",
       "text": "LocatorMemory merge rules are specified in the architecture doc as a decision table (human approve, human revoke, inferred, stale revision); each row has a test, and any unresolved revocation conflict yields not-approved",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/LocatorMemoryMerge.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-locator-merge.check.cjs",
+          "name": "row 1: absent + evidence creates trusted; firstSeen min, lastSeen max"
+        },
+        {
+          "file": "tests/regression/p16-locator-merge.check.cjs",
+          "name": "row 8: revoked + evidence is ignored and the entry is unchanged"
+        },
+        {
+          "file": "tests/regression/p16-locator-merge.check.cjs",
+          "name": "row 10: human decision after snapshotAt drops evidence and candidates as stale (any trust)"
+        },
+        {
+          "file": "tests/regression/p16-locator-merge.check.cjs",
+          "name": "row 12: trusted with a revocation not older than the last approve (or unparseable/equal) fails closed"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-24",
@@ -271,10 +627,17 @@
       "title": "Healing logs",
       "priority": "Must",
       "text": "Private worker logs merge canonically; retries are not doubled",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Reducers.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-reducers.check.cjs",
+          "name": "healingLog: union by id in global order, HealingReport entry shape, byte-stable on replay and shuffle"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-25",
@@ -282,10 +645,18 @@
       "title": "Run history",
       "priority": "Must",
       "text": "Exactly one aggregate record after a successful merge, never one per shard",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/ShardMerge.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-merge.check.cjs",
+          "name": "clean merge: code 1 (a deduped+failed page), report and state written, fragments removed"
+        }
+      ],
+      "status": "partial",
+      "note": "Merge writes run history once, but no test asserts exactly one run_history record after merge versus one per shard."
     },
     {
       "id": "P16-AC-26",
@@ -293,10 +664,19 @@
       "title": "Visual artifacts and logs",
       "priority": "Must",
       "text": "Per-worker visual diff artifacts and logs are written under worker-private directories, merged by canonical page ordinal with name-collision handling, or the feature is rejected with a documented unsupported error under --workers>1; a test exercises two workers producing the same artifact name",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/ParallelMode.js",
+        "src/core/VisualRegression.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-diversion.check.cjs",
+          "name": "VisualRegression constructor throws VISUAL_REGRESSION_UNSUPPORTED_PARALLEL and creates nothing"
+        }
+      ],
+      "status": "done",
+      "note": "Takes the documented-unsupported branch under --workers>1; per-worker artifact merge is not built."
     },
     {
       "id": "P16-AC-27",
@@ -304,10 +684,34 @@
       "title": "Path and identity safety",
       "priority": "Must",
       "text": "Run/shard/worker identifiers match a fixed pattern and length cap, are never used raw in paths, and every path built from them resolves under a trusted root with symlink refusal and restrictive permissions; tests cover traversal, absolute paths, symlinks and over-length values",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/SafeFs.js",
+        "src/core/parallel/Args.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-safefs.check.cjs",
+          "name": "resolveUnder accepts a 64-char name and rejects 65"
+        },
+        {
+          "file": "tests/regression/p16-safefs.check.cjs",
+          "name": "resolveUnder rejects traversal, absolute, NUL, separators, dots, unicode, empty"
+        },
+        {
+          "file": "tests/regression/p16-safefs.check.cjs",
+          "name": "resolveUnder refuses a symlinked intermediate that escapes the root"
+        },
+        {
+          "file": "tests/regression/p16-safefs.check.cjs",
+          "name": "writeAtomicPrivate: creates 0600 file in 0700 dirs, replaces atomically"
+        },
+        {
+          "file": "tests/regression/p16-args.check.cjs",
+          "name": "run-id pattern and requirement"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-28",
@@ -315,10 +719,51 @@
       "title": "Parser and resource bounds",
       "priority": "Must",
       "text": "Journal, manifest and fragment size, count, nesting, array, string and event-count limits are numeric constants enforced by the reader; schemas reject __proto__/prototype/constructor and non-finite values; each limit has a test that accepts the maximum and rejects maximum+1",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/SafeFs.js",
+        "src/core/parallel/Limits.js",
+        "src/core/parallel/Schemas.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-safefs.check.cjs",
+          "name": "Limits are frozen and match the architecture table"
+        },
+        {
+          "file": "tests/regression/p16-safefs.check.cjs",
+          "name": "readBoundedJson: accepts maxBytes, rejects maxBytes+1"
+        },
+        {
+          "file": "tests/regression/p16-safefs.check.cjs",
+          "name": "readBoundedJson: depth max accepted, max+1 rejected; 10k nesting rejected"
+        },
+        {
+          "file": "tests/regression/p16-safefs.check.cjs",
+          "name": "readBoundedJson: forbidden keys at any depth rejected, no pollution"
+        },
+        {
+          "file": "tests/regression/p16-safefs.check.cjs",
+          "name": "readBoundedJson: huge exponent (Infinity) rejected"
+        },
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "journal: event-count cap max accepted, max+1 rejected"
+        },
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "journal: byte cap accepts max (2 MiB), rejects max+1"
+        },
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "manifest: pages array max accepted, max+1 rejected"
+        },
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "fragment: byte cap accepts max and rejects max+1"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-29",
@@ -326,10 +771,35 @@
       "title": "No privilege from workers",
       "priority": "Must",
       "text": "Workers and mergers cannot approve healing; duplicate events cannot raise trust; branch state cannot authorize another branch",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Schemas.js",
+        "src/core/parallel/Reducers.js",
+        "src/core/parallel/LocatorMemoryMerge.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "event types: unknown and decision types rejected"
+        },
+        {
+          "file": "tests/regression/p16-journal.check.cjs",
+          "name": "record rejects unknown, decision, and task.end types"
+        },
+        {
+          "file": "tests/regression/p16-reducers.check.cjs",
+          "name": "locatorStore: non-use event types (e.g. locatorStore.add from a worker) never change the store"
+        },
+        {
+          "file": "tests/regression/p16-locator-merge.check.cjs",
+          "name": "never raises trust of an existing entry; human decision in canonical beats worker events"
+        },
+        {
+          "file": "tests/regression/p16-diversion.check.cjs",
+          "name": "HealingTrust.recordPending / recordTier3Invocation divert; approve/reject never do"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-30",
@@ -337,10 +807,32 @@
       "title": "Secret canaries",
       "priority": "Must",
       "text": "Planted canaries never appear in journals, manifests, reports, logs or artifacts",
-      "implementation": [],
+      "implementation": [
+        "src/core/parallel/Schemas.js",
+        "src/core/parallel/StateJournal.js",
+        "src/core/util"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-journal.check.cjs",
+          "name": "canaries never appear in a finished journal"
+        },
+        {
+          "file": "tests/regression/p16-journal.check.cjs",
+          "name": "record never leaks rejected content in the error"
+        },
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "canaries in disallowed fields are never accepted"
+        },
+        {
+          "file": "tests/regression/p16-schemas.check.cjs",
+          "name": "fragment: valid accepted; unknown keys and secrets in fields rejected"
+        }
+      ],
+      "status": "done",
+      "note": "Canary coverage of journals and schemas; report/log/artifact outputs of a full run are not canary-swept end to end."
     },
     {
       "id": "P16-AC-31",
@@ -348,10 +840,30 @@
       "title": "Accurate parallel status",
       "priority": "Must",
       "text": "Dashboard test asserts mode, configured, active, completed, pending and failed worker counts and shard index/total match the coordinator's state at defined event points, and that events arrive with strictly increasing sequence numbers",
-      "implementation": [],
+      "implementation": [
+        "src/core/Dashboard.js",
+        "src/dashboard/index.html"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-dashboard-status.check.cjs",
+          "name": "P16-AC-31: seq is strictly increasing across mixed events and survives the replay cap"
+        },
+        {
+          "file": "tests/regression/p16-dashboard-status.check.cjs",
+          "name": "P16-AC-31: broadcast and replayed events carry the same seq, still increasing after reconnect"
+        },
+        {
+          "file": "tests/regression/p16-dashboard-status.check.cjs",
+          "name": "P16-AC-31: /emit accepts valid runPlan and workerState with seq in /events"
+        },
+        {
+          "file": "tests/regression/p16-dashboard-status.check.cjs",
+          "name": "P16-AC-31: malformed runPlan/workerState are rejected with 400 and no echo"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-32",
@@ -359,10 +871,34 @@
       "title": "Security preserved",
       "priority": "Must",
       "text": "Auth, host exposure, rate limits, CORS/socket auth, escaping, replay bounds, accessibility and shutdown timeout are covered by the existing dashboard tests (unchanged) plus new tests for worker events, which must pass unchanged or stronger",
-      "implementation": [],
+      "implementation": [
+        "src/core/Dashboard.js",
+        "src/dashboard/index.html"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-dashboard-status.check.cjs",
+          "name": "P16-AC-32: panel shows mode, workers, shard and counts at defined points and after replay"
+        },
+        {
+          "file": "tests/regression/p16-dashboard-status.check.cjs",
+          "name": "P16-AC-32: panel renders hostile values as inert text"
+        },
+        {
+          "file": "tests/regression/p16-dashboard-status.check.cjs",
+          "name": "P16-AC-32: interleaved concurrent page events fold to correct counts (client and server)"
+        },
+        {
+          "file": "tests/regression/p16-dashboard-hardening.check.cjs",
+          "name": "W-1: POST /emit auth is unchanged (missing token still 401)"
+        },
+        {
+          "file": "tests/regression/p16-dashboard-hardening.check.cjs",
+          "name": "W-1: POST /emit caps the request body size"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-33",
@@ -370,10 +906,25 @@
       "title": "Benchmark",
       "priority": "Must",
       "text": "Deterministic local fixture with >=8 pages; workers 1/2/4; warm-up plus >=5 measured runs; median, range, speedup, efficiency, memory, environment and equivalence published including unfavorable results",
-      "implementation": [],
+      "implementation": [
+        "scripts/benchmark/parallel.js",
+        "scripts/fixture/server.js",
+        "docs/benchmarks/phase-16-parallel-benchmark.json",
+        "docs/benchmarks/phase-16-parallel-benchmark.md"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-fixture.check.cjs",
+          "name": "serves index and 10 pages deterministically on loopback"
+        },
+        {
+          "file": "tests/regression/p16-fixture.check.cjs",
+          "name": "benchmark stats helpers"
+        }
+      ],
+      "status": "partial",
+      "note": "Fixture (10 pages) and published results exist, tested for fixture and stats helpers only; the benchmark run itself is evidence, not an automated test."
     },
     {
       "id": "P16-AC-34",
@@ -381,10 +932,19 @@
       "title": "Thresholds as evidence",
       "priority": "Should",
       "text": "Provisional targets (2w >=1.5x, 4w >=2.3x, 1w regression <=10%) are reported against the fixture; per QA review they are informational and do not gate CI; no linear-scaling claim",
-      "implementation": [],
-      "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "implementation": [
+        "docs/benchmarks/phase-16-parallel-benchmark.md",
+        "scripts/benchmark/parallel.js"
+      ],
+      "verifiedBy": "review",
+      "tests": [
+        {
+          "file": "tests/regression/p16-fixture.check.cjs",
+          "name": "benchmark stats helpers"
+        }
+      ],
+      "status": "partial",
+      "note": "Done only as evidence: thresholds reported against the fixture, with 2 workers MISS (1.04x vs 1.5x) and 4 workers MISS (1.18x vs 2.3x). Informational, not a CI gate."
     },
     {
       "id": "P16-AC-35",
@@ -392,10 +952,22 @@
       "title": "Shard matrix and aggregate",
       "priority": "Must",
       "text": "Hosted workflow runs a shard matrix on a local fixture with unique artifacts and an if: always() aggregate job that validates completeness, writes one report, reconciles once, uploads evidence and saves state only on success",
-      "implementation": [],
-      "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "implementation": [
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "platform",
+      "tests": [
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "ci.yml: shard matrix artifacts are unique and include the shard index"
+        },
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "ci.yml: aggregate needs shards, runs always, exit code is the merge's"
+        }
+      ],
+      "status": "partial",
+      "note": "Workflow structure is statically tested; no hosted run on the exact head exists yet."
     },
     {
       "id": "P16-AC-36",
@@ -403,10 +975,31 @@
       "title": "Workflow hardening",
       "priority": "Must",
       "text": "Actions pinned to full SHAs, minimal permissions, timeouts, no fork secrets, no external sites, locator_memory.json excluded from cross-branch cache",
-      "implementation": [],
-      "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "implementation": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/security.yml"
+      ],
+      "verifiedBy": "platform",
+      "tests": [
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "${name}: every uses: is a 40-hex SHA"
+        },
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "${name}: top-level permissions are contents: read"
+        },
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "${name}: no pull_request_target"
+        },
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "${name}: every job has timeout-minutes"
+        }
+      ],
+      "status": "partial",
+      "note": "Static workflow hardening is tested; hosted confirmation is pending. Cache exclusion of locator_memory.json is not asserted by a dedicated test here."
     },
     {
       "id": "P16-AC-37",
@@ -414,10 +1007,18 @@
       "title": "Real shard evidence",
       "priority": "Must",
       "text": "Hosted run proves every-shard success and a missing-shard failure on the exact head",
-      "implementation": [],
-      "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "implementation": [
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "platform",
+      "tests": [
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "ci.yml: aggregate needs shards, runs always, exit code is the merge's"
+        }
+      ],
+      "status": "planned",
+      "note": "Needs a hosted run proving every-shard success and a missing-shard failure on the exact head; none recorded."
     },
     {
       "id": "P16-AC-38",
@@ -425,10 +1026,15 @@
       "title": "Documentation synchronized",
       "priority": "Must",
       "text": "Docs review checklist is recorded per file (README, phase plans, changelog, handoff, env example, CLI usage, architecture) with each command and flag in the docs executed or statically checked against the CLI parser",
-      "implementation": [],
-      "verifiedBy": "test",
+      "implementation": [
+        "README.md",
+        "docs/architecture/phase-16-parallel-execution.md",
+        "docs/phase-16-plan.md"
+      ],
+      "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "Per-file docs review checklist not yet recorded."
     },
     {
       "id": "P16-AC-39",
@@ -436,10 +1042,13 @@
       "title": "Architecture complete",
       "priority": "Must",
       "text": "The architecture doc contains a section for each required topic (alternatives, lifecycle, data flow, trust boundaries, schemas, conflicts, failure matrix, compatibility, migration, rollback, residual risk), checked by a review verdict against a listed checklist",
-      "implementation": [],
-      "verifiedBy": "test",
+      "implementation": [
+        "docs/architecture/phase-16-parallel-execution.md"
+      ],
+      "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "Architecture doc exists with sections for design, trust boundaries, failure matrix, compatibility/rollback and residual risk; the reviewer verdict against the checklist is not recorded."
     },
     {
       "id": "P16-AC-40",
@@ -447,10 +1056,26 @@
       "title": "Traceability",
       "priority": "Must",
       "text": "A negative-control test proves every AC ID, implementation path, test path and referenced test exists",
-      "implementation": [],
+      "implementation": [
+        "tests/regression/p16-traceability.check.cjs",
+        "docs/phase-16-acceptance-criteria.json"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-traceability.check.cjs",
+          "name": "P16-AC-40: every required AC id is present exactly once"
+        },
+        {
+          "file": "tests/regression/p16-traceability.check.cjs",
+          "name": "P16-AC-40: every done or partial row resolves to existing implementation paths and live tests"
+        },
+        {
+          "file": "tests/regression/p16-traceability.check.cjs",
+          "name": "P16-AC-40 negative control: a bogus test name, a missing implementation path and a duplicate id are each rejected"
+        }
+      ],
+      "status": "done"
     },
     {
       "id": "P16-AC-41",
@@ -458,10 +1083,19 @@
       "title": "Rollback",
       "priority": "Must",
       "text": "Documented and tested path returns to sequential behaviour and canonical state without loss",
-      "implementation": [],
+      "implementation": [
+        "docs/architecture/phase-16-parallel-execution.md",
+        "falcon.js"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned"
+      "tests": [
+        {
+          "file": "tests/regression/p16-cli.check.cjs",
+          "name": "default parsing is unchanged: --workers=1 and unrelated flags are accepted by the parser"
+        }
+      ],
+      "status": "partial",
+      "note": "Rollback is documented (architecture section 10) and the default sequential path is tested, but there is no dedicated test of returning from parallel to sequential with canonical state intact."
     },
     {
       "id": "P16-AC-42",
@@ -470,9 +1104,10 @@
       "priority": "Must",
       "text": "No unresolved P0/P1; QA, Code Review, Security, DevOps verdicts and CI evidence recorded against the exact final head; Release Manager verdict recorded",
       "implementation": [],
-      "verifiedBy": "test",
+      "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "Release evidence (QA, Code Review, Security, DevOps verdicts on the exact head, Release Manager verdict) not yet recorded."
     },
     {
       "id": "P16-AC-101",
@@ -480,10 +1115,13 @@
       "title": "Pinned Snyk version",
       "priority": "Must",
       "text": "Exactly one pinned Snyk CLI version is used locally and in CI; never unpinned latest",
-      "implementation": [],
+      "implementation": [
+        ".github/workflows/security.yml"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "Pinned snyk CLI checked statically by p16-workflow test; local/CI version parity not independently reviewed."
     },
     {
       "id": "P16-AC-102",
@@ -491,10 +1129,13 @@
       "title": "Token handling",
       "priority": "Must",
       "text": "SNYK_TOKEN is used only from the environment; never printed, logged, committed, or passed in arguments",
-      "implementation": [],
+      "implementation": [
+        ".github/workflows/security.yml"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "SNYK_TOKEN confined to env by the workflow test; no security review verdict recorded."
     },
     {
       "id": "P16-AC-103",
@@ -502,10 +1143,13 @@
       "title": "Baseline scans complete",
       "priority": "Must",
       "text": "Baseline outputs for dependency, Code, applicable IaC and digest-pinned container scans exist with distinct paths, recorded exit codes, command lines and SHA-256 hashes, produced on a clean detached checkout of the recorded origin/main SHA",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "Baseline exists, but Snyk Code is BLOCKED (exit 2, not supported for the organization, BL-002); incomplete scan set."
     },
     {
       "id": "P16-AC-104",
@@ -513,10 +1157,13 @@
       "title": "Baseline classification",
       "priority": "Must",
       "text": "Every baseline finding is individually classified with the required fields",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "Findings BL-001..BL-005 classified; BL-003 (historical client.key in git history) awaits owner disposition; BL-004/BL-005 unconfirmed."
     },
     {
       "id": "P16-AC-105",
@@ -524,10 +1171,13 @@
       "title": "Blocker remediation",
       "priority": "Must",
       "text": "Confirmed exploitable critical/high baseline findings are fixed in separate commits before feature work",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "BL-001 (container zlib) remediation scheduled, not done; BL-003 owner action pending."
     },
     {
       "id": "P16-AC-106",
@@ -535,10 +1185,13 @@
       "title": "Identical final scan set",
       "priority": "Must",
       "text": "Final scans repeat the exact baseline scan set on the final candidate SHA",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "Final scans on candidate SHA not run."
     },
     {
       "id": "P16-AC-107",
@@ -546,10 +1199,13 @@
       "title": "Stable delta",
       "priority": "Must",
       "text": "security-delta.md maps baseline/head SHAs, CLI version and finding identities",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "security-delta.md not produced."
     },
     {
       "id": "P16-AC-108",
@@ -557,10 +1213,13 @@
       "title": "No new critical/high/medium",
       "priority": "Must",
       "text": "Phase 16 introduces none",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "Depends on final scan set; not yet evidenced."
     },
     {
       "id": "P16-AC-109",
@@ -568,10 +1227,13 @@
       "title": "Operational errors handled",
       "priority": "Must",
       "text": "Snyk exit codes 2 and 3 are never treated as clean",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "Baseline records Snyk Code exit 2 as BLOCKED, not clean; CI-side handling not independently verified."
     },
     {
       "id": "P16-AC-110",
@@ -579,10 +1241,13 @@
       "title": "Hosted Snyk gate",
       "priority": "Must",
       "text": "Dedicated CI security job on Node 24 with pinned CLI, timeouts, minimal permissions and policy-based failure",
-      "implementation": [],
+      "implementation": [
+        ".github/workflows/security.yml"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "security.yml exists with static checks; no hosted run."
     },
     {
       "id": "P16-AC-111",
@@ -590,10 +1255,14 @@
       "title": "Fork secret isolation",
       "priority": "Must",
       "text": "Forks never receive SNYK_TOKEN; no pull_request_target running fork code with secrets",
-      "implementation": [],
+      "implementation": [
+        ".github/workflows/security.yml",
+        ".github/workflows/ci.yml"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "No pull_request_target asserted by the workflow test; fork secret behaviour needs review and a hosted run."
     },
     {
       "id": "P16-AC-112",
@@ -601,10 +1270,13 @@
       "title": "No broad suppression",
       "priority": "Must",
       "text": "No broad .snyk ignores; any narrow ignore has ID, scope, evidence, owner, reason, expiry",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "No .snyk review recorded."
     },
     {
       "id": "P16-AC-113",
@@ -612,10 +1284,13 @@
       "title": "Secret scanning",
       "priority": "Must",
       "text": "Current-tree and Git-history secret scans are clean",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "History scan has finding BL-003 (private key) open; secret scan not clean."
     },
     {
       "id": "P16-AC-114",
@@ -623,10 +1298,13 @@
       "title": "Separate code scanning evidence",
       "priority": "Must",
       "text": "CodeQL JS/TS, CodeQL Actions and GitGuardian reported separately and green",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "CodeQL and GitGuardian results not recorded; Snyk Code BLOCKED."
     },
     {
       "id": "P16-AC-115",
@@ -634,10 +1312,14 @@
       "title": "Immutable action SHAs",
       "priority": "Must",
       "text": "All workflow actions pinned to full SHAs",
-      "implementation": [],
+      "implementation": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/security.yml"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "Full-SHA pinning asserted by p16-workflow test; Security review verdict not recorded."
     },
     {
       "id": "P16-AC-116",
@@ -645,10 +1327,13 @@
       "title": "Exact-head Security verdict",
       "priority": "Must",
       "text": "Independent Security Engineer verdict covers the exact final head",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-threat-model.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "No exact-head Security verdict."
     },
     {
       "id": "P16-AC-117",
@@ -656,10 +1341,14 @@
       "title": "No P0/P1 security defects",
       "priority": "Must",
       "text": "None unresolved",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md",
+        "docs/security/phase-16-threat-model.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "Open blockers BL-002 and BL-003 prevent claiming none unresolved."
     },
     {
       "id": "P16-AC-118",
@@ -667,10 +1356,13 @@
       "title": "Safe Snyk artifacts",
       "priority": "Must",
       "text": "Artifacts are sanitized, uniquely named, retention-bounded",
-      "implementation": [],
+      "implementation": [
+        ".github/workflows/security.yml"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "Artifact sanitisation/retention not reviewed."
     },
     {
       "id": "P16-AC-119",
@@ -678,10 +1370,13 @@
       "title": "Exact SHAs in evidence",
       "priority": "Must",
       "text": "Every scan output records the SHA it covers",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "Baseline records the SHA; final scans do not exist yet."
     },
     {
       "id": "P16-AC-120",
@@ -689,10 +1384,14 @@
       "title": "Immutable container digest",
       "priority": "Must",
       "text": "Container scan uses a resolved sha256 digest, with tag, platform and date recorded",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md",
+        ".github/workflows/security.yml"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "Digest pinning asserted by the workflow test; resolved-digest record (tag, platform, date) review pending."
     },
     {
       "id": "P16-AC-121",
@@ -700,10 +1399,13 @@
       "title": "Release Manager evidence",
       "priority": "Must",
       "text": "Release Manager receives the security evidence directly",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "Release Manager packet not assembled."
     },
     {
       "id": "P16-AC-122",
@@ -711,10 +1413,14 @@
       "title": "Baseline assessment doc",
       "priority": "Must",
       "text": "The container scan target is of the form image@sha256:<64 hex>; the record lists the original tag, platform and resolution date; a static check rejects any tag-only container scan reference",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-baseline-security-assessment.md",
+        ".github/workflows/security.yml"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "Baseline doc present; static tag-only rejection check covers security.yml digest, not an explicit check of the record."
     },
     {
       "id": "P16-AC-123",
@@ -722,10 +1428,13 @@
       "title": "Threat model doc",
       "priority": "Must",
       "text": "The Release Manager input packet lists each security artifact path and hash; the Release Manager verdict quotes those hashes",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-threat-model.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "Threat model exists; artifact path/hash packet for Release Manager not assembled."
     },
     {
       "id": "P16-AC-124",
@@ -733,10 +1442,15 @@
       "title": "Workflow security review",
       "priority": "Must",
       "text": "Full workflow review covers every listed class and separates AI-triage failures from real CodeQL",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-threat-model.md",
+        ".github/workflows/ci.yml",
+        ".github/workflows/security.yml"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "partial",
+      "note": "Threat model exists; full workflow review verdict not recorded."
     },
     {
       "id": "P16-AC-125",
@@ -744,10 +1458,13 @@
       "title": "Hosted CI Snyk on exact head",
       "priority": "Must",
       "text": "Green hosted Snyk run on the exact final head",
-      "implementation": [],
+      "implementation": [
+        ".github/workflows/security.yml"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned"
+      "status": "planned",
+      "note": "No green hosted Snyk run on the exact head."
     }
   ]
 }
