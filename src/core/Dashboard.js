@@ -28,6 +28,17 @@ const HISTORY_MAX_BYTES = RUN_LEDGER_MAX_BYTES;
 
 const COOKIE_NAME = "falcon_dashboard_token";
 
+// POST /emit accepts only the event names the framework itself produces
+// (falcon.js, SiteSweep, FlakinessTracker, HealingTrust, HealingReport,
+// Middleware) and bounds the request body.
+const EMIT_ALLOWED_EVENTS = new Set([
+    "testStart", "testEnd", "testPass", "testFail", "testSkip", "testQuarantined",
+    "healingEvent", "healingPending", "healingApproved", "healingRejected",
+    "explorerPage", "pageStart", "pageComplete", "sweepComplete",
+    "flakyDetected", "scenarioQuarantined", "scenarioUnquarantined",
+]);
+const EMIT_BODY_LIMIT = "64kb";
+
 const HEALING_PENDING_STALE_DAYS_DEFAULT = 14;
 const FLAKY_UNREVIEWED_STALE_DAYS_DEFAULT = 14;
 const REHAB_CANDIDATE_WINDOW_DEFAULT = 5;
@@ -484,12 +495,20 @@ class Dashboard {
     }
 
     /**
+     * The dashboard URL without any credential. This is the only form that
+     * may be passed to Logger or any other sink.
+     */
+    get safeUrl() {
+        return `http://localhost:${this.port}`;
+    }
+
+    /**
      * The URL to open — includes ?token= when auth is enabled. This is a
      * one-shot bootstrap: GET / exchanges the token for an HttpOnly cookie and
      * redirects to a clean URL; the query token is rejected on every API route.
      */
     get url() {
-        const base = `http://localhost:${this.port}`;
+        const base = this.safeUrl;
         return this._token ? `${base}/?token=${encodeURIComponent(this._token)}` : base;
     }
 
@@ -522,6 +541,12 @@ class Dashboard {
             const mutating = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
             if (this._isRequestAllowed(req.headers, { checkOrigin: mutating })) return next();
             res.status(403).json({ error: "Forbidden — unexpected Host or Origin." });
+        });
+        app.use("/emit", express.json({ limit: EMIT_BODY_LIMIT }));
+        app.use("/emit", (err, req, res, next) => {
+            if (err && err.type === "entity.too.large") return res.status(413).json({ error: "Payload too large." });
+            if (err && err.type === "entity.parse.failed") return res.status(400).json({ error: "Invalid JSON." });
+            return next(err);
         });
         app.use(express.json());
 
@@ -569,9 +594,10 @@ class Dashboard {
                 return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
             }
             const { name, payload } = req.body || {};
-            if (typeof name === "string") {
-                this.emit(name, payload || {});
+            if (typeof name !== "string" || !EMIT_ALLOWED_EVENTS.has(name)) {
+                return res.status(400).json({ error: "Unknown event name." });
             }
+            this.emit(name, payload || {});
             res.status(204).end();
         });
 
@@ -597,8 +623,10 @@ class Dashboard {
             if (!this._isAuthorized(this._tokenFromRequest(req))) {
                 return res.status(401).json({ error: "Unauthorized — missing or invalid DASHBOARD_TOKEN." });
             }
-            const { original } = req.body || {};
-            const decision = typeof original === "string" ? HealingTrust.approve(original, { approvedBy: "dashboard" }) : null;
+            const { original, suggested } = req.body || {};
+            const decision = typeof original === "string" && typeof suggested === "string"
+                ? HealingTrust.approve(original, { approvedBy: "dashboard", suggested })
+                : null;
             if (!decision) return res.status(404).json({ error: "No pending healing entry for that selector." });
             res.json(decision);
         });
@@ -852,7 +880,7 @@ class Dashboard {
             });
         });
 
-        Logger.info(`🖥  Dashboard → ${this.url}`);
+        Logger.info(`🖥  Dashboard → ${this.safeUrl}`);
         if (!this._token) {
             Logger.warning(
                 "⚠️  Dashboard running WITHOUT auth (DASHBOARD_TOKEN not set) — " +

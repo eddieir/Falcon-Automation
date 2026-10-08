@@ -429,9 +429,12 @@ class HealingTrust {
      * and that field would otherwise be baked into the decision ledger
      * verbatim via the `{...entry}` spread below.
      */
-    approve(original, { approvedBy = "dashboard" } = {}) {
+    approve(original, { approvedBy = "dashboard", suggested } = {}) {
         const raw = this._getPending(original);
         if (!raw) return null;
+        // When the caller names the proposal it reviewed, refuse if the
+        // pending suggestion has since changed. No state is touched.
+        if (suggested !== undefined && suggested !== raw.suggested) return null;
         const entry = this._hydratePreviouslyRejected(raw);
 
         LocatorStore.addLocator(entry.original, entry.suggested);

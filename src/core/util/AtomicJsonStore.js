@@ -173,12 +173,16 @@ async function writeJsonAtomic(filePath, data) {
     const tmpPath = path.join(dir, `${path.basename(filePath)}.tmp-${process.pid}-${crypto.randomUUID()}`);
     try {
         await fs.promises.mkdir(dir, { recursive: true, mode: 0o700 });
-        const handle = await fs.promises.open(tmpPath, "wx", 0o600);
+        await fs.promises.writeFile(tmpPath, JSON.stringify(data, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
+        // Flush the temp file's contents before the rename publishes it, so a
+        // crash cannot leave a renamed-but-empty canonical file.
+        const handle = await fs.promises.open(tmpPath, "r");
         try {
-            await handle.writeFile(JSON.stringify(data, null, 2), "utf8");
             await handle.sync();
         } finally {
-            await handle.close();
+            // The data was already synced (or the sync error is propagating);
+            // a failed close must not turn a good write into a failure.
+            await handle.close().catch(() => {});
         }
         await fs.promises.rename(tmpPath, filePath);
         return { ok: true };
