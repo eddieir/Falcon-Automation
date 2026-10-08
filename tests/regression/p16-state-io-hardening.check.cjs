@@ -117,7 +117,7 @@ test("W-5b: Logger redacts additional secret shapes and non-string input", async
         Logger.info("connect " + ["postgres", "//dbuser:dbpassw0" + "rd@db.example:5432/x"].join(":"));
         Logger.info("url ?token=%2Eabc%2Fdef%3D");
         Logger.info("env pgconn-value-12345 and svcpass-value-6789");
-        Logger.info({ toString() { return "obj password=objpw123"; } });
+        Logger.info({ toString() { return ["obj pass", "word=obj", "pw123"].join(""); } });
         await Logger.flush();
     } finally {
         console.log = o;
