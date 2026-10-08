@@ -145,8 +145,16 @@ test("W-1: POST /emit caps the request body size", async (t) => {
   await d.start();
   const before = d._events.length;
   const big = { name: "testPass", payload: { blob: "x".repeat(100 * 1024) } };
-  const res = await post(d.port, "/emit", big);
-  assert.equal(res.statusCode, 413);
+  // The server may close the socket while the client is still sending the
+  // oversized body, so a reset is as good a rejection as the 413 itself.
+  let outcome;
+  try {
+    outcome = (await post(d.port, "/emit", big)).statusCode;
+  } catch (error) {
+    assert.ok(["ECONNRESET", "EPIPE"].includes(error.code), `unexpected error ${error.code || error.message}`);
+    outcome = "reset";
+  }
+  assert.ok(outcome === 413 || outcome === "reset", `oversized body was not rejected (${outcome})`);
   assert.equal(d._events.length, before);
 });
 
