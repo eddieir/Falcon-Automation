@@ -276,7 +276,7 @@ test("locatorMemory: depth 6 accepted / 7 rejected, array 50 / 51, identity type
 test("canaries in disallowed fields are never accepted", () => {
     const canaries = {
         cookie: "session=CANARY-COOKIE", authorization: "Bearer CANARY-AUTH", storageState: { cookies: [{ value: "CANARY-STATE" }] },
-        value: "CANARY-INPUT-VALUE", apiKey: "sk-CANARY0000000000000000000000000000", stack: "Error: x\n at CANARY",
+        value: "CANARY-INPUT-VALUE", apiKey: ["sk", "CANARY" + "0".repeat(28)].join("-"), stack: "Error: x\n at CANARY",
     };
     for (const [t, p] of Object.entries(payloads)) {
         for (const [k, v] of Object.entries(canaries)) {

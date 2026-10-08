@@ -22,6 +22,7 @@ function startServer() {
   const server = http.createServer((req, res) => {
     if (req.url === "/broken") { res.writeHead(500); return res.end("boom"); }
     const name = req.url === "/" ? "home" : req.url.slice(1);
+    if (!/^[a-z0-9-]{1,32}$/.test(name)) { res.writeHead(404); return res.end("not found"); }
     res.writeHead(200, { "content-type": "text/html" });
     res.end(`<html><body><nav>${nav}</nav><h1>${name}</h1><button id="b-${name}" type="button">Press ${name}</button></body></html>`);
   });
