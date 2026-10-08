@@ -1175,3 +1175,18 @@ Closes the items the post-Phase-14 security review left open.
 **Fix:** Each `node falcon.js` run appends one validated record to `data/run_history.json` (at most 500 runs, 1 MB): commit and branch, repeat count, outcome counts, coverage, heals and failed heal attempts by tier, review queue depth, quarantine count and duration, plus an incomplete marker for crashed runs. Records come from a fixed allow-list, so URLs, selectors, page text, error messages and scenario names never reach the file. Writes are atomic, mode 0600, serialised by a cross-process lock with bounded retries; corrupt, oversized or symlinked files are moved aside or refused rather than followed or deleted; recording can never change the run's exit code. `FALCON_RUN_HISTORY=off` disables it.
 
 Trend flags for heal-rate spikes, pass-rate decay, duration regression, review backlog and quarantine growth compare each run with the median and MAD of the previous 10 complete runs on the same branch and repeat count, with absolute floors so a stable baseline does not flag a trivial change. They are advisory. `npm run history:list`, `history:export -- --format=json|csv` (formula-safe CSV) and `history:check [--strict]` read the ledger; `npm run dashboard` serves a History panel without a run, behind the dashboard's existing token and host checks. CI keeps the ledger in its own per-branch cache, exports it into the reports artifact, writes an advisory trend summary to the job page, and uploads a 90-day copy from `main`.
+
+---
+
+## Phase 16 — Parallel execution (in review, not merged)
+
+- Added `--workers=N` (1 to 16), page-level parallelism. Scenarios within a page stay sequential.
+- Added `--shard=I/N --run-id=<id>`, which writes a shard bundle under `reports/shards/<runId>/` and writes no report or canonical state.
+- Added `node falcon.js merge --input=<dir> [--expect-total=N]` with exit codes 0, 1, 2 and 3.
+- Invalid or conflicting parallel flags exit 1 before the browser or dashboard starts.
+- Added a local benchmark fixture. Measured 1.04x (2 workers) and 1.18x (4 workers); speedup targets were missed.
+- Added a CI shard matrix, an aggregate merge job, a missing-shard negative job, and a Snyk security workflow. Hosted results are not yet recorded.
+- Sequential behaviour is unchanged when no parallel flags are passed.
+
+See [docs/phase-16-operations.md](docs/phase-16-operations.md) for usage, limitations and rollback.
+
