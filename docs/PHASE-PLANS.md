@@ -732,7 +732,7 @@ it.
 
 ---
 
-## Phase 15 — Run history and trend — IMPLEMENTED, UNDER REVIEW
+## Phase 15 — Run history and trend — DELIVERED
 
 The detailed plan of record is [phase-15-plan.md](phase-15-plan.md): definitions, run record,
 architecture and ADR, trend rules with worked examples, CLI, dashboard and serve mode, CI, security
