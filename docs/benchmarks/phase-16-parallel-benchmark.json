@@ -1,0 +1,209 @@
+{
+  "host": {
+    "os": "Darwin 25.5.0 arm64",
+    "cpus": 10,
+    "node": "v22.19.0"
+  },
+  "config": {
+    "fixtureServer": "scripts/fixture/server.js",
+    "runs": 5,
+    "warmup": 1,
+    "delayMs": 200,
+    "baseline1wMs": null
+  },
+  "results": {
+    "1": {
+      "wallMs": {
+        "n": 5,
+        "median": 16448.982459,
+        "min": 16427.600833,
+        "max": 16586.78,
+        "p95": null,
+        "note": "range only (n<20, no p95)"
+      },
+      "stages": {
+        "discoveryMs": {
+          "n": 5,
+          "median": 11402,
+          "min": 11279,
+          "max": 11445,
+          "p95": null,
+          "note": "range only (n<20, no p95)"
+        },
+        "parallelizableMs": {
+          "n": 5,
+          "median": 4790,
+          "min": 4761,
+          "max": 4862,
+          "p95": null,
+          "note": "range only (n<20, no p95)"
+        },
+        "analysisMs": "UNKNOWN",
+        "executionMs": "UNKNOWN",
+        "mergeMs": "UNKNOWN"
+      },
+      "stageSource": "execution.log timestamps (approximate)",
+      "peakRssKb": 526544,
+      "speedup": 1,
+      "efficiency": 1,
+      "parallelizableSpeedup": 1,
+      "parallelizableEfficiency": 1,
+      "karpFlattSerialFraction": null
+    },
+    "2": {
+      "wallMs": {
+        "n": 5,
+        "median": 15790.830667,
+        "min": 15735.83875,
+        "max": 15806.295292,
+        "p95": null,
+        "note": "range only (n<20, no p95)"
+      },
+      "stages": {
+        "discoveryMs": {
+          "n": 5,
+          "median": 11217,
+          "min": 11181,
+          "max": 11239,
+          "p95": null,
+          "note": "range only (n<20, no p95)"
+        },
+        "parallelizableMs": {
+          "n": 5,
+          "median": 4118,
+          "min": 4071,
+          "max": 4171,
+          "p95": null,
+          "note": "range only (n<20, no p95)"
+        },
+        "analysisMs": {
+          "n": 5,
+          "median": 1602,
+          "min": 1581,
+          "max": 1649,
+          "p95": null,
+          "note": "range only (n<20, no p95)"
+        },
+        "executionMs": {
+          "n": 5,
+          "median": 2522,
+          "min": 2469,
+          "max": 2538,
+          "p95": null,
+          "note": "range only (n<20, no p95)"
+        },
+        "mergeMs": {
+          "n": 5,
+          "median": 54,
+          "min": 50,
+          "max": 56,
+          "p95": null,
+          "note": "range only (n<20, no p95)"
+        }
+      },
+      "stageSource": "report execution.timings (monotonic)",
+      "peakRssKb": 542144,
+      "speedup": 1.0416793648085543,
+      "efficiency": 0.5208396824042771,
+      "parallelizableSpeedup": 1.163186012627489,
+      "parallelizableEfficiency": 0.5815930063137446,
+      "karpFlattSerialFraction": 0.9199765950701839
+    },
+    "4": {
+      "wallMs": {
+        "n": 5,
+        "median": 13994.080042,
+        "min": 13887.253041,
+        "max": 14090.177083,
+        "p95": null,
+        "note": "range only (n<20, no p95)"
+      },
+      "stages": {
+        "discoveryMs": {
+          "n": 5,
+          "median": 11184,
+          "min": 11115,
+          "max": 11197,
+          "p95": null,
+          "note": "range only (n<20, no p95)"
+        },
+        "parallelizableMs": {
+          "n": 5,
+          "median": 2346,
+          "min": 2284,
+          "max": 2388,
+          "p95": null,
+          "note": "range only (n<20, no p95)"
+        },
+        "analysisMs": {
+          "n": 5,
+          "median": 826,
+          "min": 812,
+          "max": 832,
+          "p95": null,
+          "note": "range only (n<20, no p95)"
+        },
+        "executionMs": {
+          "n": 5,
+          "median": 1523,
+          "min": 1458,
+          "max": 1562,
+          "p95": null,
+          "note": "range only (n<20, no p95)"
+        },
+        "mergeMs": {
+          "n": 5,
+          "median": 59,
+          "min": 58,
+          "max": 82,
+          "p95": null,
+          "note": "range only (n<20, no p95)"
+        }
+      },
+      "stageSource": "report execution.timings (monotonic)",
+      "peakRssKb": 733360,
+      "speedup": 1.175424351556671,
+      "efficiency": 0.2938560878891677,
+      "parallelizableSpeedup": 2.041773231031543,
+      "parallelizableEfficiency": 0.5104433077578857,
+      "karpFlattSerialFraction": 0.801008771768995
+    }
+  },
+  "amdahl": {
+    "serialFractionAt1w": 0.7041749011857708,
+    "maxEndToEndSpeedup": 1.4201017365374495,
+    "note": "serial fraction = discovery / (discovery + analysis + execution) at 1 worker; startup/teardown ignored"
+  },
+  "thresholds": {
+    "2w>=1.5x": "MISS",
+    "4w>=2.3x": "MISS",
+    "1w regression<=10% vs baseline": "UNKNOWN (no --baseline-1w-ms)"
+  },
+  "semanticEquivalence": true,
+  "rawReportsIdentical": false,
+  "volatileFieldsStripped": [
+    "date",
+    "duration",
+    "durationMs",
+    "elapsed",
+    "elapsedMs",
+    "endTime",
+    "execution",
+    "executionMode",
+    "finishedAt",
+    "generatedAt",
+    "id",
+    "path",
+    "runId",
+    "screenshot",
+    "screenshotPath",
+    "shard",
+    "startTime",
+    "startedAt",
+    "time",
+    "timestamp",
+    "totalDuration",
+    "workerId",
+    "workers"
+  ]
+}

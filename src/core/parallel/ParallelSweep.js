@@ -11,6 +11,9 @@ const ParallelMode = require("./ParallelMode");
 const StateJournal = require("./StateJournal");
 const ShardBundle = require("./ShardBundle");
 
+const nowMs = () => Number(process.hrtime.bigint()) / 1e6; // monotonic
+const elapsed = (t0) => Math.max(0, Math.round(nowMs() - t0));
+
 const AUTH_STATE_MAX_BYTES = 1024 * 1024;
 const MAX_ERROR = Limits.ERROR_MAX;
 const bound = (e) => String(e && e.message !== undefined ? e.message : e).replace(/[^\x20-\x7e]/g, "?").slice(0, MAX_ERROR);
@@ -64,6 +67,7 @@ async function run(opts) {
     if (!entry) throw new Error(`ParallelSweep requires an http(s) entry URL, received: ${entryUrl}`);
     const cap = Math.min(Number.isFinite(maxPages) ? Math.max(0, Math.floor(maxPages)) : 20, Limits.MAX_PAGES);
 
+    const tDiscovery = nowMs();
     // Stage 1-3: discover once, canonical order, ordinals.
     const sweep = new SiteSweep(context, { maxPages: Limits.MAX_PAGES, sameOriginOnly, budgetMs: budgetMs === null ? undefined : budgetMs, pageTimeoutMs, dedupe, repeat });
     const discovered = await sweep._discover(entry);
@@ -73,7 +77,10 @@ async function run(opts) {
     const frontierDigest = Planning.frontierDigest(ordered);
     const configFp = configFingerprint({ entryUrl: entry, maxPages: cap, dedupe, sameOriginOnly, repeat });
 
+    const discoveryMs = elapsed(tDiscovery);
+
     // Stage 4: analyse every eligible page below the cap.
+    const tAnalysis = nowMs();
     const toAnalyse = ordered.slice(0, cap);
     const analysisRuns = await runBounded(toAnalyse, workers, (url) => withContext(browser, auth, async (page) => {
         const t0 = Date.now();
@@ -89,6 +96,7 @@ async function run(opts) {
         return { uiIssues, plan, durationMs: Date.now() - t0 };
     }));
 
+    const analysisMs = elapsed(tAnalysis);
     const analyses = toAnalyse.map((url, ordinal) => {
         const r = analysisRuns[ordinal];
         const a = { ordinal, url, name: url, scenarios: [], plan: null, uiIssues: [], status: "tested", reason: undefined, durationMs: 0, analysisError: null };
@@ -163,6 +171,7 @@ async function run(opts) {
     }
 
     const snapshotAt = new Date(startedAtMs).toISOString();
+    const tExecution = nowMs();
     const execRuns = await runBounded(execList, workers, (p) => withContext(browser, auth, async (page) => {
         const a = analyses[p.ordinal];
         const t0 = Date.now();
@@ -195,6 +204,7 @@ async function run(opts) {
         return { results, failure, journal: journal.toJSON(), durationMs: Date.now() - t0 };
     }), { deadline });
 
+    const executionMs = elapsed(tExecution);
     execRuns.forEach((r, i) => {
         const p = execList[i];
         const a = analyses[p.ordinal];
@@ -226,6 +236,7 @@ async function run(opts) {
         runId, shard, entryUrl: entry, workers, configFp, frontierDigest, planDigest,
         pages, coverage, budgetExhausted: coverage.budgetExhausted,
         startedAt: startedAtMs, endedAt: Date.now(),
+        timings: { discoveryMs, analysisMs, executionMs },
     };
     if (bundleDir) {
         const written = await ShardBundle.write({

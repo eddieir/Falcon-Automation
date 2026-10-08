@@ -153,7 +153,7 @@ class ReportManager {
      * no exit code. The caller supplies `runId` and `duration`. The same
      * validation and tally rules as generateReport, which delegates here.
      */
-    static buildReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [], runId, duration } = {}) {
+    static buildReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [], runId, duration, timings = null } = {}) {
         if (!Array.isArray(tests) || !Array.isArray(uiIssues) || !Array.isArray(healingEvents) || !Array.isArray(pages)) {
             throw new TypeError("Report results, issues, healing events and pages must be arrays");
         }
@@ -215,6 +215,10 @@ class ReportManager {
             coverage,
             pages,
         };
+
+        // VOLATILE, parallel/shard runs only: stage wall times in ms. Strip
+        // `execution` before comparing reports for equivalence.
+        if (timings && typeof timings === "object") report.execution = { timings };
 
         return report;
     }

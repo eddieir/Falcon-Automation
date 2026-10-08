@@ -15,7 +15,7 @@ const OUTPUT = path.join(ROOT, 'docs', 'benchmarks', 'phase-16-parallel-benchmar
 // Fields stripped before comparing reports across worker counts.
 const VOLATILE_KEYS = new Set(['timestamp', 'startTime', 'endTime', 'startedAt', 'finishedAt', 'generatedAt',
     'duration', 'durationMs', 'totalDuration', 'elapsed', 'elapsedMs', 'runId', 'id', 'workers', 'shard',
-    'workerId', 'executionMode', 'screenshot', 'screenshotPath', 'path', 'time', 'date']);
+    'workerId', 'executionMode', 'execution', 'screenshot', 'screenshotPath', 'path', 'time', 'date']);
 
 function sorted(a) { return [...a].sort((x, y) => x - y); }
 function median(a) {
@@ -82,7 +82,7 @@ function treeRss(rootPid) {
 function prepareWorkdir() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'falcon-bench-'));
     for (const f of ['falcon.js', 'package.json']) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
-    fs.cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true });
+    for (const d of ['src', 'utils']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true });
     fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'), 'dir');
     return dir;
 }
@@ -107,6 +107,41 @@ function readReports(dir) {
     return out;
 }
 
+const LOG_TS = /^\[[A-Z]+\]\s+(\d{4}-\d\d-\d\dT[\d:.]+Z)\s+-\s(.*)$/;
+
+/**
+ * Sequential (workers=1) stage split derived from execution.log timestamps, approximate:
+ * discovery = "Sweeping" line -> first PageAnalyser line; rest = first PageAnalyser line -> last log line.
+ * Returns null (reported as UNKNOWN) if the markers are not found.
+ */
+function stagesFromLog(dir) {
+    let text;
+    try { text = fs.readFileSync(path.join(dir, 'reports', 'execution.log'), 'utf8'); } catch { return null; }
+    let sweepAt = null; let analyseAt = null; let lastAt = null;
+    for (const line of text.split('\n')) {
+        const m = LOG_TS.exec(line);
+        if (!m) continue;
+        const t = Date.parse(m[1]);
+        if (!Number.isFinite(t)) continue;
+        lastAt = t;
+        if (sweepAt === null && m[2].includes('Sweeping ')) sweepAt = t;
+        else if (sweepAt !== null && analyseAt === null && m[2].includes('[PageAnalyser]')) analyseAt = t;
+    }
+    if (sweepAt === null || analyseAt === null || lastAt === null) return null;
+    return { discoveryMs: analyseAt - sweepAt, parallelizableMs: lastAt - analyseAt };
+}
+
+/** Stage timings from the merged report (parallel runs): execution.timings, VOLATILE. */
+function stagesFromReport(dir) {
+    try {
+        const t = JSON.parse(fs.readFileSync(path.join(dir, 'reports', 'test-report.json'), 'utf8')).execution.timings;
+        const ok = ['discoveryMs', 'analysisMs', 'executionMs'].every((k) => Number.isFinite(t[k]));
+        if (!ok) return null;
+        return { discoveryMs: t.discoveryMs, analysisMs: t.analysisMs, executionMs: t.executionMs,
+            mergeMs: Number.isFinite(t.mergeMs) ? t.mergeMs : null, parallelizableMs: t.analysisMs + t.executionMs };
+    } catch { return null; }
+}
+
 function runOnce(dir, url, workers, timeoutMs) {
     fs.rmSync(path.join(dir, 'reports'), { recursive: true, force: true });
     return new Promise((resolve) => {
@@ -119,9 +154,23 @@ function runOnce(dir, url, workers, timeoutMs) {
         const killer = setTimeout(() => p.kill('SIGKILL'), timeoutMs);
         p.once('close', (code) => {
             clearInterval(sampler); clearTimeout(killer);
-            resolve({ code, ms: Number(process.hrtime.bigint() - t0) / 1e6, peakRssKb: peak, output: out, reports: readReports(dir) });
+            const stages = workers === 1 ? stagesFromLog(dir) : stagesFromReport(dir);
+            resolve({ code, ms: Number(process.hrtime.bigint() - t0) / 1e6, peakRssKb: peak, output: out, stages, reports: readReports(dir) });
         });
     });
+}
+
+/**
+ * Semantic digest: exit code, summary, result, the sorted (name,status) multiset and the explored URL set.
+ * Row-level bookkeeping (page/pageOrdinal/scn/rep vs repetition), explored-URL order and the extra
+ * parallel-only files are representation differences and are excluded.
+ */
+function semanticKey(r) {
+    const rep = r.reports['test-report.json'] || {};
+    const exp = r.reports['exploratory_test_results.json'] || {};
+    const tests = (Array.isArray(rep.tests) ? rep.tests : []).map((t) => `${t.name}|${t.status}`).sort();
+    const pages = (Array.isArray(exp.exploredPages) ? [...exp.exploredPages] : []).sort();
+    return JSON.stringify({ code: r.code, summary: rep.summary, result: rep.result, tests, pages });
 }
 
 const UNSUPPORTED = /unknown (option|argument|flag)|unrecognized|unsupported|invalid (option|argument)/i;
@@ -130,20 +179,27 @@ async function main() {
     const o = parseArgs(process.argv.slice(2));
     const dir = prepareWorkdir();
     const fixture = await startFixture(o.delayMs);
-    const results = {}; let reference = null; let equivalent = true; let blocked = null;
+    const results = {}; let reference = null; let rawReference = null; let rawIdentical = true; let equivalent = true; let blocked = null;
     try {
         for (const w of o.workers) {
-            const times = []; const rss = [];
+            const times = []; const rss = []; const stg = { discoveryMs: [], parallelizableMs: [], analysisMs: [], executionMs: [], mergeMs: [] };
             for (let i = 0; i < o.warmup + o.runs; i++) {
                 const r = await runOnce(dir, fixture.url, w, o.timeoutMs);
                 if (r.code !== 0 && UNSUPPORTED.test(r.output)) { blocked = `falcon.js rejected --workers=${w}`; break; }
                 if (i < o.warmup) continue;
-                times.push(r.ms); if (r.peakRssKb !== null) rss.push(r.peakRssKb);
-                const key = JSON.stringify({ code: r.code, reports: r.reports });
+                times.push(r.ms);
+                if (r.stages) for (const k of Object.keys(stg)) if (Number.isFinite(r.stages[k])) stg[k].push(r.stages[k]);
+                if (r.peakRssKb !== null) rss.push(r.peakRssKb);
+                const key = semanticKey(r);
                 if (reference === null) reference = key; else if (key !== reference) equivalent = false;
+                const raw = JSON.stringify({ code: r.code, reports: r.reports });
+                if (rawReference === null) rawReference = raw; else if (raw !== rawReference) rawIdentical = false;
             }
             if (blocked) break;
-            results[w] = { wallMs: summarize(times), peakRssKb: rss.length ? Math.max(...rss) : 'UNKNOWN' };
+            const stages = {};
+            for (const [k, v] of Object.entries(stg)) stages[k] = v.length ? summarize(v) : 'UNKNOWN';
+            results[w] = { wallMs: summarize(times), stages, stageSource: w === 1 ? 'execution.log timestamps (approximate)' : 'report execution.timings (monotonic)',
+                peakRssKb: rss.length ? Math.max(...rss) : 'UNKNOWN' };
         }
     } finally {
         fixture.proc.removeAllListeners('exit'); fixture.proc.kill('SIGTERM');
@@ -156,6 +212,22 @@ async function main() {
         const sp = speedup(base, results[w].wallMs.median);
         results[w].speedup = sp; results[w].efficiency = efficiency(sp, Number(w));
     }
+    // Parallelizable stages (analysis + execution) and Amdahl serial fraction (discovery share at 1 worker).
+    const med = (x) => (x && x.median !== undefined ? x.median : null);
+    const d1 = med(results[1].stages.discoveryMs); const p1 = med(results[1].stages.parallelizableMs);
+    const serialFraction = d1 !== null && p1 !== null ? d1 / (d1 + p1) : null;
+    const amdahl = {
+        serialFractionAt1w: serialFraction,
+        maxEndToEndSpeedup: serialFraction ? 1 / serialFraction : null,
+        note: 'serial fraction = discovery / (discovery + analysis + execution) at 1 worker; startup/teardown ignored',
+    };
+    for (const w of Object.keys(results)) {
+        const pw = med(results[w].stages.parallelizableMs);
+        const sp = speedup(p1, pw);
+        results[w].parallelizableSpeedup = sp; results[w].parallelizableEfficiency = efficiency(sp, Number(w));
+        const S = results[w].speedup; const n = Number(w);
+        results[w].karpFlattSerialFraction = S && n > 1 ? (1 / S - 1 / n) / (1 - 1 / n) : null;
+    }
     const verdict = (ok) => (ok === null ? 'UNKNOWN' : ok ? 'PASS' : 'MISS');
     const thresholds = {
         '2w>=1.5x': results[2] ? verdict(results[2].speedup >= 1.5) : 'UNKNOWN',
@@ -164,8 +236,8 @@ async function main() {
     };
     const doc = {
         host: { os: `${os.type()} ${os.release()} ${os.arch()}`, cpus: os.cpus().length, node: process.version },
-        config: { runs: o.runs, warmup: o.warmup, delayMs: o.delayMs, baseline1wMs: o.baseline },
-        results, thresholds, semanticEquivalence: equivalent,
+        config: { fixtureServer: 'scripts/fixture/server.js', runs: o.runs, warmup: o.warmup, delayMs: o.delayMs, baseline1wMs: o.baseline },
+        results, amdahl, thresholds, semanticEquivalence: equivalent, rawReportsIdentical: rawIdentical,
         volatileFieldsStripped: [...VOLATILE_KEYS].sort()
     };
     process.stdout.write(`${JSON.stringify(doc, null, 2)}\n`);
@@ -178,7 +250,7 @@ async function main() {
     if (!equivalent) { process.stderr.write('NON-EQUIVALENT reports across worker counts\n'); process.exit(1); }
 }
 
-module.exports = { median, percentile, summarize, speedup, efficiency, normalize, parseArgs };
+module.exports = { stagesFromLog, median, percentile, summarize, speedup, efficiency, normalize, parseArgs };
 
 if (require.main === module) {
     main().catch((e) => { process.stderr.write(`${e.message}\n`); process.exit(1); });
