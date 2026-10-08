@@ -23,8 +23,11 @@ Container image: tag `postgres:16-alpine` (the CI service image, `.github/workfl
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | BL-001 | Snyk container | High | SNYK-ALPINE324-ZLIB-20541555, CVE-2026-85091 (out-of-bounds write, CVSS 3.1 AV:N/AC:H) | `zlib@1.3.2-r0` in the Alpine layer of the CI Postgres service image | OS package in a CI-only service container; not shipped, not a Falcon runtime dependency | `zlib 1.3.2-r1` | Not Defined | The container runs a disposable test database in the hosted CI `test` job with throwaway credentials. Falcon does not feed untrusted compressed input to it. Exploitation path from Falcon: none identified (HYPOTHESIS, not tested) | Real image finding, low Falcon exposure. Not an exploitable-critical/high blocker under the program definition (no confirmed exploitation) | Move the service image to a rebuilt digest that includes the fix; pin by `@sha256:` (also required by AC-122). Candidate digest to be resolved and rescanned | DevOps | No (pending human confirmation) | Open; fix scheduled with the CI work (separate baseline-remediation commit) |
 | BL-002 | Snyk Code | Unknown | n/a | whole repository | n/a | n/a | n/a | n/a | Not assessed: scan could not run | Enable Snyk Code for the organization (Snyk settings, owner action), then rerun | Human owner | **Yes. Missing scan means release NO-GO** | BLOCKED |
+| BL-003 | gitleaks (history) | High (credential class) | private-key rule, two hits for `client.key` (28 lines) in commits `8d1cff4` and `ef4b32c` (2025-03-09, "update - worked on DB"), removed later by `58cd66a`; `client.crt` was added in the same commit | Git history, reachable from `origin/main` | Not in the current tree | n/a | Not applicable | The file is still retrievable from public history. Whether it is a real credential or a throwaway test key, and what it protects, is UNKNOWN (value deliberately not displayed) | Treat as compromised until the owner says otherwise (project rule). Owner to identify the key, rotate or revoke it, and decide on any history rewrite. No history rewrite or rotation is performed by the agent | Human owner | **Yes. Credential finding blocks the release gate until the owner records a disposition** | Open, awaiting owner |
+| BL-004 | gitleaks (history) | Low | generic-api-key, `tests/regression/p15-routes.check.cjs:27` (commit `8d42009`) and `tests/regression/p15-integration.check.cjs:64` (commit `52c7f3a`) | test files | n/a | n/a | n/a | Variable names are `SECRET_KEY` and `OPENAI_API_KEY` in regression tests that plant canary values; consistent with deliberate canaries (HYPOTHESIS, not proven) | Likely false positives | Security Engineer to confirm the values are inert canaries; if so record as false positive without a broad allowlist | Security Engineer | No, once confirmed | Open |
+| BL-005 | gitleaks (history) | Low | jwt rule, `tests/regression/p14-identity.check.cjs:564` (commit `dcc55cb`) | test file | n/a | n/a | n/a | An accessible-name fixture string beginning `auth:` in an identity-redaction test; consistent with a planted token-shaped fixture (HYPOTHESIS) | Likely false positive | As BL-004 | Security Engineer | No, once confirmed | Open |
 
-No critical findings. One high finding, assessed above; no dependency or npm-audit findings.
+No critical findings. High findings: BL-001 (container, low exposure) and BL-003 (historical private key, owner action).
 
 ## 3. Additional baseline checks
 
@@ -33,14 +36,15 @@ No critical findings. One high finding, assessed above; no dependency or npm-aud
 | CodeQL on baseline commit | `Analyze (javascript-typescript)` success and `Analyze (actions)` success (GitHub check runs) |
 | Hosted CI on baseline commit | `regression` and `test` success |
 | GitGuardian hosted check | UNKNOWN: no status or check run is attached to the baseline commit. It reports on pull requests; to be read on the Phase 16 PR |
-| Current-tree and Git-history secret scan | NOT RUN: no approved scanner (gitleaks, trufflehog) is installed. Needs the owner to approve installing one; absence is not a clean result |
+| Current-tree secret scan | gitleaks 8.30.1 (installed with owner approval), `gitleaks dir` on the baseline checkout: exit 0, no leaks. Output SHA-256 37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570 |
+| Git-history secret scan | `gitleaks git` (redacted output), 249 commits: exit 1, 5 findings, triaged in section 2 (BL-003 to BL-005). Output SHA-256 63ca8d7161a29aa5f0f996038545cbf1233e38524a8dbaccc41d4761571464aa |
 | Branch protection / rulesets | Branch protection API: not protected. One active ruleset (`Eddie_main`) with `deletion` and `non_fast_forward` rules only; no required reviews or required checks. Observation for the owner |
 | Existing security tests | Not yet run in this assessment; to be run in the final evidence set |
 | Workflow security review | Preliminary review is in `phase-16-threat-model.md` section 7 (W-6 job-wide `OPENAI_API_KEY`, W-8 cache restore by branch prefix, W-9 mutable image tag, W-11 `|| true` on report generation). Full review pending |
 
 ## 4. Blockers before the release gate
 1. BL-002: Snyk Code not enabled for the organization (owner action).
-2. Secret scanning of tree and history: scanner needed.
+2. BL-003: owner disposition for the historical `client.key`.
 3. GitGuardian: read the check on the PR.
 4. BL-001 remediation or owner acceptance.
 
