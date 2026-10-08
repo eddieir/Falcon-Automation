@@ -39,17 +39,30 @@ const { sanitizeField } = require(path.join(__dirname, "..", "src", "core", "uti
  *   message containing an embedded newline, so this changes no current
  *   output.
  */
-const SECRET_ENV_NAME = /TOKEN|KEY|SECRET|PASSWORD/i;
+const SECRET_ENV_NAME = /TOKEN|KEY|SECRET|PASSWORD|PASS|CREDENTIAL|DATABASE_URL|CONNECTION/i;
+
+function toText(message) {
+    if (typeof message === "string") return message;
+    try {
+        return String(message);
+    } catch {
+        return "[unprintable]";
+    }
+}
 
 function redact(message) {
-    if (typeof message !== "string") return message;
-    let out = message;
+    let out = toText(message);
     for (const [name, value] of Object.entries(process.env)) {
         if (typeof value === "string" && value.length >= 8 && SECRET_ENV_NAME.test(name)) {
             out = out.split(value).join("[redacted]");
         }
     }
-    out = out.replace(/(token=)[^\s&"',;]+/gi, "$1[redacted]");
+    // URL userinfo: scheme://user:pass@host
+    out = out.replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]*:[^\s/@]*@/gi, "$1[redacted]@");
+    // Authorization headers (scheme + value, or a bare value)
+    out = out.replace(/(Authorization\s*:\s*)(?:(?:Bearer|Basic|Token|Digest)\s+)?[^\s"',;]+/gi, "$1[redacted]");
+    // key=value forms, including URL-encoded values (%2E...)
+    out = out.replace(/\b((?:access_|id_|refresh_)?token|password|passwd|secret|api_?key)(=)[^\s&"',;]+/gi, "$1$2[redacted]");
     out = out.replace(/(Bearer\s+)[^\s"',;]+/gi, "$1[redacted]");
     return out;
 }

@@ -97,3 +97,39 @@ test("W-5: Logger redacts env secrets, token= and Bearer in console and file", a
     }
     assert.strictEqual(fs.statSync(path.join(d, "reports", "execution.log")).mode & 0o777, 0o600);
 });
+
+test("W-5b: Logger redacts additional secret shapes and non-string input", async () => {
+    const d = tmp();
+    const orig = Logger.logFilePath;
+    const origDir = Logger._dirEnsured;
+    Logger.logFilePath = path.join(d, "reports", "execution.log");
+    Logger._dirEnsured = false;
+    process.env.P16_DB_CONNECTION_STRING = "pgconn-value-12345";
+    process.env.P16_SERVICE_PASS = "svcpass-value-6789";
+    const lines = [];
+    const o = console.log;
+    console.log = (m) => lines.push(m);
+    try {
+        Logger.info("password=hunter2pw passwd=hunter3pw secret=s3cr3tval api_key=AKIA1234 apikey=AKIA5678");
+        Logger.info("Authorization: Bearer abc.def.ghi");
+        Logger.info("Authorization: rawvalue987");
+        Logger.info("Authorization: Basic dXNlcjpwYXNz");
+        Logger.info("connect postgres://dbuser:dbpassw0rd@db.example:5432/x");
+        Logger.info("url ?token=%2Eabc%2Fdef%3D");
+        Logger.info("env pgconn-value-12345 and svcpass-value-6789");
+        Logger.info({ toString() { return "obj password=objpw123"; } });
+        await Logger.flush();
+    } finally {
+        console.log = o;
+        delete process.env.P16_DB_CONNECTION_STRING;
+        delete process.env.P16_SERVICE_PASS;
+        Logger.logFilePath = orig;
+        Logger._dirEnsured = origDir;
+    }
+    const out = lines.join("\n");
+    const file = fs.readFileSync(path.join(d, "reports", "execution.log"), "utf8");
+    for (const text of [out, file]) {
+        assert.ok(!/hunter2pw|hunter3pw|s3cr3tval|AKIA1234|AKIA5678|abc\.def\.ghi|rawvalue987|dXNlcjpwYXNz|dbpassw0rd|%2Eabc|pgconn-value|svcpass-value|objpw123/.test(text), text);
+    }
+    assert.ok(out.includes("db.example:5432"), "host must remain readable");
+});

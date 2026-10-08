@@ -955,6 +955,7 @@ Status: in review on `phase-16/parallel-execution`, not merged. Sequential runs 
 node falcon.js --url=https://your-app.example --workers=2          # page-level parallelism, 1 to 16
 node falcon.js --url=https://your-app.example --shard=1/2 --run-id=local-run-1
 node falcon.js merge --input=reports/shards/local-run-1 --expect-total=2
+# optional strict checks, exit 2 on mismatch: --expect-run-id=<id> --expect-commit=<sha>
 ```
 
 - `--workers=N` runs pages in parallel. Scenarios within a page stay sequential.
