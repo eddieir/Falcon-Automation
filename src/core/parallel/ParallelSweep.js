@@ -10,6 +10,7 @@ const { runBounded } = require("./Scheduler");
 const ParallelMode = require("./ParallelMode");
 const StateJournal = require("./StateJournal");
 const ShardBundle = require("./ShardBundle");
+const Schemas = require("./Schemas");
 
 const nowMs = () => Number(process.hrtime.bigint()) / 1e6; // monotonic
 const elapsed = (t0) => Math.max(0, Math.round(nowMs() - t0));
@@ -74,7 +75,8 @@ async function run(opts) {
     const planned = sweep._plan(entry, discovered);
     const auth = await takeAuthState(context);
     const ordered = Planning.canonicalOrder(entry, planned.pages.map((r) => r.url)).slice(0, Limits.MAX_PAGES);
-    const frontierDigest = Planning.frontierDigest(ordered);
+    // Digest over the stored (query-free) form so writer and readers agree; urlId keeps identity unique.
+    const frontierDigest = Planning.frontierDigest(ordered.map(Schemas.storedUrl));
     const configFp = configFingerprint({ entryUrl: entry, maxPages: cap, dedupe, sameOriginOnly, repeat });
 
     const discoveryMs = elapsed(tDiscovery);
@@ -94,13 +96,15 @@ async function run(opts) {
         const uiIssues = await sweep._detectIssues(page, url);
         const plan = await sweep._generate(page, url);
         return { uiIssues, plan, durationMs: Date.now() - t0 };
-    }));
+    }), { deadline });
 
     const analysisMs = elapsed(tAnalysis);
     const analyses = toAnalyse.map((url, ordinal) => {
         const r = analysisRuns[ordinal];
         const a = { ordinal, url, name: url, scenarios: [], plan: null, uiIssues: [], status: "tested", reason: undefined, durationMs: 0, analysisError: null };
-        if (r.status !== "done") {
+        if (r.status === "not-started") {
+            a.budgetExhausted = true; // never silently dropped: reported as skipped / budget-exhausted
+        } else if (r.status !== "done") {
             a.analysisError = r.error || "analysis-not-completed";
         } else if (r.value.unreachable) {
             a.status = "unreachable"; a.reason = r.value.reason; a.durationMs = r.value.durationMs;
@@ -135,6 +139,7 @@ async function run(opts) {
             signatures: signatureLists[ordinal] || [], scenarioNames: [], journal: null,
         };
         if (!a) { base.reason = "max-pages"; if (assigned) base.disposition = "skipped"; return base; }
+        if (a.budgetExhausted) { base.reason = "budget-exhausted"; if (assigned) base.disposition = "skipped"; return base; }
         base.analysisStatus = a.status; base.analysisReason = a.reason;
         base.uiIssues = a.uiIssues;
         base.scenariosGenerated = a.scenarios.length;
@@ -156,15 +161,15 @@ async function run(opts) {
     const execList = [];
     for (const p of pages) {
         const a = analyses[p.ordinal];
-        if (!a || !p.assigned) continue;
+        if (!a || !p.assigned || a.budgetExhausted) continue;
         if (a.status === "unreachable") {
             p.status = "unreachable"; p.reason = a.reason; p.durationMs = a.durationMs;
-            p.results = [{ name: `Load ${p.url}`, status: "failed", error: a.reason }];
+            p.results = [{ name: `Load ${Schemas.storedUrl(p.url)}`, status: "failed", error: a.reason }];
             p.disposition = "completed";
-            Logger.warning(`Unreachable: ${p.url} (${a.reason})`);
+            Logger.warning(`Unreachable: ${Schemas.storedUrl(p.url)} (${Schemas.redactText(a.reason)})`);
         } else if (a.analysisError) {
             p.status = "tested"; p.reason = a.analysisError; p.disposition = "task-failed"; p.taskFailed = true;
-            p.results = [{ name: `Sweep of ${p.url}`, status: "failed", error: a.analysisError }];
+            p.results = [{ name: `Sweep of ${Schemas.storedUrl(p.url)}`, status: "failed", error: a.analysisError }];
         } else {
             execList.push(p);
         }
@@ -218,8 +223,8 @@ async function run(opts) {
         p.status = "tested";
         if (v.failure) {
             p.disposition = "task-failed"; p.taskFailed = true; p.reason = bound(v.failure);
-            p.results = [...v.results, ...a.dedupedRows, { name: `Sweep of ${p.url}`, status: "failed", error: bound(v.failure) }];
-            Logger.warning(`Sweep of ${p.url} failed after ${v.results.length} scenario(s): ${p.reason}`);
+            p.results = [...v.results, ...a.dedupedRows, { name: `Sweep of ${Schemas.storedUrl(p.url)}`, status: "failed", error: bound(v.failure) }];
+            Logger.warning(`Sweep of ${Schemas.storedUrl(p.url)} failed after ${v.results.length} scenario(s): ${Schemas.redactText(p.reason)}`);
         } else {
             p.disposition = "completed";
             p.results = [...v.results, ...a.dedupedRows];

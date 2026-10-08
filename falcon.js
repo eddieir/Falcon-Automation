@@ -403,8 +403,14 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
             await Logger.flush();
             process.exit(2);
         }
+        const expect = ParallelRunner.parseMergeExpect(args);
+        if (!expect.ok) {
+            Logger.error(`❌ ${expect.message}`);
+            await Logger.flush();
+            process.exit(2);
+        }
         const code = await ParallelRunner.runMerge({
-            merge: parallel.merge, paths: ParallelRunner.defaultPaths(__dirname),
+            merge: { ...parallel.merge, expectRunId: expect.expectRunId, expectCommit: expect.expectCommit }, paths: ParallelRunner.defaultPaths(__dirname),
         });
         await Logger.flush();
         process.exit(code);

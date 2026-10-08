@@ -98,7 +98,7 @@ function fail(code, message) {
 
 /**
  * Bounded, symlink-refusing JSON read. Never throws, never returns raw content
- * in errors. Returns {ok:true,value,bytes} | {ok:false,code,message}.
+ * in errors. The sha256 is of the exact buffer that was parsed. Returns {ok:true,value,bytes,sha256} | {ok:false,code,message}.
  */
 async function readBoundedJson(file, opts = {}) {
     const maxBytes = opts.maxBytes;
@@ -144,7 +144,8 @@ async function readBoundedJson(file, opts = {}) {
         try { value = JSON.parse(text); } catch { return fail("READ_PARSE", "invalid JSON"); }
         const bad = inspectValue(value, maxDepth);
         if (bad) return fail("READ_" + bad, "value rejected");
-        return { ok: true, value, bytes: off };
+        const sha256 = crypto.createHash("sha256").update(buf.subarray(0, off)).digest("hex");
+        return { ok: true, value, bytes: off, sha256 };
     } catch {
         return fail("READ_FAILED", "read failed");
     } finally {
