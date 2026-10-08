@@ -36,7 +36,36 @@ const EMIT_ALLOWED_EVENTS = new Set([
     "healingEvent", "healingPending", "healingApproved", "healingRejected",
     "explorerPage", "pageStart", "pageComplete", "sweepComplete",
     "flakyDetected", "scenarioQuarantined", "scenarioUnquarantined",
+    "runPlan", "workerState",
 ]);
+const RUN_MODES = new Set(["sequential", "parallel", "sharded"]);
+const MAX_COUNT = 100000;
+const isCount = (v) => Number.isInteger(v) && v >= 0 && v <= MAX_COUNT;
+
+/**
+ * Strict schema for the Phase 16 run-state events. Returns a rebuilt payload
+ * (only known fields) or null when anything is out of shape or out of bounds.
+ */
+function validateRunEvent(name, payload) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+    if (name === "runPlan") {
+        const { mode, workers, shard, pagesTotal } = payload;
+        if (!RUN_MODES.has(mode) || !isCount(workers) || !isCount(pagesTotal)) return null;
+        let cleanShard = null;
+        if (shard !== null && shard !== undefined) {
+            if (typeof shard !== "object" || Array.isArray(shard)) return null;
+            if (!isCount(shard.index) || !isCount(shard.total)) return null;
+            cleanShard = { index: shard.index, total: shard.total };
+        }
+        return { mode, workers, shard: cleanShard, pagesTotal };
+    }
+    const out = {};
+    for (const key of ["configured", "active", "completed", "pending", "failed"]) {
+        if (!isCount(payload[key])) return null;
+        out[key] = payload[key];
+    }
+    return out;
+}
 const EMIT_BODY_LIMIT = "64kb";
 
 const HEALING_PENDING_STALE_DAYS_DEFAULT = 14;
@@ -201,7 +230,10 @@ class Dashboard {
             // The sweep contract numbers pages from 1, so an index of 1 means a
             // new sweep has started — the previous run's pages must not linger
             // and inflate the coverage counts.
-            if (index !== undefined && index <= 1 && this._sweep.pages.size > 0) {
+            // Concurrent pages can deliver index 1 late, after pages 2..n have
+            // started; that is only a restart when page 1 was already recorded.
+            const hasFirst = [...this._sweep.pages.values()].some((p) => p.index === 1);
+            if (index !== undefined && index <= 1 && hasFirst) {
                 this._sweep = Dashboard._emptySweep();
             }
             const total = Dashboard._num(payload.total);
@@ -597,7 +629,12 @@ class Dashboard {
             if (typeof name !== "string" || !EMIT_ALLOWED_EVENTS.has(name)) {
                 return res.status(400).json({ error: "Unknown event name." });
             }
-            this.emit(name, payload || {});
+            let clean = payload || {};
+            if (name === "runPlan" || name === "workerState") {
+                clean = validateRunEvent(name, payload);
+                if (!clean) return res.status(400).json({ error: "Invalid event payload." });
+            }
+            this.emit(name, clean);
             res.status(204).end();
         });
 
@@ -900,7 +937,10 @@ class Dashboard {
      * @param {Object} payload
      */
     emit(name, payload = {}) {
-        const event = { name, payload, timestamp: Date.now() };
+        // seq is additive and strictly increasing for the process lifetime,
+        // independent of the replay cap, so clients can order and de-duplicate.
+        this._seq = (this._seq || 0) + 1;
+        const event = { name, payload, timestamp: Date.now(), seq: this._seq };
         this._events.push(event);
         if (this._events.length > MAX_EVENTS) {
             this._events.splice(0, this._events.length - MAX_EVENTS);
