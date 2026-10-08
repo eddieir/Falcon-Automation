@@ -279,13 +279,17 @@ existing files or secure their containing directory.
 
 An adjacent exclusive lock covers the durable-file digest check and replacement. A stale store
 instance cannot overwrite another writer's work: restart it to reload current state after a writer
-conflict. A lock left by a crashed process is automatically reclaimed: if its recorded PID is gone
-(verified via `process.kill(pid, 0)` returning `ESRCH`), or if the lock has no readable PID and is
-older than 30 seconds, the next writer moves it aside and retries once. A lock naming a live PID,
-or the current process's own PID, is never reclaimed. A reused PID, for example a container
-restarted with the same PID, therefore still needs manual recovery: stop writers, confirm the owner
-has exited, then remove the lock. A narrow window remains in which a live owner displaced
-mid-reclaim can briefly overlap with the next holder; neither can remove the other's lock. The
+conflict. Each lock records the host that created it, the owner PID and the creation time. A lock left by a
+crashed process on the same host is automatically reclaimed: if its recorded PID is gone (verified via
+`process.kill(pid, 0)` returning `ESRCH`), or if the lock has no readable owner and is older than
+60 seconds, the next writer moves it aside and retries once. A lock naming a live PID, or the current
+process's own PID, is never reclaimed. A lock created on another host is never reclaimed automatically,
+because a PID means nothing across machines: the write stops with `LOCK_FOREIGN_HOST` and changes
+nothing. Stop writers, confirm the owner is gone, then remove the lock by hand. Hostnames that change
+between runs on a shared volume (for example ephemeral containers) hit the same rule and need the same
+manual step. A reused PID on the same host also still needs manual recovery. A narrow window remains in
+which a live owner displaced mid-reclaim can briefly overlap with the next holder; neither can remove the
+other's lock. The
 conflict message names the owner PID and age to aid diagnosis. There is no merge of competing
 snapshots.
 

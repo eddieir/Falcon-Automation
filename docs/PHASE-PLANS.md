@@ -807,7 +807,7 @@ configuration selects.
 
 ## Phase 16 — Parallel execution
 
-**Status: in review, not merged.** Branch `phase-16/parallel-execution`. Hosted CI for head 42fac1a: Falcon CI run 37792596841 succeeded on all seven jobs (see docs/phase-16-operations.md).
+**Status: in review, not merged.** Branch `phase-16/parallel-execution`. Last completed hosted run (head 42fac1a, before the lock change and later docs commits): Falcon CI run 37792596841 succeeded on all seven jobs (see docs/phase-16-operations.md).
 
 ### Why
 

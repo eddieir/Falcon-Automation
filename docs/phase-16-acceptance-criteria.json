@@ -983,7 +983,7 @@
         }
       ],
       "status": "partial",
-      "note": "Workflow structure is statically tested; no hosted run on the exact head exists yet."
+      "note": "Workflow structure is statically tested; the last completed hosted run (head 42fac1a) succeeded on all jobs; the exact final head is confirmed by the release review."
     },
     {
       "id": "P16-AC-36",
@@ -1305,7 +1305,7 @@
       "verifiedBy": "platform",
       "tests": [],
       "status": "planned",
-      "note": "No hosted run on the final head recorded."
+      "note": "Last completed hosted run (head 42fac1a) succeeded on all jobs; final-head confirmation is part of the release review."
     },
     {
       "id": "P16-AC-115",

@@ -63,6 +63,6 @@ Result legend: OK = checked, matches code or CI; FIXED = edited in this review; 
 ## 5. Verification evidence
 
 - Regression suite: `node --test --test-concurrency=1 tests/regression/*.check.cjs` gives 1444 tests, 1443 pass, 1 fail (exit 1). The failing test is not yet identified: OPEN.
-- Hosted CI for 42fac1a: Falcon CI run 37792596841 succeeded on all seven jobs (regression, test, shards 1-3, aggregate, shard-negative).
+- Last completed hosted run (head 42fac1a, before the lock change and later docs commits): Falcon CI run 37792596841 succeeded on all seven jobs (regression, test, shards 1-3, aggregate, shard-negative).
 - GitHub code scanning run 37792606063 on the same head concluded failure: OPEN, not investigated.
 - No separate security workflow exists in `.github/workflows/`; security evidence is the GitHub checks plus `npm audit --omit=dev --audit-level=high` in the regression job.
