@@ -253,6 +253,9 @@ class LocatorMemory {
       );
     }
 
+    // Phase 16: additive list of run ids already merged by the coordinator.
+    this.mergedRuns = Array.isArray(raw && raw.mergedRuns)
+      ? raw.mergedRuns.filter(r => typeof r === "string" && r.length > 0 && r.length <= 63).slice(-8) : [];
     this.entries = new Map();
     this.legacy = new Map();
     let quarantinedCount = 0;
@@ -384,7 +387,29 @@ class LocatorMemory {
       entries: Object.fromEntries(this.entries),
       legacy: Object.fromEntries(this.legacy),
       rejections: this.rejections,
+      ...(Array.isArray(this.mergedRuns) && this.mergedRuns.length > 0 ? {mergedRuns: this.mergedRuns} : {}),
     };
+  }
+
+  /**
+   * Phase 16 coordinator merge: reduce the shards' locatorMemory.* events into
+   * the FRESH on-disk state and persist with ONE digest-guarded _writeState.
+   * Never approves, rejects or rolls back; human decisions stay untouched.
+   * @returns {Promise<{ok:boolean, changed:boolean, conflicts:Array, error?:string}>}
+   */
+  async applyMerge(events, runId, snapshotAt) {
+    const { reduceLocatorMemory } = require("../parallel/LocatorMemoryMerge");
+    this._reload();
+    if (this._blockedEnvelope) {
+      return {ok:false, changed:false, conflicts:[{code:"envelope_blocked", key:null, detail:this._blockedEnvelopeReason}], error:"locator memory envelope is blocked"};
+    }
+    const r = reduceLocatorMemory(_clone(this._toPersistable()), events, runId, snapshotAt);
+    if (r.blocked) return {ok:false, changed:false, conflicts:r.conflicts, error:"locator memory envelope is blocked"};
+    if (!r.changed) return {ok:true, changed:false, conflicts:r.conflicts};
+    const result = await this._writeState(r.envelope);
+    if (!result || !result.ok) return {ok:false, changed:true, conflicts:r.conflicts, error:(result && result.error) || "write failed"};
+    this._reload();
+    return {ok:true, changed:true, conflicts:r.conflicts};
   }
 
   /**
