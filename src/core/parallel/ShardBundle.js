@@ -202,7 +202,9 @@ async function read(dir) {
     if (Planning.frontierDigest(urls) !== manifest.frontierDigest) {
         throw new BundleError("BUNDLE_FRONTIER_MISMATCH");
     }
-    if (Planning.planDigest(sigLists) !== manifest.planDigest) throw new BundleError("BUNDLE_PLAN_DIGEST_MISMATCH");
+    let end = sigLists.length;
+    while (Planning.planDigest(sigLists.slice(0, end)) !== manifest.planDigest && end > 0 && sigLists[end - 1].length === 0) end--;
+    if (Planning.planDigest(sigLists.slice(0, end)) !== manifest.planDigest) throw new BundleError("BUNDLE_PLAN_DIGEST_MISMATCH");
     return { manifest, fragments, journals, analysis };
 }
 

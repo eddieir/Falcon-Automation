@@ -63,6 +63,36 @@ async function readChecked(shardDir, sub, ref, maxBytes, where) {
     return value;
 }
 
+/** The writer digests only analysed pages (those below --max-pages), so trailing unanalysed pages carry no signatures. */
+function planDigestMatches(lists, expected) {
+    let end = lists.length;
+    for (;;) {
+        if (Planning.planDigest(lists.slice(0, end)) === expected) return true;
+        if (end === 0 || lists[end - 1].length > 0) return false;
+        end--;
+    }
+}
+
+/**
+ * The manifest's frontier/plan digests must match the signatures recorded in analysis.json.
+ * A bundle without analysis.json is accepted (older writers); one with a mismatch is rejected.
+ */
+async function checkAnalysis(dir, m, name) {
+    const file = SafeFs.resolveUnder(dir, "analysis.json");
+    const r = await SafeFs.readBoundedJson(file, { maxBytes: 4 * 1024 * 1024, maxDepth: 8 });
+    if (!r.ok) {
+        if (r.code === "READ_NOT_FOUND") return;
+        throw new Reject("ANALYSIS_" + r.code, `${name}/analysis.json`);
+    }
+    const a = r.value;
+    if (!a || a.schema !== "falcon.shard-analysis" || a.runId !== m.runId || !Array.isArray(a.pages) || a.pages.length !== m.pages.length
+        || a.pages.some((p, i) => !p || p.ordinal !== m.pages[i].ordinal || p.url !== m.pages[i].url || !Array.isArray(p.signatures))) {
+        throw new Reject("ANALYSIS_INVALID", `${name}/analysis.json`);
+    }
+    if (Planning.frontierDigest(m.pages.map((p) => p.url)) !== m.frontierDigest) throw new Reject("FRONTIER_DIGEST_MISMATCH", name);
+    if (!planDigestMatches(a.pages.map((p) => p.signatures), m.planDigest)) throw new Reject("PLAN_DIGEST_MISMATCH", name);
+}
+
 /** Stage A: list shard dirs and validate manifests only. */
 async function loadManifests(inputDir, expectTotal) {
     let names;
@@ -82,6 +112,7 @@ async function loadManifests(inputDir, expectTotal) {
         const [, i, n] = SHARD_DIR.exec(name);
         if (raw.shard.index !== Number(i) || raw.shard.total !== Number(n)) throw new Reject("SHARD_NAME_MISMATCH", name);
         const digest = sha(await fs.promises.readFile(file));
+        await checkAnalysis(dir, raw, name);
         shards.push({ name, dir, m: raw, digest });
     }
     const total = shards[0].m.shard.total;
@@ -117,7 +148,6 @@ function buildPageTable(shards, total) {
             if (t.owner !== null) throw new Reject("DUPLICATE_PAGE_OWNER", `page ${i}`);
             if (pg.disposition === "not-run") throw new Reject("PAGE_NOT_RUN", `page ${i}`);
             if (pg.fragment === null) throw new Reject("FRAGMENT_MISSING", `page ${i}`);
-            if ((pg.disposition === "completed" || pg.disposition === "task-failed") && pg.journal === null) throw new Reject("JOURNAL_MISSING", `page ${i}`);
             t.owner = s; t.pg = pg;
         });
     }
@@ -144,7 +174,12 @@ async function loadPayloads(table, runId) {
         frag.results.forEach((r, idx) => rows.push({ t, r, idx }));
         frag.uiIssues.forEach((u) => uiIssues.push({ ...u, page: t.url }));
         t.status = frag.status;
-        if (pg.journal === null) continue;
+        // A page that never ran tasks (unreachable, analysis failure) has no journal; a page that
+        // reports ok must have one.
+        if (pg.journal === null) {
+            if ((pg.disposition === "completed" || pg.disposition === "task-failed") && frag.status !== "failed") throw new Reject("JOURNAL_MISSING", where);
+            continue;
+        }
         const j = await readChecked(owner.dir, "journals", pg.journal, Limits.JOURNAL_MAX_BYTES, where + " journal");
         const jv = Schemas.validateJournal(j);
         if (!jv.ok) throw new Reject("JOURNAL_" + jv.code, `${where}${jv.path.slice(1)}`);
@@ -254,7 +289,17 @@ async function merge({ inputDir, expectTotal, paths, beforeStep, env } = {}) {
         const pend = Reducers.reduceHealingPending(pendFresh, dec, events, payload.snapshotAt, runId);
         w = await persistIfChanged(f("healing_pending.json"), pendFresh, pend.pending);
         if (!w.ok) return fail3("healing_pending", w.error);
-        addConflicts(pend.conflicts);
+        // Derived from events + the resulting canonical entries (not from "was it applied just now"),
+        // so a rerun after a partial apply reports the same conflicts.
+        addConflicts(pend.conflicts.filter((c) => c.code !== "rejected_after_snapshot"));
+        {
+            const snap = Date.parse(payload.snapshotAt);
+            const keys = [...new Set(events.filter((e) => e.type === "healing.pending" && e.p && typeof e.p.original === "string").map((e) => e.p.original))].sort();
+            addConflicts(keys.filter((k) => {
+                const pr = pend.pending[k] && pend.pending[k].previouslyRejected;
+                return pr && pr.count > 0 && Date.parse(pr.lastRejectedAt) > snap;
+            }).map((k) => ({ code: "rejected_after_snapshot", key: k })));
+        }
 
         await step("locator_store");
         const storeFresh = readStore(f("locator_store.json"), {});
@@ -277,7 +322,9 @@ async function merge({ inputDir, expectTotal, paths, beforeStep, env } = {}) {
         const count = (d) => table.filter((t) => t.pg.disposition === d).length;
         const healingEvents = Reducers.buildHealingLog(events);
         const coverage = {
-            pagesTested: count("completed"), pagesSkipped: count("skipped"), pagesUnreachable: count("task-failed"),
+            pagesTested: table.filter((t) => t.pg.disposition === "completed" && t.status === "ok").length,
+            pagesSkipped: count("skipped"),
+            pagesUnreachable: table.filter((t) => t.pg.disposition === "task-failed" || (t.pg.disposition === "completed" && t.status !== "ok")).length,
             scenariosGenerated: tests.length, scenariosDeduplicated: tests.filter((t) => t.status === "deduped").length,
             budgetExhausted: false,
         };
