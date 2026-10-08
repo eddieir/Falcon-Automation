@@ -198,7 +198,7 @@ test("T13: every CI cache key carries the branch ref and no cache path includes 
     assert.ok(block, "cache step without path");
     assert.ok(!/locator_memory\.json/.test(block[0]), `cache path includes locator_memory.json:\n${block[0]}`);
   }
-  assert.ok(!/path:[^\n]*\n(?:\s+[^\n:]+\n)*\s+data\/locator_memory\.json/.test(ci.replace(/#[^\n]*/g, "")), "locator_memory.json appears in a path list");
+  assert.ok(!/^path:[^\n]*\n(?:[ \t]+[^\n:]+\n)*[ \t]+data\/locator_memory\.json$/m.test(ci.replace(/#[^\n]*/g, "")), "locator_memory.json appears in a path list");
 });
 test("T13: the aggregate state save is restricted to the default branch and non-fork runs", () => {
   const save = steps().find((s) => /actions\/cache\/save@/.test(s) && /falcon-state-agg-/.test(s));
