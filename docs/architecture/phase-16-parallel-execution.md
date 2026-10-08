@@ -1,6 +1,6 @@
 # Phase 16 Architecture: Deterministic Parallel Execution and Safe CI Sharding
 
-Status: design for approval (CP1). Base: branch `phase-16/parallel-execution` at 747d6ec (Phase 15 merged). Risk tier: full. Acceptance register: `docs/phase-16-acceptance-criteria.json` (P16-AC-01..42; security program AC-101..125 are out of scope here except where noted).
+Status: implemented on the branch and in review, not merged (HEAD 42fac1a); originally written as the CP1 design. Base: branch `phase-16/parallel-execution` at 747d6ec (Phase 15 merged). Risk tier: full. Acceptance register: `docs/phase-16-acceptance-criteria.json` (P16-AC-01..42; security program AC-101..125 are out of scope here except where noted).
 
 ## 1. Context and constraints
 
@@ -124,7 +124,7 @@ Run identity: `--run-id=<id>` (required with `--shard`; generated for local para
 
 Merge command: `node falcon.js merge --input=<dir> [--expect-total=N]`. Dispatched before dashboard or browser start. Strict arguments (unknown, duplicate, empty, conflicting values exit 2). Exit codes: 0 validated and PASSED; 1 validated, verdict not PASSED (same rule as `ReportManager`: PASSED only; FAILED, PARTIAL, NO_TESTS_RUN are 1); 2 rejected input or usage; 3 state not durable. CLI flag errors in falcon.js itself keep today's convention (exit 1 before dashboard/browser, like `--repeat`).
 
-Shard exit code: 0 unless a verdict is `failed`/`unavailable` or the shard hit an infrastructure error; 1 otherwise. A shard never applies the run-level NO_TESTS_RUN rule (a shard whose pages were all deduped is fine); the aggregate does. Shards never call `ReportManager.generateReport`; the merge uses a new pure `ReportManager.buildReport(...)` (fixed `runId`, `duration` from manifests, no `Date.now()`, no console, no exit code) with `generateReport` delegating to it so sequential output is unchanged.
+Shard exit code: 0 unless a verdict is `failed`/`unavailable` or the shard hit an infrastructure error; 1 when a verdict is `failed`/`unavailable` or the shard hits an infrastructure error, 0 otherwise. A shard never applies the run-level NO_TESTS_RUN rule (a shard whose pages were all deduped is fine); the aggregate does. Shards never call `ReportManager.generateReport`; the merge uses a new pure `ReportManager.buildReport(...)` (fixed `runId`, `duration` from manifests, no `Date.now()`, no console, no exit code) with `generateReport` delegating to it so sequential output is unchanged.
 
 Report determinism (AC-14/15): `tests` ordered by (page, scenario, repetition) with deduped rows following the page's executed rows as today; `pages` by ordinal; `healingEvents` by (page, scenario, repetition, seq); fixed key order; no merge-time timestamps. Documented volatile fields: `runId`, `duration`, per-row `duration`, `durationMs`, healing `timestamp`, history timestamps.
 
