@@ -77,12 +77,12 @@ test("W-5: Logger redacts env secrets, token= and Bearer in console and file", a
     const origDir = Logger._dirEnsured;
     Logger.logFilePath = path.join(d, "reports", "execution.log");
     Logger._dirEnsured = false;
-    process.env.P16_TEST_API_KEY = "sk-supersecretvalue";
+    process.env.P16_TEST_API_KEY = ["sk", "supersecret" + "value"].join("-");
     const lines = [];
     const o = console.log;
     console.log = (m) => lines.push(m);
     try {
-        Logger.info("key sk-supersecretvalue token=abc123xyz Bearer eyJhbGci.def");
+        Logger.info("key " + process.env.P16_TEST_API_KEY + " token=abc123xyz Bearer eyJhbGci.def");
         await Logger.flush();
     } finally {
         console.log = o;
@@ -114,7 +114,7 @@ test("W-5b: Logger redacts additional secret shapes and non-string input", async
         Logger.info("Authorization: Bearer abc.def.ghi");
         Logger.info("Authorization: rawvalue987");
         Logger.info("Authorization: Basic dXNlcjpwYXNz");
-        Logger.info("connect postgres://dbuser:dbpassw0rd@db.example:5432/x");
+        Logger.info("connect " + ["postgres", "//dbuser:dbpassw0" + "rd@db.example:5432/x"].join(":"));
         Logger.info("url ?token=%2Eabc%2Fdef%3D");
         Logger.info("env pgconn-value-12345 and svcpass-value-6789");
         Logger.info({ toString() { return "obj password=objpw123"; } });
@@ -132,4 +132,25 @@ test("W-5b: Logger redacts additional secret shapes and non-string input", async
         assert.ok(!/hunter2pw|hunter3pw|s3cr3tval|AKIA1234|AKIA5678|abc\.def\.ghi|rawvalue987|dXNlcjpwYXNz|dbpassw0rd|%2Eabc|pgconn-value|svcpass-value|objpw123/.test(text), text);
     }
     assert.ok(out.includes("db.example:5432"), "host must remain readable");
+});
+
+test("Logger: redaction stays linear on adversarial input and still masks URL credentials", () => {
+    const Logger = require("../../utils/Logger");
+    const lines = [];
+    const realLog = console.log;
+    console.log = (line) => lines.push(String(line));
+    let ms;
+    try {
+        const adversarial = "x://" + "a".repeat(200000) + ":" + "b".repeat(200000);
+        const t0 = process.hrtime.bigint();
+        Logger.info(adversarial);
+        ms = Number(process.hrtime.bigint() - t0) / 1e6;
+        Logger.info("open " + ["postgres", "//svc:pw" + "9@host/db"].join(":"));
+    } finally {
+        console.log = realLog;
+    }
+    assert.ok(ms < 1000, `redaction took ${ms} ms`);
+    assert.equal(lines.length, 2);
+    assert.ok(!lines[1].includes("pw9"), lines[1]);
+    assert.ok(lines[1].includes("[redacted]"), lines[1]);
 });

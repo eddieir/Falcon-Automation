@@ -57,7 +57,7 @@ test("tampered fragment, journal, manifest and analysis are rejected", async (t)
     const dir = temp(); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
     await ShardBundle.write(opts(dir, f));
     const file = path.join(dir, ...rel);
-    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/ /g, "  ").replace("{", "{ "));
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/ /g, "  ").split("{").join("{ "));
     await assert.rejects(() => ShardBundle.read(dir), (e) => e.code === code);
   }
   const dir = temp(); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

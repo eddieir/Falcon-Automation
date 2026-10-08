@@ -39,6 +39,39 @@ const { sanitizeField } = require(path.join(__dirname, "..", "src", "core", "uti
  *   message containing an embedded newline, so this changes no current
  *   output.
  */
+/**
+ * Replace the user:password part of scheme://user:password@host with
+ * [redacted]. Written as a linear scan (no backtracking regex) because the
+ * input is arbitrary log text.
+ */
+function redactUrlUserinfo(text) {
+    let result = "";
+    let from = 0;
+    for (;;) {
+        const marker = text.indexOf("://", from);
+        if (marker === -1) break;
+        const start = marker + 3;
+        let end = start;
+        let at = -1;
+        let colon = -1;
+        while (end < text.length) {
+            const ch = text[end];
+            if (ch === "@") { at = end; break; }
+            if (ch === "/" || ch === " " || ch === "\n" || ch === "\r" || ch === "\t") break;
+            if (ch === ":" && colon === -1) colon = end;
+            end++;
+        }
+        if (at !== -1 && colon !== -1) {
+            result += text.slice(from, start) + "[redacted]@";
+            from = at + 1;
+        } else {
+            result += text.slice(from, marker + 3);
+            from = marker + 3;
+        }
+    }
+    return result + text.slice(from);
+}
+
 const SECRET_ENV_NAME = /TOKEN|KEY|SECRET|PASSWORD|PASS|CREDENTIAL|DATABASE_URL|CONNECTION/i;
 
 function toText(message) {
@@ -58,7 +91,7 @@ function redact(message) {
         }
     }
     // URL userinfo: scheme://user:pass@host
-    out = out.replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]*:[^\s/@]*@/gi, "$1[redacted]@");
+    out = redactUrlUserinfo(out);
     // Authorization headers (scheme + value, or a bare value)
     out = out.replace(/(Authorization\s*:\s*)(?:(?:Bearer|Basic|Token|Digest)\s+)?[^\s"',;]+/gi, "$1[redacted]");
     // key=value forms, including URL-encoded values (%2E...)
