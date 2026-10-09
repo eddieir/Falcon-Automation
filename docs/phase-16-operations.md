@@ -1,6 +1,6 @@
 # Phase 16 operations: parallel runs, shards and merge
 
-Status: **in review, not merged.** The behaviour below is implemented on branch `phase-16/parallel-execution`. Sequential runs (no flags) are the default and are unchanged. Hosted CI for head 42fac1a47a3c967ccbb0e9bfa55614e645e85005 (run 37792596841, Falcon CI): all seven jobs succeeded (regression, shards 1-3, test, aggregate, shard-negative).
+Status: **in review, not merged.** The behaviour below is implemented on branch `phase-16/parallel-execution`. Sequential runs (no flags) are the default and are unchanged. Hosted CI for head cebd31f7460589d8a31211fb5cb5ddb16a6277b9 (run 37940648249, Falcon CI, pull request #48): all seven jobs succeeded (regression, shards 1-3, test, aggregate, shard-negative). A GitHub code scanning run on the same head (37940650327) concluded failure; not yet investigated.
 
 Audience: engineers who run Falcon locally or in CI, and reviewers approving the merge.
 
@@ -66,16 +66,18 @@ A shard exits 0 unless a verdict is `failed` or `unavailable`, or the shard hits
 - Page order can differ from a sequential run when the frontier is larger than `--max-pages`.
 - If a page that owns a deduplicated scenario fails, later pages keep the scenario deduplicated, and the run fails.
 - `--budget-ms` is a scheduling deadline. The deadline is checked before starting each page task in analysis and execution; a task that has already started runs to completion.
+- Parallel and shard runs discover pages with a different pass from the sequential crawl (section 4); the page set can differ on unusual sites.
 - Evidence recorded in a parallel run does not raise locator trust until a sequential run has confirmed it.
 
 ## 4. Benchmark
 
 Measured on one machine (Darwin 25.5.0 arm64, 10 CPUs, Node v22.19.0, headless Chromium, local fixture server, no network), with a 200 ms page delay:
 
-- 2 workers: 1.04x end-to-end speedup.
-- 4 workers: 1.18x end-to-end speedup.
+- 2 workers: 2.80x end-to-end speedup (median 5.87 s against 16.43 s sequential); parallel-stage (analysis + execution) speedup 1.11x.
+- 4 workers: 4.15x end-to-end speedup (median 3.96 s); parallel-stage speedup 1.88x.
+- Most of the end-to-end gain comes from the cheaper discovery pass (median 11.4 s sequential; about 1.1 s with 2 workers and 0.85 s with 4 workers).
 - Parallel and shard runs use a different discovery pass from the sequential crawl: plain anchors are resolved from their `href` instead of clicked, links that open a new tab are not clicked, other origins are recorded but never opened, and clicks on pages two hops away (whose results the sequential crawl discards) are skipped. On unusual sites the page set can differ from a sequential run.
-- The thresholds were missed: 2 workers needed at least 1.5x (measured 1.04x); 4 workers needed at least 2.3x (measured 1.18x).
+- The thresholds (2 workers at least 1.5x, 4 workers at least 2.3x) are met on the fixture. They are evidence only and do not gate CI.
 - The results are specific to this fixture and machine. They do not show linear scaling.
 
 Source: `docs/benchmarks/phase-16-parallel-benchmark.md`.
@@ -83,7 +85,7 @@ Source: `docs/benchmarks/phase-16-parallel-benchmark.md`.
 ## 5. CI
 
 - `.github/workflows/ci.yml` has a `shards` matrix job, an `aggregate` job, and a `shard-negative` job.
-- The `aggregate` job runs with `if: always()`, downloads the shard artifacts, runs `merge --expect-total=N`, and uploads the merged report. It is the only job that saves the state cache, on main for non-fork runs, even when the merge fails. The save skips when no state file exists and is the only step allowed to fail without failing the job. Shard artifacts are named `falcon-shard-<i>-of-3-<attempt>` so a re-run does not collide, and the merge receives the expected run id and commit.
+- The `aggregate` job runs with `if: always()`, downloads the shard artifacts, runs `merge --expect-total=N`, and uploads the merged report. Of the shard and aggregate jobs, only aggregate saves the state cache, on main for non-fork runs, even when the merge fails. The save skips when no state file exists and is the only step allowed to fail without failing the job. Shard artifacts are named `falcon-shard-<i>-of-3-<attempt>` so a re-run does not collide, and the merge receives the expected run id and commit.
 - The `shard-negative` job checks that a missing shard is rejected.
 - Local runs do not exercise the matrix. CI is the authority for these jobs.
 
