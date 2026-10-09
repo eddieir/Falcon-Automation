@@ -1455,7 +1455,7 @@
       "verifiedBy": "review",
       "tests": [],
       "status": "partial",
-      "note": "Owner decided on 2026-10-08: rotate the historical key (no history rewrite) and mark the GitGuardian fixture incident as a false positive. Written acceptance of the T13/T17 residual risks is still outstanding; key rotation is pending."
+      "note": "Owner decided on 2026-10-08: rotate the historical key (no history rewrite) and mark the GitGuardian fixture incident as a false positive. Written acceptance of the T13/T17 residual risks is still outstanding; the historical key's project (Supabase) was fully deleted per the owner on 2026-10-09, so the credential is invalidated; use by any other system is not verified."
     }
   ]
 }
