@@ -224,14 +224,29 @@ test("T13: every CI cache key carries the branch ref and no cache path includes 
     assert.ok(pathText, "cache step without path");
     assert.ok(!/locator_memory\.json/.test(pathText), `cache path includes locator_memory.json:\n${pathText}`);
   }
-  assert.ok(!/^[ \t]*path:[^\n]*\n(?:[ \t]+[^\n:]+\n)*[ \t]+data\/locator_memory\.json$/m.test(ci.replace(/#[^\n]*/g, "")), "locator_memory.json appears in a path list");
+  assert.ok(!pathListIncludes(ci.replace(/#[^\n]*/g, ""), "data/locator_memory.json"), "locator_memory.json appears in a path list");
 });
-test("T13 negative control: the path-list pattern flags a cache path that includes locator_memory.json", () => {
-  const re = /^[ \t]*path:[^\n]*\n(?:[ \t]+[^\n:]+\n)*[ \t]+data\/locator_memory\.json$/m;
+function pathListIncludes(text, needle) {
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^([ \t]*)path:/.exec(lines[i]);
+    if (!m) continue;
+    const base = m[1].length;
+    for (let j = i + 1; j < lines.length; j++) {
+      const ln = lines[j];
+      if (!ln.trim()) continue;
+      const indent = /^[ \t]*/.exec(ln)[0].length;
+      if (indent <= base) break;
+      if (ln.trim() === needle) return true;
+    }
+  }
+  return false;
+}
+test("T13 negative control: the path-list check flags a cache path that includes locator_memory.json", () => {
   const bad = "        with:\n          path: |\n            data/scenario_history.json\n            data/locator_memory.json\n          key: k\n";
   const good = "        with:\n          path: |\n            data/scenario_history.json\n          key: k\n";
-  assert.ok(re.test(bad), "must flag a path list that includes locator_memory.json");
-  assert.ok(!re.test(good), "must not flag a clean path list");
+  assert.ok(pathListIncludes(bad, "data/locator_memory.json"), "must flag a path list that includes locator_memory.json");
+  assert.ok(!pathListIncludes(good, "data/locator_memory.json"), "must not flag a clean path list");
 });
 test("T13: the aggregate state save is restricted to the default branch and non-fork runs", () => {
   const save = steps().find((s) => /actions\/cache\/save@/.test(s) && /falcon-state-agg-/.test(s));
