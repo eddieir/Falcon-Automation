@@ -1032,8 +1032,8 @@
           "name": "ci.yml: aggregate needs shards, runs always, exit code is the merge's"
         }
       ],
-      "status": "planned",
-      "note": "Needs a hosted run proving every-shard success and a missing-shard failure on the exact head; none recorded."
+      "status": "done",
+      "note": "Hosted Falcon CI run 37935443035 on 543e78d: shards 1, 2 and 3 succeeded, aggregate succeeded, and the shard-negative job succeeded (a missing shard is rejected). Evidence is for that head; recheck if the head changes."
     },
     {
       "id": "P16-AC-38",
@@ -1133,11 +1133,13 @@
       "title": "Code scanning runs on the PR head",
       "priority": "Must",
       "text": "GitHub code scanning (CodeQL JavaScript/TypeScript and Actions) runs on the PR head commit",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Pin and install method documented in the skeleton; no run recorded."
+      "status": "done",
+      "note": "CodeQL (JavaScript/TypeScript and Actions) ran on the PR head 543e78d: CodeQL, Analyze (javascript-typescript) and Analyze (actions) all succeeded."
     },
     {
       "id": "P16-AC-102",
@@ -1145,11 +1147,13 @@
       "title": "Tokens and keys stay in the environment",
       "priority": "Must",
       "text": "Tokens and keys reach the code only through environment or repository secrets; none is printed, committed or passed in command arguments",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Rule documented in the GitHub code scanning and secret scanning assessment; operator run not yet performed or reviewed."
+      "status": "done",
+      "note": "Reviewed by the Security Engineer (SEC-5, 9385e72): secrets appear only as repository-secret references in the sequential test job; none is printed, committed or passed in command arguments; shard, aggregate and shard-negative jobs use none."
     },
     {
       "id": "P16-AC-103",
@@ -1157,11 +1161,13 @@
       "title": "Baseline and head code-scanning comparison",
       "priority": "Must",
       "text": "Open code-scanning alerts on the final head are compared with the baseline commit and recorded with the exact SHAs",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Results: NOT YET RUN."
+      "status": "done",
+      "note": "Baseline commit d13be7f was green. On the PR ref (head 543e78d) there are 0 open code-scanning alerts. During the phase CodeQL raised 3 highs at e25c66b (a real ReDoS in Logger URL redaction, a reflected test-server path, incomplete escaping) and 2 highs at 73f0322 (backtracking regexes in a test); all were fixed and no alert remains open."
     },
     {
       "id": "P16-AC-104",
@@ -1169,11 +1175,13 @@
       "title": "Secret scanning on the PR head",
       "priority": "Must",
       "text": "GitGuardian and GitHub secret scanning run on the PR head and their results are recorded",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Results: NOT YET RUN."
+      "status": "done",
+      "note": "GitGuardian ran on the PR head: it flagged one test string (incident 38007648, commit e25c66b) which the owner marked Ignored / Test credential on 2026-10-09; the check on 543e78d shows skipped. GitHub secret scanning API reports no open alerts."
     },
     {
       "id": "P16-AC-105",
@@ -1181,11 +1189,13 @@
       "title": "Every alert classified",
       "priority": "Must",
       "text": "Every code-scanning or secret-scanning alert is individually classified (confirmed, false-positive, duplicate) with severity and disposition",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "No GitHub code scanning, secret scanning or npm audit findings exist yet."
+      "status": "done",
+      "note": "Every alert is classified: CodeQL ReDoS in Logger (confirmed, fixed with a regression test that fails on the old code), reflected test-server path (confirmed, fixed), incomplete string escaping (confirmed, fixed), two backtracking regexes in a test (confirmed, fixed); GitGuardian incident 38007648 (false positive, test fixture, owner-ignored); historical client.key BL-003 (see AC-125)."
     },
     {
       "id": "P16-AC-106",
@@ -1193,11 +1203,13 @@
       "title": "Confirmed critical/high resolved",
       "priority": "Must",
       "text": "Confirmed critical or high alerts are fixed with regression tests or explicitly accepted by the owner",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Depends on the GitHub code scanning, secret scanning and npm audit results."
+      "status": "done",
+      "note": "The confirmed high alerts were fixed; the Logger ReDoS has a regression test that fails on the old code. No critical or high alert is open on 543e78d."
     },
     {
       "id": "P16-AC-107",
@@ -1205,11 +1217,13 @@
       "title": "No new critical/high/medium alerts",
       "priority": "Must",
       "text": "The final head introduces no new critical, high or medium alert relative to the baseline",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Depends on baseline and final GitHub code scanning, secret scanning and npm audit runs."
+      "status": "done",
+      "note": "No code-scanning alert is open on the PR ref at 543e78d, so the head introduces no new critical, high or medium alert relative to the baseline. npm audit (production, high) reports no findings."
     },
     {
       "id": "P16-AC-108",
@@ -1245,11 +1259,13 @@
       "title": "CodeQL green on final head",
       "priority": "Must",
       "text": "CodeQL JavaScript/TypeScript and Actions analyses are green on the final head",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "platform",
       "tests": [],
-      "status": "planned",
-      "note": "Baseline commit was green; final head not evidenced."
+      "status": "done",
+      "note": "CodeQL, Analyze (javascript-typescript) and Analyze (actions) succeeded on 543e78d."
     },
     {
       "id": "P16-AC-111",
@@ -1257,11 +1273,13 @@
       "title": "GitGuardian green or documented",
       "priority": "Must",
       "text": "GitGuardian is green on the final head, or a false positive is documented",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "platform",
       "tests": [],
-      "status": "planned",
-      "note": "No result recorded."
+      "status": "done",
+      "note": "GitGuardian on 543e78d shows skipped; the single finding (incident 38007648) is documented as a false positive and marked Ignored / Test credential by the owner."
     },
     {
       "id": "P16-AC-112",
@@ -1301,11 +1319,13 @@
       "title": "Hosted CI green on final head",
       "priority": "Must",
       "text": "Hosted CI (regression, test, shards, shard-negative, aggregate) is green on the exact final head",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "platform",
       "tests": [],
-      "status": "planned",
-      "note": "Last completed hosted run (head 42fac1a) succeeded on all jobs; final-head confirmation is part of the release review."
+      "status": "done",
+      "note": "Falcon CI run 37935443035 on 543e78d: test, regression, shards 1-3, aggregate and shard-negative all succeeded. Recheck if the head changes."
     },
     {
       "id": "P16-AC-115",
