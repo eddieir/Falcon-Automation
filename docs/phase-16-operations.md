@@ -13,6 +13,8 @@ Flags are strict. An invalid, duplicate or conflicting value exits with code 1 b
 | `--workers=N` | Page-level parallelism, integer 1 to 16, default 1. Pages run in parallel; scenarios within one page stay sequential. |
 | `--shard=I/N --run-id=<id>` | Run shard I of N (1 <= I <= N <= 64). Writes a bundle under `reports/shards/<runId>/shard-I-of-N`. Writes no report and no canonical state. `--run-id` must match `^[a-z0-9][a-z0-9-]{5,62}$` and is required with `--shard`. |
 | `--single-page` | Cannot be combined with `--workers` or `--shard`. |
+| `--shard=I/N` with `--workers=M` | Allowed. The shard still only runs the pages it owns and writes only its bundle; `--workers` sets how many of those pages run at the same time inside the shard (and the lane count of its discovery pass). Page ownership, the manifest and the merged result do not depend on M (tested). Without `--workers` the shard runs its pages one at a time. Memory use grows with M on each runner. |
+| `--run-id=<id>` without `--shard` | Rejected (exit 1). |
 
 Run a parallel page sweep locally (replace the URL with your entry page):
 
@@ -20,7 +22,7 @@ Run a parallel page sweep locally (replace the URL with your entry page):
 node falcon.js --url=https://your-app.example --workers=2
 ```
 
-Run one shard of a sharded run:
+Run one shard of a sharded run (add `--workers=2` to run that shard's pages two at a time):
 
 ```bash
 node falcon.js --url=https://your-app.example --shard=1/2 --run-id=local-run-1

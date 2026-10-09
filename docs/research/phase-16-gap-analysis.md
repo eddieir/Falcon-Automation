@@ -28,6 +28,6 @@
 - Healing/locator state reconciliation under parallelism has no reviewed public precedent; Falcon's reducer rules are original design requiring its own proof.
 
 ## Open items before design sign-off
-1. Re-open PARTIALLY VERIFIED sources (S07–S12) before any public citation.
+1. Done 2026-10-09: S07–S12 re-opened and verified (see the source register).
 2. Review third-party open-source Playwright shard orchestrators (UNKNOWN).
 3. Independent source review, Product Manager value review, Product Owner scope approval, QA testability review (Phase 0 exit gates) — not yet done.
