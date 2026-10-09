@@ -229,15 +229,16 @@ test("T13: every CI cache key carries the branch ref and no cache path includes 
 function pathListIncludes(text, needle) {
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
-    const m = /^([ \t]*)path:/.exec(lines[i]);
+    const m = /^([ \t]*)path:(.*)$/.exec(lines[i]);
     if (!m) continue;
+    if (m[2].includes(needle)) return true;
     const base = m[1].length;
     for (let j = i + 1; j < lines.length; j++) {
       const ln = lines[j];
       if (!ln.trim()) continue;
       const indent = /^[ \t]*/.exec(ln)[0].length;
       if (indent <= base) break;
-      if (ln.trim() === needle) return true;
+      if (ln.replace(/^[\s-]*['"]?/, "").replace(/['"]?\s*$/, "") === needle) return true;
     }
   }
   return false;
@@ -247,6 +248,8 @@ test("T13 negative control: the path-list check flags a cache path that includes
   const good = "        with:\n          path: |\n            data/scenario_history.json\n          key: k\n";
   assert.ok(pathListIncludes(bad, "data/locator_memory.json"), "must flag a path list that includes locator_memory.json");
   assert.ok(!pathListIncludes(good, "data/locator_memory.json"), "must not flag a clean path list");
+  const variants = ["        with:\n          path:\n            - data/locator_memory.json\n", "        with:\n          path:\n            - 'data/locator_memory.json'\n", "        with:\n          path: data/locator_memory.json\n"];
+  for (const v of variants) assert.ok(pathListIncludes(v, "data/locator_memory.json"), `must flag: ${v}`);
 });
 test("T13: the aggregate state save is restricted to the default branch and non-fork runs", () => {
   const save = steps().find((s) => /actions\/cache\/save@/.test(s) && /falcon-state-agg-/.test(s));

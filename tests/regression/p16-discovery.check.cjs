@@ -89,6 +89,36 @@ test("plain anchors are resolved from their href, buttons are clicked, new-tab l
     }
 });
 
+test("links with credentials in the URL or an oversized href are neither followed nor recorded", { timeout: 120000 }, async () => {
+    const main = await site({ "/": `<a href="http://user:secret@127.0.0.1/x">Cred</a><a href="/ok">Ok</a><a href="/${"a".repeat(3000)}">Long</a>`, "/ok": "<h1>ok</h1>" });
+    try {
+        await withBrowser(async (context) => {
+            const found = await PD.discover(context, `${main.url}/`, { concurrency: 2 });
+            assert.ok(found.some((u) => u.endsWith("/ok")));
+            assert.ok(!found.some((u) => u.includes("secret") || u.includes("user:")), "no URL with credentials is recorded");
+            assert.ok(!found.some((u) => u.length > 2100), "no oversized URL is recorded");
+        });
+    } finally { await close(main.s); }
+});
+
+test("a page that fails once is retried, so a transient failure does not shrink the result", { timeout: 120000 }, async () => {
+    let flaky = 0;
+    const s = http.createServer((req, res) => {
+        const body = req.url === "/" ? `<a href="/flaky">Flaky</a>` : req.url === "/flaky" ? `<a href="/deep">Deep</a>` : "<h1>x</h1>";
+        const send = () => { res.writeHead(200, { "content-type": "text/html" }); res.end(body); };
+        // The first request for /flaky outlasts the page timeout; the retry is answered at once.
+        if (req.url === "/flaky" && flaky++ === 0) setTimeout(send, 2500); else send();
+    });
+    await new Promise((r) => s.listen(0, "127.0.0.1", r));
+    const url = `http://127.0.0.1:${s.address().port}`;
+    try {
+        await withBrowser(async (context) => {
+            const found = await PD.discover(context, `${url}/`, { concurrency: 1, pageTimeoutMs: 800 });
+            assert.ok(found.some((u) => u.endsWith("/deep")), `second hop found after the retry: ${found.join(", ")}`);
+        });
+    } finally { await close(s); }
+});
+
 test("a page that cannot be loaded is skipped and discovery still returns the rest", { timeout: 120000 }, async () => {
     const main = await site({ "/": `<a href="/gone">Gone</a><a href="/ok">Ok</a>`, "/ok": "<h1>ok</h1>" });
     try {
