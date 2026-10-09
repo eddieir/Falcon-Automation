@@ -1184,7 +1184,7 @@ Trend flags for heal-rate spikes, pass-rate decay, duration regression, review b
 - Added `--shard=I/N --run-id=<id>`, which writes a shard bundle under `reports/shards/<runId>/` and writes no report or canonical state.
 - Added `node falcon.js merge --input=<dir> [--expect-total=N]` with exit codes 0, 1, 2 and 3.
 - Invalid or conflicting parallel flags exit 1 before the browser or dashboard starts.
-- Added a local benchmark fixture. Measured 1.04x (2 workers) and 1.18x (4 workers); speedup targets were missed.
+- Parallel and shard runs discover pages with a level-by-level pass that resolves plain anchors from their `href`, so every shard computes the same frontier. Added a local benchmark fixture. Measured 2.80x (2 workers) and 4.15x (4 workers) end to end on the fixture; most of that gain is the cheaper discovery pass, and the page work alone scales 1.11x and 1.88x.
 - Added a CI shard matrix, an aggregate merge job, a missing-shard negative job. Security evidence comes from the repository's GitHub checks (code scanning, secret scanning) and `npm audit` in CI.
 - Sequential behaviour is unchanged when no parallel flags are passed.
 

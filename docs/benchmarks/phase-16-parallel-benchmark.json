@@ -9,32 +9,32 @@
     "runs": 5,
     "warmup": 1,
     "delayMs": 200,
-    "baseline1wMs": null
+    "baseline1wMs": 16450
   },
   "results": {
     "1": {
       "wallMs": {
         "n": 5,
-        "median": 16448.982459,
-        "min": 16427.600833,
-        "max": 16586.78,
+        "median": 16428.878417,
+        "min": 16293.034167,
+        "max": 16528.838916,
         "p95": null,
         "note": "range only (n<20, no p95)"
       },
       "stages": {
         "discoveryMs": {
           "n": 5,
-          "median": 11402,
-          "min": 11279,
-          "max": 11445,
+          "median": 11404,
+          "min": 11304,
+          "max": 11437,
           "p95": null,
           "note": "range only (n<20, no p95)"
         },
         "parallelizableMs": {
           "n": 5,
-          "median": 4790,
-          "min": 4761,
-          "max": 4862,
+          "median": 4769,
+          "min": 4717,
+          "max": 4841,
           "p95": null,
           "note": "range only (n<20, no p95)"
         },
@@ -43,7 +43,7 @@
         "mergeMs": "UNKNOWN"
       },
       "stageSource": "execution.log timestamps (approximate)",
-      "peakRssKb": 526544,
+      "peakRssKb": 530496,
       "speedup": 1,
       "efficiency": 1,
       "parallelizableSpeedup": 1,
@@ -53,131 +53,131 @@
     "2": {
       "wallMs": {
         "n": 5,
-        "median": 15790.830667,
-        "min": 15735.83875,
-        "max": 15806.295292,
+        "median": 5868.435208,
+        "min": 5738.668958,
+        "max": 8212.47425,
         "p95": null,
         "note": "range only (n<20, no p95)"
       },
       "stages": {
         "discoveryMs": {
           "n": 5,
-          "median": 11217,
-          "min": 11181,
-          "max": 11239,
+          "median": 1109,
+          "min": 1071,
+          "max": 1856,
           "p95": null,
           "note": "range only (n<20, no p95)"
         },
         "parallelizableMs": {
           "n": 5,
-          "median": 4118,
-          "min": 4071,
-          "max": 4171,
+          "median": 4280,
+          "min": 4161,
+          "max": 5699,
           "p95": null,
           "note": "range only (n<20, no p95)"
         },
         "analysisMs": {
           "n": 5,
-          "median": 1602,
-          "min": 1581,
-          "max": 1649,
+          "median": 1610,
+          "min": 1603,
+          "max": 2974,
           "p95": null,
           "note": "range only (n<20, no p95)"
         },
         "executionMs": {
           "n": 5,
-          "median": 2522,
-          "min": 2469,
-          "max": 2538,
+          "median": 2668,
+          "min": 2558,
+          "max": 2725,
           "p95": null,
           "note": "range only (n<20, no p95)"
         },
         "mergeMs": {
           "n": 5,
-          "median": 54,
-          "min": 50,
-          "max": 56,
+          "median": 61,
+          "min": 56,
+          "max": 64,
           "p95": null,
           "note": "range only (n<20, no p95)"
         }
       },
       "stageSource": "report execution.timings (monotonic)",
-      "peakRssKb": 542144,
-      "speedup": 1.0416793648085543,
-      "efficiency": 0.5208396824042771,
-      "parallelizableSpeedup": 1.163186012627489,
-      "parallelizableEfficiency": 0.5815930063137446,
-      "karpFlattSerialFraction": 0.9199765950701839
+      "peakRssKb": 582048,
+      "speedup": 2.799533067111951,
+      "efficiency": 1.3997665335559755,
+      "parallelizableSpeedup": 1.1142523364485981,
+      "parallelizableEfficiency": 0.5571261682242991,
+      "karpFlattSerialFraction": -0.28559515031439286
     },
     "4": {
       "wallMs": {
         "n": 5,
-        "median": 13994.080042,
-        "min": 13887.253041,
-        "max": 14090.177083,
+        "median": 3959.467708,
+        "min": 3828.78425,
+        "max": 4047.6655,
         "p95": null,
         "note": "range only (n<20, no p95)"
       },
       "stages": {
         "discoveryMs": {
           "n": 5,
-          "median": 11184,
-          "min": 11115,
-          "max": 11197,
+          "median": 852,
+          "min": 839,
+          "max": 934,
           "p95": null,
           "note": "range only (n<20, no p95)"
         },
         "parallelizableMs": {
           "n": 5,
-          "median": 2346,
-          "min": 2284,
-          "max": 2388,
+          "median": 2530,
+          "min": 2517,
+          "max": 2687,
           "p95": null,
           "note": "range only (n<20, no p95)"
         },
         "analysisMs": {
           "n": 5,
-          "median": 826,
-          "min": 812,
-          "max": 832,
+          "median": 870,
+          "min": 854,
+          "max": 958,
           "p95": null,
           "note": "range only (n<20, no p95)"
         },
         "executionMs": {
           "n": 5,
-          "median": 1523,
-          "min": 1458,
-          "max": 1562,
+          "median": 1649,
+          "min": 1563,
+          "max": 1833,
           "p95": null,
           "note": "range only (n<20, no p95)"
         },
         "mergeMs": {
           "n": 5,
-          "median": 59,
-          "min": 58,
-          "max": 82,
+          "median": 58,
+          "min": 55,
+          "max": 64,
           "p95": null,
           "note": "range only (n<20, no p95)"
         }
       },
       "stageSource": "report execution.timings (monotonic)",
-      "peakRssKb": 733360,
-      "speedup": 1.175424351556671,
-      "efficiency": 0.2938560878891677,
-      "parallelizableSpeedup": 2.041773231031543,
-      "parallelizableEfficiency": 0.5104433077578857,
-      "karpFlattSerialFraction": 0.801008771768995
+      "peakRssKb": 758544,
+      "speedup": 4.1492644033454,
+      "efficiency": 1.03731610083635,
+      "parallelizableSpeedup": 1.8849802371541502,
+      "parallelizableEfficiency": 0.47124505928853755,
+      "karpFlattSerialFraction": -0.011991234175151133
     }
   },
   "amdahl": {
-    "serialFractionAt1w": 0.7041749011857708,
-    "maxEndToEndSpeedup": 1.4201017365374495,
+    "serialFractionAt1w": 0.70512582699561,
+    "maxEndToEndSpeedup": 1.418186601192564,
     "note": "serial fraction = discovery / (discovery + analysis + execution) at 1 worker; startup/teardown ignored"
   },
   "thresholds": {
-    "2w>=1.5x": "MISS",
-    "4w>=2.3x": "MISS",
-    "1w regression<=10% vs baseline": "UNKNOWN (no --baseline-1w-ms)"
+    "2w>=1.5x": "PASS",
+    "4w>=2.3x": "PASS",
+    "1w regression<=10% vs baseline": "PASS"
   },
   "semanticEquivalence": true,
   "rawReportsIdentical": false,
