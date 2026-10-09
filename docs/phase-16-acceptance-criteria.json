@@ -1049,12 +1049,13 @@
       "implementation": [
         "README.md",
         "docs/architecture/phase-16-parallel-execution.md",
+        "docs/phase-16-docs-review.md",
         "docs/phase-16-plan.md"
       ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Per-file docs review checklist not yet recorded."
+      "status": "done",
+      "note": "docs/phase-16-docs-review.md (head cebd31f) records the per-file checklist and the commands and flags checked against the CLI parser (21 parser cases, 4 falcon.js rejections, 1 benchmark rejection); benchmark figures re-derived from the JSON. Open items are listed in that file (merge exit codes covered by p16-runner tests; research sources S07-S12 remain PARTIALLY VERIFIED)."
     },
     {
       "id": "P16-AC-39",
@@ -1067,8 +1068,8 @@
       ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "Architecture doc exists with sections for design, trust boundaries, failure matrix, compatibility/rollback and residual risk; the reviewer verdict against the checklist is not recorded."
+      "status": "done",
+      "note": "Architecture doc section 14 lists the 11 required topics with where each is covered; verdict PASS WITH GAPS (rollback test AC-41 is a design statement not executed in the review; ADR-016 status left for the owner)."
     },
     {
       "id": "P16-AC-40",

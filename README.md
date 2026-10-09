@@ -964,7 +964,9 @@ node falcon.js merge --input=reports/shards/local-run-1 --expect-total=2
 
 - `--workers=N` runs pages in parallel. Scenarios within a page stay sequential.
 - `--shard=I/N --run-id=<id>` runs one shard and writes a bundle only. The merge command combines bundles into one report and one history record.
-- Benchmark on a local fixture: 1.04x (2 workers) and 1.18x (4 workers). The speedup targets were missed, and the numbers do not show linear scaling.
+- Benchmark on a local fixture (200 ms page delay): 2.80x end to end with 2 workers and 4.15x with 4 workers. Most of that gain is a cheaper parallel discovery pass (about 11.4 s of sequential discovery becomes about 1 s); the page work alone scales 1.11x and 1.88x. The numbers are specific to this fixture and machine and do not show linear scaling.
+- Only pages run in parallel. Pages must be independent. `storageState` is copied into each worker context and is not synchronized across contexts.
+- Parallel and shard runs use a different link-discovery pass from the sequential crawl, so the page set can differ on unusual sites.
 
 Limitations, merge exit codes and CI details: [docs/phase-16-operations.md](docs/phase-16-operations.md).
 

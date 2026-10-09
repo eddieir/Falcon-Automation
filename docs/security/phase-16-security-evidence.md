@@ -2,7 +2,7 @@
 
 Security evidence for this phase comes from GitHub's own checks (CodeQL for JavaScript/TypeScript and Actions, GitGuardian, GitHub secret scanning) and `npm audit` in CI, plus an independent code review. Results below are for the stated heads; recheck them if the head changes.
 
-Baseline: `main` at `d13be7f`. Final head recorded here: `543e78d`.
+Baseline: `main` at `d13be7f`. Evidence recorded at head `543e78d`; not re-run on `cebd31f` (see docs/phase-16-docs-review.md, OPEN items).
 
 ## Hosted checks on 543e78d
 

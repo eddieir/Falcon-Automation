@@ -1,6 +1,6 @@
 # Phase 16 Threat Model: Parallel Execution
 
-Revision: branch phase-16/parallel-execution @ 747d6ec. Status: design-time. Owner: Security Engineer. Covers P16-AC-27..30 and P16-AC-101..125.
+Revision: branch phase-16/parallel-execution @ 747d6ec (design-time; current head cebd31f). Status: design-time. Owner: Security Engineer. Covers P16-AC-27..30 and P16-AC-101..125.
 Evidence labels: CONFIRMED = observed in code at the cited file:line. HYPOTHESIS = plausible, not demonstrated.
 No secret values appear in this document or are needed to verify it.
 

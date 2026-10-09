@@ -1,6 +1,6 @@
 # Phase 16 — Deterministic Parallel Execution and Safe CI Sharding
 
-Status: implemented, in review, not merged (see docs/phase-16-operations.md). Branch `phase-16/parallel-execution`, base `origin/main` d13be7f (Phase 15 merged). Risk tier: full.
+Status: implemented, in review, not merged (see docs/phase-16-operations.md). Branch `phase-16/parallel-execution`, base `origin/main` 6e7f5f1 (Phase 15 merged). Risk tier: full.
 
 ## 1. Objective
 Run independent application pages concurrently on one machine (`--workers=N`) and split pages across CI shards (`--shard=I/N`) with a dedicated merge step, while keeping results, exit codes, page ownership, shared state and reports deterministic and auditable. Sequential execution stays the default and remains byte-compatible.

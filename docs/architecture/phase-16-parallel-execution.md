@@ -1,6 +1,6 @@
 # Phase 16 Architecture: Deterministic Parallel Execution and Safe CI Sharding
 
-Status: implemented on the branch and in review, not merged (HEAD 42fac1a); originally written as the CP1 design. Base: branch `phase-16/parallel-execution` at 747d6ec (Phase 15 merged). Risk tier: full. Acceptance register: `docs/phase-16-acceptance-criteria.json` (P16-AC-01..42; security program AC-101..125 are out of scope here except where noted).
+Status: implemented on the branch and in review, not merged (HEAD cebd31f); originally written as the CP1 design. Base: `origin/main` at 6e7f5f1 (Phase 15 merged; verified as the merge-base of the branch). Risk tier: full. Acceptance register: `docs/phase-16-acceptance-criteria.json` (P16-AC-01..42; security program AC-101..125 are out of scope here except where noted).
 
 ## 1. Context and constraints
 
@@ -323,10 +323,18 @@ Observability: bounded `Logger.info/warning/error` lines per stage (counts only)
 
 ## 10. Compatibility, migration, rollback
 
+### 10.1 Compatibility
+
 - Default behaviour: untouched code path; report gains only additive fields when parallel (`execution {mode, workers, shard}`, `stateMerge`). Sequential report shape unchanged (AC-01).
 - Additive file fields: history items `eventId`, entries `appliedRunIds`, LocatorMemory `mergedRuns`. Older Falcon builds ignore unknown history/pending fields; LocatorMemory is the exception because `_classifyEntry`/envelope handling rebuild known fields only, so an older build would drop `mergedRuns` (harmless: markers only guard replay).
+### 10.2 Migration
+
 - No data migration. `RunLedger` gains a runId-exists no-op; `HealingReport` flush becomes atomic; `ReportManager.buildReport` extracted; `Dashboard.emit` adds `seq`.
+### 10.3 CI and state ownership
+
 - CI: shard jobs restore state read-only (never save), upload unique `falcon-shard-<i>-of-<n>` bundles; the `if: always()` aggregate job downloads all, runs `merge --expect-total=N`, uploads the report, and is the only job saving the state cache (on success). `locator_memory.json` remains excluded. Re-run of a failed shard job uploads a bundle with `attempt` incremented; the aggregate keeps only the latest attempt per index and rejects duplicates of the same attempt.
+### 10.4 Rollback
+
 - Rollback: stop passing `--workers`/`--shard` (or revert the merge) and Falcon runs the sequential path; canonical files are valid for the old build. Orphan bundles (`reports/shards`, `reports/merge`) are deletable. Rollback test (AC-41): merge then run sequential and compare canonical state with the pre-merge expectation; delete bundles and confirm no behaviour change.
 
 ## 11. Test seams mapped to acceptance criteria
@@ -369,7 +377,35 @@ Injection seams: `StateJournal` path and clock, `ParallelMode`, scheduler `now()
 - R8 Extra navigation per executed page lowers speedup; thresholds are evidence only.
 - R9 ErrorHandler reachability UNKNOWN.
 - R10 Numeric bounds are proposals.
+- R11 Discovery: parallel and shard modes use `ParallelDiscovery` (D-DISC), not the sequential crawl; page sets can differ on sites whose anchor click handlers navigate away from the `href`. Evidence is the fixture only.
+- R12 Performance evidence is fixture- and machine-specific and not linear (2 workers 2.80x, 4 workers 4.15x end to end; page work alone 1.11x and 1.88x). Thresholds are not a CI gate.
 
 ## 13. ADR-016: Private journals reconciled by a coordinator-only merge
 
 Status: proposed. Context: concurrent page tasks and multi-runner shards cannot safely rewrite shared whole-file state; in-process promise queues give no cross-process guarantee; locks do not span runners. Decision: page tasks emit bounded, allow-listed, immutable, event-id-stable journals; a single coordinator (local or `merge`) validates, reduces per store with pure idempotent reducers against fresh canonical state, persists with digest-guarded atomic writes, publishes one report and one history record, writes a receipt, then deletes inputs. Every shard analyses all pages and executes only its ordinal-modulo share so dedupe is exact. Consequences: no cross-process locking in the hot path; additive markers in state files; a new module tree (`src/core/parallel/`, `StateJournal`, `ShardMerge`); trust never rises during merge; one documented ordering change in parallel modes. Rejected: advisory locks, append-only log, embedded database, coordinator-only without journals.
+
+## 14. Review checklist (AC-39)
+
+Reviewed at head cebd31f. Each required topic is checked against the section that covers it.
+
+| # | Required topic | Covered at | Verdict |
+|---|---|---|---|
+| 1 | Alternatives | §4 Cross-process state alternatives; ADR-016 "Rejected" list | PASS |
+| 2 | Lifecycle | §2 Execution flow; §3.2 Staged pipeline; operations guide §2 | PASS |
+| 3 | Data flow | §2; §3.5 Journals and coordinator merge; §3.6 Bundle layout | PASS |
+| 4 | Trust boundaries | §8 | PASS |
+| 5 | Schemas | §3.6 Manifests; §5 Journal envelope; §6 Numeric bounds | PASS |
+| 6 | Conflicts | §7 Reducers (pure; each returns conflicts[]); §7.5 LocatorMemory rules | PASS |
+| 7 | Failure matrix | §9 | PASS |
+| 8 | Compatibility | §10.1 Compatibility | PASS |
+| 9 | Migration | §10.2 Migration | PASS |
+| 10 | Rollback | §10.4 Rollback; operations guide §6 | PASS |
+| 11 | Residual risk | §12 R1-R12 | PASS |
+
+Overall verdict: **PASS WITH GAPS**.
+
+Gaps:
+- Migration and rollback now have their own headings (§10.2, §10.4), added after the first review pass.
+- The rollback path (AC-41: merge, then a sequential run) is a design statement. It was not executed in this review.
+- ADR-016 says "Status: proposed" while the header says the design is implemented on the branch. This is an owner decision and was left unchanged.
+- §4, §7 and §9 were checked for presence and wording, not line by line against the code.

@@ -1,6 +1,6 @@
 # Phase 16 Gap Analysis
 
-## Falcon today (baseline, commit d13be7f)
+## Falcon today (baseline at review time, commit d13be7f; the branch base is now 6e7f5f1)
 - Execution is strictly sequential: `falcon.js` launches one browser and one context; `SiteSweep.run` loops `queue` with `await this._sweepPage(...)`.
 - Dedupe state (`_seenSignatures`) is claimed during sequential execution, so page order determines ownership; claims are released when a page fails.
 - Budget is checked only between pages (`Date.now() - startedAt >= budgetMs`); an in-flight page can overrun, so it is not a hard wall-clock cap.
