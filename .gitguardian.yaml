@@ -1,4 +1,0 @@
-version: 2
-secret:
-  ignored-paths:
-    - tests/regression/p16-state-io-hardening.check.cjs
