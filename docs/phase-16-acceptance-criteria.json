@@ -1435,12 +1435,14 @@
       "priority": "Must",
       "text": "A Phase 16 threat model maps assets, actors, threats, controls and tests",
       "implementation": [
+        "docs/security/phase-16-owner-acceptance.md",
+        "docs/security/phase-16-security-evidence.md",
         "docs/security/phase-16-threat-model.md"
       ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "Document exists; the GitHub code scanning and secret scanning evidence not yet recorded."
+      "status": "done",
+      "note": "Threat model exists; GitHub code-scanning and secret-scanning evidence is recorded in docs/security/phase-16-security-evidence.md; T13 and T17 residuals accepted by the owner on 2026-10-09."
     },
     {
       "id": "P16-AC-123",
@@ -1475,12 +1477,13 @@
       "priority": "Must",
       "text": "Owner decisions for BL-003 and the T13/T17 residual risks are recorded",
       "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md"
+        "docs/security/phase-16-baseline-security-assessment.md",
+        "docs/security/phase-16-owner-acceptance.md"
       ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "Owner decided on 2026-10-08: rotate the historical key (no history rewrite) and mark the GitGuardian fixture incident as a false positive. Written acceptance of the T13/T17 residual risks is still outstanding; the historical key's project (Supabase) was fully deleted per the owner on 2026-10-09, so the credential is invalidated; use by any other system is not verified."
+      "status": "done",
+      "note": "Owner decisions recorded: historical key's Supabase project deleted (2026-10-09), no history rewrite; GitGuardian incident 38007648 marked Ignored / Test credential; T13, T17 and the unscanned CI Postgres image accepted (2026-10-09). Use of the old certificate elsewhere is not verified."
     }
   ]
 }
