@@ -71,7 +71,7 @@ async function runInJournalMode(opts) {
     const tDiscovery = nowMs();
     // Stage 1-3: discover once, canonical order, ordinals.
     const sweep = new SiteSweep(context, { maxPages: Limits.MAX_PAGES, sameOriginOnly, budgetMs: budgetMs === null ? undefined : budgetMs, pageTimeoutMs, dedupe, repeat });
-    const discovered = await sweep._discover(entry);
+    const discovered = await sweep._discover(entry, { concurrency: workers });
     const planned = sweep._plan(entry, discovered);
     const auth = await takeAuthState(context);
     const ordered = Planning.canonicalOrder(entry, planned.pages.map((r) => r.url)).slice(0, Limits.MAX_PAGES);
