@@ -78,6 +78,8 @@ Shard assignment: page with ordinal `o` belongs to shard `(o mod N) + 1`. This p
 
 Compatibility decision D-ORD: sorting changes page order relative to Phase 15 discovery order. It is applied only in parallel/shard modes. Default and `--workers=1` keep discovery order. Consequence: when the frontier exceeds `maxPages`, parallel mode may select different pages than sequential. Equivalence tests (AC-15) use a fixture whose discovery order equals canonical order and frontier <= maxPages; the difference is documented in the CLI help and README.
 
+Discovery decision D-DISC: parallel and shard modes discover with `src/core/parallel/ParallelDiscovery.js`, not the depth-first crawl. It runs the same bounds (two click hops, five candidates per page) breadth-first. Each frontier page is loaded once and its candidates listed; plain anchors (an http(s) `href`, no inline handler, not a bare fragment) are resolved from the attribute, and every other candidate is clicked in its own page. The set found at each level is the union of task results, so it is independent of task timing and of the lane count, which keeps every shard's frontier identical. Other origins are recorded but never opened, links that open a new tab are not followed, and the task count is capped at 400. The sequential path keeps the original crawl. Residual risk: on a site whose anchor click handler sends the browser away from its `href`, the page sets can differ between modes.
+
 Scheduler dispatch order = ordinal order (a shared cursor); completion order is arbitrary and is never used for anything (results are stored by index).
 
 ### 3.4 Scheduler (`src/core/parallel/Scheduler.js`)

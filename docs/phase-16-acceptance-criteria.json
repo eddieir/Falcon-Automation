@@ -923,10 +923,11 @@
       "priority": "Must",
       "text": "Deterministic local fixture with >=8 pages; workers 1/2/4; warm-up plus >=5 measured runs; median, range, speedup, efficiency, memory, environment and equivalence published including unfavorable results",
       "implementation": [
+        "docs/benchmarks/phase-16-parallel-benchmark.json",
+        "docs/benchmarks/phase-16-parallel-benchmark.md",
         "scripts/benchmark/parallel.js",
         "scripts/fixture/server.js",
-        "docs/benchmarks/phase-16-parallel-benchmark.json",
-        "docs/benchmarks/phase-16-parallel-benchmark.md"
+        "src/core/parallel/ParallelDiscovery.js"
       ],
       "verifiedBy": "test",
       "tests": [
@@ -937,10 +938,14 @@
         {
           "file": "tests/regression/p16-fixture.check.cjs",
           "name": "benchmark stats helpers"
+        },
+        {
+          "file": "tests/regression/p16-discovery.check.cjs",
+          "name": "discovery result is identical for 1, 2 and 4 lanes and matches the sequential crawl on the fixture"
         }
       ],
       "status": "partial",
-      "note": "Fixture (10 pages) and published results exist, tested for fixture and stats helpers only; the benchmark run itself is evidence, not an automated test."
+      "note": "Fixture (10 pages) and published results (5 measured runs, 1 warm-up, median/range, speedup, efficiency, memory, environment, equivalence) exist, tested for fixture, stats helpers and the discovery pass. Benchmark numbers are specific to this fixture and machine."
     },
     {
       "id": "P16-AC-34",
@@ -959,8 +964,8 @@
           "name": "benchmark stats helpers"
         }
       ],
-      "status": "partial",
-      "note": "Done only as evidence: thresholds reported against the fixture, with 2 workers MISS (1.04x vs 1.5x) and 4 workers MISS (1.18x vs 2.3x). Informational, not a CI gate."
+      "status": "done",
+      "note": "Thresholds reported against the fixture (informational, do not gate CI): 2 workers 2.80x (target 1.5x) PASS, 4 workers 4.15x (target 2.3x) PASS, 1-worker regression within 10% PASS. Most of the end-to-end gain comes from the cheaper parallel-mode discovery pass, not from page parallelism alone (page-stage speedup 1.11x / 1.88x); see the benchmark doc. No linear-scaling claim."
     },
     {
       "id": "P16-AC-35",

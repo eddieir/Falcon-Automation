@@ -53,7 +53,7 @@ A shard exits 0 unless a verdict is `failed` or `unavailable`, or the shard hits
 1. Ordinal 0 is the normalized entry URL. The remaining pages are sorted by URL in parallel and shard modes.
 2. A shard owns every page whose ordinal `o` satisfies `(o mod N) + 1 = I`.
 3. Each page task writes its events to a private journal (`journals/page-<ordinal>.json`). Page tasks never write canonical state.
-4. Discovery (link harvesting and ClickExplorer) runs once and serially before any page task starts.
+4. Discovery runs once before any page task starts. In parallel and shard runs it is link harvesting plus a level-by-level click pass (`ParallelDiscovery`) that uses the same number of lanes as `--workers`; its result does not depend on the lane count, so every shard computes the same frontier.
 5. A shard writes a bundle: manifest, fragments and journals.
 6. One merge validates all bundles, reconciles the journals in a fixed order, and writes one report and one run-history record.
 7. A receipt is written last. If the same inputs are merged again, the merge prints the recorded outcome and exits with the recorded code.
@@ -74,7 +74,7 @@ Measured on one machine (Darwin 25.5.0 arm64, 10 CPUs, Node v22.19.0, headless C
 
 - 2 workers: 1.04x end-to-end speedup.
 - 4 workers: 1.18x end-to-end speedup.
-- Serial link discovery dominates the run time. Its serial fraction bounds end-to-end speedup at about 1.42x.
+- Parallel and shard runs use a different discovery pass from the sequential crawl: plain anchors are resolved from their `href` instead of clicked, links that open a new tab are not clicked, other origins are recorded but never opened, and clicks on pages two hops away (whose results the sequential crawl discards) are skipped. On unusual sites the page set can differ from a sequential run.
 - The thresholds were missed: 2 workers needed at least 1.5x (measured 1.04x); 4 workers needed at least 2.3x (measured 1.18x).
 - The results are specific to this fixture and machine. They do not show linear scaling.
 
