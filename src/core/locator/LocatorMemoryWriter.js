@@ -24,7 +24,12 @@ async function digest(file) {return digestSync(file);}
 // A lock whose content cannot prove an owner (empty, corrupt, no pid) is only
 // treated as abandoned once it is older than this; a fresh empty lock may be a
 // live writer between creating the file and writing its owner record.
-const LOCK_GRACE_MS = 30_000;
+const LOCK_GRACE_MS = 60_000;
+const os = require("os");
+// A lock records the host that created it. pid probing is meaningless for a
+// lock from another machine (shared or network filesystem), so such a lock is
+// never reclaimed automatically.
+const foreignHostError = (lock) => ({ok:false,code:"LOCK_FOREIGN_HOST",error:`LOCK_FOREIGN_HOST: lock ${path.basename(lock)} was created on another host; remove it manually after confirming the owner is gone`});
 
 // True only when the pid positively does not exist. Permission errors and any
 // other failure mean the process may be alive, so the lock is kept.
@@ -97,9 +102,18 @@ async function reclaimStale(lock, hooks = {}) {
     pid = undefined;
   }
 
+  let host;
+  try { host = JSON.parse(raw).host; } catch { host = undefined; }
+  const currentHost = hooks.hostname || os.hostname();
+  if (typeof host === "string" && host !== "" && host !== currentHost) {
+    hooks.foreign = true;
+    return false;
+  }
+  const now = hooks.now ? hooks.now() : Date.now();
+
   if (Number.isInteger(pid) && pid > 0) {
     if (pid === process.pid || !pidIsDead(pid)) return false;
-  } else if (Date.now() - stat.mtimeMs <= LOCK_GRACE_MS) {
+  } else if (now - stat.mtimeMs < LOCK_GRACE_MS) {
     return false;
   }
 
@@ -136,7 +150,7 @@ async function reclaimStale(lock, hooks = {}) {
   return true;
 }
 
-async function write(file,data,expected,atomic) {
+async function write(file,data,expected,atomic,opts={}) {
   const lock = `${file}.lock`; const token = crypto.randomUUID(); let handle;
   try {
     await fs.promises.mkdir(path.dirname(file),{recursive:true});
@@ -145,7 +159,8 @@ async function write(file,data,expected,atomic) {
     } catch (e) {
       if (e.code !== "EEXIST") throw e;
       // Possibly abandoned by a crashed writer: try to reclaim and retry once.
-      if (!(await reclaimStale(lock))) return {ok:false,error:`writer conflict: lock exists${await describeLock(lock)}`};
+      const rh = {...opts}; 
+      if (!(await reclaimStale(lock, rh))) return rh.foreign ? foreignHostError(lock) : {ok:false,error:`writer conflict: lock exists${await describeLock(lock)}`};
       try {
         handle = await fs.promises.open(lock,"wx",0o600);
       } catch (e2) {
@@ -153,7 +168,7 @@ async function write(file,data,expected,atomic) {
         return {ok:false,error:`writer conflict: lock exists${await describeLock(lock)}`};
       }
     }
-    await handle.writeFile(JSON.stringify({token,pid:process.pid}));
+    await handle.writeFile(JSON.stringify({token,pid:process.pid,host:opts.hostname||os.hostname(),createdAt:new Date().toISOString()}));
     if (await digest(file) !== expected) return {ok:false,error:"writer conflict: durable file changed"};
     const result = await atomic(file,data);
     return result.ok ? {...result,digest:await digest(file)} : result;

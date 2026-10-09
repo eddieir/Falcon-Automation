@@ -179,7 +179,7 @@ class SiteSweep {
      * best-effort: a crawler that dies halfway still leaves us the entry URL and
      * whatever it reached, which is strictly better than aborting the run.
      */
-    async _discover(entry) {
+    async _discover(entry, opts = {}) {
         let page;
         try {
             page = await this.context.newPage();
@@ -189,6 +189,16 @@ class SiteSweep {
             // page as it clicks, so anything read afterwards describes wherever
             // it happened to end up rather than the entry page.
             const linked = await this._harvestLinks(page);
+
+            if (opts.concurrency) {
+                // Parallel and shard runs: level-synchronous discovery whose
+                // result does not depend on task timing.
+                const ParallelDiscovery = require("./parallel/ParallelDiscovery");
+                const clicked = await ParallelDiscovery.discover(this.context, entry, {
+                    concurrency: opts.concurrency, pageTimeoutMs: this.pageTimeoutMs,
+                });
+                return [...linked, ...clicked];
+            }
 
             const explorer = new ClickExplorer(page);
             await explorer.explore();

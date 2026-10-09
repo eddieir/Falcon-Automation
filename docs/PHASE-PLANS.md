@@ -807,6 +807,8 @@ configuration selects.
 
 ## Phase 16 — Parallel execution
 
+**Status: in review, not merged.** Branch `phase-16/parallel-execution`. Hosted CI on head cebd31f (run 37940648249, pull request #48): all seven jobs succeeded; an earlier head 42fac1a (run 37792596841) also succeeded; GitHub code scanning run 37940650327 on cebd31f concluded failure (open) (see docs/phase-16-operations.md).
+
 ### Why
 
 184 scenarios one at a time is a demo, not a pipeline. Phase 10 makes this acute: covering every page

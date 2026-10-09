@@ -2,6 +2,7 @@ const path = require("path");
 const Middleware = require("./Middleware");
 const Logger = require("../../utils/Logger");
 const AtomicJsonStore = require("./util/AtomicJsonStore");
+const ParallelMode = require("./parallel/ParallelMode");
 
 /**
  * FlakinessTracker — Phase 9. Persistent pass/fail history per scenario,
@@ -241,6 +242,21 @@ class FlakinessTracker {
             normalizedOutcome = outcome ?? "unavailable";
         }
         if (normalizedStatus !== "passed" && normalizedStatus !== "failed") return null;
+
+        const divert = ParallelMode.divertTarget();
+        if (divert) {
+            // Parallel page task: journal the outcome; the merge applies it.
+            divert.record("flakiness.outcome", {
+                action,
+                locator,
+                status: normalizedStatus,
+                outcome: normalizedOutcome ?? null,
+                errorType: errorType ?? null,
+                durationMs: Number.isFinite(duration) ? Math.max(0, Math.round(duration)) : 0,
+                description: String(description ?? "").slice(0, 120),
+            });
+            return null;
+        }
 
         const key = this.keyFor({ url, action, locator });
         const existing = this._getScenario(key);

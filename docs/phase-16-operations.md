@@ -1,0 +1,137 @@
+# Phase 16 operations: parallel runs, shards and merge
+
+Status: **in review, not merged.** The behaviour below is implemented on branch `phase-16/parallel-execution`. Sequential runs (no flags) are the default and are unchanged. Hosted CI for head cebd31f7460589d8a31211fb5cb5ddb16a6277b9 (run 37940648249, Falcon CI, pull request #48): all seven jobs succeeded (regression, shards 1-3, test, aggregate, shard-negative). A GitHub code scanning run on the same head (37940650327) concluded failure; not yet investigated.
+
+Audience: engineers who run Falcon locally or in CI, and reviewers approving the merge.
+
+## 1. Usage
+
+Flags are strict. An invalid, duplicate or conflicting value exits with code 1 before the browser or dashboard starts.
+
+| Flag | Meaning |
+| --- | --- |
+| `--workers=N` | Page-level parallelism, integer 1 to 16, default 1. Pages run in parallel; scenarios within one page stay sequential. |
+| `--shard=I/N --run-id=<id>` | Run shard I of N (1 <= I <= N <= 64). Writes a bundle under `reports/shards/<runId>/shard-I-of-N`. Writes no report and no canonical state. `--run-id` must match `^[a-z0-9][a-z0-9-]{5,62}$` and is required with `--shard`. |
+| `--single-page` | Cannot be combined with `--workers` or `--shard`. |
+| `--shard=I/N` with `--workers=M` | Allowed. The shard still only runs the pages it owns and writes only its bundle; `--workers` sets how many of those pages run at the same time inside the shard (and the lane count of its discovery pass). Page ownership, the manifest and the merged result do not depend on M (tested). Without `--workers` the shard runs its pages one at a time. Memory use grows with M on each runner. |
+| `--run-id=<id>` without `--shard` | Rejected (exit 1). |
+
+Run a parallel page sweep locally (replace the URL with your entry page):
+
+```bash
+node falcon.js --url=https://your-app.example --workers=2
+```
+
+Run one shard of a sharded run (add `--workers=2` to run that shard's pages two at a time):
+
+```bash
+node falcon.js --url=https://your-app.example --shard=1/2 --run-id=local-run-1
+node falcon.js --url=https://your-app.example --shard=2/2 --run-id=local-run-1
+```
+
+Merge the shard bundles into one report and one history record:
+
+```bash
+node falcon.js merge --input=reports/shards/local-run-1 --expect-total=2
+```
+
+`merge` takes `--input=<dir>` (required) and optionally `--expect-total=N` (1 to 64), `--expect-run-id=<id>` and `--expect-commit=<sha>`. The last two are strict: a bundle whose run id or commit differs is rejected with exit 2. CI passes both. It cannot be combined with `--workers`, `--shard` or `--run-id`.
+
+### Merge exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Inputs validated and the verdict is PASSED. |
+| 1 | Inputs validated, but the verdict is not PASSED (FAILED, PARTIAL or NO_TESTS_RUN). |
+| 2 | Rejected input or usage (bad flags, missing or inconsistent bundles, duplicate or missing page ownership). Nothing canonical is changed. |
+| 3 | State not durable: a write failed during reduction. Inputs are kept. |
+
+### Shard exit codes
+
+A shard exits 0 unless a verdict is `failed` or `unavailable`, or the shard hits an infrastructure error. A shard whose pages were all deduplicated exits 0. The NO_TESTS_RUN rule is applied only by the merge.
+
+## 2. How it works
+
+1. Ordinal 0 is the normalized entry URL. The remaining pages are sorted by URL in parallel and shard modes.
+2. A shard owns every page whose ordinal `o` satisfies `(o mod N) + 1 = I`.
+3. Each page task writes its events to a private journal (`journals/page-<ordinal>.json`). Page tasks never write canonical state.
+4. Discovery runs once before any page task starts. In parallel and shard runs it is link harvesting plus a level-by-level click pass (`ParallelDiscovery`) that uses the same number of lanes as `--workers`; its result does not depend on the lane count, so every shard computes the same frontier.
+5. A shard writes a bundle: manifest, fragments and journals.
+6. One merge validates all bundles, reconciles the journals in a fixed order, and writes one report and one run-history record.
+7. A receipt is written last. If the same inputs are merged again, the merge prints the recorded outcome and exits with the recorded code.
+
+## 3. Limitations
+
+- Pages must be independent of each other. Parallel execution does not order page-to-page dependencies.
+- `storageState` is copied in memory into each worker context. Mutations made inside one context are not synchronized with the others.
+- VisualRegression is rejected under parallel mode.
+- Page order can differ from a sequential run when the frontier is larger than `--max-pages`.
+- If a page that owns a deduplicated scenario fails, later pages keep the scenario deduplicated, and the run fails.
+- `--budget-ms` is a scheduling deadline. The deadline is checked before starting each page task in analysis and execution; a task that has already started runs to completion.
+- Parallel and shard runs discover pages with a different pass from the sequential crawl (section 4); the page set can differ on unusual sites.
+- Evidence recorded in a parallel run does not raise locator trust until a sequential run has confirmed it.
+
+## 4. Benchmark
+
+Measured on one machine (Darwin 25.5.0 arm64, 10 CPUs, Node v22.19.0, headless Chromium, local fixture server, no network), with a 200 ms page delay:
+
+- 2 workers: 2.80x end-to-end speedup (median 5.87 s against 16.43 s sequential); parallel-stage (analysis + execution) speedup 1.11x.
+- 4 workers: 4.15x end-to-end speedup (median 3.96 s); parallel-stage speedup 1.88x.
+- Most of the end-to-end gain comes from the cheaper discovery pass (median 11.4 s sequential; about 1.1 s with 2 workers and 0.85 s with 4 workers).
+- Parallel and shard runs use a different discovery pass from the sequential crawl: plain anchors are resolved from their `href` instead of clicked, links that open a new tab are not clicked, other origins are recorded but never opened, and clicks on pages two hops away (whose results the sequential crawl discards) are skipped. On unusual sites the page set can differ from a sequential run. Discovery retries a failed page or click once; if a page still fails to load or the 400-task cap is reached, a warning is logged and the page set may be smaller on that shard than on others, which the merge then rejects as a mismatch (rerun the shard). Links with credentials in the URL or very long hrefs are skipped.
+- The thresholds (2 workers at least 1.5x, 4 workers at least 2.3x) are met on the fixture. They are evidence only and do not gate CI.
+- The results are specific to this fixture and machine. They do not show linear scaling.
+
+Source: `docs/benchmarks/phase-16-parallel-benchmark.md`.
+
+## 5. CI
+
+- `.github/workflows/ci.yml` has a `shards` matrix job, an `aggregate` job, and a `shard-negative` job.
+- The `aggregate` job runs with `if: always()`, downloads the shard artifacts, runs `merge --expect-total=N`, and uploads the merged report. Of the shard and aggregate jobs, only aggregate saves the state cache, on main for non-fork runs, even when the merge fails. The save skips when no state file exists and is the only step allowed to fail without failing the job. Shard artifacts are named `falcon-shard-<i>-of-3-<attempt>` so a re-run does not collide, and the merge receives the expected run id and commit.
+- The `shard-negative` job checks that a missing shard is rejected.
+- Local runs do not exercise the matrix. CI is the authority for these jobs.
+
+## 6. Recovery and rollback
+
+- **Merge failed (exit 2 or 3):** fix the input or the storage problem and run the same `merge` command again. Inputs are preserved until the merge succeeds. A successful merge is idempotent.
+- **Merge crashed:** re-run the same `merge` command. The receipt is written last, so reduction runs again and converges.
+- **Re-running CI after a shard failure:** use "Re-run all jobs". The run id includes the attempt number and the aggregate is told to expect it, so "Re-run failed jobs" leaves the passing shards' bundles under the previous attempt and the merge rejects the set (exit 2, unexpected run id). That is the safe failure; nothing is published.
+- **Mixed plan digests (`MIXED_PLANDIGEST`):** every shard analyses all pages and records a digest of the plan. If shards reach the `--budget-ms` deadline at different points during analysis, their digests differ and the merge rejects the set (exit 2). CI does not use `--budget-ms`. When using it locally, give the budget enough room for analysis, or run without it when sharding.
+- **Clean up bundles:** delete `reports/shards` and `reports/merge`. Neither directory holds canonical state.
+- **Return to sequential:** stop passing `--workers`, `--shard` and `--run-id`. Canonical files written by a Phase 16 run are readable by the earlier build.
+
+### Rollback triggers
+
+Return to sequential (stop passing the flags) and open an issue if any of these happens on a parallel or sharded run:
+
+- `merge` exits 3 (state not durable) more than once after re-running it.
+- A parallel run's result differs from a sequential run of the same commit on the same app (test names, statuses or page set).
+- The aggregate job reports a PASSED report that is missing a page the sequential run covers.
+- Canonical state files (`data/*.json`) fail to load in a sequential run after a merge.
+- A parallel run leaves browser processes, contexts or lock files behind.
+
+To undo the feature itself, revert the pull request; canonical file formats are unchanged.
+
+### Monitoring signals
+
+| Signal | Where it shows | Meaning | Action |
+| --- | --- | --- | --- |
+| `merge` exit 2 with `MISSING_SHARD`, `DUPLICATE_SHARD`, `MIXED_TOTAL` or `NO_SHARDS` | aggregate job log | Shard set incomplete or inconsistent | Re-run all jobs; check the failing shard job |
+| exit 2 with `UNEXPECTED_RUNID` or `UNEXPECTED_COMMIT` | aggregate job log | Bundles from another attempt or commit | Use "Re-run all jobs", not "Re-run failed jobs" |
+| exit 2 with `PLAN_DIGEST_MISMATCH` or `FRONTIER_DIGEST_MISMATCH` | aggregate job log | Shards saw different pages (unstable app, or a failed discovery task: look for the discovery warnings in the shard logs) | Re-run the shards; if it repeats, stabilise the app under test |
+| exit 2 with `PAGE_UNOWNED`, `DUPLICATE_PAGE_OWNER` or `BAD_ASSIGNMENT` | aggregate job log | Page ownership broken | Treat as a defect; roll back to sequential and report it |
+| exit 3 | aggregate job log | A state write failed; inputs kept | Fix storage and re-run the same merge |
+| `LOCK_FOREIGN_HOST` | Falcon log of the run that wrote locator memory | A lock written by another host was found and left in place | Confirm that host is gone, remove the lock file by hand, re-run |
+| `Discovery task cap` or `failed task(s)` warnings | shard logs | Discovery was truncated or lost a page | Expect a digest mismatch; re-run the shard |
+
+## 7. Known open items
+
+- A historical private key (`client.key`, commits `8d1cff4` and `ef4b32c`, removed in `58cd66a`) is in git history. Owner disposition (2026-10-09): the Supabase project it belonged to is fully deleted, so the credential cannot authenticate; use of the same certificate elsewhere was not verified.
+- The CI Postgres service image is pinned by digest; no image vulnerability scan has been run. The owner accepted this on 2026-10-09 (`docs/security/phase-16-owner-acceptance.md`).
+- Discovery in parallel and shard runs: a URL that a click lands on is recorded as is (query strings and redirect targets are not stripped), and clicking runs page JavaScript that may make the browser load another origin without recording it. The sequential crawl behaves the same way.
+- Retries are not reported when they succeed, and a retry also repeats for failures that cannot succeed (an unreachable host).
+
+Sources: `docs/architecture/phase-16-parallel-execution.md`, `docs/security/phase-16-baseline-security-assessment.md`.
+
+## Known difference from a sequential report
+A merged report matches a sequential one on test names and statuses, page statuses and coverage counts, with one gap: `coverage.linksOutOfScope` (links skipped as cross-origin or non-page) is not carried through the bundle, so the merged report does not include it. The merged report also adds `execution` and `stateMerge` blocks.

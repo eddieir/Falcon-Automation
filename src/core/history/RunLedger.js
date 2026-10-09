@@ -150,6 +150,12 @@ class RunLedger {
         continue;
       }
 
+      // Phase 16: a record whose runId is already present is a no-op, so a
+      // re-run of the coordinator merge never double-counts a run.
+      if (state.runs.some((r) => r && r.runId === record.runId)) {
+        return { ok: true, duplicate: true, count: state.runs.length + state.preserved.length };
+      }
+
       // Valid and preserved records share one cap. The new record is never a candidate.
       const kept = state.runs.concat(state.preserved);
       const evicted = Math.max(0, kept.length + 1 - MAX_RUNS);

@@ -26,23 +26,12 @@ class ClickExplorer {
         this.exploredElements = []; // audit log for reporting
     }
 
-    async explore(depth = 0) {
-        if (depth > this.maxDepth) {
-            Logger.info("🛑 Reached max exploration depth, stopping navigation.");
-            return;
-        }
-
-        const currentUrl = await this.page.url();
-        if (this.visitedPages.has(currentUrl)) {
-            Logger.info(`🔄 Skipping already visited page: ${currentUrl}`);
-            return;
-        }
-
-        Logger.info(`🌍 Exploring page: ${currentUrl}`);
-        this.visitedPages.add(currentUrl);
-
-        // Build a list of clickable elements with valid, attribute-based selectors
-        const clickableElements = await this.page.evaluate(() => {
+    /**
+     * The clickable elements of a page, with attribute-based selectors.
+     * Shared by the sequential crawl and the parallel discovery.
+     */
+    static async listCandidates(page) {
+        return page.evaluate(() => {
             /**
              * Derive the most stable CSS selector from an element's attributes.
              * Priority: data-testid > id > aria-label > name > (fallback = null)
@@ -73,9 +62,54 @@ class ClickExplorer {
                 selector: buildSelector(el),
                 text: (el.innerText || el.textContent || "").trim().substring(0, 100),
                 href: el.getAttribute("href") || null,
+                hasHandler: el.tagName.toLowerCase() !== "a" || el.hasAttribute("onclick") || el.hasAttribute("role"),
                 newTab: el.getAttribute("target") === "_blank",
             }));
         });
+    }
+
+    /**
+     * Click one candidate: attribute selector first, text locator as fallback.
+     * Returns whether a click happened.
+     */
+    static async clickElement(page, element) {
+        let clicked = false;
+        if (element.selector) {
+            try {
+                await page.waitForSelector(element.selector, { state: "visible", timeout: 4000 });
+                await page.click(element.selector);
+                clicked = true;
+            } catch {
+                Logger.warning(`⚠️ Attribute selector failed for "${element.text}", falling back to text locator.`);
+            }
+        }
+        if (!clicked && element.text) {
+            try {
+                await page.getByText(element.text, { exact: true }).first().click({ timeout: 4000 });
+                clicked = true;
+            } catch {
+                Logger.warning(`⚠️ Text locator also failed for "${element.text}".`);
+            }
+        }
+        return clicked;
+    }
+
+    async explore(depth = 0) {
+        if (depth > this.maxDepth) {
+            Logger.info("🛑 Reached max exploration depth, stopping navigation.");
+            return;
+        }
+
+        const currentUrl = await this.page.url();
+        if (this.visitedPages.has(currentUrl)) {
+            Logger.info(`🔄 Skipping already visited page: ${currentUrl}`);
+            return;
+        }
+
+        Logger.info(`🌍 Exploring page: ${currentUrl}`);
+        this.visitedPages.add(currentUrl);
+
+        const clickableElements = await ClickExplorer.listCandidates(this.page);
 
         // Process a bounded slice to avoid unbounded execution time
         const candidates = clickableElements.filter((el) => el.text).slice(0, 5);
@@ -84,33 +118,7 @@ class ClickExplorer {
             try {
                 Logger.info(`🖱 Exploring: "${element.text}"`);
 
-                let clicked = false;
-
-                if (element.selector) {
-                    // Attribute-based selector — preferred path
-                    try {
-                        await this.page.waitForSelector(element.selector, {
-                            state: "visible",
-                            timeout: 4000,
-                        });
-                        await this.page.click(element.selector);
-                        clicked = true;
-                    } catch {
-                        Logger.warning(
-                            `⚠️ Attribute selector failed for "${element.text}", falling back to text locator.`
-                        );
-                    }
-                }
-
-                if (!clicked && element.text) {
-                    // Text-based fallback — getByText is tolerant of DOM changes
-                    try {
-                        await this.page.getByText(element.text, { exact: true }).first().click({ timeout: 4000 });
-                        clicked = true;
-                    } catch {
-                        Logger.warning(`⚠️ Text locator also failed for "${element.text}".`);
-                    }
-                }
+                const clicked = await ClickExplorer.clickElement(this.page, element);
 
                 if (!clicked) continue;
 

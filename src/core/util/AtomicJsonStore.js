@@ -57,6 +57,8 @@ const Logger = require("../../../utils/Logger");
  * aggregation logic.
  */
 
+const DEFAULT_MAX_BYTES = 8 * 1024 * 1024;
+
 function _sidecarPath(filePath) {
     const dir  = path.dirname(filePath);
     const base = path.basename(filePath);
@@ -86,14 +88,43 @@ function _preserveCorrupt(filePath, rawBytes) {
  * @param {string} filePath
  * @param {object|Array} fallback
  */
-function readJsonSync(filePath, fallback) {
+function readJsonSync(filePath, fallback, options = {}) {
+    const maxBytes = Number.isFinite(options && options.maxBytes) && options.maxBytes > 0
+        ? options.maxBytes
+        : DEFAULT_MAX_BYTES;
     let raw;
+    let fd;
     try {
-        if (!fs.existsSync(filePath)) return fallback;
-        raw = fs.readFileSync(filePath);
+        let st;
+        try {
+            st = fs.lstatSync(filePath);
+        } catch (statError) {
+            if (statError.code === "ENOENT") return fallback;
+            throw statError;
+        }
+        if (st.isSymbolicLink() || !st.isFile()) {
+            Logger.warning(`AtomicJsonStore corrupt-file recovery: refusing to read ${filePath} — not a regular file`);
+            return fallback;
+        }
+        const noFollow = typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
+        fd = fs.openSync(filePath, fs.constants.O_RDONLY | noFollow);
+        const fst = fs.fstatSync(fd);
+        if (!fst.isFile()) {
+            Logger.warning(`AtomicJsonStore corrupt-file recovery: refusing to read ${filePath} — not a regular file`);
+            return fallback;
+        }
+        if (fst.size > maxBytes) {
+            Logger.warning(`AtomicJsonStore corrupt-file recovery: refusing to read ${filePath} — size ${fst.size} exceeds limit ${maxBytes}`);
+            return fallback;
+        }
+        raw = fs.readFileSync(fd);
     } catch (readError) {
         Logger.warning(`AtomicJsonStore corrupt-file recovery: failed to read ${filePath} — ${readError.message}`);
         return fallback;
+    } finally {
+        if (fd !== undefined) {
+            try { fs.closeSync(fd); } catch { /* ignore */ }
+        }
     }
 
     let parsed;
@@ -141,8 +172,18 @@ async function writeJsonAtomic(filePath, data) {
     const dir     = path.dirname(filePath);
     const tmpPath = path.join(dir, `${path.basename(filePath)}.tmp-${process.pid}-${crypto.randomUUID()}`);
     try {
-        await fs.promises.mkdir(dir, { recursive: true });
+        await fs.promises.mkdir(dir, { recursive: true, mode: 0o700 });
         await fs.promises.writeFile(tmpPath, JSON.stringify(data, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
+        // Flush the temp file's contents before the rename publishes it, so a
+        // crash cannot leave a renamed-but-empty canonical file.
+        const handle = await fs.promises.open(tmpPath, "r");
+        try {
+            await handle.sync();
+        } finally {
+            // The data was already synced (or the sync error is propagating);
+            // a failed close must not turn a good write into a failure.
+            await handle.close().catch(() => {});
+        }
         await fs.promises.rename(tmpPath, filePath);
         return { ok: true };
     } catch (error) {

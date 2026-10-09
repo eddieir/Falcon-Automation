@@ -3,6 +3,7 @@
 > **For:** Any engineer or Claude Code session continuing this work
 > **Author:** Peyman Iravani — QA Manager / Tech Lead
 > **Last updated:** Phase 15 ("Run history and trend") merged on `main` at `6e7f5f1` via #46. Phases 1–15 are merged and verified.
+> **Phase 16 (Parallel execution): in review, not merged.** Branch `phase-16/parallel-execution`. Operations guide: `docs/phase-16-operations.md`.
 > **Repo:** https://github.com/eddieir/Falcon-Automation
 
 ---

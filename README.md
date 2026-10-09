@@ -279,13 +279,17 @@ existing files or secure their containing directory.
 
 An adjacent exclusive lock covers the durable-file digest check and replacement. A stale store
 instance cannot overwrite another writer's work: restart it to reload current state after a writer
-conflict. A lock left by a crashed process is automatically reclaimed: if its recorded PID is gone
-(verified via `process.kill(pid, 0)` returning `ESRCH`), or if the lock has no readable PID and is
-older than 30 seconds, the next writer moves it aside and retries once. A lock naming a live PID,
-or the current process's own PID, is never reclaimed. A reused PID, for example a container
-restarted with the same PID, therefore still needs manual recovery: stop writers, confirm the owner
-has exited, then remove the lock. A narrow window remains in which a live owner displaced
-mid-reclaim can briefly overlap with the next holder; neither can remove the other's lock. The
+conflict. Each lock records the host that created it, the owner PID and the creation time. A lock left by a
+crashed process on the same host is automatically reclaimed: if its recorded PID is gone (verified via
+`process.kill(pid, 0)` returning `ESRCH`), or if the lock has no readable owner and is older than
+60 seconds, the next writer moves it aside and retries once. A lock naming a live PID, or the current
+process's own PID, is never reclaimed. A lock created on another host is never reclaimed automatically,
+because a PID means nothing across machines: the write stops with `LOCK_FOREIGN_HOST` and changes
+nothing. Stop writers, confirm the owner is gone, then remove the lock by hand. Hostnames that change
+between runs on a shared volume (for example ephemeral containers) hit the same rule and need the same
+manual step. A reused PID on the same host also still needs manual recovery. A narrow window remains in
+which a live owner displaced mid-reclaim can briefly overlap with the next holder; neither can remove the
+other's lock. The
 conflict message names the owner PID and age to aid diagnosis. There is no merge of competing
 snapshots.
 
@@ -946,6 +950,25 @@ The full, current file is the source of truth; see `.github/workflows/ci.yml`. [
 Node 22+ is required locally (the openai SDK's floor; `test:coverage`/`test:regression` also need a recent Node for `--test-concurrency` and `--experimental-test-coverage` alongside `--test`; see `engines` in `package.json`); CI is pinned to Node 24 and has always been fine, but an older local Node fails these two scripts with a plain `node: bad option` instead of a useful message.
 
 ---
+
+## Parallel execution and sharding (Phase 16, in review)
+
+Status: in review on `phase-16/parallel-execution`, not merged. Sequential runs remain the default.
+
+```bash
+node falcon.js --url=https://your-app.example --workers=2          # page-level parallelism, 1 to 16
+node falcon.js --url=https://your-app.example --shard=1/2 --run-id=local-run-1
+node falcon.js merge --input=reports/shards/local-run-1 --expect-total=2
+# optional strict checks, exit 2 on mismatch: --expect-run-id=<id> --expect-commit=<sha>
+```
+
+- `--workers=N` runs pages in parallel. Scenarios within a page stay sequential.
+- `--shard=I/N --run-id=<id>` runs one shard and writes a bundle only. The merge command combines bundles into one report and one history record. `--workers=M` can be added to a shard to run that shard's pages M at a time; page ownership and the merged result do not change with M.
+- Benchmark on a local fixture (200 ms page delay): 2.80x end to end with 2 workers and 4.15x with 4 workers. Most of that gain is a cheaper parallel discovery pass (about 11.4 s of sequential discovery becomes about 1 s); the page work alone scales 1.11x and 1.88x. The numbers are specific to this fixture and machine and do not show linear scaling.
+- Only pages run in parallel. Pages must be independent. `storageState` is copied into each worker context and is not synchronized across contexts.
+- Parallel and shard runs use a different link-discovery pass from the sequential crawl, so the page set can differ on unusual sites.
+
+Limitations, merge exit codes and CI details: [docs/phase-16-operations.md](docs/phase-16-operations.md).
 
 ## Running Tests
 
