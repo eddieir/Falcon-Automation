@@ -944,8 +944,8 @@
           "name": "discovery result is identical for 1, 2 and 4 lanes and matches the sequential crawl on the fixture"
         }
       ],
-      "status": "partial",
-      "note": "Fixture (10 pages) and published results (5 measured runs, 1 warm-up, median/range, speedup, efficiency, memory, environment, equivalence) exist, tested for fixture, stats helpers and the discovery pass. Benchmark numbers are specific to this fixture and machine."
+      "status": "done",
+      "note": "Fixture (10 pages) and published results (5 measured runs, 1 warm-up, median/range, speedup, efficiency, memory, environment, equivalence) exist and are covered by fixture, stats-helper and discovery tests. Numbers are specific to this fixture and machine."
     },
     {
       "id": "P16-AC-34",
@@ -987,8 +987,8 @@
           "name": "ci.yml: aggregate needs shards, runs always, exit code is the merge's"
         }
       ],
-      "status": "partial",
-      "note": "Workflow structure is statically tested; the last completed hosted run (head 42fac1a) succeeded on all jobs; the exact final head is confirmed by the release review."
+      "status": "done",
+      "note": "Workflow structure is statically tested and hosted Falcon CI run 37935443035 (head 543e78d) succeeded on shards 1-3, aggregate and shard-negative. Recheck if the head changes."
     },
     {
       "id": "P16-AC-36",
@@ -1018,8 +1018,8 @@
           "name": "${name}: every job has timeout-minutes"
         }
       ],
-      "status": "partial",
-      "note": "Static workflow hardening is tested; hosted confirmation is pending. Cache exclusion of locator_memory.json is not asserted by a dedicated test here."
+      "status": "done",
+      "note": "Pinning, permissions, timeouts and absence of fork secrets are statically tested and were reviewed by the Security Engineer (SEC-5, 9385e72); the exclusion of locator_memory.json from caches is asserted by the T13 test in p16-gaps.check.cjs."
     },
     {
       "id": "P16-AC-37",
@@ -1237,12 +1237,13 @@
       "priority": "Must",
       "text": "npm audit at the high level passes for production dependencies in the CI regression job, and for all dependencies when run locally",
       "implementation": [
-        ".github/workflows/ci.yml"
+        ".github/workflows/ci.yml",
+        "docs/security/phase-16-security-evidence.md"
       ],
-      "verifiedBy": "test",
+      "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "Production audit runs in CI; the all-dependencies audit is run locally only."
+      "status": "done",
+      "note": "`npm audit --omit=dev --audit-level=high` runs in the CI regression job and reports no findings; `npm audit --audit-level=high` for all dependencies, run locally on 2026-10-09 at head cac34bd, reports 0 vulnerabilities."
     },
     {
       "id": "P16-AC-109",
@@ -1251,12 +1252,13 @@
       "priority": "Must",
       "text": "Current-tree and git-history secret scans are recorded with findings classified (BL-003 and others)",
       "implementation": [
-        "docs/security/phase-16-baseline-security-assessment.md"
+        "docs/security/phase-16-baseline-security-assessment.md",
+        "docs/security/phase-16-security-evidence.md"
       ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "Baseline records a clean current-tree scan and classified history findings BL-003..BL-005; BL-003 awaits owner disposition; final-head scan not run."
+      "status": "done",
+      "note": "Baseline records the current-tree and history scans with findings classified (BL-003..BL-005). A local secret scan of the 45 commits on the branch (origin/main..HEAD, redacted) found no leaks on 2026-10-09; the owner disposition for BL-003 is recorded. A scan of the whole working directory also hits two untracked, git-ignored local files (a copy under .claude/worktrees and reports/execution.log), neither of which is in the PR."
     },
     {
       "id": "P16-AC-110",
@@ -1314,9 +1316,18 @@
         ".github/workflows/ci.yml"
       ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "partial",
-      "note": "Asserted statically; fork behaviour on a hosted run not recorded."
+      "tests": [
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "ci.yml: OPENAI_API_KEY is not job-level; negative shard check expects exit 2"
+        },
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "workflows: every action reference is pinned to a full commit SHA"
+        }
+      ],
+      "status": "done",
+      "note": "No workflow uses pull_request_target; permissions are contents: read; secrets are referenced only in the sequential test job (SEC-5, 9385e72). No fork pull request has been run, so fork behaviour relies on GitHub withholding secrets from fork runs."
     },
     {
       "id": "P16-AC-114",
@@ -1362,11 +1373,18 @@
       "title": "Artifacts sanitized and retention-bounded",
       "priority": "Must",
       "text": "Security artifacts are sanitized and uploaded with bounded retention and unique names",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "planned",
-      "note": "Name and retention asserted; content sanitisation not reviewed."
+      "tests": [
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "ci.yml: shard matrix artifacts are unique and include the shard index"
+        }
+      ],
+      "status": "done",
+      "note": "Shard artifacts carry names with the run attempt and bounded retention (7 and 14 days); journals, bundles and fragments hold only allow-listed, redacted, query-free fields (SEC-5, 9385e72). Other report files uploaded with the merged report were not audited and match the sequential job's existing exposure."
     },
     {
       "id": "P16-AC-118",
@@ -1379,8 +1397,8 @@
       ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "Baseline records its SHA; final-head evidence does not exist yet."
+      "status": "done",
+      "note": "Security evidence records the exact SHAs: baseline d13be7f, Security review 9385e72, hosted checks 543e78d (docs/security/phase-16-security-evidence.md)."
     },
     {
       "id": "P16-AC-119",
@@ -1390,7 +1408,8 @@
       "text": "The CI Postgres service image is pinned by digest and its vulnerability status is recorded by the owner's approved process",
       "implementation": [
         ".github/workflows/ci.yml",
-        "docs/security/phase-16-baseline-security-assessment.md"
+        "docs/security/phase-16-baseline-security-assessment.md",
+        "docs/security/phase-16-owner-acceptance.md"
       ],
       "verifiedBy": "test",
       "tests": [
@@ -1399,8 +1418,8 @@
           "name": "ci.yml: postgres image is digest pinned"
         }
       ],
-      "status": "partial",
-      "note": "Digest pin asserted; image vulnerability scan not yet run."
+      "status": "done",
+      "note": "The CI Postgres image is pinned by digest; its vulnerability status is recorded as not scanned (no scanner in use) and accepted by the owner on 2026-10-09 (docs/security/phase-16-owner-acceptance.md)."
     },
     {
       "id": "P16-AC-120",
@@ -1425,8 +1444,8 @@
       ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "partial",
-      "note": "Document exists with npm audit, secret scan, CodeQL and GitGuardian baseline results."
+      "status": "done",
+      "note": "Baseline assessment of the baseline commit exists with npm audit, secret scan, CodeQL and GitGuardian results."
     },
     {
       "id": "P16-AC-122",
@@ -1451,12 +1470,22 @@
       "priority": "Must",
       "text": "The workflows are reviewed for pinning, permissions, secrets and untrusted input",
       "implementation": [
-        ".github/workflows/ci.yml"
+        ".github/workflows/ci.yml",
+        "docs/security/phase-16-security-evidence.md"
       ],
       "verifiedBy": "test",
-      "tests": [],
-      "status": "partial",
-      "note": "Static checks exist; no recorded Security review verdict."
+      "tests": [
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "workflows: every action reference is pinned to a full commit SHA"
+        },
+        {
+          "file": "tests/regression/p16-workflow.check.cjs",
+          "name": "ci.yml: OPENAI_API_KEY is not job-level; negative shard check expects exit 2"
+        }
+      ],
+      "status": "done",
+      "note": "Workflows reviewed by the Security Engineer (SEC-5, 9385e72) for pinning, permissions, secrets, cache and untrusted input; static checks in p16-workflow and p16-gaps tests."
     },
     {
       "id": "P16-AC-124",
@@ -1464,11 +1493,13 @@
       "title": "Dependency and supply-chain review",
       "priority": "Must",
       "text": "New dependencies and install steps are reviewed; the lockfile is consistent with npm ci",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Not yet reviewed."
+      "status": "done",
+      "note": "Supply chain reviewed by the Security Engineer (SEC-5, 9385e72): package-lock.json is unchanged from main, package.json adds two scripts and no dependency, install steps use npm ci, the Postgres image is pinned by digest."
     },
     {
       "id": "P16-AC-125",
