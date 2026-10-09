@@ -100,10 +100,36 @@ Source: `docs/benchmarks/phase-16-parallel-benchmark.md`.
 - **Clean up bundles:** delete `reports/shards` and `reports/merge`. Neither directory holds canonical state.
 - **Return to sequential:** stop passing `--workers`, `--shard` and `--run-id`. Canonical files written by a Phase 16 run are readable by the earlier build.
 
+### Rollback triggers
+
+Return to sequential (stop passing the flags) and open an issue if any of these happens on a parallel or sharded run:
+
+- `merge` exits 3 (state not durable) more than once after re-running it.
+- A parallel run's result differs from a sequential run of the same commit on the same app (test names, statuses or page set).
+- The aggregate job reports a PASSED report that is missing a page the sequential run covers.
+- Canonical state files (`data/*.json`) fail to load in a sequential run after a merge.
+- A parallel run leaves browser processes, contexts or lock files behind.
+
+To undo the feature itself, revert the pull request; canonical file formats are unchanged.
+
+### Monitoring signals
+
+| Signal | Where it shows | Meaning | Action |
+| --- | --- | --- | --- |
+| `merge` exit 2 with `MISSING_SHARD`, `DUPLICATE_SHARD`, `MIXED_TOTAL` or `NO_SHARDS` | aggregate job log | Shard set incomplete or inconsistent | Re-run all jobs; check the failing shard job |
+| exit 2 with `UNEXPECTED_RUNID` or `UNEXPECTED_COMMIT` | aggregate job log | Bundles from another attempt or commit | Use "Re-run all jobs", not "Re-run failed jobs" |
+| exit 2 with `PLAN_DIGEST_MISMATCH` or `FRONTIER_DIGEST_MISMATCH` | aggregate job log | Shards saw different pages (unstable app, or a failed discovery task: look for the discovery warnings in the shard logs) | Re-run the shards; if it repeats, stabilise the app under test |
+| exit 2 with `PAGE_UNOWNED`, `DUPLICATE_PAGE_OWNER` or `BAD_ASSIGNMENT` | aggregate job log | Page ownership broken | Treat as a defect; roll back to sequential and report it |
+| exit 3 | aggregate job log | A state write failed; inputs kept | Fix storage and re-run the same merge |
+| `LOCK_FOREIGN_HOST` | Falcon log of the run that wrote locator memory | A lock written by another host was found and left in place | Confirm that host is gone, remove the lock file by hand, re-run |
+| `Discovery task cap` or `failed task(s)` warnings | shard logs | Discovery was truncated or lost a page | Expect a digest mismatch; re-run the shard |
+
 ## 7. Known open items
 
-- A historical private key (`client.key`, commits `8d1cff4` and `ef4b32c`, removed in `58cd66a`) is in git history. Owner disposition pending.
-- The CI Postgres service image is pinned by digest; no image vulnerability scan has been run.
+- A historical private key (`client.key`, commits `8d1cff4` and `ef4b32c`, removed in `58cd66a`) is in git history. Owner disposition (2026-10-09): the Supabase project it belonged to is fully deleted, so the credential cannot authenticate; use of the same certificate elsewhere was not verified.
+- The CI Postgres service image is pinned by digest; no image vulnerability scan has been run. The owner accepted this on 2026-10-09 (`docs/security/phase-16-owner-acceptance.md`).
+- Discovery in parallel and shard runs: a URL that a click lands on is recorded as is (query strings and redirect targets are not stripped), and clicking runs page JavaScript that may make the browser load another origin without recording it. The sequential crawl behaves the same way.
+- Retries are not reported when they succeed, and a retry also repeats for failures that cannot succeed (an unreachable host).
 
 Sources: `docs/architecture/phase-16-parallel-execution.md`, `docs/security/phase-16-baseline-security-assessment.md`.
 
