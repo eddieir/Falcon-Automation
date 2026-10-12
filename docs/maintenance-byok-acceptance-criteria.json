@@ -1,0 +1,669 @@
+{
+  "phase": "maintenance/byok-frontier-providers",
+  "title": "BYOK: invocation-scoped multi-provider LLM support (M17)",
+  "evidenceRevision": "9abbf7b",
+  "criteriaSource": "M17-BYOK AC-register-text.md (owner mandate, texts FIXED) + PO-01 negative criteria N01..N13",
+  "textFreeze": "The 28 AC texts are the sole source of truth; tests/regression/m17-byok-traceability.check.cjs enforces an SHA256 freeze over AC01..AC28 and parity between this register and the canonical array in that test.",
+  "statusMeaning": {
+    "verified": "A named regression test observed passing on this revision asserts the criterion.",
+    "pending": "Verification outstanding (docs, exact-head governance evidence, or external gate). Allowed only for AC20, AC24, AC25, AC26 under traceability policy."
+  },
+  "owner": "QA-01 (claude-opus-4-7, independent verification)",
+  "criteria": [
+    {
+      "id": "M17-BYOK-AC01",
+      "text": "user-owned credentials; no Falcon/shared key exists or implied.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/ProviderContext.js",
+        "src/core/llm/LlmConfig.js",
+        ".env.example"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-credentials.check.cjs", "name": "AC15: resolve() reads no credential value; only config.apiKey access does" },
+        { "file": "tests/regression/m17-byok-cli.check.cjs", "name": ".env.example: FALCON_LLM_*/ANTHROPIC_API_KEY/GEMINI_API_KEY optional entries are blank with no key-shaped text" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "No Falcon-shared credential is present in code or env templates; verified by env-template scan and resolve-time behaviour.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC02",
+      "text": "per-invocation provider/model/endpoint/credential-ref without mutating another.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/ProviderContext.js",
+        "src/core/llm/LlmProviderRegistry.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC02: precedence options > profile for the same field" },
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC02: profile fills a field options omits" },
+        { "file": "tests/regression/m17-byok-isolation.check.cjs", "name": "N01: two ProviderContexts with the same provider id get distinct provider instances" },
+        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC02/N01: two openai contexts with different keys/models never share cache or carry each other's secrets" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Per-context WeakMap memoisation and deep-frozen config; verified by distinct-instance assertions.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC03",
+      "text": "concurrent OpenAI+Anthropic instrumented executions hit only their mock endpoint, carry only own planted marker, leak zero markers across requests/logs/errors/ledger/dashboard.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/LlmProviderRegistry.js",
+        "src/core/llm/providers/OpenAIProvider.js",
+        "src/core/llm/providers/AnthropicProvider.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC03/AC02/AC09/AC12/N01: concurrent openai+anthropic executions isolate keys, models, and markers" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Dashboard/ledger not exercised in this test (QA-01 covers requests/logs/errors/stdout/stderr/telemetry/inspect sweep); dashboard concurrency is tracked under AC22.",
+      "owner": "QA Engineer"
+    },
+    {
+      "id": "M17-BYOK-AC04",
+      "text": "Anthropic adapter: verified official contract, strict bounded output, normalized usage/errors, existing local-validation/approval pipeline.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/providers/AnthropicProvider.js",
+        "src/core/llm/transport/guardedFetch.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "success: exact request shape, text extracted, usage mapped" },
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "AC04/AC09: an arbitrary valid model id is sent verbatim" },
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "oversized response => OVERSIZED, zero retries (not retryable)" },
+        { "file": "tests/regression/m17-byok-payload-approval.check.cjs", "name": "sanity: a clean in-range integer from either adapter still heals normally (anthropic)" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Contract verified against deterministic local mocks; no live Anthropic traffic in CI (AC21 label applies).",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC05",
+      "text": "OpenAI behavior compatible via invocation config.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/providers/OpenAIProvider.js",
+        "src/core/llm/ProviderContext.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC01: direct options provider=openai with credentialEnvVar resolves ok" },
+        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC02/N01: two openai contexts with different keys/models never share cache or carry each other's secrets" },
+        { "file": "tests/regression/m17-byok-wiring.check.cjs", "name": "AIHealer with providerContext uses that context's provider, not the default" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Compatibility is behavioural (invocation-scoped) and verified via injected OpenAI SDK seam.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC06",
+      "text": "Gemini adapter official contract, bounded output.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/providers/GeminiProvider.js",
+        "src/core/llm/transport/guardedFetch.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "success: exact request shape, text extracted, usage mapped" },
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "AC06/AC09: an arbitrary valid model id is sent verbatim in the path" },
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "oversized response => OVERSIZED" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Verified against deterministic mock; stricter Gemini model-id charset enforced (C1).",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC07",
+      "text": "Azure deployment/model/auth correct and invocation-scoped.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/providers/AzureOpenAIProvider.js",
+        "src/core/llm/ProviderContext.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "N04: azureDeployment is rejected for provider=openai (azure* fields pinned to azure-openai)" },
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "N04: model and azureDeployment cannot both be set" },
+        { "file": "tests/regression/p17-provider-contract.check.cjs", "name": "(AzureOpenAIProvider) AC03/AC20: path is /openai/v1/chat/completions, body.model is the deployment, Bearer auth, no api-version" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "No live Azure resource in CI; Entra ID excluded by owner decision D4.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC08",
+      "text": "compatible/local endpoints explicit, isolated, Phase 17 endpoint controls.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/providers/OpenAICompatibleProvider.js",
+        "src/core/llm/transport/EndpointPolicy.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC05: endpoint field rejected (CONFIG_CONFLICT) for provider=openai" },
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "C6: profile endpoint field rejected for provider!=openai-compatible" },
+        { "file": "tests/regression/m17-byok-transport.check.cjs", "name": "fixed-host: policy is forced no-loopback/no-private even if caller opts in" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Phase 17 EndpointPolicy inherited; opt-in rules re-asserted through ProviderContext.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC09",
+      "text": "syntactically valid operator model ID reaches only selected adapter, no Falcon release needed, not claimed certified.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/ProviderContext.js",
+        "src/core/llm/providers/AnthropicProvider.js",
+        "src/core/llm/providers/GeminiProvider.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "AC04/AC09: an arbitrary valid model id is sent verbatim" },
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "AC06/AC09: an arbitrary valid model id is sent verbatim in the path" },
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "C1: gemini model id traversal/escape shapes are rejected by the stricter charset" },
+        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC03/AC02/AC09/AC12/N01: concurrent openai+anthropic executions isolate keys, models, and markers" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "No certification claim; model id is user input constrained to charset+length.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC10",
+      "text": "provider/model/auth failure never switches provider/key/profile/endpoint, never probes.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/providers/OpenAIProvider.js",
+        "src/core/llm/providers/AnthropicProvider.js",
+        "src/core/llm/LlmProviderRegistry.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC10: a resolve failure never falls back to another provider — it just fails" },
+        { "file": "tests/regression/m17-byok-wiring.check.cjs", "name": "AC10: provider auth failure surfaces as an error result; a different context's provider is never touched" },
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "AC10: a provider failure never triggers the other provider or another endpoint" },
+        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC10/AC12: provider A 401 => AUTH_FAILED and provider B's endpoint is never probed, no fallback" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "No automatic provider switching exists in the code path (registry resolves one provider per context).",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC11",
+      "text": "Tier1/2/2.5 + local usable with no credentials.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/providers/DisabledProvider.js",
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-wiring.check.cjs", "name": "AC11: Tier1 heal success never reads any provider credential or touches the registry" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "No-credential paths tested through AIHealer; Tier2.5 corpus not re-exercised here (inherited from Phase 17).",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC12",
+      "text": "planted keys never in tracked/untracked artifacts, profile metadata, ledger, dashboard, logs, reports, errors, test output, crash output, PR text.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/ProviderContext.js",
+        "src/core/llm/ProfileStore.js",
+        "src/core/llm/LlmTelemetry.js",
+        "src/production-cycle/Redact.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC12: apiKey-named field is rejected, nothing written, marker never echoed" },
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC12: nested secret field is rejected, nothing written" },
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC12: key-shaped model value (Gemini-shaped) is rejected, marker absent from detail" },
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "error body marker and api key marker never appear in the result or thrown messages" },
+        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC03/AC02/AC09/AC12/N01: concurrent openai+anthropic executions isolate keys, models, and markers" },
+        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC10/AC12: provider A 401 => AUTH_FAILED and provider B's endpoint is never probed, no fallback" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "In-process sweep covers requests, results, telemetry, stdout/stderr, console.*, util.inspect. 'tracked/untracked artifacts' and 'crash output/PR text' are enforced by secret-scanning and process convention (external to in-process tests).",
+      "owner": "QA Engineer"
+    },
+    {
+      "id": "M17-BYOK-AC13",
+      "text": "safe profiles (traversal/symlink/perm/bounds); persisted = references + non-secret metadata.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/ProfileStore.js",
+        "scripts/llm/profile.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC13 name matrix: valid and invalid profile names" },
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC13: symlinked profile file is rejected on get()" },
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC13: symlinked profile directory is rejected" },
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC13: profile file with mode 0644 is rejected by get()" },
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC13: oversize profile file (>16KiB) is rejected by get()" },
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC13: __proto__/constructor keys are rejected on write and read" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Windows path is skipped with a one-time warning (ADR-0019 §6); documented residual risk.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC14",
+      "text": "deterministic documented precedence direct/profile/env/defaults; unsafe ambiguity rejected.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/ProviderContext.js",
+        "src/core/llm/InvocationContext.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC02: precedence options > profile for the same field" },
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC14: options/profile provider vs conflicting FALCON_LLM_PROVIDER env-compat => CONFIG_CONFLICT" },
+        { "file": "tests/regression/m17-byok-wiring.check.cjs", "name": "InvocationContext: direct --llm-model overrides the profile's model (direct > profile)" },
+        { "file": "tests/regression/m17-byok-wiring.check.cjs", "name": "InvocationContext: profile-vs-flag provider conflict => CONFIG_CONFLICT" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Precedence pinned by pickField(); ambiguity rejected with CONFIG_CONFLICT.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC15",
+      "text": "only selected adapter reads its credential source; import and local tiers read/contact nothing.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/ProviderContext.js",
+        "src/core/llm/providers/AnthropicProvider.js",
+        "src/core/llm/providers/OpenAIProvider.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-credentials.check.cjs", "name": "AC15: resolve() reads no credential value; only config.apiKey access does" },
+        { "file": "tests/regression/m17-byok-credentials.check.cjs", "name": "AC15: import of ProviderContext.js performs no credential reads (module load is side-effect-free)" },
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "apiKey is read lazily: a getter is untouched before complete(), read at most once per attempt" },
+        { "file": "tests/regression/m17-byok-wiring.check.cjs", "name": "AC11: Tier1 heal success never reads any provider credential or touches the registry" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Lazy getter with existence-only check at resolve time (peekOwnValue).",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC16",
+      "text": "outbound payload = minimum bounded candidate-selection context; no cookies/tokens/full DOM.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/AIHealer/AIHealer.js",
+        "src/core/llm/providers/AnthropicProvider.js",
+        "src/core/llm/providers/GeminiProvider.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "success: exact request shape, text extracted, usage mapped" },
+        { "file": "tests/regression/p17-healer-provider.check.cjs", "name": "data minimisation + redaction (AC08/S-17): markers in cookie/hidden-DOM/localStorage/env never reach prompt, request, logs, or report" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "AnthropicProvider enforces exact header + body key set; Phase 17 bounds inherited for prompt size.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC17",
+      "text": "remote output cannot bypass numeric parsing, candidate bounds, local validation, human approval, trust, quarantine, rehabilitation, reuse.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/AIHealer/AIHealer.js",
+        "src/core/AIHealer/HealingTrust.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-payload-approval.check.cjs", "name": "sanity: a clean in-range integer from either adapter still heals normally (anthropic)" },
+        { "file": "tests/regression/m17-byok-payload-approval.check.cjs", "name": "sanity: a clean in-range integer from either adapter still heals normally (gemini)" },
+        { "file": "tests/regression/tier3-allowlist.check.cjs", "name": "a free-form selector reply is rejected and nothing is clicked" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Pipeline inherited from Phase 17; m17 sanity tests confirm anthropic/gemini outputs flow through the same gate.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC18",
+      "text": "distinguishable safe errors: config, auth, permission, model-not-found/unsupported, rate-limit, timeout, network, endpoint-policy, malformed, oversized.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/providers/AnthropicProvider.js",
+        "src/core/llm/providers/GeminiProvider.js",
+        "src/core/llm/transport/guardedFetch.js",
+        "src/core/llm/LlmProvider.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "401/403 => AUTH_FAILED, 1 attempt" },
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "404/413/422 => BAD_REQUEST, never retried" },
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "429 RATE_LIMITED retried up to maxAttempts, then surfaced" },
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "504 => TIMEOUT; 500/529 => PROVIDER_ERROR" },
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "oversized response => OVERSIZED, zero retries (not retryable)" },
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "invalid JSON body => MALFORMED_RESPONSE" },
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "401/403 => AUTH_FAILED; 400/404/413/422 => BAD_REQUEST not retried; 429 retried bounded; 504 TIMEOUT; 5xx PROVIDER_ERROR" },
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "N11: promptFeedback.blockReason => CONTENT_BLOCKED, never an empty success" },
+        { "file": "tests/regression/m17-byok-transport.check.cjs", "name": "ERROR_CODES includes CONTENT_BLOCKED, frozen, length 20" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Closed error-code enum; adapters map upstream statuses deterministically; bodies never leak.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC19",
+      "text": "provider + user-selected model may be shown; never secrets, secret refs where sensitive, prompts, headers, raw DOM, endpoint query strings.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/LlmTelemetry.js",
+        "src/core/llm/ProviderContext.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-credentials.check.cjs", "name": "C16: util.inspect/JSON.stringify of the context never reveals the credential value" },
+        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC03/AC02/AC09/AC12/N01: concurrent openai+anthropic executions isolate keys, models, and markers" },
+        { "file": "tests/regression/p17-telemetry.check.cjs", "name": "S-10: telemetry serializes a success result from the allowlist only" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "credentialEnvVarName property is non-enumerable; apiKey getter non-enumerable.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC20",
+      "text": "discovery absent => docs say manual model IDs (decision: not implemented).",
+      "status": "pending",
+      "implementationPaths": [],
+      "testPaths": [],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "No discovery feature exists by owner decision; this must be documented in operator docs (pending Technical Writer).",
+      "owner": "Technical Writer"
+    },
+    {
+      "id": "M17-BYOK-AC21",
+      "text": "mock results prove protocol only; quality needs separately authorized real-model evaluation.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/locator/HealingBenchmark.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/p17-benchmark-provider.check.cjs", "name": "formatProviderDimensionText: labels mock rows with claimScope and never emits comparative/superiority wording" },
+        { "file": "tests/regression/p17-benchmark-provider.check.cjs", "name": "claimScope is a frozen, exact string" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Mock-only claim scope inherited from P17-AC11; no m17-specific benchmark test added (test coverage is the P17 benchmark suite). No live-model path exercised anywhere in CI.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC22",
+      "text": "dashboard keeps real dispatch packets + safe provider/profile metadata; no fabricated conversations/credentials.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/production-cycle/Server.js",
+        "src/production-cycle/EventSchema.js",
+        "src/production-cycle/Redact.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC12: apiKey-named field is rejected, nothing written, marker never echoed" },
+        { "file": "tests/regression/p17-pc-schema.check.cjs", "name": "unknown top-level key is rejected" },
+        { "file": "tests/regression/p17-pc-redact.check.cjs", "name": "pattern review: ghp_ GitHub token is refused" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "No m17-specific dashboard test asserts byok provider/profile metadata rendering; coverage is 'profile persistence rejects secrets' + inherited Phase 17 Redact/EventSchema tests. Full dashboard-concurrency path not re-exercised against byok dispatches.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC23",
+      "text": "Phase 17 env has tested migration/deprecation, never silently changes provider.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/ProviderContext.js",
+        "src/core/llm/LlmConfig.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC23: env-only path is unchanged — OPENAI_API_KEY alone => CONFIG_PROVIDER_REQUIRED" },
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC23: env-only path with no settings at all resolves to disabled, byte-identical to LlmConfig" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Env-only path delegates verbatim to LlmConfig.resolve(); conflict rejection pins behavior.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC24",
+      "text": "exact-head GitHub Advanced Security evidence complete, zero applicable alerts, no other third-party scanners.",
+      "status": "pending",
+      "implementationPaths": [
+        ".github/workflows/ci.yml"
+      ],
+      "testPaths": [],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "GitHub CodeQL + code scanning + secret scanning verdicts are recorded on the final PR head by the Release Manager; cannot be observed from in-process tests.",
+      "owner": "Release Manager"
+    },
+    {
+      "id": "M17-BYOK-AC25",
+      "text": "docs configure OpenAI, Claude, Gemini, Azure, compatible with own keys using placeholders only.",
+      "status": "pending",
+      "implementationPaths": [
+        ".env.example"
+      ],
+      "testPaths": [],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Operator-facing docs for the new BYOK providers (Claude/Gemini) are not yet written; placeholder-only env template is in place.",
+      "owner": "Technical Writer"
+    },
+    {
+      "id": "M17-BYOK-AC26",
+      "text": "same 12 agents/models, zero Fable, exact-head independent verdicts.",
+      "status": "pending",
+      "implementationPaths": [
+        "CLAUDE.md"
+      ],
+      "testPaths": [],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Governance/exact-head independent verdicts land only at release time (Release Manager owns the ledger evidence); routing policy in CLAUDE.md is already pinned by p17-governance tests.",
+      "owner": "Release Manager"
+    },
+    {
+      "id": "M17-BYOK-AC27",
+      "text": "any new SDK justified, lockfile-pinned, audited, license-reviewed, not loaded for unselected providers.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/providers/AnthropicProvider.js",
+        "src/core/llm/providers/GeminiProvider.js",
+        "package.json"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "success: exact request shape, text extracted, usage mapped" },
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "success: exact request shape, text extracted, usage mapped" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "ADR-0019 chose guarded REST (no SDK) for Anthropic/Gemini. OpenAI SDK is the only runtime SDK; adapter tests prove no SDK code paths execute for unselected providers (constructor-side only).",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-AC28",
+      "text": "request/response/retries/timeouts/concurrency/model IDs/profile fields/discovery results have tested limits.",
+      "status": "verified",
+      "implementationPaths": [
+        "src/core/llm/Semaphore.js",
+        "src/core/llm/LlmBudget.js",
+        "src/core/llm/RetryPolicy.js",
+        "src/core/llm/ProfileStore.js"
+      ],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-limits.check.cjs", "name": "LlmBudget.processCeiling: independent budgets together cannot exceed 2000 total attempts" },
+        { "file": "tests/regression/m17-byok-limits.check.cjs", "name": "LlmBudget.processCeiling: independent semaphores together cannot exceed 8 concurrent in-flight" },
+        { "file": "tests/regression/m17-byok-limits.check.cjs", "name": "Semaphore: a waiter that times out rejects without leaking a permit, and the queue drains" },
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC28: timeoutMs and maxAttempts out-of-bounds values are rejected" },
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC28: model length bound (>64 chars) is rejected" },
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC28: profile size bound (>16KiB serialized) is rejected at write time" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "Discovery results limit is not implemented (feature absent, AC20); other limits all have tests.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N01",
+      "text": "no ambient key/default model crosses providers.",
+      "status": "verified",
+      "implementationPaths": ["src/core/llm/LlmProviderRegistry.js", "src/core/llm/ProviderContext.js"],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-isolation.check.cjs", "name": "N01: two ProviderContexts with the same provider id get distinct provider instances" },
+        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC02/N01: two openai contexts with different keys/models never share cache or carry each other's secrets" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "WeakMap-by-context memoisation.",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N02",
+      "text": "registry keyed by invocation not provider id.",
+      "status": "verified",
+      "implementationPaths": ["src/core/llm/LlmProviderRegistry.js"],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-isolation.check.cjs", "name": "N02: legacy Map-by-provider-id memoization is unchanged (existing p17 behaviour)" },
+        { "file": "tests/regression/m17-byok-isolation.check.cjs", "name": "N02: a context and a legacy plain config for the same provider id are independent" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N03",
+      "text": "redirects not followed.",
+      "status": "verified",
+      "implementationPaths": ["src/core/llm/transport/guardedFetch.js"],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "redirect 30x is rejected, surfaced as REDIRECT_REJECTED (not retried)" },
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "redirect 30x rejected" },
+        { "file": "tests/regression/m17-byok-transport.check.cjs", "name": "fixed-host: a 30x redirect response is rejected and never followed" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N04",
+      "text": "model id >64 or off-charset rejected.",
+      "status": "verified",
+      "implementationPaths": ["src/core/llm/ProviderContext.js"],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "C1: gemini model id traversal/escape shapes are rejected by the stricter charset" },
+        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC28: model length bound (>64 chars) is rejected" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N05",
+      "text": "case/non-canonical config rejected.",
+      "status": "verified",
+      "implementationPaths": ["src/core/llm/ProviderContext.js"],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "N05: timeoutMs out of bounds is rejected (CONFIG_INVALID), not silently clamped" },
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC07: unsupported provider value is rejected" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N06",
+      "text": "oversize aborts, no partial text.",
+      "status": "verified",
+      "implementationPaths": ["src/core/llm/transport/guardedFetch.js"],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "oversized response => OVERSIZED, zero retries (not retryable)" },
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "oversized response => OVERSIZED" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N07",
+      "text": "concurrency cap + exhausted budget zero calls.",
+      "status": "verified",
+      "implementationPaths": ["src/core/llm/Semaphore.js", "src/core/llm/LlmBudget.js"],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "BUDGET_EXHAUSTED: canSend() false and a zero-budget complete() make zero requests" },
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "BUDGET_EXHAUSTED: zero-budget complete() makes zero requests" },
+        { "file": "tests/regression/m17-byok-limits.check.cjs", "name": "LlmBudget.processCeiling: exhaustion makes zero network calls (returns false synchronously)" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N08",
+      "text": "provider error bodies never surface.",
+      "status": "verified",
+      "implementationPaths": ["src/core/llm/providers/AnthropicProvider.js", "src/core/llm/providers/GeminiProvider.js"],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "error body marker and api key marker never appear in the result or thrown messages" },
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "error body marker and api key marker never appear in the result" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N09",
+      "text": "unset/path-like credential ref fails closed.",
+      "status": "verified",
+      "implementationPaths": ["src/core/llm/ProviderContext.js"],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-credentials.check.cjs", "name": "Missing credential at resolve time => CONFIG_MISSING_CREDENTIALS, value never read" },
+        { "file": "tests/regression/m17-byok-credentials.check.cjs", "name": "C11: GITHUB_TOKEN is rejected as a credentialEnvVar (name shape mismatch)" },
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "N09: provider value containing control characters is rejected" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N10",
+      "text": "Anthropic 400 / max_tokens-without-text -> BAD_REQUEST/MALFORMED no retry.",
+      "status": "verified",
+      "implementationPaths": ["src/core/llm/providers/AnthropicProvider.js"],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "N10: 400 BAD_REQUEST never retried (exactly 1 attempt)" },
+        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "N10: max_tokens stop_reason with only a thinking block (no text) => MALFORMED_RESPONSE" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N11",
+      "text": "Gemini safety block = failure.",
+      "status": "verified",
+      "implementationPaths": ["src/core/llm/providers/GeminiProvider.js"],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "N11: promptFeedback.blockReason => CONTENT_BLOCKED, never an empty success" },
+        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "N11: blocked finishReason variants => CONTENT_BLOCKED even when text is present" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N12",
+      "text": "OPENAI_API_KEY alone never selects provider.",
+      "status": "verified",
+      "implementationPaths": ["src/core/llm/ProviderContext.js", "src/core/llm/LlmConfig.js"],
+      "testPaths": [
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC23: env-only path is unchanged — OPENAI_API_KEY alone => CONFIG_PROVIDER_REQUIRED" },
+        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "N12: blank/whitespace-only model is rejected, not treated as unset" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "",
+      "owner": "Developer"
+    },
+    {
+      "id": "M17-BYOK-N13",
+      "text": "dashboard escapes provider/model.",
+      "status": "verified",
+      "implementationPaths": ["src/production-cycle/ui/index.html", "src/production-cycle/Redact.js"],
+      "testPaths": [
+        { "file": "tests/regression/p17-pc-ui-static.check.cjs", "name": "UI: no chain-of-thought field names read as properties" },
+        { "file": "tests/regression/p17-pc-redact.check.cjs", "name": "D-22: M06 short hostile HTML is accepted by Redact, stays a plain escaped string" }
+      ],
+      "evidenceRevision": "9abbf7b",
+      "limitation": "No m17-specific dashboard escape test; coverage inherited from p17 ui-static + redact suites.",
+      "owner": "Developer"
+    }
+  ],
+  "totals": {
+    "ac": { "total": 28, "verified": 24, "pending": 4, "pendingIds": ["M17-BYOK-AC20", "M17-BYOK-AC24", "M17-BYOK-AC25", "M17-BYOK-AC26"] },
+    "n": { "total": 13, "verified": 13, "pending": 0 }
+  }
+}
