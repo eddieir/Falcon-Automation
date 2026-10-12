@@ -2,7 +2,7 @@
 name: devops-engineer
 description: Owns Falcon CI/CD, runtime configuration, reproducibility, artifacts, caching, and operational readiness. Use for workflow, dependency, environment, DB, dashboard, and release changes.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: sonnet
+model: claude-opus-4-6
 effort: medium
 maxTurns: 16
 ---

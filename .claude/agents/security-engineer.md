@@ -2,7 +2,7 @@
 name: security-engineer
 description: Reviews Falcon changes for secrets, authentication, injection, unsafe AI behavior, dependency, data exposure, and denial-of-service risks. Use for auth, dashboard, AI, persistence, network, CI, or release changes.
 tools: Read, Grep, Glob, Bash
-model: sonnet
+model: claude-opus-5-5
 effort: medium
 maxTurns: 16
 ---

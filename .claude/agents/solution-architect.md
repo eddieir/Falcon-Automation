@@ -2,7 +2,7 @@
 name: solution-architect
 description: Designs Falcon architecture, interfaces, data flow, failure modes, and migration strategy. Use before implementation of cross-cutting or risky changes.
 tools: Read, Grep, Glob, Bash
-model: sonnet
+model: claude-opus-5
 effort: medium
 maxTurns: 16
 ---

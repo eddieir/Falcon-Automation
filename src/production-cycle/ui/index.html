@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Falcon production-cycle dashboard</title>
+<style nonce="__NONCE__">
+  /* Contrast: all text/background pairs below are >= 4.5:1 (WCAG AA).
+     body #111 on #fff ~ 17.9:1; .muted #595959 on #fff ~ 7:1;
+     .badge-mismatch #7a0000 on #ffe3e3 ~ 7.7:1; .badge-ok #0b4d0b on #e3ffe3 ~ 7.4:1;
+     focus ring #0b57d0 on #fff ~ 5.5:1. */
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, sans-serif;
+    color: #111;
+    background: #fff;
+    margin: 0;
+    padding: 0 1rem 2rem;
+  }
+  header, nav, main, section {
+    display: block;
+  }
+  header {
+    padding: 1rem 0;
+    border-bottom: 2px solid #111;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 .5rem; }
+  h2 { font-size: 1.15rem; margin-top: 2rem; }
+  h3 { font-size: 1rem; }
+  .muted { color: #595959; }
+  nav button, main button {
+    font: inherit;
+    padding: .4rem .7rem;
+    margin: .2rem .3rem .2rem 0;
+    border: 1px solid #555;
+    background: #f4f4f4;
+    color: #111;
+    cursor: pointer;
+  }
+  button:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 3px solid #0b57d0;
+    outline-offset: 2px;
+  }
+  label { display: inline-block; margin-right: .3rem; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: .6rem;
+  }
+  .card {
+    border: 1px solid #999;
+    border-radius: 4px;
+    padding: .6rem;
+  }
+  .card.shape-blocked { border-left: 6px solid #111; border-left-style: double; }
+  .card.shape-invalidated { border-left: 6px solid #111; border-left-style: dashed; }
+  .badge {
+    display: inline-block;
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 0 .35rem;
+    font-size: .8rem;
+    margin-left: .3rem;
+  }
+  .badge-mismatch { background: #ffe3e3; color: #7a0000; }
+  .badge-mismatch::before { content: "\25B2 "; }
+  .badge-unverified { background: #eee; color: #333; }
+  .badge-unverified::before { content: "\2014 "; }
+  .badge-ok { background: #e3ffe3; color: #0b4d0b; }
+  .badge-ok::before { content: "\2713 "; }
+  .pill {
+    display: inline-block;
+    border-radius: 999px;
+    border: 1px solid #333;
+    padding: .1rem .6rem;
+    font-size: .85rem;
+    margin-right: .4rem;
+  }
+  .pill-live::before { content: "\25CF "; }
+  .pill-stale::before { content: "\25D0 "; }
+  .pill-disconnected::before { content: "\25CB "; }
+  .tamper-banner {
+    background: #ffe3e3;
+    color: #7a0000;
+    border: 2px solid #7a0000;
+    padding: .6rem;
+    font-weight: bold;
+  }
+  .verdict-go { background: #e3ffe3; }
+  .verdict-conditional { background: #fff6cc; }
+  .verdict-nogo { background: #ffe3e3; }
+  .verdict-none { background: #eee; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #999; padding: .3rem .5rem; text-align: left; font-size: .9rem; }
+  .kanban-lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .5rem; }
+  .lane { border: 1px solid #999; padding: .4rem; min-height: 3rem; }
+  .lane h3 { margin: 0 0 .4rem; }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Falcon production-cycle dashboard</h1>
+  <p class="muted">ledger-asserted, not authenticated</p>
+  <div id="verdict-banner" class="verdict-none" aria-live="polite">no verdict recorded</div>
+</header>
+
+<nav aria-label="Dashboard sections">
+  <button type="button" data-jump="agents">Agents</button>
+  <button type="button" data-jump="messages">Messages</button>
+  <button type="button" data-jump="timeline">Timeline</button>
+  <button type="button" data-jump="kanban">Kanban</button>
+  <button type="button" data-jump="blockers">Blockers</button>
+</nav>
+
+<main>
+
+  <section id="health">
+    <h2>Health</h2>
+    <div id="health-strip" aria-live="polite">
+      <span class="pill pill-disconnected" id="conn-state">DISCONNECTED</span>
+      <span id="last-good">last good: never</span>
+      <span id="schema-version"></span>
+      <span id="event-count"></span>
+      <span id="last-seq"></span>
+      <span id="malformed-count"></span>
+      <span id="refused-count"></span>
+      <span id="partial-bytes"></span>
+      <span id="new-event-counter" aria-live="polite"></span>
+    </div>
+    <div id="tamper-banner" hidden class="tamper-banner" role="alert">
+      ledger-asserted, not authenticated; tamper detected
+    </div>
+  </section>
+
+  <section id="agents">
+    <h2>Agent grid</h2>
+    <div class="grid" id="agent-grid"></div>
+  </section>
+
+  <section id="messages">
+    <h2>Routed message cards</h2>
+    <div id="message-list"></div>
+  </section>
+
+  <section id="timeline">
+    <h2>Timeline</h2>
+    <p>
+      <label for="search-input">Search</label>
+      <input type="text" id="search-input" autocomplete="off">
+    </p>
+    <p>
+      <label for="filter-type">Type</label>
+      <select id="filter-type"><option value="">all</option></select>
+      <label for="filter-role">Role</label>
+      <select id="filter-role"><option value="">all</option></select>
+      <label for="filter-status">Status</label>
+      <select id="filter-status"><option value="">all</option></select>
+      <label for="filter-phase">Phase</label>
+      <select id="filter-phase"><option value="">all</option></select>
+    </p>
+    <div id="timeline-list"></div>
+    <button type="button" id="load-older">load older</button>
+  </section>
+
+  <section id="kanban">
+    <h2>Kanban</h2>
+    <div class="kanban-lanes" id="kanban-lanes"></div>
+  </section>
+
+  <section id="blockers">
+    <h2>Blockers &amp; invalidations</h2>
+    <div id="blocker-list"></div>
+  </section>
+
+  <section id="unrecognized">
+    <h3>Unrecognized lines</h3>
+    <div id="unrecognized-summary">malformed: 0, bytes: 0</div>
+  </section>
+
+</main>
+
+<script nonce="__NONCE__">
+"use strict";
+
+// Frozen enums copied verbatim from src/production-cycle/EventSchema.js so
+// the static drift test can verify this file's role set matches the
+// schema's role set exactly.
+var ROLES = [
+  "coordinator",
+  "human",
+  "production-director",
+  "code-reviewer",
+  "developer",
+  "devops-engineer",
+  "product-manager",
+  "product-owner",
+  "project-manager",
+  "qa-engineer",
+  "release-manager",
+  "security-engineer",
+  "solution-architect",
+  "technical-writer"
+];
+var AGENT_ROLES = ROLES.filter(function (r) { return r !== "human"; });
+var TYPES = [
+  "run_started", "run_completed", "dispatch_created", "agent_started",
+  "agent_completed", "packet_returned", "packet_routed", "task_blocked",
+  "retry_scheduled", "evidence_added", "revision_changed",
+  "verdict_invalidated", "review_verdict", "release_verdict"
+];
+var STATUSES = ["PENDING", "DONE", "PARTIAL", "BLOCKED", "NEEDS_INPUT", "ACCEPTED", "REJECTED", "INVALIDATED"];
+var PHASES = ["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "NA"];
+
+var state = {
+  cursor: 0,
+  events: new Map(), // eventId -> event (dedupe)
+  order: [],          // eventIds in arrival order
+  agents: new Map(),  // role -> aggregate info
+  lastRun: null,
+  lastGoodAt: null,
+  consecutiveFailures: 0,
+  backoffMs: 1000,
+  inFlight: false,
+  timer: null,
+  visibleLimit: 500,
+};
+
+function el(tag, attrs, children) {
+  var node = document.createElement(tag);
+  if (attrs) {
+    Object.keys(attrs).forEach(function (k) {
+      if (k === "class") node.className = attrs[k];
+      else if (k === "for") node.setAttribute("for", attrs[k]);
+      else node.setAttribute(k, attrs[k]);
+    });
+  }
+  (children || []).forEach(function (c) {
+    if (c === null || c === undefined) return;
+    node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  });
+  return node;
+}
+
+function clear(node) {
+  while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function setText(id, text) {
+  var n = document.getElementById(id);
+  if (n) {
+    clear(n);
+    n.appendChild(document.createTextNode(text));
+  }
+}
+
+function fillSelect(id, values) {
+  var select = document.getElementById(id);
+  values.forEach(function (v) {
+    var opt = document.createElement("option");
+    opt.value = v;
+    opt.appendChild(document.createTextNode(v));
+    select.appendChild(opt);
+  });
+}
+
+fillSelect("filter-type", TYPES);
+fillSelect("filter-role", ROLES);
+fillSelect("filter-status", STATUSES);
+fillSelect("filter-phase", PHASES);
+
+document.querySelectorAll("nav button[data-jump]").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var target = document.getElementById(btn.getAttribute("data-jump"));
+    if (target && typeof target.scrollIntoView === "function") {
+      target.scrollIntoView();
+    }
+  });
+});
+
+// ---- Health strip -----------------------------------------------------
+
+function renderConnState() {
+  var pill = document.getElementById("conn-state");
+  var now = Date.now();
+  var sinceGood = state.lastGoodAt === null ? Infinity : now - state.lastGoodAt;
+  var label, cls;
+  if (state.consecutiveFailures >= 2 || sinceGood >= 5000) {
+    label = "DISCONNECTED"; cls = "pill pill-disconnected";
+  } else if (sinceGood >= 2000) {
+    label = "STALE"; cls = "pill pill-stale";
+  } else {
+    label = "LIVE"; cls = "pill pill-live";
+  }
+  pill.className = cls;
+  clear(pill);
+  pill.appendChild(document.createTextNode(label));
+  var lastGoodText = state.lastGoodAt === null
+    ? "last good: never"
+    : "last good: " + new Date(state.lastGoodAt).toISOString();
+  setText("last-good", lastGoodText);
+}
+
+function renderHealth(run) {
+  setText("schema-version", "schema: " + run.schemaVersion);
+  setText("event-count", "events: " + state.order.length);
+  setText("last-seq", "last seq: " + run.lastSeq);
+  setText("malformed-count", "malformed: " + run.malformedCount);
+  setText("refused-count", "refused: " + run.refusedCount);
+  setText("partial-bytes", "partial bytes: " + run.partialBytes);
+  setText("unrecognized-summary", "malformed: " + run.malformedCount + ", bytes: " + run.partialBytes);
+  var tamperBanner = document.getElementById("tamper-banner");
+  tamperBanner.hidden = !run.tampered;
+}
+
+// ---- Agent grid ---------------------------------------------------------
+
+function renderAgentGrid() {
+  var grid = document.getElementById("agent-grid");
+  clear(grid);
+  AGENT_ROLES.forEach(function (role) {
+    var agg = state.agents.get(role) || {};
+    var badge;
+    if (agg.resolvedModelId != null && agg.observedModelId != null && agg.resolvedModelId !== agg.observedModelId) {
+      badge = el("span", { class: "badge badge-mismatch" }, ["MODEL MISMATCH"]);
+    } else if (agg.observedModelId == null) {
+      badge = el("span", { class: "badge badge-unverified" }, ["NOT VERIFIED"]);
+    } else {
+      badge = el("span", { class: "badge badge-ok" }, ["VERIFIED"]);
+    }
+    var card = el("div", { class: "card" }, [
+      el("h3", null, [role]),
+      el("p", null, ["requested: " + (agg.requestedLabel || "-")]),
+      el("p", null, ["resolved: " + (agg.resolvedModelId || "-"), badge]),
+      el("p", null, ["observed: " + (agg.observedModelId || "-")]),
+      el("p", null, ["dispatches: " + (agg.dispatchCount || 0) + " retries: " + (agg.retryCount || 0)]),
+      el("p", null, ["status: " + (agg.latestStatus || "-")]),
+    ]);
+    grid.appendChild(card);
+  });
+}
+
+function updateAgentAggregates(ev) {
+  [ev.fromRole, ev.toRole].forEach(function (role) {
+    if (!role || !AGENT_ROLES.includes(role)) return;
+    if (!state.agents.has(role)) state.agents.set(role, {});
+  });
+  var role = ev.toRole || ev.fromRole;
+  if (!role || !AGENT_ROLES.includes(role)) return;
+  var agg = state.agents.get(role) || {};
+  if (ev.requestedLabel) agg.requestedLabel = ev.requestedLabel;
+  if (ev.resolvedModelId) agg.resolvedModelId = ev.resolvedModelId;
+  if (ev.observedModelId) agg.observedModelId = ev.observedModelId;
+  if (ev.type === "dispatch_created") agg.dispatchCount = (agg.dispatchCount || 0) + 1;
+  if (ev.type === "retry_scheduled") agg.retryCount = (agg.retryCount || 0) + 1;
+  if (ev.status) agg.latestStatus = ev.status;
+  state.agents.set(role, agg);
+}
+
+// ---- Routed message cards ----------------------------------------------
+
+function renderMessages() {
+  var list = document.getElementById("message-list");
+  clear(list);
+  var byTask = new Map();
+  state.order.forEach(function (id) {
+    var ev = state.events.get(id);
+    if (ev.type === "dispatch_created" && ev.taskId) {
+      byTask.set(ev.taskId, Object.assign({ dispatch: ev }, byTask.get(ev.taskId)));
+    }
+    if (ev.type === "packet_returned" && ev.taskId) {
+      byTask.set(ev.taskId, Object.assign(byTask.get(ev.taskId) || {}, { returned: ev }));
+    }
+    if (ev.type === "packet_routed" && ev.packetId) {
+      byTask.forEach(function (rec, taskId) {
+        if (rec.returned && rec.returned.packetId === ev.packetId) {
+          rec.routed = ev;
+        }
+      });
+    }
+  });
+  byTask.forEach(function (rec, taskId) {
+    var dispatch = rec.dispatch, returned = rec.returned, routed = rec.routed;
+    var fromRole = dispatch ? dispatch.toRole : null;
+    var toRole = routed ? routed.toRole : null;
+    var complete = dispatch && returned && routed;
+    var card = el("div", { class: "card", "data-event-id": (routed || returned || dispatch).eventId }, []);
+    if (complete) {
+      card.appendChild(el("h3", null, [(fromRole || "?") + " -> coordinator -> " + (toRole || "?")]));
+      card.appendChild(el("p", null, [
+        "events: " + dispatch.eventId + ", " + returned.eventId + ", " + routed.eventId
+      ]));
+      card.appendChild(el("p", null, [returned.summary || ""]));
+    } else {
+      var stage = !returned ? "awaiting return" : "awaiting route";
+      var ids = [dispatch, returned, routed].filter(Boolean).map(function (e) { return e.eventId; });
+      card.appendChild(el("h3", null, [taskId + ": " + stage]));
+      card.appendChild(el("p", null, ["events present: " + ids.join(", ")]));
+    }
+    list.appendChild(card);
+  });
+}
+
+// ---- Timeline -------------------------------------------------------------
+
+function matchesFilters(ev, q, type, role, status, phase) {
+  if (type && ev.type !== type) return false;
+  if (role && ev.fromRole !== role && ev.toRole !== role) return false;
+  if (status && ev.status !== status) return false;
+  if (phase && ev.phase !== phase) return false;
+  if (q) {
+    var haystack = [ev.type, ev.taskId, ev.fromRole, ev.toRole, ev.summary].join(" ").toLowerCase();
+    if (haystack.indexOf(q.toLowerCase()) === -1) return false;
+  }
+  return true;
+}
+
+function renderTimeline() {
+  var list = document.getElementById("timeline-list");
+  clear(list);
+  var q = document.getElementById("search-input").value;
+  var type = document.getElementById("filter-type").value;
+  var role = document.getElementById("filter-role").value;
+  var status = document.getElementById("filter-status").value;
+  var phase = document.getElementById("filter-phase").value;
+
+  var ids = state.order.slice().reverse();
+  var shown = 0;
+  for (var i = 0; i < ids.length && shown < state.visibleLimit; i++) {
+    var ev = state.events.get(ids[i]);
+    if (!matchesFilters(ev, q, type, role, status, phase)) continue;
+    shown++;
+    var row = el("div", { class: "card", "data-event-id": ev.eventId }, [
+      el("p", null, [ev.ts + " " + ev.type + " " + (ev.taskId || "") + " " + (ev.fromRole || "") + "->" + (ev.toRole || "")]),
+      el("p", null, [ev.summary || ""]),
+    ]);
+    list.appendChild(row);
+  }
+}
+
+["search-input", "filter-type", "filter-role", "filter-status", "filter-phase"].forEach(function (id) {
+  document.getElementById(id).addEventListener("input", renderTimeline);
+  document.getElementById(id).addEventListener("change", renderTimeline);
+});
+document.getElementById("load-older").addEventListener("click", function () {
+  state.visibleLimit += 500;
+  renderTimeline();
+});
+
+// ---- Kanban ---------------------------------------------------------------
+
+function renderKanban() {
+  var lanes = document.getElementById("kanban-lanes");
+  clear(lanes);
+  var byTask = new Map();
+  state.order.forEach(function (id) {
+    var ev = state.events.get(id);
+    if (!ev.taskId) return;
+    byTask.set(ev.taskId, ev);
+  });
+  var laneKeys = PHASES.concat(["BLOCKED", "INVALIDATED"]);
+  var laneMap = new Map();
+  laneKeys.forEach(function (k) { laneMap.set(k, []); });
+  byTask.forEach(function (ev, taskId) {
+    var key;
+    if (ev.status === "BLOCKED") key = "BLOCKED";
+    else if (ev.status === "INVALIDATED") key = "INVALIDATED";
+    else key = ev.phase && laneMap.has(ev.phase) ? ev.phase : "NA";
+    laneMap.get(key).push(ev);
+  });
+  laneKeys.forEach(function (key) {
+    var lane = el("div", { class: "lane" }, [el("h3", null, [key])]);
+    laneMap.get(key).forEach(function (ev) {
+      lane.appendChild(el("p", { "data-event-id": ev.eventId }, [ev.taskId + " (" + (ev.status || "") + ")"]));
+    });
+    lanes.appendChild(lane);
+  });
+}
+
+// ---- Blockers & invalidations ----------------------------------------------
+
+function renderBlockers() {
+  var list = document.getElementById("blocker-list");
+  clear(list);
+  var kinds = ["task_blocked", "retry_scheduled", "revision_changed", "verdict_invalidated"];
+  state.order.forEach(function (id) {
+    var ev = state.events.get(id);
+    if (kinds.indexOf(ev.type) === -1) return;
+    var cls = "card " + (ev.type === "task_blocked" ? "shape-blocked" : ev.type === "verdict_invalidated" ? "shape-invalidated" : "");
+    var card = el("div", { class: cls, "data-event-id": ev.eventId }, [
+      el("h3", null, [ev.type + ": " + (ev.taskId || "")]),
+      el("p", null, [ev.summary || ""]),
+    ]);
+    if (ev.invalidates && ev.invalidates.length) {
+      card.appendChild(el("p", null, ["invalidates: " + ev.invalidates.join(", ")]));
+    }
+    list.appendChild(card);
+  });
+}
+
+// ---- Verdict banner ---------------------------------------------------------
+
+function renderVerdict() {
+  var banner = document.getElementById("verdict-banner");
+  var latest = null;
+  state.order.forEach(function (id) {
+    var ev = state.events.get(id);
+    if (ev.type === "release_verdict") latest = ev;
+  });
+  clear(banner);
+  if (!latest) {
+    banner.className = "verdict-none";
+    banner.appendChild(document.createTextNode("no verdict recorded"));
+    return;
+  }
+  var v = latest.verdict || "";
+  var cls = v === "GO" ? "verdict-go" : v === "NO_GO" ? "verdict-nogo" : "verdict-conditional";
+  banner.className = cls;
+  banner.appendChild(document.createTextNode("Release verdict: " + v));
+}
+
+// ---- Polling loop -----------------------------------------------------------
+
+function ingest(events) {
+  var newCount = 0;
+  events.forEach(function (ev) {
+    if (!state.events.has(ev.eventId)) {
+      state.events.set(ev.eventId, ev);
+      state.order.push(ev.eventId);
+      updateAgentAggregates(ev);
+      newCount++;
+    }
+    if (typeof ev.seq === "number" && ev.seq > state.cursor) state.cursor = ev.seq;
+  });
+  if (newCount > 0) {
+    setText("new-event-counter", "+" + newCount + " new");
+  }
+  return newCount;
+}
+
+function renderAll(run) {
+  renderHealth(run);
+  renderAgentGrid();
+  renderMessages();
+  renderTimeline();
+  renderKanban();
+  renderBlockers();
+  renderVerdict();
+  renderConnState();
+}
+
+function scheduleNext(delayMs) {
+  if (state.timer) clearTimeout(state.timer);
+  state.timer = setTimeout(poll, delayMs);
+}
+
+function poll() {
+  if (state.inFlight) return;
+  state.inFlight = true;
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", "/api/state?from=" + state.cursor, true);
+  xhr.onload = function () {
+    state.inFlight = false;
+    if (xhr.status === 200) {
+      try {
+        var body = JSON.parse(xhr.responseText);
+        ingest(body.events || []);
+        state.lastRun = body.run;
+        state.lastGoodAt = Date.now();
+        state.consecutiveFailures = 0;
+        state.backoffMs = 1000;
+        renderAll(body.run);
+        scheduleNext(1000);
+        return;
+      } catch (e) {
+        /* fall through to failure handling below */
+      }
+    }
+    state.consecutiveFailures++;
+    renderConnState();
+    state.backoffMs = Math.min(8000, state.backoffMs * 2);
+    scheduleNext(state.backoffMs);
+  };
+  xhr.onerror = function () {
+    state.inFlight = false;
+    state.consecutiveFailures++;
+    renderConnState();
+    state.backoffMs = Math.min(8000, state.backoffMs * 2);
+    scheduleNext(state.backoffMs);
+  };
+  xhr.send();
+}
+
+window.addEventListener("focus", function () {
+  state.backoffMs = 1000;
+  if (!state.inFlight) {
+    if (state.timer) clearTimeout(state.timer);
+    poll();
+  }
+});
+
+renderConnState();
+poll();
+</script>
+</body>
+</html>

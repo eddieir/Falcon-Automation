@@ -6,6 +6,48 @@ See [README.md](README.md) for the current feature set, architecture, and usage.
 
 ---
 
+## Phase 17 — Pluggable LLM Providers and Production-Cycle Visibility
+
+Implemented on branch `phase-17/pluggable-llm-providers` (base commit `023917306d28f85e677c866dedf48b77a2165beb`).
+
+### BREAKING CHANGES
+
+- **OPENAI_API_KEY alone no longer enables Tier 3**: Must set `FALCON_LLM_PROVIDER=openai` to enable LLM-powered healing. Setting only `OPENAI_API_KEY` logs a one-time warning and Tier 3 is skipped (Tiers 1/2 remain active).
+- **AIAnalyser removed**: Public interface change (ADR-0017 AC17). Removed unused legacy analyzer module. No replacement needed for production use.
+
+### Added
+
+- **Pluggable LLM provider interface**: Support for OpenAI, Azure OpenAI, and custom openai-compatible endpoints. Provider selection via `FALCON_LLM_PROVIDER` environment variable.
+- **Production-cycle coordination dashboard**: Local (loopback-only) server and event ledger for tracking dispatch history, verdicts, and evidence during release cycles (`npm run production:dashboard`, `npm run production:event`). Hash chain and tamper detection included.
+- **SSRF and transport hardening**: Endpoint policy enforcement (always-deny cloud metadata, loopback/private ranges opt-in), DNS pinning, no proxy support, response size caps, budget tracking per run.
+- **Error code taxonomy**: Closed enumeration of 19 provider/config error codes for consistent troubleshooting.
+- **Data minimization**: Prompt capped at 20 candidates and 8 KiB UTF-8 (DOM collection still 60); never sends full DOM, cookies, storage, or env.
+
+### Changed
+
+- **CI**: No longer passes `OPENAI_API_KEY` secret to test steps; `FALCON_LLM_*` configuration not required for CI (Tier 3 skipped by default).
+- **Configuration**: Unified LLM config via `.env.example` with provider-specific settings (Azure resource/deployment, custom endpoint opt-ins, timeouts, budgets, concurrency).
+- **Logging**: OutputSafe.sanitizeField now strips additional unsafe Unicode (U+2028/2029, U+200B-U+200F, U+061C, U+FEFF) to prevent log injection.
+
+### Security
+
+- **ADR-0017 (Provider)** and **ADR-0018 (Dashboard)**: Security requirements S-01–S-18 and D-01–D-24 enforced and tested. Threat model published at `docs/security/phase-17-threat-model.md`.
+- **Redaction**: Hard-refuse secret-shaped patterns (sk-*, API keys, PRIVATE KEY, AKIA, ghp_, DB URLs, base64/hex >=40 chars) at CLI and server; zero occurrences in ledger, logs, reports, or errors.
+- **Ledger integrity**: Hash chain prevents accidental corruption; owner hardening via deny rules on `.git/production-cycle/**` prevents authorized agent rewrites.
+- **Endpoint hardening**: 0 metadata/link-local/proxy traffic; only WHATWG-parsed, resolved-address-derived endpoints allowed.
+
+### Known Limitations
+
+1. Prompt candidates capped at 20 (down from 60) for size/latency targets; benchmark healing quality before/after if concerned.
+2. Production-cycle ledger local only (no remote replication); cloned repos have no event history.
+3. Custom endpoints and private ranges require explicit opt-in flags.
+4. Proxies unsupported; dedicated Agent per transport.
+5. Azure: key-based auth only; Entra ID managed identity unsupported.
+
+See `docs/phase-17-operations.md` for operator guide and troubleshooting.
+
+---
+
 ## Phase 1 — Stabilisation Changelog
 
 The following defects were identified through a full code audit and resolved in `feat/phase-1-ai-core-foundation`.  All changes are committed individually with detailed messages.
