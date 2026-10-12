@@ -39,7 +39,7 @@ node falcon.js --llm-profile=<name> --llm-provider=<id> --llm-model=<id> [other 
 ```bash
 # CORRECT
 export ANTHROPIC_API_KEY=<your-key>
-node falcon.js --llm-provider=anthropic --llm-model=claude-3-sonnet-20240229
+node falcon.js --llm-provider=anthropic --llm-model=<anthropic-model-id>
 
 # WRONG (flags hard-exit)
 node falcon.js --llm-api-key=<your-key>  # REJECTED
@@ -52,7 +52,7 @@ node falcon.js --key=<your-key>         # REJECTED
 
 ```bash
 export FALCON_LLM_API_KEY=<your-key>
-node falcon.js --llm-provider=openai --llm-model=gpt-4o
+node falcon.js --llm-provider=openai --llm-model=<openai-model-id>
 ```
 
 Keys: Set `FALCON_LLM_API_KEY` or fall back to `OPENAI_API_KEY` (Phase 17 compat). Never pass the key in CLI flags.
@@ -69,7 +69,7 @@ node falcon.js --llm-provider=openai --llm-model=gpt-4o-mini
 
 ```bash
 export ANTHROPIC_API_KEY=<your-key>
-node falcon.js --llm-provider=anthropic --llm-model=claude-3-sonnet-20240229
+node falcon.js --llm-provider=anthropic --llm-model=<anthropic-model-id>
 ```
 
 Credentials: `ANTHROPIC_API_KEY` by default (or use `--llm-credential-env=<name>` to override, if supported).
@@ -78,7 +78,7 @@ Credentials: `ANTHROPIC_API_KEY` by default (or use `--llm-credential-env=<name>
 
 ```bash
 export GEMINI_API_KEY=<your-key>
-node falcon.js --llm-provider=gemini --llm-model=gemini-1.5-pro
+node falcon.js --llm-provider=gemini --llm-model=<gemini-model-id>
 ```
 
 Credentials: `GEMINI_API_KEY` by default.
@@ -115,12 +115,12 @@ Falcon resolves the provider once per process at startup and freezes it. To swit
 ```bash
 # Run 1: OpenAI
 export FALCON_LLM_API_KEY=<your-key>
-node falcon.js --llm-provider=openai --llm-model=gpt-4o-mini npm run test:ui
+node falcon.js --llm-provider=openai --llm-model=gpt-4o-mini
 
 # Run 2: Anthropic (new shell or unset)
 unset FALCON_LLM_API_KEY
 export ANTHROPIC_API_KEY=<your-key>
-node falcon.js --llm-provider=anthropic --llm-model=claude-3-haiku-20240307 npm run test:ui
+node falcon.js --llm-provider=anthropic --llm-model=<anthropic-model-id>
 ```
 
 **In-process:** Do not attempt to switch providers mid-run. Create separate processes with distinct flags and environment.
@@ -168,7 +168,7 @@ npm run llm:profile:show -- my-openai
 # Create/update profile
 npm run llm:profile:set -- my-anthropic \
   --provider=anthropic \
-  --model=claude-3-sonnet-20240229 \
+  --model=<anthropic-model-id> \
   --credential-env=ANTHROPIC_API_KEY
 
 # Delete profile
@@ -188,7 +188,7 @@ When resolving a provider, Falcon checks in this order. The first match wins:
 3. **`FALCON_LLM_*` environment variables** (Phase 17 compat: `FALCON_LLM_PROVIDER`, `FALCON_LLM_MODEL`, etc.)
 4. **Defaults** (e.g., `openai` default model is `gpt-4o-mini`)
 
-**Conflict detection:** If a profile's provider differs from `--llm-provider` or `FALCON_LLM_PROVIDER`, Falcon exits with `CONFIG_CONFLICT`.
+**Conflict detection:** If a profile's provider differs from `--llm-provider`, or if `FALCON_LLM_PROVIDER` in the environment names a different provider than the one selected by `--llm-provider`/`--llm-profile` (including `FALCON_LLM_PROVIDER=disabled` or `=none`, the kill switch), Falcon exits with `CONFIG_CONFLICT`. It is never silently overridden; the operator must `unset FALCON_LLM_PROVIDER` (or select the same provider) to run with a different provider.
 
 ### Credential Precedence (Special Case)
 
@@ -216,17 +216,21 @@ npm run test:ui
 
 ### New: Per-Invocation Flags
 
-You may now override with CLI flags without changing the environment:
+You may now select a provider with CLI flags without changing the environment, as long as the flag agrees with (or the environment is unset for) `FALCON_LLM_PROVIDER`. Flags never silently override a *different* provider set in the environment — that is refused with `CONFIG_CONFLICT`:
 
 ```bash
 export FALCON_LLM_PROVIDER=openai
 export FALCON_LLM_API_KEY=<your-key>
 
-# Use the env setup
-npm run test:ui
+# This is refused: FALCON_LLM_PROVIDER=openai conflicts with --llm-provider=anthropic
+node falcon.js --llm-provider=anthropic --llm-model=<anthropic-model-id>
+# -> exits with CONFIG_CONFLICT
 
-# Override for this run
-node falcon.js --llm-provider=anthropic --llm-model=claude-3-haiku-20240307 npm run test:ui
+# To select a different provider for this run, unset the provider variable and
+# supply that provider's own key variable (Anthropic reads ANTHROPIC_API_KEY):
+unset FALCON_LLM_PROVIDER
+export ANTHROPIC_API_KEY=<your-key>
+node falcon.js --llm-provider=anthropic --llm-model=<anthropic-model-id>
 ```
 
 ### Rollback
