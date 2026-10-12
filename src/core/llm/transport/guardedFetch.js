@@ -256,6 +256,11 @@ function createGuardedFetch(config = {}) {
                 failWith("ENDPOINT_POLICY_REJECTED");
                 return;
             }
+            // Fixed-host mode has no single `expectedPath` (its allowlist can
+            // have more than one entry) — the wire request must use the
+            // exact, already-allowlist-checked path from the request URL
+            // itself, not the default-mode-only `expectedPath`.
+            const requestPath = mode === "fixed-host" ? parsedReq.pathname : expectedPath;
 
             timer = setTimeout(() => {
                 if (activeRequest) {
@@ -303,7 +308,7 @@ function createGuardedFetch(config = {}) {
                     method: "POST",
                     hostname: unbracketed,
                     port,
-                    path: expectedPath,
+                    path: requestPath,
                     headers,
                     lookup: pinnedLookup,
                     agent: isHttps

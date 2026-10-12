@@ -28,9 +28,10 @@ test("registry memoizes the same provider id per process", () => {
 
 test("registry rejects unwired provider ids instead of dynamic loading", () => {
   const { resolve } = load("src/core/llm/LlmProviderRegistry.js", {});
-  // "openai"/"azure-openai"/"openai-compatible" are wired in (Dev-02a/02b);
-  // "anthropic" is a deliberately still-unwired, unknown provider id.
-  assert.throws(() => resolve({ provider: "anthropic" }), /no provider wired in/);
+  // "openai"/"azure-openai"/"openai-compatible"/"anthropic"/"gemini" are all
+  // wired in now (Dev-02a/02b/03); any other string is still an unknown,
+  // unwired provider id and must stay rejected, never dynamically loaded.
+  assert.throws(() => resolve({ provider: "bogus-provider-id" }), /no provider wired in/);
   assert.throws(() => resolve({ provider: "../../etc/passwd" }), /no provider wired in/);
 });
 
