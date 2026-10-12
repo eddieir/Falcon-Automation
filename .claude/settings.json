@@ -1,4 +1,22 @@
 {
   "model": "sonnet",
-  "effortLevel": "medium"
+  "effortLevel": "medium",
+  "permissions": {
+    "deny": [
+      "Edit(/.git/production-cycle/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/ledger-guard.js\""
+          }
+        ]
+      }
+    ]
+  }
 }
