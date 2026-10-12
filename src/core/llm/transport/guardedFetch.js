@@ -40,7 +40,7 @@ const http = require("node:http");
 const https = require("node:https");
 const net = require("node:net");
 const Logger = require("../../../../utils/Logger");
-const { validateEndpointUrl, assertAllResolvedAllowed } = require("./EndpointPolicy");
+const { validateEndpointUrl, assertAllResolvedAllowed, classifyAddress } = require("./EndpointPolicy");
 const { ERROR_CODES } = require("../LlmProvider");
 
 const KNOWN_ERROR_CODES = new Set(ERROR_CODES);
@@ -77,6 +77,76 @@ function normalizeHeaders(initHeaders) {
     return out;
 }
 
+const CREDENTIAL_SHAPE_RE = /^[\x21-\x7e]{1,512}$/;
+
+/**
+ * C8/C10: a credential value must be a single printable-ASCII token (no
+ * whitespace, no control characters, no CR/LF) within a sane length bound,
+ * checked BEFORE any I/O is attempted. Never logs or echoes `value`.
+ * @param {*} value
+ * @returns {boolean}
+ */
+function isValidCredentialShape(value) {
+    return typeof value === "string" && CREDENTIAL_SHAPE_RE.test(value);
+}
+
+// C10: model/endpoint-path/deployment/profile fields must never carry a
+// key-shaped value. Each pattern is anchored to a fixed-width prefix plus a
+// bounded-width body, so scanning is linear with no backtracking surface.
+const KEY_SHAPED_PATTERNS = Object.freeze([
+    /AIza[0-9A-Za-z_-]{35}/, // Gemini API key shape
+    /sk-ant-[A-Za-z0-9_-]{10,}/, // Anthropic key shape (checked before the generic sk- pattern)
+    /sk-[A-Za-z0-9_-]{16,}/, // OpenAI-style key shape
+]);
+
+/**
+ * C10: true iff `value` contains a recognizable provider-key shape anywhere
+ * in it. Used to reject key-shaped values placed in model/endpoint-path/
+ * deployment/profile fields; never echoes `value` at the call site.
+ * @param {*} value
+ * @returns {boolean}
+ */
+function isKeyShapedValue(value) {
+    if (typeof value !== "string" || value === "") return false;
+    return KEY_SHAPED_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+/**
+ * C9: validate the fixed-host transport shape once, at creation time. A
+ * fixed-host configuration pins a constant host/port — never derived from
+ * the request URL — and an exact-match pathname allowlist. Literal IP hosts
+ * are classified immediately against a policy forced to no loopback/no
+ * private (the fixed-host policy never accepts an opt-in).
+ * @param {{host?:string, pathAllowlist?:string[], port?:number}} fixedHost
+ * @returns {{ok:true, url:object, hostKind:('dns'|'ip'), pathAllowlist:Set<string>}|{ok:false, errorCode:string}}
+ */
+function buildFixedHostShape(fixedHost) {
+    if (!fixedHost || typeof fixedHost !== "object") {
+        return { ok: false, errorCode: "CONFIG_INVALID" };
+    }
+    const host = typeof fixedHost.host === "string" ? fixedHost.host.trim() : "";
+    const port = Number.isInteger(fixedHost.port) ? fixedHost.port : 443;
+    const pathAllowlist = Array.isArray(fixedHost.pathAllowlist)
+        ? fixedHost.pathAllowlist.filter((p) => typeof p === "string" && p.startsWith("/"))
+        : [];
+    if (host === "" || host.includes("/") || host.includes("@") || pathAllowlist.length === 0 || !Number.isInteger(port)) {
+        return { ok: false, errorCode: "CONFIG_INVALID" };
+    }
+    const ipVersion = net.isIP(host);
+    if (ipVersion !== 0) {
+        const classification = classifyAddress(host, { allowLoopback: false, allowPrivate: false });
+        if (!classification.allowed) {
+            return { ok: false, errorCode: "ENDPOINT_POLICY_REJECTED" };
+        }
+    }
+    return {
+        ok: true,
+        url: { protocol: "https:", hostname: host, port: String(port), pathname: "" },
+        hostKind: ipVersion !== 0 ? "ip" : "dns",
+        pathAllowlist: new Set(pathAllowlist),
+    };
+}
+
 function transportError(code) {
     const safeCode = KNOWN_ERROR_CODES.has(code) ? code : "NETWORK_ERROR";
     Logger.error(`guardedFetch transport rejection: ${safeCode}`);
@@ -111,6 +181,7 @@ function filterResponseHeaders(rawHeaders) {
  * @returns {(url:string, init:{method:string, headers?:object, body?:(string|Buffer)}) => Promise<Response>}
  */
 function createGuardedFetch(config = {}) {
+    const mode = config.mode === "fixed-host" ? "fixed-host" : "default";
     const policyOpts = config.policyOpts || {};
     const timeoutMs = config.timeoutMs;
     const maxResponseBytes = config.maxResponseBytes;
@@ -122,10 +193,17 @@ function createGuardedFetch(config = {}) {
     // Validated exactly once, at creation time, before any request is ever
     // made. A bad base configuration is a permanent failure for every call.
     const baseShape =
-        typeof config.baseUrl === "string" && config.baseUrl !== ""
-            ? validateEndpointUrl(config.baseUrl, policyOpts)
-            : { ok: false, errorCode: "CONFIG_INVALID" };
-    const expectedPath = baseShape.ok ? `${baseShape.url.pathname.replace(/\/$/, "")}${CHAT_COMPLETIONS_SUFFIX}` : null;
+        mode === "fixed-host"
+            ? buildFixedHostShape(config.fixedHost)
+            : typeof config.baseUrl === "string" && config.baseUrl !== ""
+              ? validateEndpointUrl(config.baseUrl, policyOpts)
+              : { ok: false, errorCode: "CONFIG_INVALID" };
+    const expectedPath =
+        mode === "default" && baseShape.ok ? `${baseShape.url.pathname.replace(/\/$/, "")}${CHAT_COMPLETIONS_SUFFIX}` : null;
+    // C9: the fixed-host policy never accepts an opt-in — loopback/private/
+    // http are always denied regardless of what the caller passed in.
+    const lookupPolicyOpts =
+        mode === "fixed-host" ? Object.freeze({ allowLoopback: false, allowPrivate: false, allowHttpLoopback: false }) : policyOpts;
 
     return function guardedFetch(url, init = {}) {
         return new Promise((resolve, reject) => {
@@ -168,13 +246,12 @@ function createGuardedFetch(config = {}) {
                 parsedReq.protocol === baseShape.url.protocol &&
                 parsedReq.hostname.toLowerCase() === baseShape.url.hostname.toLowerCase() &&
                 effectivePort(parsedReq) === Number(baseShape.url.port);
+            const noQueryFragmentUserinfo =
+                parsedReq.search === "" && parsedReq.hash === "" && parsedReq.username === "" && parsedReq.password === "";
             const matchesShape =
-                sameOrigin &&
-                parsedReq.pathname === expectedPath &&
-                parsedReq.search === "" &&
-                parsedReq.hash === "" &&
-                parsedReq.username === "" &&
-                parsedReq.password === "";
+                mode === "fixed-host"
+                    ? sameOrigin && baseShape.pathAllowlist.has(parsedReq.pathname) && noQueryFragmentUserinfo
+                    : sameOrigin && parsedReq.pathname === expectedPath && noQueryFragmentUserinfo;
             if (!matchesShape) {
                 failWith("ENDPOINT_POLICY_REJECTED");
                 return;
@@ -208,7 +285,17 @@ function createGuardedFetch(config = {}) {
                     else callback(null, pinnedAddress, family);
                 };
 
-                const headers = normalizeHeaders(init.headers);
+                // C8: a CR/LF or otherwise invalid header value must become a
+                // closed CONFIG_INVALID result, never an uncaught exception,
+                // and the thrown error's `.message` is never inspected or
+                // logged (it may contain the offending value).
+                let headers;
+                try {
+                    headers = normalizeHeaders(init.headers);
+                } catch {
+                    failWith("CONFIG_INVALID");
+                    return;
+                }
                 headers["accept-encoding"] = "identity";
                 headers.host = port === (isHttps ? 443 : 80) ? rawHostname : `${rawHostname}:${port}`;
 
@@ -332,7 +419,7 @@ function createGuardedFetch(config = {}) {
                     return;
                 }
                 const list = Array.isArray(addresses) ? addresses : [{ address: addresses }];
-                const policyResult = assertAllResolvedAllowed(list.map((a) => a.address), policyOpts);
+                const policyResult = assertAllResolvedAllowed(list.map((a) => a.address), lookupPolicyOpts);
                 if (!policyResult.ok) {
                     failWith(policyResult.errorCode);
                     return;
@@ -343,4 +430,4 @@ function createGuardedFetch(config = {}) {
     };
 }
 
-module.exports = { createGuardedFetch };
+module.exports = { createGuardedFetch, isValidCredentialShape, isKeyShapedValue };
