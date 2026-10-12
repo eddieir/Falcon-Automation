@@ -4,6 +4,7 @@
 > **Author:** Peyman Iravani — QA Manager / Tech Lead
 > **Last updated:** Phase 16 ("Parallel execution") merged on `main` via #48. Phases 1–16 are merged and verified.
 > **Phase 17 (Pluggable LLM providers): implemented** on branch `phase-17/pluggable-llm-providers`; the owner decides the merge. Operations guide: `docs/phase-17-operations.md`.
+> **Post-Phase-17 maintenance (invocation-scoped BYOK providers, Anthropic/Gemini): implemented** on branch `maintenance/byok-frontier-providers`, submitted as PR #50 — pending review and the owner's merge decision. Operations guide: `docs/maintenance-byok-operations.md`.
 > **Repo:** https://github.com/eddieir/Falcon-Automation
 
 ---
@@ -291,7 +292,7 @@ Resolved in Phase 13: staleness thresholds and rehabilitation candidates for qua
 - **Never `console.log`** — always `Logger.info / Logger.warning / Logger.error`.
 - **Never `fs.writeFileSync`/`fs.readFileSync` on a hot path** — prefer `fs.promises.*`.
 - **Path construction**: `path.join(__dirname, ...)` with the correct `..` count — get it wrong and it fails silently more often than it throws.
-- **No raw axios calls to OpenAI** — always the `openai` SDK behind the Phase 17 provider layer (`src/core/llm/`), lazy-initialised, and Tier 3 stays off unless `FALCON_LLM_PROVIDER` is set.
+- **No raw axios calls to OpenAI** — the `openai` provider uses the `openai` SDK; `anthropic` and `gemini` call their REST endpoints through the same guarded transport (no vendor SDK, no new dependency). All of this sits behind the Phase 17 provider layer (`src/core/llm/`), lazy-initialised, and Tier 3 stays off unless a provider is selected (`FALCON_LLM_PROVIDER`, or the `--llm-provider`/`--llm-profile` flags).
 - **Error handling**: every test's `runTest()` wraps `Middleware.beforeTest`/`afterTest` in try/catch/finally and pushes a real `{name, status, error?}` entry — a test that doesn't push a result reports `NO_TESTS_RUN`.
 - **Process exit codes matter** (Phase 6): `ReportManager.generateReport()` sets `process.exitCode` from the tallied outcome — verify actual exit codes when testing CI-sensitive changes, not just the printed summary.
 - **DB-dependent tests must check `this.dbClient` before using it**, and skip (not fail) if it's `null` (Phase 6 pattern, `tests/db/*.js`).
