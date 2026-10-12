@@ -71,6 +71,27 @@ function isBidiControl(code) {
     return (code >= 0x202a && code <= 0x202e) || (code >= 0x2066 && code <= 0x2069);
 }
 
+/**
+ * Additional Unicode line-structure and invisible-formatting characters
+ * that a terminal (or a browser rendering a copy-pasted value) can use to
+ * forge an extra visual line or hide characters from a reviewer: U+2028
+ * LINE SEPARATOR, U+2029 PARAGRAPH SEPARATOR, U+200B-U+200F (zero-width
+ * space/joiner/non-joiner and the LTR/RTL marks), U+061C ARABIC LETTER
+ * MARK, and U+FEFF (zero-width no-break space / BOM). Falcon's
+ * production-cycle event schema (EventSchema.UNICODE_FORBIDDEN_RE)
+ * rejects this identical set on write, and this function strips it again
+ * at the terminal render boundary so the two layers agree.
+ */
+function isUnicodeInjectionChar(code) {
+    return (
+        code === 0x2028 ||
+        code === 0x2029 ||
+        (code >= 0x200b && code <= 0x200f) ||
+        code === 0x061c ||
+        code === 0xfeff
+    );
+}
+
 function isLineWhitespace(code) {
     return code === 0x09 || code === 0x0a || code === 0x0d; // TAB, LF, CR
 }
@@ -170,7 +191,7 @@ function scan(value, onWhitespace) {
             continue;
         }
 
-        if (isBidiControl(code)) {
+        if (isBidiControl(code) || isUnicodeInjectionChar(code)) {
             continue;
         }
 

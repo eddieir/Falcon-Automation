@@ -310,40 +310,7 @@ for (const [coverage, pages, expected] of [
   test(`coverage line reads "${expected.slice(0, 40)}…"`, () => {
     assert.equal(Report.coverageLine(coverage, pages), expected);
   });
-for (const [content, expected] of [
-  [" #new ", "#new"],
-  ["null", null],
-  ["", null],
-]) {
-  test(`standalone locator analysis normalizes ${content || "empty response"}`, async () => {
-    const Analyser = load("src/core/AIHealer/AIAnalyser.js", {
-      "../../../utils/Logger": silent,
-      dotenv: { config() {} },
-    });
-    Analyser._client = async () => ({
-      chat: {
-        completions: {
-          create: async (request) => {
-            assert.match(request.messages[1].content, /fixture/);
-            return { choices: [{ message: { content } }] };
-          },
-        },
-      },
-    });
-    assert.equal(await Analyser.getAlternativeLocator("fixture"), expected);
-  });
-}
-for (const status of [401, 429, 500])
-  test(`standalone locator analysis tolerates provider ${status}`, async () => {
-    const Analyser = load("src/core/AIHealer/AIAnalyser.js", {
-      "../../../utils/Logger": silent,
-      dotenv: { config() {} },
-    });
-    Analyser._client = async () => {
-      throw Object.assign(Error("provider error"), { status });
-    };
-    assert.equal(await Analyser.getAlternativeLocator("fixture"), null);
-  });
+// AIAnalyser removed in Phase 17 (OD: remove dead second egress path, AC17 documented interface removal)
 
 // The summary line used to print `healingEvents.length` as "Self-healing
 // events", counting every attempt — including ones that resolved nothing,
