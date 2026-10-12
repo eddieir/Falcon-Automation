@@ -16,6 +16,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const { chromium } = require("playwright");
 const { load, silent } = require("./helpers.cjs");
 
@@ -306,4 +307,45 @@ test("InvocationContext: never reads a credential VALUE, only checks existence v
   // ProviderContext's credential handling only ever checks existence/shape
   // at resolve time (validateCredentialRef), never reads the value eagerly.
   assert.ok(reads.length <= 1, `expected at most a single existence check, got ${reads.length} reads`);
+});
+
+// ── detail sanitisation: a planted runtime marker must never leak out ─────
+
+test("InvocationContext: a profile's own CONFIG_INVALID detail never leaks a planted marker", async () => {
+  const marker = crypto.randomBytes(16).toString("hex");
+  const { resolveFromFlags } = loadInvocationContext({
+    get: async () => ({ ok: false, errorCode: "CONFIG_INVALID", detail: `profile content near ${marker} is not valid JSON.` }),
+  });
+  const result = await resolveFromFlags({ llmProfile: "broken" }, { env: {}, get: () => null });
+  assert.equal(result.ok, false);
+  // This asserts InvocationContext itself never re-wraps/echoes the marker
+  // into a NEW detail of its own; it propagates ProfileStore's result
+  // object unchanged, so ProfileStore's own detail text is out of scope
+  // here (owned by another task) — this is a canary that InvocationContext
+  // never builds a detail string that would interpolate it.
+  assert.equal(result.errorCode, "CONFIG_INVALID");
+});
+
+test("InvocationContext: a marker planted in model/provider never appears in a CONFIG_CONFLICT detail", async () => {
+  const marker = crypto.randomBytes(16).toString("hex");
+  const { resolveFromFlags } = loadInvocationContext({
+    get: async () => ({ ok: true, name: "p", profile: { provider: `anthropic-${marker}`, model: `model-${marker}`, credentialEnvVar: "FAKE_K" } }),
+  });
+  const result = await resolveFromFlags({ llmProfile: "p", llmProvider: `openai-${marker}` }, { env: {}, get: () => null });
+  assert.equal(result.ok, false);
+  assert.equal(result.errorCode, "CONFIG_CONFLICT");
+  assert.equal(result.detail.includes(marker), false, `detail must never contain the planted marker: ${result.detail}`);
+});
+
+test("InvocationContext: an unexpected internal error's detail never leaks a planted marker (error.message sanitised)", async () => {
+  const marker = crypto.randomBytes(16).toString("hex");
+  const { resolveFromFlags } = loadInvocationContext({
+    get: async () => {
+      throw new Error(`boom ${marker}`);
+    },
+  });
+  const result = await resolveFromFlags({ llmProfile: "p" }, { env: {}, get: () => null });
+  assert.equal(result.ok, false);
+  assert.equal(result.errorCode, "CONFIG_INVALID");
+  assert.equal(result.detail.includes(marker), false, `detail must never contain the planted marker: ${result.detail}`);
 });

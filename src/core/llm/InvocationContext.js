@@ -15,6 +15,7 @@
 
 const ProfileStore = require("./ProfileStore");
 const ProviderContext = require("./ProviderContext");
+const ConfigManager = require("../ConfigManager");
 
 /**
  * @param {Object} [flags]
@@ -25,7 +26,10 @@ const ProviderContext = require("./ProviderContext");
  * @param {Object} [deps.env] - plain key/value map for credential-shape
  *   checks. Defaults to `process.env`.
  * @param {function(string): *} [deps.get] - ConfigManager-like getter for
- *   the Phase 17 FALCON_LLM_* env-compat layer. Defaults to a no-op.
+ *   the Phase 17 FALCON_LLM_* env-compat layer. Defaults to
+ *   `ConfigManager.get` so the existing env-compat layer (and the
+ *   FALCON_LLM_PROVIDER kill switch / conflict check) stays reachable when a
+ *   --llm-* flag is also given.
  * @param {Object} [deps.profileDir] - forwarded as `{env, cwd}` to
  *   ProfileStore.get() when provided (test seam); otherwise ProfileStore's
  *   own defaults (process.env/process.cwd()) are used.
@@ -37,7 +41,7 @@ async function resolveFromFlags(flags = {}, deps = {}) {
     const llmModel = flags && typeof flags === "object" ? flags.llmModel : undefined;
 
     const env = deps && typeof deps.env === "object" && deps.env !== null ? deps.env : process.env;
-    const get = typeof deps.get === "function" ? deps.get : () => null;
+    const get = typeof deps.get === "function" ? deps.get : (key) => ConfigManager.get(key);
     const profileStoreOpts = deps && typeof deps.profileDir === "object" && deps.profileDir !== null ? deps.profileDir : undefined;
 
     try {
@@ -79,7 +83,7 @@ async function resolveFromFlags(flags = {}, deps = {}) {
         if (!resolved.ok) return resolved;
         return { ok: true, context: resolved.context };
     } catch (error) {
-        return { ok: false, errorCode: "CONFIG_INVALID", detail: `Unexpected invocation-context error: ${error && error.message}` };
+        return { ok: false, errorCode: "CONFIG_INVALID", detail: "Unexpected invocation-context error." };
     }
 }
 

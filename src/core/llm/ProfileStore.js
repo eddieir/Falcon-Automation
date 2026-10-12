@@ -286,16 +286,19 @@ function validateProfileSchema(profile) {
         try {
             const parsed = validateIntSetting("timeoutMs", profile.timeoutMs, INT_BOUNDS.FALCON_LLM_TIMEOUT_MS);
             if (parsed !== null) out.timeoutMs = parsed;
-        } catch (error) {
-            return fail("CONFIG_INVALID", error.message);
+        } catch {
+            // Never interpolate error.message or the caller-supplied raw
+            // value (ConfigValidation embeds `received "<value>"` in it) —
+            // a fixed, generic detail naming only the field (ADR-0019 C16).
+            return fail("CONFIG_INVALID", "timeoutMs must be an integer within the allowed bounds.");
         }
     }
     if (profile.maxAttempts !== undefined) {
         try {
             const parsed = validateIntSetting("maxAttempts", profile.maxAttempts, INT_BOUNDS.FALCON_LLM_MAX_ATTEMPTS);
             if (parsed !== null) out.maxAttempts = parsed;
-        } catch (error) {
-            return fail("CONFIG_INVALID", error.message);
+        } catch {
+            return fail("CONFIG_INVALID", "maxAttempts must be an integer within the allowed bounds.");
         }
     }
 
@@ -310,16 +313,40 @@ function validateName(name) {
 }
 
 /**
+ * Pure, additive helper (ADR-0019 C12): derive the default profile
+ * directory path from an already-realpath'd home directory. Exported so the
+ * derivation can be tested without depending on the real os.homedir() of
+ * the test host.
+ */
+function defaultProfileDirFromRealHome(realHome) {
+    return path.join(realHome, ".falcon", "llm-profiles");
+}
+
+/**
  * Resolve and validate the profile storage directory (ADR-0019 C12).
  * Creates the DEFAULT directory (mode 0700) if missing; an explicitly
  * configured FALCON_LLM_PROFILE_DIR must already exist.
+ *
+ * C12 is enforced LITERALLY: for the resolved `given` path,
+ * `fs.promises.realpath(given)` must equal `given` exactly. A symlink
+ * ANYWHERE in the path — at the leaf or at any ancestor segment — is
+ * rejected. The DEFAULT directory is derived from
+ * `realpath(os.homedir())` so a home directory whose own path contains an
+ * OS-level symlink (e.g. macOS /tmp -> /private/tmp, /var -> /private/var)
+ * is not spuriously rejected.
  */
 async function resolveDir({ env = process.env, cwd = process.cwd() } = {}) {
     const explicit = Object.hasOwn(env, "FALCON_LLM_PROFILE_DIR") ? env.FALCON_LLM_PROFILE_DIR : undefined;
     const usingDefault = explicit === undefined || explicit === null || String(explicit).trim() === "";
     let given;
     if (usingDefault) {
-        given = path.join(os.homedir(), ".falcon", "llm-profiles");
+        let realHome;
+        try {
+            realHome = await fs.promises.realpath(os.homedir());
+        } catch {
+            return fail("CONFIG_INVALID", "the default profile directory could not be resolved.");
+        }
+        given = defaultProfileDirFromRealHome(realHome);
         try {
             await fs.promises.mkdir(given, { recursive: true, mode: 0o700 });
         } catch (error) {
@@ -342,22 +369,18 @@ async function resolveDir({ env = process.env, cwd = process.cwd() } = {}) {
         return fail("CONFIG_INVALID", "the configured profile directory path is not a directory.");
     }
 
-    // Compare realpath only for the LEAF directory component against its
-    // already-realpath'd parent — this rejects a symlinked profile
-    // directory itself without rejecting legitimate ancestor-level OS
-    // symlinks (e.g. macOS's /tmp -> /private/tmp, /var -> /private/var),
-    // which `mkdtemp(os.tmpdir())` always sits under.
-    const base = path.basename(given);
-    const parent = path.dirname(given);
-    let realParent;
+    // Literal C12 equality check: the FULL path's realpath must equal the
+    // given path exactly. This rejects a symlink at the leaf AND a symlink
+    // at any ancestor segment — no exception for OS-level ancestor
+    // symlinks, which is why the DEFAULT dir above is derived from an
+    // already-realpath'd home directory.
     let real;
     try {
-        realParent = await fs.promises.realpath(parent);
         real = await fs.promises.realpath(given);
     } catch {
         return fail("CONFIG_INVALID", "the configured profile directory could not be resolved.");
     }
-    if (real !== path.join(realParent, base)) {
+    if (real !== given) {
         return fail("CONFIG_INVALID", "the configured profile directory must not involve a symlink.");
     }
 
@@ -566,6 +589,7 @@ module.exports = {
     get,
     list,
     remove,
+    defaultProfileDirFromRealHome,
     _resetWindowsWarningForTests() {
         windowsWarned = false;
     },
