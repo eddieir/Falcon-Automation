@@ -1,6 +1,6 @@
 # Phase 16 operations: parallel runs, shards and merge
 
-Status: **in review, not merged.** The behaviour below is implemented on branch `phase-16/parallel-execution`. Sequential runs (no flags) are the default and are unchanged. Hosted CI for head cebd31f7460589d8a31211fb5cb5ddb16a6277b9 (run 37940648249, Falcon CI, pull request #48): all seven jobs succeeded (regression, shards 1-3, test, aggregate, shard-negative). A GitHub code scanning run on the same head (37940650327) concluded failure; not yet investigated.
+Status: implemented on branch `phase-16/parallel-execution` (pull request #48); the owner decides the merge. Sequential runs (no flags) are the default and are unchanged. Hosted CI results and the review verdicts, per head, are in `docs/phase-16-review-verdicts.md` and the pull request description.
 
 Audience: engineers who run Falcon locally or in CI, and reviewers approving the merge.
 

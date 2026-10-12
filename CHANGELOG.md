@@ -1178,7 +1178,7 @@ Trend flags for heal-rate spikes, pass-rate decay, duration regression, review b
 
 ---
 
-## Phase 16 — Parallel execution (in review, not merged)
+## Phase 16 — Parallel execution (pull request #48)
 
 - Added `--workers=N` (1 to 16), page-level parallelism. Scenarios within a page stay sequential.
 - Added `--shard=I/N --run-id=<id>`, which writes a shard bundle under `reports/shards/<runId>/` and writes no report or canonical state.
