@@ -84,7 +84,7 @@
         }
       ],
       "status": "partial",
-      "note": "Verified against a mock only; no real Azure resource was available. Entra ID authentication is out of scope (reversible assumption)."
+      "note": "Owner-accepted disposition: verified against a contract-complete mock (path, deployment as model, key authentication, no api-version); no live Azure resource was available and Entra ID authentication is out of scope. Remains partial."
     },
     {
       "id": "P17-AC04",
@@ -308,8 +308,8 @@
           "name": "runProviderProtocolRows: a REAL round trip hits the loopback mock server and records protocol success"
         }
       ],
-      "status": "partial",
-      "note": "promptCoverage at 20 versus 60 candidates is not measured: the Tier 2.5 corpus has no Tier 3 ranking data. Mock rows prove protocol compatibility, not healing quality, and are labelled so."
+      "status": "done",
+      "note": "Owner-approved disposition: the criterion wording requires separately labelled no-key and provider rows without presenting mock compatibility as model quality, which is met. promptCoverage at 20 versus 60 candidates is not part of the wording and stays an unmeasured, documented limit (the Tier 2.5 corpus has no Tier 3 ranking data)."
     },
     {
       "id": "P17-AC12",
@@ -402,6 +402,10 @@
         {
           "file": "tests/regression/p17-pc-runpaths.check.cjs",
           "name": "resolveRunDir rejects a symlinked run directory"
+        },
+        {
+          "file": "tests/regression/p17-pc-reader.check.cjs",
+          "name": "a line with no newline that outgrows the line limit is dropped, not buffered"
         }
       ],
       "status": "done"
@@ -756,7 +760,7 @@
         },
         {
           "file": "tests/regression/p17-pc-reader.check.cjs",
-          "name": "duplicate eventId is ignored, not double-counted"
+          "name": "duplicate eventId is not double-counted and is flagged as tampered"
         }
       ],
       "status": "done"
