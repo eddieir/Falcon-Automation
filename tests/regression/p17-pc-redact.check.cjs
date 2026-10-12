@@ -73,7 +73,7 @@ test("D-22: M06 short hostile HTML is accepted by Redact, stays a plain escaped 
   // It is present only as a JSON string value, never as unescaped markup
   // outside quotes: a JSON string's contents can never break out of the
   // enclosing double quotes.
-  assert.ok(serialized.includes('"summary":"' + hostile.replace(/"/g, '\\"') + '"'));
+  assert.ok(serialized.includes('"summary":' + JSON.stringify(hostile)));
 });
 
 test("M12: marker inside evidenceRefs (a structured field) is not scanned here", () => {
