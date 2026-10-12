@@ -23,6 +23,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const crypto = require("crypto");
 
 const Logger = require("../../../utils/Logger");
 const { ERROR_CODES } = require("./LlmProvider");
@@ -398,7 +399,7 @@ function profilePath(dir, name) {
  * fsynced, closed, then renamed over the target (ADR-0019 C12/C13).
  */
 async function atomicWrite(dir, name, serialized) {
-    const tempName = `.tmp-${name}-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const tempName = `.tmp-${name}-${process.pid}-${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
     const tempPath = path.join(dir, tempName);
     let handle;
     try {

@@ -12,6 +12,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const crypto = require("node:crypto");
 
 const ProviderContext = require(path.join("..", "..", "src", "core", "llm", "ProviderContext.js"));
 const Registry = require(path.join("..", "..", "src", "core", "llm", "LlmProviderRegistry.js"));
@@ -67,8 +68,8 @@ test("N02: a context and a legacy plain config for the same provider id are inde
 });
 
 test("Credential isolation: two contexts (openai + azure-openai) each read only their own marker", () => {
-    const markerOpenAi = "FAKEMARKER_ISO_" + Math.random().toString(36).slice(2);
-    const markerAzure = "FAKEMARKER_ISO_" + Math.random().toString(36).slice(2);
+    const markerOpenAi = "FAKEMARKER_ISO_" + crypto.randomBytes(8).toString("hex");
+    const markerAzure = "FAKEMARKER_ISO_" + crypto.randomBytes(8).toString("hex");
 
     const openaiResult = ProviderContext.resolve({
         options: { provider: "openai", credentialEnvVar: "FAKEMARKER_ISO_OPENAI_API_KEY" },

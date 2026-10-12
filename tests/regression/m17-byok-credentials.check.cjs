@@ -11,6 +11,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const util = require("node:util");
 const path = require("node:path");
+const crypto = require("node:crypto");
 
 const ProviderContext = require(path.join("..", "..", "src", "core", "llm", "ProviderContext.js"));
 
@@ -37,7 +38,7 @@ function recordingEnv(map) {
 }
 
 test("AC15: resolve() reads no credential value; only config.apiKey access does", () => {
-    const marker = "FAKEMARKER_" + Math.random().toString(36).slice(2);
+    const marker = "FAKEMARKER_" + crypto.randomBytes(8).toString("hex");
     const { proxy, reads } = recordingEnv({ FAKEMARKER_CRED_1_API_KEY: marker });
     const result = ProviderContext.resolve({
         options: { provider: "openai", credentialEnvVar: "FAKEMARKER_CRED_1_API_KEY" },
@@ -143,7 +144,7 @@ test("C11: constructor is rejected as a credentialEnvVar (name shape mismatch)",
 });
 
 test("C11: a well-formed *_API_KEY name is accepted", () => {
-    const marker = "FAKEMARKER_" + Math.random().toString(36).slice(2);
+    const marker = "FAKEMARKER_" + crypto.randomBytes(8).toString("hex");
     const result = ProviderContext.resolve({
         options: { provider: "openai", credentialEnvVar: "MY_CUSTOM_API_KEY" },
         get: noGet,
@@ -165,7 +166,7 @@ test("C16: resolve() never mutates process.env", () => {
 });
 
 test("C16: util.inspect/JSON.stringify of the context never reveals the credential value", () => {
-    const marker = "FAKEMARKER_" + Math.random().toString(36).slice(2);
+    const marker = "FAKEMARKER_" + crypto.randomBytes(8).toString("hex");
     const result = ProviderContext.resolve({
         options: { provider: "openai", credentialEnvVar: "FAKEMARKER_CRED_2_API_KEY" },
         get: noGet,
