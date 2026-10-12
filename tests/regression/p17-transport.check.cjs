@@ -333,38 +333,39 @@ test("error message and Logger output never contain a planted marker", TEST_OPTS
     await closeAll(server);
 });
 
-test("https: rejectUnauthorized is explicit true even with NODE_TLS_REJECT_UNAUTHORIZED=0", TEST_OPTS, async () => {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-    let seenOptions = null;
-    const spyHttpsRequest = (options, callback) => {
-        seenOptions = options;
-        return makeSpyRequest(() => {
-            const res = new EventEmitter();
-            res.statusCode = 200;
-            res.headers = { "content-type": "application/json" };
-            res.destroy = () => {};
-            callback(res);
-            setImmediate(() => {
-                res.emit("data", Buffer.from("{}"));
-                res.emit("end");
-            });
-        });
-    };
-    try {
+test("https: rejectUnauthorized is explicit true when the process environment relaxes TLS checks", TEST_OPTS, async () => {
+    // Run in a child process so the relaxed environment never touches this one.
+    const { spawnSync } = require("node:child_process");
+    const path = require("node:path");
+    const modulePath = path.join(__dirname, "..", "..", "src", "core", "llm", "transport", "guardedFetch");
+    const script = `
+        const { EventEmitter } = require("node:events");
+        const { createGuardedFetch } = require(${JSON.stringify(modulePath)});
+        let seen = null;
+        const spy = (options, callback) => {
+            seen = options;
+            const req = new EventEmitter();
+            req.setTimeout = () => req; req.write = () => {}; req.destroy = () => {};
+            req.end = () => {
+                const res = new EventEmitter();
+                res.statusCode = 200; res.headers = { "content-type": "application/json" }; res.destroy = () => {};
+                callback(res);
+                setImmediate(() => { res.emit("data", Buffer.from("{}")); res.emit("end"); });
+            };
+            return req;
+        };
         const baseUrl = "https://api.internal.test:443/v1";
-        const fetchFn = createGuardedFetch({
-            baseUrl,
-            policyOpts: {},
-            timeoutMs: 3000,
-            maxResponseBytes: 1024,
-            deps: { lookup: (h, o, cb) => cb(null, [{ address: "203.0.113.9", family: 4 }]), httpRequest: http.request, httpsRequest: spyHttpsRequest },
+        createGuardedFetch({
+            baseUrl, policyOpts: {}, timeoutMs: 3000, maxResponseBytes: 1024,
+            deps: { lookup: (h, o, cb) => cb(null, [{ address: "203.0.113.9", family: 4 }]), httpRequest: require("node:http").request, httpsRequest: spy },
+        })(baseUrl + "/chat/completions", { method: "POST", body: "{}" }).then(() => {
+            process.stdout.write(JSON.stringify({ ru: seen.rejectUnauthorized, sn: seen.servername }));
         });
-        await fetchFn(`${baseUrl}/chat/completions`, { method: "POST", body: "{}" });
-        assert.equal(seenOptions.rejectUnauthorized, true);
-        assert.equal(seenOptions.servername, "api.internal.test");
-    } finally {
-        delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    }
+    `;
+    const relaxed = { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: "0" };
+    const out = spawnSync(process.execPath, ["-e", script], { env: relaxed, encoding: "utf8", timeout: 6000 });
+    assert.equal(out.status, 0, out.stderr);
+    assert.deepEqual(JSON.parse(out.stdout), { ru: true, sn: "api.internal.test" });
 });
 
 test("no proxy settings are consulted even with proxy env vars pointing at a decoy", TEST_OPTS, async () => {
