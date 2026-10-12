@@ -39,17 +39,44 @@ function parseChunk(chunk, state) {
     partialBytes: 0,
     tampered: false,
     firstBadSeq: null,
+    dropping: false,
+    droppedBytes: 0,
   };
 
   const combined = Buffer.concat([st.carry, chunk]);
   let start = 0;
   const newlineByte = 0x0a;
+  const maxLine = Schema.LIMITS.LINE_MAX_BYTES;
 
   for (;;) {
     const idx = combined.indexOf(newlineByte, start);
+    if (st.dropping) {
+      // Inside a line already known to exceed the limit: count it, keep nothing.
+      if (idx === -1) {
+        st.droppedBytes += combined.length - start;
+        st.partialBytes = st.droppedBytes;
+        st.carry = Buffer.alloc(0);
+        break;
+      }
+      st.lineNumber += 1;
+      st.malformed.push({ lineNumber: st.lineNumber, byteLength: st.droppedBytes + (idx - start) });
+      st.dropping = false;
+      st.droppedBytes = 0;
+      start = idx + 1;
+      continue;
+    }
     if (idx === -1) {
-      st.carry = combined.slice(start);
-      st.partialBytes = st.carry.length;
+      const pending = combined.length - start;
+      if (pending > maxLine) {
+        // No complete line can be this long: stop buffering it (bounded memory).
+        st.dropping = true;
+        st.droppedBytes = pending;
+        st.partialBytes = pending;
+        st.carry = Buffer.alloc(0);
+      } else {
+        st.carry = combined.slice(start);
+        st.partialBytes = st.carry.length;
+      }
       break;
     }
     const lineBuf = combined.slice(start, idx);
@@ -72,7 +99,12 @@ function parseChunk(chunk, state) {
     const event = validated.value;
 
     if (st.seenEventIds.has(event.eventId)) {
-      // Duplicate eventId — ignored (not an error, not re-emitted).
+      // Duplicate eventId: never re-emitted, and flagged because the append
+      // primitive cannot produce one (replay or forged line).
+      st.tampered = true;
+      if (st.firstBadSeq === null) {
+        st.firstBadSeq = event.seq;
+      }
       continue;
     }
 
