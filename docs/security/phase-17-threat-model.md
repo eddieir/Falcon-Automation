@@ -129,9 +129,12 @@ Baseline is the base commit `0239173`; final is the Phase 17 head. A scanner tha
 | TruffleHog | 0 verified, 0 unverified (committed content) | 0 verified; 6 unverified, all fake `user:pass@host` fixtures in test files | Pass; fixtures only |
 | gitleaks (working tree) | 3 findings | 3 findings, identical | No new finding (two are git-ignored paths; one is the deliberate fake key in a redaction test) |
 | gitleaks (history) | 5 findings | 5 findings, identical | No new finding |
-| CodeQL (hosted) | 0 alerts on `0239173` | 3 high alerts on the first PR head, all in test code; fixed and re-run is recorded in the PR | See the PR for the re-run result |
+| GitGuardian (hosted) | Not recorded for the base commit | Pass on every PR head, including the one reviewed here | Pass |
+| CodeQL (hosted) | 0 alerts on `0239173` | 0 open alerts on PR head `843ea9e` (earlier heads: 3 high alerts on `823670b`, 1 on `4a39779`, all in test code and since fixed) | Pass for that head; re-read for any later head |
 
-The three CodeQL findings were fixed rather than dismissed: an incomplete escape in a redaction test (now `JSON.stringify`), comment stripping that did not repeat until stable (now repeats), and a test that set `NODE_TLS_REJECT_UNAUTHORIZED` on the test process (now runs the relaxed environment in a child process and asserts `rejectUnauthorized` is still `true`).
+The CodeQL findings were fixed rather than dismissed: an incomplete escape in a redaction test (the expected string is now built with `JSON.stringify`), comment stripping in the dashboard UI test (now a linear `indexOf` scan, because repeating a regex replace was still flagged), and a test that set `NODE_TLS_REJECT_UNAUTHORIZED` on the test process (it now runs the relaxed environment in a child process and asserts `rejectUnauthorized` is still `true`).
+
+Recorded P3 items from the final security review: the real TLS handshake against a self-signed server is not exercised (the option is asserted instead), `LlmConfig` copies a lower-level `error.message` into configuration errors, the dashboard re-validates the ledger path but does not compare the file identity captured at startup, and org- or environment-level secrets were not checked for a stale `OPENAI_API_KEY` (only the repository level was).
 
 ## Test index
 
