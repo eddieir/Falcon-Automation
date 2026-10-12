@@ -32,7 +32,7 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 - **Autonomous UI exploration:** recursive crawler (ClickExplorer) + rule-based DOM issue scanning (DOMIssueScanner)
 - **DOM-driven interaction generation:** PageAnalyser maps the DOM; TestGenerator creates scenarios; TestRunner executes them with full healing
 - **Locator recovery without a model:** when a selector fails and no approved replacement exists, Falcon scores live candidates against the element's stored signature locally — no network, no model, no randomness — and refuses rather than guess when the evidence is weak or ambiguous
-- **AI-assisted locator recovery:** if local matching refuses too, Tier 3 (gpt-4o-mini) infers a replacement and a human approves it before reuse
+- **AI-assisted locator recovery:** if local matching refuses too, Tier 3 (LLM inference via pluggable provider) infers a replacement and a human approves it before reuse
 - **Visual regression testing:** pixel-level screenshot comparison with diff images and cumulative summary
 - **Real-time live dashboard:** express + socket.io stream every test event to a browser UI at `localhost:3000`
 - **Accurate reporting:** structured pass/fail/skip tallying + Allure HTML report via `allure-playwright`
@@ -302,13 +302,13 @@ wrong-element action, and the ability to inject arbitrary DOM into your applicat
 already a far larger problem than suppressed self-healing. It is recorded here so that "no fix
 needed" is not mistaken for "not considered."
 
-### What Tier 3 sends to OpenAI
+### What Tier 3 sends to the LLM provider
 
-Tier 3 sends `gpt-4o-mini` (temperature 0) a numbered list of candidate elements, not the page. Only elements that fit the failed action are listed: fillable fields for a type, `<select>` for a select, clickable elements for a click. Each must be visible and enabled; hidden, zero-opacity, `inert`, `pointer-events: none` and off-document elements are left out, and the list stops at 60. For each candidate it sends the tag name, a fixed set of attributes (`id`, `name`, `type`, `data-testid`, `data-test`, `data-qa`, `aria-label`, `role`, and the path of an `href`), and its text. Every value has control characters removed and is capped at 200 characters; password values are never sent. Those labels, IDs, test IDs and texts leave your network. The prompt also carries the original selector, the step description and the action, and states that page text is untrusted data whose instructions must not be followed.
+Tier 3 sends a numbered list of candidate elements to the configured LLM provider, not the page. Only elements that fit the failed action are listed: fillable fields for a type, `<select>` for a select, clickable elements for a click. Each must be visible and enabled; hidden, zero-opacity, `inert`, `pointer-events: none` and off-document elements are left out, and the list stops at 60. For each candidate it sends the tag name, a fixed set of attributes (`id`, `name`, `type`, `data-testid`, `data-test`, `data-qa`, `aria-label`, `role`, and the path of an `href`), and its text. Every value has control characters removed and is capped at 200 characters; password values are never sent. Those labels, IDs, test IDs and texts leave your network. The prompt also carries the original selector, the step description and the action, and states that page text is untrusted data whose instructions must not be followed.
 
 The model may answer only with a candidate's number, or `null`. It never writes a selector: the selector for each candidate is built locally, and the chosen one is re-checked in the page (still unique, same identifying attributes, still eligible) before Falcon acts on it. Any other answer is rejected and the heal fails exactly as an unresolved one would, with `status: "rejected"` and one of these reasons in the healing report: `no_eligible_candidates`, `model_declined`, `invalid_reply`, `index_out_of_range`, `selector_not_unique`. One limit remains: a page that controls visible, action-compatible elements can still bias which of them the model picks. Whatever is picked runs once in the current run and goes to review as pending; it is never reused without human approval.
 
-Tier 3 requires `OPENAI_API_KEY` to be set and does not fall back to lower tiers if the key is missing — it simply does not run, so Tier 3 is effectively opt-in. A run with no API key still passes Tiers 1 and 2; it just never reaches the LLM.
+Tier 3 is opt-in and requires explicit provider selection via `FALCON_LLM_PROVIDER` (see [Pluggable LLM providers](#pluggable-llm-providers) below). `OPENAI_API_KEY` alone does not enable Tier 3; you must set both the provider and the corresponding API key. A run with no provider configured falls back to Tiers 1–2.5; it never attempts Tier 3.
 
 ### Healing every action, demonstrated against the same real site
 
@@ -569,12 +569,11 @@ Falcon-Automation/
 │   │   └── index.html               # Live dashboard front-end (socket.io client)
 │   └── core/
 │       ├── AIHealer/
-│       │   ├── AIHealer.js          # Three-tier self-healing engine (Tier 3: OpenAI)
+│       │   ├── AIHealer.js          # Three-tier self-healing engine (Tier 3: pluggable LLM provider)
 │       │   ├── HealingReport.js     # Audit log for all healing events + reviewable trend (summary())
 │       │   ├── HealingTrust.js      # Tier 3 approval gate: pending review -> approve/reject (Phase 8)
 │       │   ├── LocatorStore.js      # Persisted alternative locators (Tier 2 cache, bounded)
-│       │   ├── AdaptiveRetry.js     # Tier 1: backoff + jitter retry
-│       │   └── AIAnalyser.js
+│       │   └── AdaptiveRetry.js     # Tier 1: backoff + jitter retry
 │       ├── APIClient.js             # HTTP client used by tests/api/*.js
 │       ├── BaseTest.js              # Dependency-injection base class
 │       ├── BrowserManager.js        # Playwright wrapper (chromium/firefox/webkit)
@@ -670,8 +669,8 @@ cp .env.example .env
 BROWSER=chromium           # chromium | firefox | webkit
 HEADLESS=true               # true for CI; false to watch the browser locally
 
-# OpenAI: optional, enables Tier 3 AI healing. Every call site degrades
-# gracefully when this is unset; Tier 3 just never fires.
+# LLM (optional): Tier 3 AI healing needs FALCON_LLM_PROVIDER (see
+# "Pluggable LLM providers"). OPENAI_API_KEY alone does not enable it.
 OPENAI_API_KEY=
 
 # API base URL: optional, defaults to jsonplaceholder
@@ -752,6 +751,51 @@ A pending Tier 3 fix can be reviewed and decided on two ways:
   ```
 
 Approving writes the fix into `LocatorStore` (Tier 2 reuses it from then on) and records the decision in `data/healing_decisions.json`. Rejecting discards it, never touching `LocatorStore`, but keeps the same audit record so a rejected guess doesn't quietly get re-suggested with no memory of having been turned down. Rejection memory carries a count and timestamps; when the same selector-suggestion pair is proposed again, the history is flagged so a human can see it was previously rejected. Both `data/healing_pending.json` and `data/healing_decisions.json` are gitignored, the same as `locator_store.json`.
+
+---
+
+## Pluggable LLM providers
+
+Tier 3 inference is optional and requires explicit provider selection. Set `FALCON_LLM_PROVIDER` to one of: `openai`, `azure-openai`, `openai-compatible`, or leave it unset to disable Tier 3 entirely. `OPENAI_API_KEY` alone no longer enables Tier 3 (breaking change from prior versions); you must set both the provider and the corresponding credentials.
+
+```ini
+# Provider configuration (all optional; Tier 3 disabled if unset)
+FALCON_LLM_PROVIDER=openai              # openai | azure-openai | openai-compatible
+OPENAI_API_KEY=<your-key>              # OpenAI API key (required when FALCON_LLM_PROVIDER=openai)
+
+# Azure OpenAI (when FALCON_LLM_PROVIDER=azure-openai)
+# AZURE_OPENAI_API_KEY=<your-key>
+# AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com/
+# AZURE_OPENAI_DEPLOYMENT=<deployment-name>
+
+# OpenAI-compatible endpoint (when FALCON_LLM_PROVIDER=openai-compatible)
+# OPENAI_COMPATIBLE_ENDPOINT=http://localhost:8000/v1
+# OPENAI_COMPATIBLE_MODEL=<model-name>
+# OPENAI_API_KEY=<your-key>  (reuses this for authentication)
+```
+
+Without a provider configured, Falcon runs Tiers 1, 2 and 2.5 only; no network call is made. An unresolved selector falls back gracefully instead of failing.
+
+**Data sent to the LLM provider:** the failing selector, step description, action type, and up to 20 candidate element descriptors (tag name, stable attributes, accessible name, text), capped at 8 KiB total. Never sent: full DOM, cookies, storage, environment variables, complete form contents, authentication tokens, or full page HTML.
+
+**Approval gate:** unchanged from Phase 8. An inferred selector is a proposal, not trusted evidence. It runs once in the current test and awaits human review before being stored for reuse. See [Healing trust: reviewing and approving Tier 3 fixes (Phase 8)](#healing-trust-reviewing-and-approving-tier-3-fixes-phase-8).
+
+For detailed configuration and operations, see [docs/phase-17-operations.md](docs/phase-17-operations.md) and [docs/architecture/phase-17-pluggable-llm-providers.md](docs/architecture/phase-17-pluggable-llm-providers.md).
+
+---
+
+## Production-cycle dashboard
+
+Falcon records and streams test execution events to a production-cycle coordinator and offers a read-only dashboard for viewing recorded runs:
+
+```sh
+npm run production:event                          # emit a custom event (manual use)
+npm run production:dashboard -- --run-id=<id>    # view recorded events for a run (loopback only)
+```
+
+The dashboard connects to localhost only; it is read-only and displays coordinator-recorded events. All data shown is ledger-asserted and not authenticated — it reflects what the coordinator has persisted, not external verification. Use the `--run-id` parameter to filter events to a specific run.
+
+For detailed information, see [docs/architecture/phase-17-production-cycle-dashboard.md](docs/architecture/phase-17-production-cycle-dashboard.md).
 
 ---
 
