@@ -16,7 +16,10 @@ test("modules load .env without dotenv banner output and still apply values", ()
   const script = [
     `require(${JSON.stringify(path.join(root, "src/core/ConfigManager.js"))});`,
     `require(${JSON.stringify(path.join(root, "src/core/DBClient.js"))});`,
-    `require(${JSON.stringify(path.join(root, "src/core/AIHealer/AIAnalyser.js"))});`,
+    // AIAnalyser.js (removed in Phase 17) used to be the third module
+    // probed here; ConfigManager.js and DBClient.js above are the only
+    // other src modules that call require("dotenv").config(...), so the
+    // assertion stays identical with just the two of them.
     "process.stdout.write('probe=' + process.env.FALCON_DOTENV_PROBE);",
   ].join("");
   const env = { ...process.env };
