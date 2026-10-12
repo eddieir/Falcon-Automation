@@ -27,7 +27,11 @@ const root = path.join(__dirname, "..", "..");
 const FAKE_KEY = "sk-" + "fakeFAKEfake1234567890";
 
 function mkdtemp700() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-byok-cli-"));
+  // fs.realpathSync.: os.tmpdir() is itself a symlink on macOS (e.g.
+  // /tmp -> /private/tmp). ProfileStore now rejects any symlinked
+  // ancestor in FALCON_LLM_PROFILE_DIR, so build under the resolved,
+  // symlink-free base to avoid a false CONFIG_INVALID in profile-dir tests.
+  const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "falcon-byok-cli-"));
   fs.chmodSync(dir, 0o700);
   return dir;
 }
@@ -229,6 +233,80 @@ test("a valid --llm-provider resolves and is forwarded to TestRunner", (t) => {
   const captured = JSON.parse(fs.readFileSync(capturePath, "utf8"));
   assert.ok(captured.providerContext, "providerContext must be forwarded");
   assert.equal(captured.providerContext.config.provider, "anthropic");
+});
+
+// ── Phase 17 env-compat layer stays reachable when a --llm-* flag is given ─
+
+test("FALCON_LLM_API_KEY + --llm-provider=openai resolves and is forwarded", (t) => {
+  const { child, capturePath } = runFalcon(t, ["--llm-provider=openai"], {
+    FALCON_LLM_API_KEY: "sk-" + "fakeFAKEfake1234567890",
+  });
+  assert.equal(child.status, 1, child.stdout + child.stderr);
+  assert.doesNotMatch(child.stderr, /BYOK configuration error/);
+  const captured = JSON.parse(fs.readFileSync(capturePath, "utf8"));
+  assert.ok(captured.providerContext, "providerContext must be forwarded");
+  assert.equal(captured.providerContext.config.provider, "openai");
+});
+
+test("FALCON_LLM_PROVIDER=openai + --llm-provider=anthropic hard-exits with CONFIG_CONFLICT", (t) => {
+  const { child, launchMarker } = runFalcon(t, ["--llm-provider=anthropic", "--llm-model=claude-3-5-sonnet-20241022"], {
+    FALCON_LLM_PROVIDER: "openai",
+    ANTHROPIC_API_KEY: "not-key-shaped-test-credential",
+  });
+  assert.notEqual(child.status, 0);
+  assert.equal(fs.existsSync(launchMarker), false, "browser must never launch");
+  assert.match(child.stderr, /CONFIG_CONFLICT/);
+});
+
+test("FALCON_LLM_PROVIDER=disabled (kill switch) + --llm-provider=anthropic hard-exits, no provider contact", (t) => {
+  const { child, launchMarker } = runFalcon(t, ["--llm-provider=anthropic", "--llm-model=claude-3-5-sonnet-20241022"], {
+    FALCON_LLM_PROVIDER: "disabled",
+    ANTHROPIC_API_KEY: "not-key-shaped-test-credential",
+  });
+  assert.notEqual(child.status, 0);
+  assert.equal(fs.existsSync(launchMarker), false, "browser must never launch");
+  assert.match(child.stderr, /CONFIG_CONFLICT/);
+});
+
+test("FALCON_LLM_PROVIDER=none (kill switch alias) + --llm-provider=anthropic hard-exits, no provider contact", (t) => {
+  const { child, launchMarker } = runFalcon(t, ["--llm-provider=anthropic", "--llm-model=claude-3-5-sonnet-20241022"], {
+    FALCON_LLM_PROVIDER: "none",
+    ANTHROPIC_API_KEY: "not-key-shaped-test-credential",
+  });
+  assert.notEqual(child.status, 0);
+  assert.equal(fs.existsSync(launchMarker), false, "browser must never launch");
+  assert.match(child.stderr, /CONFIG_CONFLICT/);
+});
+
+test("FALCON_LLM_PROVIDER=anthropic matching --llm-provider=anthropic is allowed (same provider, no conflict)", (t) => {
+  const { child, capturePath } = runFalcon(
+    t,
+    ["--llm-provider=anthropic", "--llm-model=claude-3-5-sonnet-20241022"],
+    {
+      FALCON_LLM_PROVIDER: "anthropic",
+      ANTHROPIC_API_KEY: "not-key-shaped-test-credential",
+    },
+  );
+  assert.equal(child.status, 1, child.stdout + child.stderr);
+  assert.doesNotMatch(child.stderr, /BYOK configuration error/);
+  const captured = JSON.parse(fs.readFileSync(capturePath, "utf8"));
+  assert.ok(captured.providerContext, "providerContext must be forwarded");
+  assert.equal(captured.providerContext.config.provider, "anthropic");
+});
+
+test("FALCON_LLM_RUN_BUDGET is reflected in the forwarded context for a flag-driven run", (t) => {
+  const { child, capturePath } = runFalcon(
+    t,
+    ["--llm-provider=anthropic", "--llm-model=claude-3-5-sonnet-20241022"],
+    {
+      ANTHROPIC_API_KEY: "not-key-shaped-test-credential",
+      FALCON_LLM_RUN_BUDGET: "5",
+    },
+  );
+  assert.equal(child.status, 1, child.stdout + child.stderr);
+  const captured = JSON.parse(fs.readFileSync(capturePath, "utf8"));
+  assert.ok(captured.providerContext, "providerContext must be forwarded");
+  assert.equal(captured.providerContext.config.runBudget, 5);
 });
 
 // ── .env.example: optional BYOK entries are genuinely blank ───────────────

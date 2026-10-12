@@ -20,6 +20,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const crypto = require("crypto");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 
@@ -33,8 +34,14 @@ const CLI_PATH = path.join(REPO_ROOT, "scripts", "llm", "profile.js");
 // profile dir created below.
 const SAFE_CWD = REPO_ROOT;
 
+// Under the C12-literal rule (realpath(given) === given, no symlink ANYWHERE
+// in the path, ancestor or leaf) a temp dir base must itself already be
+// canonical — on macOS os.tmpdir() sits under /var -> /private/var, a
+// symlinked ancestor, so every fixture resolves the base first.
+const TMP_BASE = fs.realpathSync(os.tmpdir());
+
 function mkdtemp() {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-profile-"));
+    const dir = fs.mkdtempSync(path.join(TMP_BASE, "falcon-profile-"));
     fs.chmodSync(dir, 0o700);
     return dir;
 }
@@ -288,6 +295,43 @@ test("AC12: key-shaped value pasted into endpoint is rejected", async () => {
     }
 });
 
+test("P2-3: a marker in an out-of-bounds timeoutMs/maxAttempts value never reaches detail/error.message", async () => {
+    const dir = mkdtemp();
+    const marker = crypto.randomBytes(16).toString("hex");
+    try {
+        const badTimeout = await ProfileStore.set("marker-timeout", { provider: "openai", timeoutMs: marker }, ctx(dir));
+        assert.equal(badTimeout.ok, false);
+        assert.equal(badTimeout.errorCode, "CONFIG_INVALID");
+        assert.ok(!JSON.stringify(badTimeout).includes(marker), "marker leaked into timeoutMs rejection detail");
+
+        const badAttempts = await ProfileStore.set("marker-attempts", { provider: "openai", maxAttempts: marker }, ctx(dir));
+        assert.equal(badAttempts.ok, false);
+        assert.equal(badAttempts.errorCode, "CONFIG_INVALID");
+        assert.ok(!JSON.stringify(badAttempts).includes(marker), "marker leaked into maxAttempts rejection detail");
+    } finally {
+        rmrf(dir);
+    }
+});
+
+test("P2-3: a marker used as the profile name is never echoed back in detail", async () => {
+    const dir = mkdtemp();
+    const marker = `-${crypto.randomBytes(20).toString("hex")}`; // too long / shape still invalid as a name
+    try {
+        const result = await ProfileStore.set(marker, { provider: "openai" }, ctx(dir));
+        assert.equal(result.ok, false);
+        assert.ok(!JSON.stringify(result).includes(marker), "marker leaked into profile-name rejection detail");
+    } finally {
+        rmrf(dir);
+    }
+});
+
+test("P2-3: a marker in FALCON_LLM_PROFILE_DIR is never echoed back in detail", async () => {
+    const marker = crypto.randomBytes(16).toString("hex");
+    const result = await ProfileStore.list({ env: { FALCON_LLM_PROFILE_DIR: `relative/${marker}/path` }, cwd: SAFE_CWD });
+    assert.equal(result.ok, false);
+    assert.ok(!JSON.stringify(result).includes(marker), "marker leaked into FALCON_LLM_PROFILE_DIR rejection detail");
+});
+
 test("AC12: atomic write leaves no temp file behind after validation failure", async () => {
     const dir = mkdtemp();
     try {
@@ -404,6 +448,61 @@ test("C12: profile dir that is a symlink to a directory is rejected", async () =
         rmrf(realDir);
         rmrf(parentDir);
     }
+});
+
+test("C12 (P2-2): profile dir with a symlinked ANCESTOR segment (not the leaf) is rejected", async () => {
+    // outerTmp
+    //   realMiddle/           <- real directory
+    //     profiles/           <- real leaf, mode 0700 (what we'd want to use)
+    //   symMiddle -> realMiddle   <- symlinked ANCESTOR
+    // given = outerTmp/symMiddle/profiles — the leaf itself is a real
+    // directory; only an ancestor segment is a symlink. This must still be
+    // rejected under the C12-literal rule (realpath(given) === given).
+    const outerTmp = mkdtemp();
+    const realMiddle = path.join(outerTmp, "real-middle");
+    const symMiddle = path.join(outerTmp, "sym-middle");
+    const leaf = path.join(realMiddle, "profiles");
+    try {
+        fs.mkdirSync(realMiddle, { mode: 0o700 });
+        fs.mkdirSync(leaf, { mode: 0o700 });
+        fs.symlinkSync(realMiddle, symMiddle);
+        const given = path.join(symMiddle, "profiles");
+
+        // Sanity: the OLD leaf-only comparison would have accepted this,
+        // because realpath(given) === realpath(dirname(given)) + basename.
+        const realParent = fs.realpathSync(path.dirname(given));
+        const real = fs.realpathSync(given);
+        assert.equal(real, path.join(realParent, path.basename(given)), "fixture sanity check");
+        assert.notEqual(real, given, "fixture sanity check: given must differ from its own realpath");
+
+        const result = await ProfileStore.list({ env: { FALCON_LLM_PROFILE_DIR: given }, cwd: SAFE_CWD });
+        assert.equal(result.ok, false, "a symlinked ancestor segment must be rejected");
+        assert.equal(result.errorCode, "CONFIG_INVALID");
+    } finally {
+        rmrf(outerTmp);
+    }
+});
+
+test("C12: a fully canonical profile dir (no symlink anywhere in the path) is accepted", async () => {
+    const dir = mkdtemp();
+    try {
+        const result = await ProfileStore.list({ env: { FALCON_LLM_PROFILE_DIR: dir }, cwd: SAFE_CWD });
+        assert.equal(result.ok, true);
+    } finally {
+        rmrf(dir);
+    }
+});
+
+test("C12: default profile directory is derived from realpath(homedir), not the raw homedir string", () => {
+    // Additive pure export: given an already-realpath'd home directory,
+    // returns the default profile dir path. resolveDir() must call
+    // fs.promises.realpath(os.homedir()) before joining ".falcon/llm-profiles"
+    // so that a symlinked-ancestor home path (e.g. on some CI images) is not
+    // rejected by the C12-literal equality check.
+    assert.equal(typeof ProfileStore.defaultProfileDirFromRealHome, "function");
+    const realHome = fs.realpathSync(os.homedir());
+    const expected = path.join(realHome, ".falcon", "llm-profiles");
+    assert.equal(ProfileStore.defaultProfileDirFromRealHome(realHome), expected);
 });
 
 // ---------------------------------------------------------------------------

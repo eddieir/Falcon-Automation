@@ -10,6 +10,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const crypto = require("node:crypto");
 
 const ProviderContext = require(path.join("..", "..", "src", "core", "llm", "ProviderContext.js"));
 
@@ -260,4 +261,52 @@ test("getDefaultContext memoizes once per process (C2)", () => {
     const second = ProviderContext.getDefaultContext(noGet, {});
     assert.equal(first, second);
     ProviderContext._resetForTests();
+});
+
+// ── detail sanitisation: a planted runtime marker must never leak out ─────
+
+test("a marker planted in credentialEnvVar's NAME never appears in any detail", () => {
+    const marker = crypto.randomBytes(16).toString("hex");
+    const result = ProviderContext.resolve({
+        options: { provider: "openai", credentialEnvVar: `not-a-valid-name-${marker}` },
+        get: noGet,
+        env: fakeEnv({}),
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.detail.includes(marker), false, `detail must never contain the planted marker: ${result.detail}`);
+});
+
+test("a marker planted in model never appears in any detail (invalid charset path)", () => {
+    const marker = crypto.randomBytes(16).toString("hex");
+    const result = ProviderContext.resolve({
+        options: { provider: "gemini", model: `../${marker}`, credentialEnvVar: "GEMINI_API_KEY" },
+        get: noGet,
+        env: fakeEnv({ GEMINI_API_KEY: "tok-gemini" }),
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.errorCode, "CONFIG_INVALID");
+    assert.equal(result.detail.includes(marker), false, `detail must never contain the planted marker: ${result.detail}`);
+});
+
+test("a marker planted in endpoint never appears in any detail (invalid shape path)", () => {
+    const marker = crypto.randomBytes(16).toString("hex");
+    const result = ProviderContext.resolve({
+        options: { provider: "openai-compatible", allowCustomEndpoint: true, endpoint: `http://${marker}.internal` },
+        get: noGet,
+        env: fakeEnv({}),
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.detail.includes(marker), false, `detail must never contain the planted marker: ${result.detail}`);
+});
+
+test("a marker planted in a FALCON_LLM_TIMEOUT_MS value never appears in any detail", () => {
+    const marker = crypto.randomBytes(16).toString("hex");
+    const result = ProviderContext.resolve({
+        options: { provider: "openai", credentialEnvVar: "FAKEMARKER_TIMEOUT_API_KEY", timeoutMs: `not-a-number-${marker}` },
+        get: noGet,
+        env: fakeEnv({ FAKEMARKER_TIMEOUT_API_KEY: "tok-abc123" }),
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.errorCode, "CONFIG_INVALID");
+    assert.equal(result.detail.includes(marker), false, `detail must never contain the planted marker: ${result.detail}`);
 });

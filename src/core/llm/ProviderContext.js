@@ -443,7 +443,7 @@ function resolveInner(options, profile, get, env) {
         const parsed = validateIntSetting("timeoutMs", timeoutPick.value, bound);
         timeoutMs = parsed === null ? bound.def : parsed;
     } catch (error) {
-        return fail("CONFIG_INVALID", error.message);
+        return fail("CONFIG_INVALID", "timeoutMs has an invalid value.");
     }
     let maxAttempts;
     try {
@@ -451,7 +451,7 @@ function resolveInner(options, profile, get, env) {
         const parsed = validateIntSetting("maxAttempts", maxAttemptsPick.value, bound);
         maxAttempts = parsed === null ? bound.def : parsed;
     } catch (error) {
-        return fail("CONFIG_INVALID", error.message);
+        return fail("CONFIG_INVALID", "maxAttempts has an invalid value.");
     }
 
     let runBudget;
@@ -464,7 +464,7 @@ function resolveInner(options, profile, get, env) {
         maxPromptCandidates = resolveEnvOnlyInt("maxPromptCandidates", get);
         concurrency = resolveEnvOnlyInt("concurrency", get);
     } catch (error) {
-        return fail("CONFIG_INVALID", error.message);
+        return fail("CONFIG_INVALID", "A numeric FALCON_LLM_* setting has an invalid value.");
     }
 
     // --- Credential resolution (ADR-0019 C11; never crosses providers). ---
@@ -524,7 +524,7 @@ function resolveInner(options, profile, get, env) {
 
     const config = {
         provider,
-        model: isAnthropicOrGemini ? model : model,
+        model,
         azureResource,
         azureHostSuffix,
         azureDeployment,
@@ -593,7 +593,7 @@ function resolve(params = {}) {
     try {
         return resolveInner(options, profile, get, env);
     } catch (error) {
-        return fail("CONFIG_INVALID", `Unexpected provider-context error: ${error && error.message}`);
+        return fail("CONFIG_INVALID", "Unexpected provider-context error.");
     }
 }
 
