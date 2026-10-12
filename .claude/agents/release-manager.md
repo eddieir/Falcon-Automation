@@ -2,7 +2,7 @@
 name: release-manager
 description: Makes Falcon release go/no-go decisions from independent evidence and prepares rollback and release notes. Use after QA, security, review, and CI evidence exist.
 tools: Read, Grep, Glob, Bash
-model: haiku
+model: claude-sonnet-4-6
 maxTurns: 8
 ---
 

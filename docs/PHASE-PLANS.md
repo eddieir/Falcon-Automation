@@ -777,6 +777,8 @@ The full set of criteria is in the detailed plan and will be enforced by
 
 ## Phase 17 — Pluggable LLM providers
 
+**Status: implemented** on branch `phase-17/pluggable-llm-providers`; the owner decides the merge. See docs/phase-17-operations.md, docs/architecture/phase-17-pluggable-llm-providers.md, docs/architecture/phase-17-production-cycle-dashboard.md and docs/security/phase-17-threat-model.md.
+
 Renumbered and reduced. This was "Healing without a third party", and the larger half of it — a
 deterministic local tier that heals with no external call — shipped as Phase 14. What remains is the
 provider question, which is a procurement blocker rather than a capability gap, so it no longer
@@ -807,7 +809,7 @@ configuration selects.
 
 ## Phase 16 — Parallel execution
 
-**Status: implemented** on branch `phase-16/parallel-execution` (pull request #48); the owner decides the merge. Hosted CI results and review verdicts per head are in `docs/phase-16-review-verdicts.md` (see also docs/phase-16-operations.md).
+**Status: merged** via pull request #48 into `main`. Hosted CI results and review verdicts per head are in `docs/phase-16-review-verdicts.md` (see also docs/phase-16-operations.md).
 
 ### Why
 

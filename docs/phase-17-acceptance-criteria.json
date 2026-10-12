@@ -1,0 +1,875 @@
+{
+  "phase": 17,
+  "title": "Pluggable LLM providers and production-cycle dashboard",
+  "criteriaSource": "Phase 17 prompt acceptance criteria P17-AC01..AC18, extended by the Product Owner acceptance contract to AC19..AC32 (AC31 split into AC31a/AC31b)",
+  "purpose": [
+    "Registered so no criterion silently loses its implementation or test.",
+    "status 'done' requires real implementation and a real test; 'partial' means implemented but the criterion's full evidence is missing (see note); 'not-applicable' is only for the branch the owner did not choose.",
+    "tests/regression/p17-traceability.check.cjs fails on any done or partial row whose paths or tests do not exist."
+  ],
+  "verifiedByMeaning": {
+    "test": "An executing regression test asserts the criterion.",
+    "platform": "Third-party platform behaviour; Falcon wiring tested, outcome evidenced on hosted runs.",
+    "review": "Evidenced by a recorded review verdict or scan output rather than code."
+  },
+  "criteria": [
+    {
+      "id": "P17-AC01",
+      "section": "Providers",
+      "title": "Explicit provider selection",
+      "priority": "Must",
+      "text": "Supported providers openai, azure-openai, openai-compatible, disabled; case-sensitive, validated, deterministic; unset means no provider contact",
+      "implementation": [
+        "src/core/llm/LlmConfig.js",
+        "src/core/llm/LlmProviderRegistry.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-config.check.cjs",
+          "name": "AC01: unset provider resolves to disabled, zero provider contact"
+        },
+        {
+          "file": "tests/regression/p17-config.check.cjs",
+          "name": "AC01: same config resolves to the same selection"
+        },
+        {
+          "file": "tests/regression/p17-registry.check.cjs",
+          "name": "registry exact-match lookup is case-sensitive, no fuzzy match"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC02",
+      "section": "Providers",
+      "title": "OpenAI adapter",
+      "priority": "Must",
+      "text": "provider=openai preserves the Tier 3 request shape and numeric-only reply contract; healing tests pass unmodified through a stub provider",
+      "implementation": [
+        "src/core/llm/providers/OpenAIProvider.js",
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-sdk-transport.check.cjs",
+          "name": "(1) real SDK through guardedFetch: auth header, identity encoding, no org/project headers, body shape"
+        },
+        {
+          "file": "tests/regression/p17-healer-provider.check.cjs",
+          "name": "real provider replying '3' is chosen after live re-verification; recordTier3Invocation called once"
+        },
+        {
+          "file": "tests/regression/p17-registry.check.cjs",
+          "name": "registry: provider=openai resolves to a wired OpenAIProvider instance (Dev-02a)"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC03",
+      "section": "Providers",
+      "title": "Azure OpenAI adapter",
+      "priority": "Must",
+      "text": "Deployment is sent as model against https://<resource>.<suffix>/openai/v1/ with key authentication; Entra ID excluded",
+      "implementation": [
+        "src/core/llm/providers/AzureOpenAIProvider.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-provider-contract.check.cjs",
+          "name": "(AzureOpenAIProvider) AC03/AC20: path is /openai/v1/chat/completions, body.model is the deployment, Bearer auth, no api-version"
+        }
+      ],
+      "status": "partial",
+      "note": "Owner-accepted disposition: verified against a contract-complete mock (path, deployment as model, key authentication, no api-version); no live Azure resource was available and Entra ID authentication is out of scope. Remains partial."
+    },
+    {
+      "id": "P17-AC04",
+      "section": "Providers",
+      "title": "OpenAI-compatible adapter",
+      "priority": "Must",
+      "text": "Requires explicit operator opt-in; works against a loopback mock; non-opted-in or unsafe endpoints make zero requests",
+      "implementation": [
+        "src/core/llm/providers/OpenAICompatibleProvider.js",
+        "src/core/llm/transport/EndpointPolicy.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-isolation.check.cjs",
+          "name": "AC04: openai-compatible without allowCustomEndpoint=true returns CONFIG_ENDPOINT_OPT_IN_REQUIRED, zero I/O"
+        },
+        {
+          "file": "tests/regression/p17-isolation.check.cjs",
+          "name": "AC04: opt-in but loopback http not allowed is rejected with zero connections"
+        },
+        {
+          "file": "tests/regression/p17-config.check.cjs",
+          "name": "openai-compatible without opt-in flag -> CONFIG_ENDPOINT_OPT_IN_REQUIRED, zero requests"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC05",
+      "section": "Providers",
+      "title": "Provider isolation",
+      "priority": "Must",
+      "text": "With instrumented mock endpoints only the selected provider receives requests; all others receive exactly zero",
+      "implementation": [
+        "src/core/llm/LlmProviderRegistry.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-isolation.check.cjs",
+          "name": "AC05: each provider only ever talks to its own loopback server, never the other two"
+        },
+        {
+          "file": "tests/regression/p17-isolation.check.cjs",
+          "name": "AC05: registry.resolve builds exactly one provider class per id, never the others"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC06",
+      "section": "Providers",
+      "title": "No-provider behaviour",
+      "priority": "Must",
+      "text": "Without a provider Tier 1/2/2.5 and local healing continue; Tier 3 returns null non-fatally with a warning code",
+      "implementation": [
+        "src/core/llm/providers/DisabledProvider.js",
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-registry.check.cjs",
+          "name": "AC06: disabled provider is consulted but constructs no client, no network"
+        },
+        {
+          "file": "tests/regression/p17-healer-provider.check.cjs",
+          "name": "CONFIG_PROVIDER_REQUIRED: no provider configured => null, no SDK/factory call, no Tier3 trust record"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC07",
+      "section": "Healing",
+      "title": "Approval and trust preservation",
+      "priority": "Must",
+      "text": "Provider output never bypasses local validation, Phase 8 approval, quarantine or reuse rules; HealingTrust is unchanged",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js",
+        "src/core/AIHealer/HealingTrust.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/tier3-allowlist.check.cjs",
+          "name": "a valid index acts on the built selector and still records pending trust"
+        },
+        {
+          "file": "tests/regression/tier3-allowlist.check.cjs",
+          "name": "a free-form selector reply is rejected and nothing is clicked"
+        },
+        {
+          "file": "tests/regression/tier3-allowlist.check.cjs",
+          "name": "an out-of-range index is rejected"
+        },
+        {
+          "file": "tests/regression/p17-healer-provider.check.cjs",
+          "name": "rejected reply (${label}) => null, nothing approved, rejection reason unchanged"
+        },
+        {
+          "file": "tests/regression/p17-healer-provider.check.cjs",
+          "name": "BUDGET_EXHAUSTED: canSend() false => no Tier3 trust record and complete() never called"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC08",
+      "section": "Privacy",
+      "title": "Data minimisation",
+      "priority": "Must",
+      "text": "Outbound payload is at most 20 candidates and 8192 bytes; planted markers outside candidate context never reach the wire",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-healer-provider.check.cjs",
+          "name": "prompt bounds (S-09): <=20 candidate lines, <=8192 bytes, index mapping preserved"
+        },
+        {
+          "file": "tests/regression/p17-healer-provider.check.cjs",
+          "name": "prompt bounds with multibyte candidate text: byte cap holds, trailing candidates dropped whole"
+        },
+        {
+          "file": "tests/regression/p17-healer-provider.check.cjs",
+          "name": "data minimisation + redaction (AC08/S-17): markers in cookie/hidden-DOM/localStorage/env never reach prompt, request, logs, or report"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC09",
+      "section": "Failures",
+      "title": "Safe, distinguishable failures",
+      "priority": "Must",
+      "text": "Missing or invalid config, 401, 429, timeout, network, malformed, oversized and unsupported provider produce distinct codes with no secret leakage",
+      "implementation": [
+        "src/core/llm/LlmProvider.js",
+        "src/core/llm/transport/guardedFetch.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-provider-contract.check.cjs",
+          "name": "(${name}) AC09 fixture: 401 -> AUTH_FAILED, never retried"
+        },
+        {
+          "file": "tests/regression/p17-provider-contract.check.cjs",
+          "name": "(${name}) AC09 fixture: oversized response -> OVERSIZED"
+        },
+        {
+          "file": "tests/regression/p17-telemetry.check.cjs",
+          "name": "closed error-code list is frozen and matches ADR-0017 section 5"
+        },
+        {
+          "file": "tests/regression/p17-config.check.cjs",
+          "name": "numeric bounds: out-of-range FALCON_LLM_TIMEOUT_MS -> CONFIG_INVALID"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC10",
+      "section": "Telemetry",
+      "title": "Honest telemetry",
+      "priority": "Must",
+      "text": "Reports carry provider, model label, latency, outcome and normalised error code only; no prompts, keys, URLs or DOM",
+      "implementation": [
+        "src/core/llm/LlmTelemetry.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-telemetry.check.cjs",
+          "name": "S-10: telemetry serializes a success result from the allowlist only"
+        },
+        {
+          "file": "tests/regression/p17-telemetry.check.cjs",
+          "name": "extra/unknown fields on the input never survive serialization"
+        },
+        {
+          "file": "tests/regression/p17-telemetry.check.cjs",
+          "name": "S-16: escapeHtml neutralises HTML/script content for report rendering"
+        },
+        {
+          "file": "tests/regression/p17-healer-provider.check.cjs",
+          "name": "real provider result attaches an allowlisted llm telemetry block to the report row"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC11",
+      "section": "Benchmark",
+      "title": "Benchmark provider dimension",
+      "priority": "Must",
+      "text": "Phase 14 benchmark reports no-key and provider-protocol rows separately; mock rows are labelled protocol compatibility only",
+      "implementation": [
+        "src/core/locator/HealingBenchmark.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-benchmark-provider.check.cjs",
+          "name": "claimScope is a frozen, exact string"
+        },
+        {
+          "file": "tests/regression/p17-benchmark-provider.check.cjs",
+          "name": "buildProviderDimension: quality rates are identical with and without mock rows (no-key numbers unchanged)"
+        },
+        {
+          "file": "tests/regression/p17-benchmark-provider.check.cjs",
+          "name": "formatProviderDimensionText: labels mock rows with claimScope and never emits comparative/superiority wording"
+        },
+        {
+          "file": "tests/regression/p17-benchmark-provider.check.cjs",
+          "name": "runProviderProtocolRows: a REAL round trip hits the loopback mock server and records protocol success"
+        }
+      ],
+      "status": "done",
+      "note": "Owner-approved disposition: the criterion wording requires separately labelled no-key and provider rows without presenting mock compatibility as model quality, which is met. promptCoverage at 20 versus 60 candidates is not part of the wording and stays an unmeasured, documented limit (the Tier 2.5 corpus has no Tier 3 ranking data)."
+    },
+    {
+      "id": "P17-AC12",
+      "section": "Dashboard",
+      "title": "Real coordination dashboard",
+      "priority": "Must",
+      "text": "Dashboard renders actual persisted ledger events with models, sender, recipient, task, revision, evidence, state, blocker and verdict, refreshing within 2 seconds",
+      "implementation": [
+        "src/production-cycle/Server.js",
+        "src/production-cycle/ui/index.html",
+        "src/production-cycle/EventReader.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "AC12/AC13: page loads, 12 roles + coordinator, LIVE, event ids map"
+        },
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "AC12: complete triple shows routed card; incomplete shows awaiting"
+        },
+        {
+          "file": "tests/regression/p17-pc-routes.check.cjs",
+          "name": "GET /api/state returns combined shape"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC13",
+      "section": "Dashboard",
+      "title": "No fabricated communication",
+      "priority": "Must",
+      "text": "Every visible message maps to one persisted event id; no chain-of-thought fields exist",
+      "implementation": [
+        "src/production-cycle/EventSchema.js",
+        "src/production-cycle/ui/index.html"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "AC12/AC13: page loads, 12 roles + coordinator, LIVE, event ids map"
+        },
+        {
+          "file": "tests/regression/p17-pc-ui-static.check.cjs",
+          "name": "UI: no chain-of-thought field names read as properties"
+        },
+        {
+          "file": "tests/regression/p17-pc-schema.check.cjs",
+          "name": "unknown top-level key is rejected"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC14",
+      "section": "Dashboard",
+      "title": "Dashboard security",
+      "priority": "Must",
+      "text": "Loopback-only, read-only, escaped, bounded, redacted, path-safe; cannot expose repository or .git content",
+      "implementation": [
+        "src/production-cycle/Server.js",
+        "src/production-cycle/RunPaths.js",
+        "src/production-cycle/Redact.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-pc-server-security.check.cjs",
+          "name": "D-11: missing/invalid Host header is 403"
+        },
+        {
+          "file": "tests/regression/p17-pc-server-security.check.cjs",
+          "name": "D-13: connection hardening options are applied"
+        },
+        {
+          "file": "tests/regression/p17-pc-routes.check.cjs",
+          "name": "405 matrix: non-GET methods return Allow: GET"
+        },
+        {
+          "file": "tests/regression/p17-pc-routes.check.cjs",
+          "name": "D-19: non-loopback host rejected at create"
+        },
+        {
+          "file": "tests/regression/p17-pc-ui-static.check.cjs",
+          "name": "UI: forbidden DOM-injection APIs are absent"
+        },
+        {
+          "file": "tests/regression/p17-pc-runpaths.check.cjs",
+          "name": "resolveRunDir rejects a symlinked run directory"
+        },
+        {
+          "file": "tests/regression/p17-pc-reader.check.cjs",
+          "name": "a line with no newline that outgrows the line limit is dropped, not buffered"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC15",
+      "section": "Governance",
+      "title": "Governance consistency",
+      "priority": "Must",
+      "text": "Model policy, agent files and docs agree; Fable prohibited; only the two documented reuse pairs",
+      "implementation": [
+        "CLAUDE.md",
+        ".claude/agents",
+        "docs/CLAUDE_CODE_PRODUCTION_HOUSE.md"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-governance.check.cjs",
+          "name": "AC15: CLAUDE.md routing table == house-doc table == agent front matter"
+        },
+        {
+          "file": "tests/regression/p17-governance.check.cjs",
+          "name": "AC15: exactly two reuse pairs, other six distinct"
+        },
+        {
+          "file": "tests/regression/p17-governance.check.cjs",
+          "name": "AC15: no stray fable mention outside prohibition contexts"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC16",
+      "section": "Security",
+      "title": "Security gate (GitHub Advanced Security)",
+      "priority": "Must",
+      "text": "GitHub Advanced Security is the authoritative gate: CodeQL JavaScript/TypeScript and Actions analyses green on the final head, the pull-request code-scanning result has zero unresolved alerts, and GitHub secret-scanning results are clean where available; npm audit is dependency-hygiene evidence and GitGuardian is advisory. Third-party scanners are not applicable by owner security policy",
+      "implementation": [
+        "docs/security/phase-17-threat-model.md",
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "platform",
+      "tests": [],
+      "status": "done",
+      "note": "Owner-approved governance change (not a scan result): the earlier requirement for third-party scanner evidence is removed and those fields are NOT APPLICABLE — excluded by owner security policy. Evidence is the hosted CodeQL (JavaScript/TypeScript and Actions) and PR code-scanning results on the final head, read from GitHub and recorded in the pull request and the release record."
+    },
+    {
+      "id": "P17-AC17",
+      "section": "Compatibility",
+      "title": "Compatibility and regression",
+      "priority": "Must",
+      "text": "Existing non-provider behaviour and public interfaces stay compatible; documented breaking changes only",
+      "implementation": [
+        "src/core/AIHealer/AIHealer.js",
+        "package.json"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/tier3-allowlist.check.cjs",
+          "name": "a type action fills the chosen field only"
+        },
+        {
+          "file": "tests/regression/tier3-allowlist.check.cjs",
+          "name": "rejection logs a report row with reason and status and persists nothing"
+        },
+        {
+          "file": "tests/regression/p17-healer-provider.check.cjs",
+          "name": "CONFIG_PROVIDER_REQUIRED: no provider configured => null, no SDK/factory call, no Tier3 trust record"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC18",
+      "section": "Docs",
+      "title": "Operator documentation",
+      "priority": "Must",
+      "text": "Configuration, privacy boundary, provider examples, dashboard use, limitations, rollback and troubleshooting are accurate; env examples genuinely blank",
+      "implementation": [
+        "docs/phase-17-operations.md",
+        ".env.example",
+        "README.md"
+      ],
+      "verifiedBy": "review",
+      "tests": [
+        {
+          "file": "tests/regression/p17-config.check.cjs",
+          "name": "numeric bounds: unset settings fall back to ADR defaults"
+        }
+      ],
+      "status": "done",
+      "note": "Prose accuracy is evidenced by the Code Reviewer verdicts; the defaults quoted in .env.example and the operations guide are pinned to the code by the config test."
+    },
+    {
+      "id": "P17-AC19",
+      "section": "Providers",
+      "title": "Configuration negatives",
+      "priority": "Must",
+      "text": "Blank provider is unset; wrong-case or unknown values fail with zero requests; conflicting settings and unknown FALCON_LLM_ keys are reported",
+      "implementation": [
+        "src/core/llm/LlmConfig.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-config.check.cjs",
+          "name": "AC19: blank provider is treated as unset"
+        },
+        {
+          "file": "tests/regression/p17-config.check.cjs",
+          "name": "AC19: conflicting settings (AZURE_* with non-azure provider) -> CONFIG_CONFLICT"
+        },
+        {
+          "file": "tests/regression/p17-config.check.cjs",
+          "name": "AC19: unknown FALCON_LLM_* key logs one warning naming the key"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC20",
+      "section": "Security",
+      "title": "Endpoint policy",
+      "priority": "Must",
+      "text": "https only except opted-in loopback http; metadata and link-local always denied; private ranges, IPv4-mapped forms, userinfo, rebinding and redirects are rejected",
+      "implementation": [
+        "src/core/llm/transport/EndpointPolicy.js",
+        "src/core/llm/transport/guardedFetch.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-endpoint-policy.check.cjs",
+          "name": "always-deny: AWS IMDS v6 stays denied even with allowPrivate+allowLoopback+extraAllowedPorts"
+        },
+        {
+          "file": "tests/regression/p17-endpoint-policy.check.cjs",
+          "name": "IPv4-mapped ::ffff:169.254.169.254 is always denied regardless of opts"
+        },
+        {
+          "file": "tests/regression/p17-endpoint-policy.check.cjs",
+          "name": "assertAllResolvedAllowed rejects the whole lookup if any resolved address is denied"
+        },
+        {
+          "file": "tests/regression/p17-transport.check.cjs",
+          "name": "redirect response is rejected and never followed"
+        },
+        {
+          "file": "tests/regression/p17-transport.check.cjs",
+          "name": "DNS-rebinding: second resolution is never used, pinned address is the one connected"
+        },
+        {
+          "file": "tests/regression/p17-transport.check.cjs",
+          "name": "mixed resolved answers (public + private) are rejected with zero connections"
+        },
+        {
+          "file": "tests/regression/p17-transport-pinned.check.cjs",
+          "name": "hostname endpoint connects through the pinned lookup (Node { all: true } contract)"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC21",
+      "section": "Concurrency",
+      "title": "Concurrent Tier 3 calls",
+      "priority": "Must",
+      "text": "Two concurrent calls do not cross-talk and the concurrency cap holds",
+      "implementation": [
+        "src/core/llm/Semaphore.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-bounds.check.cjs",
+          "name": "AC21: two concurrent complete() calls each get their own result, mock sees exactly 2 requests"
+        },
+        {
+          "file": "tests/regression/p17-bounds.check.cjs",
+          "name": "AC21: concurrency cap of 1 serialises two complete() calls on one provider instance"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC22",
+      "section": "Dashboard",
+      "title": "Concurrent ledger appends",
+      "priority": "Must",
+      "text": "Concurrent appends through the append primitive yield parseable, chained, non-duplicated events",
+      "implementation": [
+        "src/production-cycle/EventLog.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-pc-append.check.cjs",
+          "name": "AC22: two writers x200 appendEvent into one run dir produce 400 valid chained events"
+        },
+        {
+          "file": "tests/regression/p17-pc-append.check.cjs",
+          "name": "SIGKILL variant: a stale lock left by a killed holder is recoverable"
+        }
+      ],
+      "status": "done",
+      "note": "Retargeted from N cross-process writers to the append primitive under concurrent invocation because the coordinator is the sole ledger writer; accepted by QA."
+    },
+    {
+      "id": "P17-AC23",
+      "section": "Privacy",
+      "title": "Planted markers never leak",
+      "priority": "Must",
+      "text": "Planted keys, headers, prompts and tokens appear zero times in logs, reports, ledger, dashboard and errors",
+      "implementation": [
+        "src/production-cycle/Redact.js",
+        "src/core/llm/LlmTelemetry.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-pc-redact.check.cjs",
+          "name": "D-22: M06 short hostile HTML is accepted by Redact, stays a plain escaped string"
+        },
+        {
+          "file": "tests/regression/p17-pc-redact.check.cjs",
+          "name": "pattern review: ghp_ GitHub token is refused"
+        },
+        {
+          "file": "tests/regression/p17-pc-redact.check.cjs",
+          "name": "DEF-01: ${variantName} is refused in summary"
+        },
+        {
+          "file": "tests/regression/p17-pc-reader.check.cjs",
+          "name": "M07: secret written directly into a line's summary field never leaks"
+        },
+        {
+          "file": "tests/regression/p17-transport.check.cjs",
+          "name": "error message and Logger output never contain a planted marker"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC24",
+      "section": "Failures",
+      "title": "Retry, budget and backoff",
+      "priority": "Must",
+      "text": "Attempts per call are bounded, backoff is capped, a per-run budget returns BUDGET_EXHAUSTED, 400/401 are never retried",
+      "implementation": [
+        "src/core/llm/RetryPolicy.js",
+        "src/core/llm/LlmBudget.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-bounds.check.cjs",
+          "name": "AC24: continuous 429 -> attempts == maxAttempts(2), mock sees exactly 2 requests, 400 never retried"
+        },
+        {
+          "file": "tests/regression/p17-bounds.check.cjs",
+          "name": "AC24: continuous 500 -> attempts == maxAttempts(2), budget exhaustion stops further requests"
+        },
+        {
+          "file": "tests/regression/p17-bounds.check.cjs",
+          "name": "RetryPolicy: never retries AUTH_FAILED or BAD_REQUEST"
+        }
+      ],
+      "status": "done",
+      "note": "The call budget is per process; with N workers the effective ceiling is N times the budget."
+    },
+    {
+      "id": "P17-AC25",
+      "section": "Failures",
+      "title": "Timeout bound",
+      "priority": "Must",
+      "text": "A hanging endpoint aborts within the timeout plus one second with TIMEOUT",
+      "implementation": [
+        "src/core/llm/transport/guardedFetch.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-transport.check.cjs",
+          "name": "hang times out within bound"
+        },
+        {
+          "file": "tests/regression/p17-provider-contract.check.cjs",
+          "name": "(${name}) AC09 fixture: timeout -> TIMEOUT"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC26",
+      "section": "Failures",
+      "title": "Oversized response cap",
+      "priority": "Must",
+      "text": "Reading stops at the byte cap with OVERSIZED and bounded memory",
+      "implementation": [
+        "src/core/llm/transport/guardedFetch.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-transport.check.cjs",
+          "name": "oversized response rejected via Content-Length"
+        },
+        {
+          "file": "tests/regression/p17-transport.check.cjs",
+          "name": "oversized chunked stream rejected and memory stays bounded"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC27",
+      "section": "Dashboard",
+      "title": "Partial trailing line",
+      "priority": "Must",
+      "text": "Complete events render, a partial last line is counted and never rendered, and appears once completed",
+      "implementation": [
+        "src/production-cycle/EventReader.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "AC27: partial trailing line shown as count only; complete events still render"
+        },
+        {
+          "file": "tests/regression/p17-pc-reader.check.cjs",
+          "name": "partial trailing line: counted as partialBytes only, appears once completed"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC28",
+      "section": "Dashboard",
+      "title": "Reconnect and dedupe",
+      "priority": "Must",
+      "text": "A disconnected indicator appears within 5 seconds and restored events show no duplicates",
+      "implementation": [
+        "src/production-cycle/ui/index.html"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "AC28: reconnect — DISCONNECTED <=5s, then LIVE on restart, no duplicate event ids"
+        },
+        {
+          "file": "tests/regression/p17-pc-reader.check.cjs",
+          "name": "duplicate eventId is not double-counted and is flagged as tampered"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC29",
+      "section": "Dashboard",
+      "title": "Hostile content rendered safely",
+      "priority": "Must",
+      "text": "Hostile HTML and javascript: strings are rendered literally; CSP applies and no script runs",
+      "implementation": [
+        "src/production-cycle/ui/index.html",
+        "src/production-cycle/Server.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "AC29: hostile HTML/javascript rendered as literal text"
+        },
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "AC29: CSP header matches response and nonce rotates per navigation"
+        },
+        {
+          "file": "tests/regression/p17-pc-redact.check.cjs",
+          "name": "D-22: M06 short hostile HTML is accepted by Redact, stays a plain escaped string"
+        }
+      ],
+      "status": "done",
+      "note": "The hostile summary text is not shown in the page body within the observation window; execution, injected elements and anchors are absent, which is the safety property."
+    },
+    {
+      "id": "P17-AC30",
+      "section": "Dashboard",
+      "title": "Path traversal",
+      "priority": "Must",
+      "text": "Traversal, encoded, absolute and symlink paths return 403/404 with zero outside bytes",
+      "implementation": [
+        "src/production-cycle/Server.js",
+        "src/production-cycle/RunPaths.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/browser.spec.js",
+          "name": "AC30: path traversal and sensitive paths return 403/404 with no file bytes"
+        },
+        {
+          "file": "tests/regression/p17-pc-routes.check.cjs",
+          "name": "path-attack subset and no filesystem route"
+        }
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P17-AC31",
+      "section": "Providers",
+      "title": "Legacy key alone (branch 1a)",
+      "priority": "Must",
+      "text": "OPENAI_API_KEY with no provider selected makes zero requests and reports CONFIG_PROVIDER_REQUIRED",
+      "implementation": [
+        "src/core/llm/LlmConfig.js"
+      ],
+      "verifiedBy": "test",
+      "tests": [
+        {
+          "file": "tests/regression/p17-config.check.cjs",
+          "name": "AC31a/S-11: OPENAI_API_KEY alone (no provider) -> CONFIG_PROVIDER_REQUIRED, zero requests, no key in message"
+        },
+        {
+          "file": "tests/regression/p17-config.check.cjs",
+          "name": "CONFIG_PROVIDER_REQUIRED warning fires only once per process"
+        }
+      ],
+      "status": "done",
+      "note": "Applies the owner decision OD-1 = 1a. The alternative branch 1b is not applicable and is recorded as AC31b."
+    },
+    {
+      "id": "P17-AC32",
+      "section": "CI",
+      "title": "CI is mock-only on Node 24",
+      "priority": "Must",
+      "text": "CI gates pass; Tier 3 tests use mocks only, no real key and no uncontrolled third-party host",
+      "implementation": [
+        ".github/workflows/ci.yml"
+      ],
+      "verifiedBy": "platform",
+      "tests": [
+        {
+          "file": "tests/regression/p17-transport.check.cjs",
+          "name": "no proxy settings are consulted even with proxy env vars pointing at a decoy"
+        }
+      ],
+      "status": "done",
+      "note": "The workflow no longer passes any OpenAI secret. Node 24 results are the hosted CI run on the PR head."
+    },
+    {
+      "id": "P17-AC31b",
+      "section": "Providers",
+      "title": "Legacy key alone (branch 1b)",
+      "priority": "Must",
+      "text": "Alternative to AC31a: legacy key selects openai for one release with a deprecation warning",
+      "implementation": [],
+      "verifiedBy": "review",
+      "tests": [],
+      "status": "not-applicable",
+      "note": "Owner chose branch 1a (explicit provider required); this branch does not apply."
+    }
+  ]
+}

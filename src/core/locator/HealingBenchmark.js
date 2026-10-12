@@ -538,9 +538,22 @@ async function _main() {
   const outPath = getFlag("--out", path.join(process.cwd(), "reports", "healing_benchmark.json"));
   const corpusDir = getFlag("--corpus", DEFAULT_CORPUS_DIR);
   const headless = !args.includes("--headed");
+  // Additive, opt-in only: `--providers=mock` appends the AC11 provider
+  // dimension (protocol rows only, never a healing-quality claim) to the
+  // written artifact. Default behavior (no flag) is unchanged.
+  const providersFlag = getFlag("--providers", null);
 
   Logger.info(`HealingBenchmark: running corpus at ${corpusDir}`);
   const report = await runBenchmark({ corpusDir, headless });
+
+  if (providersFlag === "mock") {
+    const mockRows = await runProviderProtocolRows({ providers: ["openai-compatible"], corpusSample: 5 });
+    report.providerDimension = buildProviderDimension({ report, mockRows });
+    // eslint-disable-next-line no-console
+    console.log(`\nProvider dimension (${CLAIM_SCOPE}):`);
+    // eslint-disable-next-line no-console
+    console.log(formatProviderDimensionText(report.providerDimension));
+  }
 
   await fs.mkdir(path.dirname(outPath), { recursive: true });
   await fs.writeFile(outPath, JSON.stringify(report, null, 2), "utf8");
@@ -607,3 +620,191 @@ module.exports = {
   measureLargeDomPerformance,
   classifyOutcome,
 };
+
+/* -----------------------------------------------------------------------
+ * P17-AC11 additive extension: a provider dimension on top of the existing
+ * no-key Tier 2.5 report. Nothing above this point is modified — the
+ * no-key numbers this benchmark already produces are untouched. These
+ * additions are strictly ADDITIVE and MUST stay structurally isolated from
+ * the runtime healing path and from src/core/llm at module load time: the
+ * `require("../llm/...")` call below lives INSIDE runProviderProtocolRows,
+ * not at the top of this file, specifically so that simply requiring
+ * HealingBenchmark.js never pulls in the provider registry.
+ * ----------------------------------------------------------------------- */
+
+const CLAIM_SCOPE = "protocol compatibility only, not healing quality";
+
+/**
+ * Build the provider dimension for a report: one `no-key` row (the
+ * existing Tier 2.5 numbers, byte-for-byte what `_buildReport` already
+ * produced) plus zero or more `provider:<id>@mock` protocol rows. The
+ * healing-quality rates are ALWAYS taken from the no-key row alone —
+ * passing mock rows never changes `qualityRates`.
+ */
+function buildProviderDimension({ report, mockRows = [] } = {}) {
+  const noKeyRow = {
+    provider: "no-key",
+    N: report.N,
+    rates: { ...report.rates },
+    counts: { ...report.counts },
+  };
+  const rows = [noKeyRow];
+  for (const r of mockRows) {
+    rows.push({
+      provider: `provider:${r.id}@mock`,
+      claimScope: CLAIM_SCOPE,
+      protocol: {
+        attempted: r.attempted,
+        requestAccepted: r.requestAccepted,
+        replyParsed: r.replyParsed,
+        indexInRange: r.indexInRange,
+        hits: typeof r.hits === "number" ? r.hits : null,
+      },
+      error: r.error || null,
+      modelLabel: r.modelLabel || null,
+      deployment: r.deployment || null,
+      runDate: r.runDate || null,
+    });
+  }
+  return {
+    rows,
+    qualityRates: { ...report.rates },
+    qualitySource: "no-key",
+  };
+}
+
+/** Render the provider dimension as plain text (CLI/Markdown). Never emits comparative/superiority wording. */
+function formatProviderDimensionText(dimension) {
+  const lines = [];
+  for (const row of dimension.rows) {
+    if (row.provider === "no-key") {
+      lines.push(
+        `no-key (N=${row.N}): correct_heal=${(row.rates.correct_heal * 100).toFixed(1)}% `
+        + `false_heal=${(row.rates.false_heal * 100).toFixed(1)}% refused=${(row.rates.refused * 100).toFixed(1)}% `
+        + `no_candidate=${(row.rates.no_candidate * 100).toFixed(1)}%`
+      );
+    } else {
+      lines.push(
+        `${row.provider} [claimScope: ${row.claimScope}]: `
+        + `requestAccepted=${row.protocol.requestAccepted}/${row.protocol.attempted} `
+        + `replyParsed=${row.protocol.replyParsed}/${row.protocol.attempted} `
+        + `indexInRange=${row.protocol.indexInRange}/${row.protocol.attempted}`
+        + `${row.modelLabel ? ` model=${row.modelLabel}` : ""}`
+        + `${row.deployment ? ` deployment=${row.deployment}` : ""}`
+        + `${row.runDate ? ` runDate=${row.runDate}` : ""}`
+      );
+    }
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Drive real provider objects from src/core/llm against LOCAL loopback mock
+ * HTTP servers created here (no real network, no real keys). Records ONLY
+ * protocol outcomes (request accepted, reply parsed, index in range) —
+ * never a healing-quality judgement. Provider modules are required lazily,
+ * inside this function only, so `require("./HealingBenchmark")` alone
+ * never loads src/core/llm.
+ */
+async function runProviderProtocolRows({ providers = ["openai-compatible"], corpusSample = 5, forceConfigError = false } = {}) {
+  const http = require("node:http");
+  const dns = require("node:dns");
+  const https = require("node:https");
+  const OpenAICompatibleProvider = require("../llm/providers/OpenAICompatibleProvider");
+
+  const rows = [];
+  for (const providerId of providers) {
+    if (providerId !== "openai-compatible") {
+      throw new Error(`runProviderProtocolRows: unsupported mock provider id "${providerId}"`);
+    }
+
+    let requestAccepted = 0;
+    let replyParsed = 0;
+    let indexInRange = 0;
+    let hits = 0;
+    const attempted = corpusSample;
+    const errors = [];
+
+    const server = http.createServer((req, res) => {
+      hits += 1;
+      let body = "";
+      req.on("data", (c) => { body += c; });
+      req.on("end", () => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          id: "mock-completion",
+          object: "chat.completion",
+          choices: [{ index: 0, message: { role: "assistant", content: "3" }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 },
+        }));
+      });
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = server.address().port;
+    const baseUrl = `http://127.0.0.1:${port}/v1`;
+
+    try {
+      // Resolved-config shape (camelCase), the same shape the provider
+      // contract/isolation suites use — NOT the raw FALCON_LLM_* strings.
+      // deps.baseUrl + deps.policyOpts stand in for the operator-configured
+      // endpoint/allow-lists, same pattern as p17-provider-contract.check.cjs.
+      const config = {
+        provider: "openai-compatible",
+        model: "mock-model",
+        apiKey: "mock-key",
+        endpoint: forceConfigError ? null : baseUrl,
+        allowCustomEndpoint: !forceConfigError,
+        allowHttpLoopback: true,
+        timeoutMs: 5000,
+        maxAttempts: 1,
+        runBudget: corpusSample + 1,
+        maxResponseBytes: 65536,
+        concurrency: 1,
+      };
+      const deps = {
+        baseUrl,
+        policyOpts: { allowLoopback: true, allowHttpLoopback: true, extraAllowedPorts: [port] },
+        transportDeps: { lookup: dns.lookup, httpRequest: http.request, httpsRequest: https.request },
+      };
+
+      const provider = new OpenAICompatibleProvider(config, deps);
+
+      for (let i = 0; i < corpusSample; i++) {
+        const gate = typeof provider.canSend === "function" ? provider.canSend() : { ok: true };
+        if (!gate.ok) {
+          errors.push(gate.errorCode);
+          continue;
+        }
+        const result = await provider.complete({ prompt: `pick candidate index ${i}`, maxOutputTokens: 80, temperature: 0 });
+        if (result.ok) {
+          requestAccepted += 1;
+          const match = /^(\d{1,3})$/.exec(String(result.text).trim());
+          if (match) {
+            replyParsed += 1;
+            const idx = Number(match[1]);
+            if (idx >= 0 && idx < 20) indexInRange += 1;
+          }
+        } else {
+          // A config/policy/transport failure is recorded as an explicit
+          // error, never silently folded into a protocol-success count.
+          errors.push(result.errorCode);
+        }
+      }
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+
+    const row = { id: providerId, requestAccepted, replyParsed, indexInRange, attempted, hits };
+    if (errors.length > 0 && requestAccepted === 0) {
+      row.error = errors[0];
+      row.errors = errors;
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+module.exports.CLAIM_SCOPE = CLAIM_SCOPE;
+module.exports.buildProviderDimension = buildProviderDimension;
+module.exports.formatProviderDimensionText = formatProviderDimensionText;
+module.exports.runProviderProtocolRows = runProviderProtocolRows;

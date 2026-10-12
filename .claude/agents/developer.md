@@ -2,7 +2,7 @@
 name: developer
 description: Implements approved Falcon stories and bug fixes with focused tests. Use only after acceptance criteria and technical direction are clear.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: sonnet
+model: claude-sonnet-5
 effort: medium
 maxTurns: 16
 ---

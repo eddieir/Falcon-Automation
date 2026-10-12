@@ -8,9 +8,26 @@ Build Falcon as a trustworthy, production-grade, AI-powered Playwright test auto
 
 For any non-trivial feature, bug, or release, use the `/production-cycle` skill. Delegate by role; do not ask one agent to invent requirements, implement, and approve its own work.
 
-The main session coordinates on Sonnet at medium effort. Invoke only specialists whose outputs are needed; the ordered phases are dependencies, not a requirement to run all 12 agents. See the skill's routing table for documentation, small bug, standard, and full cycles.
+The main session coordinates on Sonnet 5.5 at medium effort. Invoke only specialists whose outputs are needed; the ordered phases are dependencies, not a requirement to run all 12 agents. See the skill's routing table for documentation, small bug, standard, and full cycles.
 
-Each agent has an explicit Haiku or Sonnet model and a turn limit. Never override a role with Opus, Fable, `inherit`, extended-context variants, or a premium fallback. Check effective session/provider overrides before dispatch. These are economical defaults, not a billing cap.
+Each agent has an explicit, version-specific model ID in its front matter and a turn limit. This table is the single source of truth for routing (Phase 17 policy, set by the owner; it supersedes the earlier Haiku/Sonnet-only rule):
+
+| Role | Model ID |
+|---|---|
+| Production Director (main session) | `claude-sonnet-5-5` |
+| Product Manager | `claude-haiku-4-5` |
+| Product Owner | `claude-haiku-5-5` |
+| Project Manager | `claude-sonnet-4-6` |
+| Solution Architect | `claude-opus-5` |
+| Developer | `claude-sonnet-5` |
+| QA Engineer | `claude-opus-4-7` |
+| Code Reviewer | `claude-opus-4-8` |
+| Security Engineer | `claude-opus-5-5` |
+| DevOps Engineer | `claude-opus-4-6` |
+| Technical Writer | `claude-haiku-4-5` |
+| Release Manager | `claude-sonnet-4-6` |
+
+Fable models are prohibited: never select, invoke, probe, or fall back to one. Never use `inherit`, aliases, extended-context variants, or a premium fallback for a role. Model reuse is limited to two low-risk pairs (Product Manager/Technical Writer, Project Manager/Release Manager); Solution Architect, Developer, QA Engineer, Code Reviewer, Security Engineer, and DevOps Engineer keep distinct models. Verify each role's effective model from runtime metadata at its first real dispatch and record it in the ledger. If a model is unsupported, remapped, or unverifiable, stop before accepting that agent's output and report the exact error; never substitute silently. Check effective session/provider overrides before dispatch. This is a routing policy, not a billing cap.
 
 Give each task one owner, an allowed file scope, acceptance IDs, relevant evidence, a recipient, and an effort bound. The coordinator relays compact result packets between specialists and owns the run ledger; workers do not rediscover completed work or assume private peer messaging. Reuse valid evidence, share only deltas, and invalidate affected verdicts when the reviewed revision changes.
 
