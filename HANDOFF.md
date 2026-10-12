@@ -2,8 +2,8 @@
 
 > **For:** Any engineer or Claude Code session continuing this work
 > **Author:** Peyman Iravani — QA Manager / Tech Lead
-> **Last updated:** Phase 15 ("Run history and trend") merged on `main` at `6e7f5f1` via #46. Phases 1–15 are merged and verified.
-> **Phase 16 (Parallel execution): pull request #48.** Branch `phase-16/parallel-execution`; the owner decides the merge. Operations guide: `docs/phase-16-operations.md`.
+> **Last updated:** Phase 16 ("Parallel execution") merged on `main` via #48. Phases 1–16 are merged and verified.
+> **Phase 17 (Pluggable LLM providers): implemented** on branch `phase-17/pluggable-llm-providers`; the owner decides the merge. Operations guide: `docs/phase-17-operations.md`.
 > **Repo:** https://github.com/eddieir/Falcon-Automation
 
 ---
@@ -16,7 +16,7 @@
 
 ## 1. Project in One Paragraph
 
-Falcon is a Node.js test automation framework built on Playwright. Its differentiator is a genuine layered self-healing engine: when a selector fails, it retries with smart backoff (Tier 1), replays a persisted locator cache (Tier 2), scores live candidates against the element's stored signature using a deterministic local matcher with no model and no network (Tier 2.5, added in Phase 14), and finally calls an OpenAI LLM to infer a working alternative selector at runtime (Tier 3). The framework also runs an autonomous crawl of any web app, generates its own test scenarios from the live DOM, compares screenshots pixel-by-pixel for visual regression, streams all of this to a real-time browser dashboard, and (as of Phase 6) runs its DB test suite against a real Postgres in CI with results that actually gate merges.
+Falcon is a Node.js test automation framework built on Playwright. Its differentiator is a genuine layered self-healing engine: when a selector fails, it retries with smart backoff (Tier 1), replays a persisted locator cache (Tier 2), scores live candidates against the element's stored signature using a deterministic local matcher with no model and no network (Tier 2.5, added in Phase 14), and optionally calls an LLM to infer a working alternative selector at runtime (Tier 3, via pluggable provider selection). The framework also runs an autonomous crawl of any web app, generates its own test scenarios from the live DOM, compares screenshots pixel-by-pixel for visual regression, streams all of this to a real-time browser dashboard, and (as of Phase 6) runs its DB test suite against a real Postgres in CI with results that actually gate merges.
 
 ---
 
@@ -41,8 +41,8 @@ Two things worth knowing about this history if you're new to the repo:
 BROWSER=chromium           # chromium | firefox | webkit
 HEADLESS=true               # true for CI; false to watch the browser locally
 
-# ── OpenAI — optional, enables Tier 3 AI self-healing ──────────────────────
-OPENAI_API_KEY=              # every call site guards `if (!process.env.OPENAI_API_KEY) return null`.
+# ── LLM — optional, Tier 3 AI self-healing (Phase 17: explicit FALCON_LLM_PROVIDER required) ──
+OPENAI_API_KEY=              # credential source only when FALCON_LLM_PROVIDER=openai; never selects a provider.
                               # Ships blank now — see the QA-hardening note below on why a
                               # placeholder string here used to be actively harmful.
 
@@ -180,7 +180,7 @@ npm install
 npx playwright install --with-deps chromium
 
 cp .env.example .env
-# OPENAI_API_KEY is optional — see §3.
+# Tier 3 is optional and needs FALCON_LLM_PROVIDER — see docs/phase-17-operations.md.
 
 node tests/ui/LoginTest.js
 node tests/ui/CheckoutTest.js
@@ -291,7 +291,7 @@ Resolved in Phase 13: staleness thresholds and rehabilitation candidates for qua
 - **Never `console.log`** — always `Logger.info / Logger.warning / Logger.error`.
 - **Never `fs.writeFileSync`/`fs.readFileSync` on a hot path** — prefer `fs.promises.*`.
 - **Path construction**: `path.join(__dirname, ...)` with the correct `..` count — get it wrong and it fails silently more often than it throws.
-- **No raw axios calls to OpenAI** — always the `openai` SDK, lazy-initialised, `if (!process.env.OPENAI_API_KEY) return null`.
+- **No raw axios calls to OpenAI** — always the `openai` SDK behind the Phase 17 provider layer (`src/core/llm/`), lazy-initialised, and Tier 3 stays off unless `FALCON_LLM_PROVIDER` is set.
 - **Error handling**: every test's `runTest()` wraps `Middleware.beforeTest`/`afterTest` in try/catch/finally and pushes a real `{name, status, error?}` entry — a test that doesn't push a result reports `NO_TESTS_RUN`.
 - **Process exit codes matter** (Phase 6): `ReportManager.generateReport()` sets `process.exitCode` from the tallied outcome — verify actual exit codes when testing CI-sensitive changes, not just the printed summary.
 - **DB-dependent tests must check `this.dbClient` before using it**, and skip (not fail) if it's `null` (Phase 6 pattern, `tests/db/*.js`).
@@ -337,6 +337,6 @@ Runs on push/PR to `main`, `New_era_Falcon`, `feat/**`. **Two independent jobs s
 
 `GoogleSearchTest.js` is deliberately not in either job — see §9.
 
-Required secret: `OPENAI_API_KEY` (optional at runtime, `test` job only). `DB_*` vars for the CI Postgres are plain job-level `env:` values (disposable, no real-secret relation). No `DASHBOARD_TOKEN` is set in CI — the dashboard itself isn't started there (`falcon.js --no-dashboard`), so auth isn't exercised end-to-end by a real CI browser session, only by `DashboardAuth.check.js`'s direct HTTP/socket-client tests against an ephemeral in-process instance.
+No LLM secret is passed to CI as of Phase 17 (CI is mock-only; the repository secret `OPENAI_API_KEY` is unused and can be removed by the owner). `DB_*` vars for the CI Postgres are plain job-level `env:` values (disposable, no real-secret relation). No `DASHBOARD_TOKEN` is set in CI — the dashboard itself isn't started there (`falcon.js --no-dashboard`), so auth isn't exercised end-to-end by a real CI browser session, only by `DashboardAuth.check.js`'s direct HTTP/socket-client tests against an ephemeral in-process instance.
 
 **Verified against a real run, not assumed**, as part of the QA-hardening pass: the latest actual `main` run (triggered by the PR #15 merge) shows both jobs green — `regression` reporting `tests 183 / pass 183 / fail 0` and "30 passed", `test` reporting all 19 steps green including the autonomous pipeline (3/3 generated scenarios) and the native Playwright suite (4/4 passed against the real seeded CI Postgres — the same suite's DB test only shows as "skipped" when run locally with no DB configured, which is the correct, intended difference).
