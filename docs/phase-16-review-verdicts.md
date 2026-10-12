@@ -25,3 +25,19 @@ Falcon CI (test, regression, shards 1-3, aggregate, shard-negative), CodeQL, bot
 ## Post-merge verification
 
 On the first run on `main`: all checks green; the aggregate job's "Save Falcon state" step is green; `gh cache list` shows `falcon-state-agg-main-<run id>`. If the save fails, the next run starts from an empty state (safe, loses history); open a follow-up.
+
+## Local run of the required commands
+
+Run on 2026-10-12 on code head `0e68ce4` (the code is unchanged since): Darwin arm64, 10 CPUs, Node v22.19.0, headless Chromium, no retries, no skips. The hosted CI job runs `npm ci` on every head; it was not repeated locally because it deletes `node_modules`.
+
+| Command | Result | Duration |
+|---|---|---|
+| `npm audit --omit=dev --audit-level=high` | exit 0, 0 vulnerabilities | 1 s |
+| `npm audit --audit-level=high` | exit 0, 0 vulnerabilities | 1 s |
+| `npm run test:unit` | exit 0, all three unit checks passed | 5 s |
+| `npm run test:browser` | exit 0, 52 passed | 39 s |
+| `npm run test:coverage` | exit 0, 1461 tests pass, 0 fail, 0 skipped; all files 97.13% statements, 91.79% branches, 91.68% functions (`Runner.js` 100% statements, `ParallelDiscovery.js` 91.76%) | 184 s |
+| `npm test` (regression, then browser) | exit 0, 1461 regression tests and 52 browser tests pass | 215 s |
+| `node falcon.js --no-dashboard --workers=1 --url=<local fixture>` in a temporary copy of the code | exit 0, report written | 3 s |
+
+The last command uses the local fixture rather than the default target so that no uncontrolled third-party site is contacted. Untested locally: the DB tests (they need a database and run in hosted CI), and dashboard behaviour under `--workers` or `--shard`.

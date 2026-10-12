@@ -32,6 +32,12 @@ The end-to-end speedup is larger than the worker count (efficiency above 1 at 2 
 
 Before this change the end-to-end speedup was 1.04x and 1.18x and the thresholds were missed, because the serial discovery (about 11 s) dominated. That result is kept in the git history of this file.
 
+## Memory bound
+
+Peak process-tree RSS (Falcon plus Chromium) on the fixture: 530,496 KB at 1 worker, 582,048 KB at 2 (+51,552 KB), 758,544 KB at 4 (+176,496 KB, about 88,000 KB per added worker).
+
+Bound: **peak RSS at 4 workers on the fixture must stay at or below 1 GiB (1,048,576 KB)**, with about 100 MB of growth per added worker as the planning figure. The measured 4-worker value is 72% of the bound. Beyond 4 workers this is an extrapolation, not a measurement: 16 workers would be roughly 1.8 GB, so size CI runners for the worker count they run (the CI jobs here use the default of 1 worker per shard). The bound is checked by reading `peakRssKb` in `phase-16-parallel-benchmark.json`; the benchmark script does not enforce it. It is proposed from these measurements and is confirmed by the final-head QA and DevOps reviews, not by an automated test.
+
 ## Equivalence
 
 Semantic equivalence across worker counts (exit code, summary, result, sorted test name/status pairs, explored URL set): true on the fixture. Raw report files are not byte-identical (`rawReportsIdentical: false`) because parallel rows carry extra bookkeeping fields (`page`, `pageOrdinal`, `scn`, `rep`), explored-URL order differs, and parallel runs write extra files.

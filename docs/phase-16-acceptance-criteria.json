@@ -945,7 +945,7 @@
         }
       ],
       "status": "done",
-      "note": "Fixture (10 pages) and published results (5 measured runs, 1 warm-up, median/range, speedup, efficiency, memory, environment, equivalence) exist and are covered by fixture, stats-helper and discovery tests. Numbers are specific to this fixture and machine."
+      "note": "Fixture (10 pages) and published results (5 measured runs, 1 warm-up, median/range, speedup, efficiency, memory, environment, equivalence) exist and are covered by fixture, stats-helper and discovery tests. Numbers are specific to this fixture and machine. Memory bound: peak RSS at 4 workers on the fixture at most 1 GiB (measured 759 MB), stated in the benchmark document and confirmed by the final-head QA and DevOps reviews."
     },
     {
       "id": "P16-AC-34",
