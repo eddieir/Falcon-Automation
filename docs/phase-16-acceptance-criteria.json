@@ -1350,11 +1350,13 @@
       "title": "Exact-head Security Engineer verdict",
       "priority": "Must",
       "text": "The Security Engineer records a verdict on the exact final head",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "No exact-head Security verdict."
+      "status": "done",
+      "note": "Security Engineer verdicts: SEC-5 on 9385e72 (APPROVE WITH CONDITIONS), SEC-6 on 0e68ce4 (APPROVE) and SEC-7 on db38f5f (APPROVE, docs-only delta since SEC-6; npm audit 0, branch secret scan clean, 0 open alerts, hosted checks green). The verdict table is in the PR description."
     },
     {
       "id": "P16-AC-116",
@@ -1431,11 +1433,14 @@
       "title": "Release Manager receives evidence",
       "priority": "Must",
       "text": "The Release Manager receives the complete security evidence set",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-security-evidence.md",
+        "docs/security/phase-16-owner-acceptance.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Not yet handed over."
+      "status": "done",
+      "note": "The Release Manager received the security evidence set (docs/security/phase-16-security-evidence.md, phase-16-owner-acceptance.md, phase-16-baseline-security-assessment.md, phase-16-threat-model.md) with each review (RM-1, RM-2, RM-3)."
     },
     {
       "id": "P16-AC-121",
