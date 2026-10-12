@@ -614,4 +614,16 @@ function _resetForTests() {
     defaultContextResult = null;
 }
 
-module.exports = { resolve, getDefaultContext, _resetForTests };
+module.exports = {
+    resolve,
+    getDefaultContext,
+    _resetForTests,
+    // Additive-only (ADR-0019 section 6): expose already-existing internal
+    // validators/constants for reuse by ProfileStore.js. No behaviour of
+    // resolve()/getDefaultContext() changes — these are the same objects
+    // already used internally above.
+    MODEL_RE_GENERIC,
+    MODEL_RE_GEMINI,
+    CRED_NAME_RE,
+    isDeniedCredentialName,
+};
