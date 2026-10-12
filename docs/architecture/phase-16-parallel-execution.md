@@ -1,6 +1,6 @@
 # Phase 16 Architecture: Deterministic Parallel Execution and Safe CI Sharding
 
-Status: implemented on the branch and in review, not merged (HEAD cebd31f); originally written as the CP1 design. Base: `origin/main` at 6e7f5f1 (Phase 15 merged; verified as the merge-base of the branch). Risk tier: full. Acceptance register: `docs/phase-16-acceptance-criteria.json` (P16-AC-01..42; security program AC-101..125 are out of scope here except where noted).
+Status: implemented on the branch (pull request #48; the owner decides the merge); originally written as the CP1 design. Base: `origin/main` at 6e7f5f1 (Phase 15 merged; verified as the merge-base of the branch). Risk tier: full. Acceptance register: `docs/phase-16-acceptance-criteria.json` (P16-AC-01..42; security program AC-101..125 are out of scope here except where noted).
 
 ## 1. Context and constraints
 

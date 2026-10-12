@@ -951,9 +951,9 @@ Node 22+ is required locally (the openai SDK's floor; `test:coverage`/`test:regr
 
 ---
 
-## Parallel execution and sharding (Phase 16, in review)
+## Parallel execution and sharding (Phase 16)
 
-Status: in review on `phase-16/parallel-execution`, not merged. Sequential runs remain the default.
+Status: implemented on `phase-16/parallel-execution` (pull request #48); the owner decides the merge. Sequential runs remain the default.
 
 ```bash
 node falcon.js --url=https://your-app.example --workers=2          # page-level parallelism, 1 to 16
