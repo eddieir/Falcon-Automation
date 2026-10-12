@@ -297,4 +297,15 @@ function _resetWarningLatchesForTests() {
     warnedProviderRequired = false;
 }
 
-module.exports = { resolve, PROMPT_MAX_BYTES, _resetWarningLatchesForTests };
+module.exports = {
+    resolve,
+    PROMPT_MAX_BYTES,
+    _resetWarningLatchesForTests,
+    // Additive exports (ADR-0019/Dev-02) — reused by ProviderContext.js so
+    // the direct-config validation rules (azure resource/host-suffix shape,
+    // numeric bounds) stay in exactly one place. Pre-existing exports above
+    // are unchanged.
+    INT_BOUNDS,
+    AZURE_RESOURCE_RE,
+    AZURE_HOST_SUFFIXES,
+};
