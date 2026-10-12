@@ -19,6 +19,8 @@ const DisabledProvider = require("./providers/DisabledProvider");
 const OpenAIProvider = require("./providers/OpenAIProvider");
 const AzureOpenAIProvider = require("./providers/AzureOpenAIProvider");
 const OpenAICompatibleProvider = require("./providers/OpenAICompatibleProvider");
+const AnthropicProvider = require("./providers/AnthropicProvider");
+const GeminiProvider = require("./providers/GeminiProvider");
 
 /**
  * Frozen literal map of provider id -> factory. Every entry is a plain
@@ -30,6 +32,8 @@ const FACTORIES = Object.freeze({
     openai: (config, deps) => new OpenAIProvider(config, deps),
     "azure-openai": (config, deps) => new AzureOpenAIProvider(config, deps),
     "openai-compatible": (config, deps) => new OpenAICompatibleProvider(config, deps),
+    anthropic: (config, deps) => new AnthropicProvider(config, deps),
+    gemini: (config, deps) => new GeminiProvider(config, deps),
 });
 
 /**
