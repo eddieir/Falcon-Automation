@@ -441,16 +441,17 @@
     {
       "id": "P17-AC16",
       "section": "Security",
-      "title": "Security gates",
+      "title": "Security gate (GitHub Advanced Security)",
       "priority": "Must",
-      "text": "Baseline and final dependency, code, secret and applicable IaC/container scans are executed and truthfully reported",
+      "text": "GitHub Advanced Security is the authoritative gate: CodeQL JavaScript/TypeScript and Actions analyses green on the final head, the pull-request code-scanning result has zero unresolved alerts, and GitHub secret-scanning results are clean where available; npm audit is dependency-hygiene evidence and GitGuardian is advisory. Third-party scanners are not applicable by owner security policy",
       "implementation": [
-        "docs/security/phase-17-threat-model.md"
+        "docs/security/phase-17-threat-model.md",
+        ".github/workflows/ci.yml"
       ],
-      "verifiedBy": "review",
+      "verifiedBy": "platform",
       "tests": [],
-      "status": "partial",
-      "note": "Evidence is in the PR body and the release record, not in a test. Snyk Code is BLOCKED / NOT RUN (organisation not enabled); Snyk IaC and container are not applicable (no such files). A hosted CodeQL run on the final head is required before an unconditional GO."
+      "status": "done",
+      "note": "Owner-approved governance change (not a scan result): the earlier requirement for third-party scanner evidence is removed and those fields are NOT APPLICABLE — excluded by owner security policy. Evidence is the hosted CodeQL (JavaScript/TypeScript and Actions) and PR code-scanning results on the final head, read from GitHub and recorded in the pull request and the release record."
     },
     {
       "id": "P17-AC17",

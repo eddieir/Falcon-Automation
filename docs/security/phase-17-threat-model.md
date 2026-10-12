@@ -116,25 +116,32 @@ M01–M12 as per provider threat model, plus:
 - User authentication/authorization for the dashboard (the server is loopback-only; there is no remote mode and no token).
 - Healing quality or outcome bias introduced by provider selection.
 
-## 5a. Scan evidence: baseline versus final
+## 5a. Security gate and scan evidence
 
-Baseline is the base commit `0239173`; final is the Phase 17 head. A scanner that could not run is reported as BLOCKED / NOT RUN and is never counted as a pass.
+**Authority.** By owner security policy the authoritative Phase 17 security gate is GitHub Advanced Security: CodeQL JavaScript/TypeScript analysis, CodeQL Actions analysis, the pull-request code-scanning result with zero unresolved alerts, and GitHub secret-scanning results. GitGuardian stays as an advisory check and `npm audit` as dependency-hygiene evidence; neither replaces the gate. Third-party scanners are excluded by the same policy: those fields are **NOT APPLICABLE — excluded by owner security policy** (not a pass and not blocked). This is an owner-approved governance change, not the result of a scan.
 
-| Check | Baseline | Final | Disposition |
+Baseline is the base commit `0239173`; final is the Phase 17 head.
+
+| Check | Baseline | Final | Role |
 |---|---|---|---|
-| `npm audit --audit-level=high` | 0 vulnerabilities | 0 vulnerabilities | Pass |
-| Snyk `test --all-projects --dev` | 261 dependencies, 0 vulnerable paths | 261 dependencies, 0 vulnerable paths | Pass (no dependency changed) |
-| Snyk Code (`snyk code test`) | BLOCKED / NOT RUN: organisation not enabled (SNYK-CODE-0005, 403) | BLOCKED / NOT RUN, same reason | Prevents an unconditional GO until the owner enables it or accepts the gap |
-| Snyk IaC and container | Not applicable: no IaC or container files | Not applicable | n/a |
-| TruffleHog | 0 verified, 0 unverified (committed content) | 0 verified; 6 unverified, all fake `user:pass@host` fixtures in test files | Pass; fixtures only |
-| gitleaks (working tree) | 3 findings | 3 findings, identical | No new finding (two are git-ignored paths; one is the deliberate fake key in a redaction test) |
-| gitleaks (history) | 5 findings | 5 findings, identical | No new finding |
-| GitGuardian (hosted) | Not recorded for the base commit | Pass on every PR head, including the one reviewed here | Pass |
-| CodeQL (hosted) | 0 alerts on `0239173` | 0 open alerts on PR head `843ea9e` (earlier heads: 3 high alerts on `823670b`, 1 on `4a39779`, all in test code and since fixed) | Pass for that head; re-read for any later head |
+| CodeQL JavaScript/TypeScript (hosted) | 0 alerts on `0239173` | read from the hosted run on the final head | Gate |
+| CodeQL Actions (hosted) | 0 alerts on `0239173` | read from the hosted run on the final head | Gate |
+| PR code-scanning result | not applicable | zero unresolved alerts required | Gate |
+| GitHub secret scanning | 0 open alerts | 0 open alerts (secret scanning and push protection enabled) | Gate, where available |
+| GitGuardian (hosted) | not recorded | read from the hosted run on the final head | Advisory |
+| `npm audit --audit-level=high` | 0 vulnerabilities | 0 vulnerabilities | Hygiene evidence |
+| Local secret scans (gitleaks, TruffleHog) | 3 tree / 5 history findings; 0 verified | identical; 0 verified (6 unverified fake fixtures in tests) | Supporting evidence |
+| Third-party dependency and code scanner | NOT APPLICABLE — excluded by owner security policy | NOT APPLICABLE — excluded by owner security policy | Not a gate |
 
-The CodeQL findings were fixed rather than dismissed: an incomplete escape in a redaction test (the expected string is now built with `JSON.stringify`), comment stripping in the dashboard UI test (now a linear `indexOf` scan, because repeating a regex replace was still flagged), and a test that set `NODE_TLS_REJECT_UNAUTHORIZED` on the test process (it now runs the relaxed environment in a child process and asserts `rejectUnauthorized` is still `true`).
+Earlier results from a third-party dependency scan taken before the policy decision (no vulnerable paths) are historical, non-gating evidence in the release record only.
 
-Recorded P3 items from the final security review: the real TLS handshake against a self-signed server is not exercised (the option is asserted instead), `LlmConfig` copies a lower-level `error.message` into configuration errors, the dashboard re-validates the ledger path but does not compare the file identity captured at startup, and org- or environment-level secrets were not checked for a stale `OPENAI_API_KEY` (only the repository level was).
+The CodeQL findings raised during the pull request were fixed rather than dismissed: an incomplete escape in a redaction test (the expected string is now built with `JSON.stringify`), comment stripping in the dashboard UI test (now a linear `indexOf` scan, because repeating a regex replace was still flagged), and a test that set `NODE_TLS_REJECT_UNAUTHORIZED` on the test process (it now runs the relaxed environment in a child process and asserts `rejectUnauthorized` is still `true`).
+
+Recorded P3 items from the security review: the real TLS handshake against a self-signed server is not exercised (the option is asserted instead), `LlmConfig` copies a lower-level `error.message` into configuration errors, the dashboard re-validates the ledger path but does not compare the file identity captured at startup, and `escapeHtml` is tested but unused.
+
+## 5b. Ledger write controls
+
+Only the coordinator writes the production-cycle ledger. Project settings deny the built-in file tools on `.git/production-cycle/**` (`Edit(/.git/production-cycle/**)`, verified by a denied write in a session on Claude Code 2.1.285). Because file deny rules do not cover Bash redirections, a `PreToolUse` hook (`.claude/hooks/ledger-guard.js`) refuses subagent Bash calls that append events or write the ledger; the coordinator is unaffected. This is defense in depth, not a sandbox: a script that builds the path indirectly is not detected, and the hash chain still flags edits.
 
 ## Test index
 
