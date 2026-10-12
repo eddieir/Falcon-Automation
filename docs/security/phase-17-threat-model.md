@@ -113,9 +113,25 @@ M01–M12 as per provider threat model, plus:
 
 ## 5. Out of scope
 
-- Security evidence uses GitHub CodeQL and npm audit only.
-- User authentication/authorization for the dashboard (loopback + token opt-in model).
+- User authentication/authorization for the dashboard (the server is loopback-only; there is no remote mode and no token).
 - Healing quality or outcome bias introduced by provider selection.
+
+## 5a. Scan evidence: baseline versus final
+
+Baseline is the base commit `0239173`; final is the Phase 17 head. A scanner that could not run is reported as BLOCKED / NOT RUN and is never counted as a pass.
+
+| Check | Baseline | Final | Disposition |
+|---|---|---|---|
+| `npm audit --audit-level=high` | 0 vulnerabilities | 0 vulnerabilities | Pass |
+| Snyk `test --all-projects --dev` | 261 dependencies, 0 vulnerable paths | 261 dependencies, 0 vulnerable paths | Pass (no dependency changed) |
+| Snyk Code (`snyk code test`) | BLOCKED / NOT RUN: organisation not enabled (SNYK-CODE-0005, 403) | BLOCKED / NOT RUN, same reason | Prevents an unconditional GO until the owner enables it or accepts the gap |
+| Snyk IaC and container | Not applicable: no IaC or container files | Not applicable | n/a |
+| TruffleHog | 0 verified, 0 unverified (committed content) | 0 verified; 6 unverified, all fake `user:pass@host` fixtures in test files | Pass; fixtures only |
+| gitleaks (working tree) | 3 findings | 3 findings, identical | No new finding (two are git-ignored paths; one is the deliberate fake key in a redaction test) |
+| gitleaks (history) | 5 findings | 5 findings, identical | No new finding |
+| CodeQL (hosted) | 0 alerts on `0239173` | 3 high alerts on the first PR head, all in test code; fixed and re-run is recorded in the PR | See the PR for the re-run result |
+
+The three CodeQL findings were fixed rather than dismissed: an incomplete escape in a redaction test (now `JSON.stringify`), comment stripping that did not repeat until stable (now repeats), and a test that set `NODE_TLS_REJECT_UNAUTHORIZED` on the test process (now runs the relaxed environment in a child process and asserts `rejectUnauthorized` is still `true`).
 
 ## Test index
 
