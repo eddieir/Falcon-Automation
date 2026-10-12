@@ -45,9 +45,9 @@ const FlakinessTracker = require("./FlakinessTracker");
  *    `testPlan.url` between scenarios whenever the page actually drifted.
  */
 class TestRunner {
-    constructor(page, testPlan) {
+    constructor(page, testPlan, options = {}) {
         this.page = page;
-        this.healer = new AIHealer(page);
+        this.healer = new AIHealer(page, { providerContext: options.providerContext });
         this.testPlan = testPlan || { url: "", test_scenarios: [] };
         this.results = [];
     }
@@ -310,7 +310,7 @@ class TestRunner {
  * @param {number} repeatCount - >= 1
  * @returns {Promise<Array>} one flat array of every iteration's result rows
  */
-async function runRepeatedTestPlan(page, testPlan, repeatCount) {
+async function runRepeatedTestPlan(page, testPlan, repeatCount, options = {}) {
     const count = Number.isFinite(repeatCount) && repeatCount >= 1 ? Math.floor(repeatCount) : 1;
     const allResults = [];
 
@@ -329,7 +329,7 @@ async function runRepeatedTestPlan(page, testPlan, repeatCount) {
             }
         }
 
-        const runner = new TestRunner(page, testPlan);
+        const runner = new TestRunner(page, testPlan, options);
         try {
             const results = await runner.executeTest();
             for (const result of results) {
