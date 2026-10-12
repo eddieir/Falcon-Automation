@@ -2,7 +2,7 @@
 name: technical-writer
 description: Keeps Falcon README, guides, examples, configuration, changelog, and operational notes accurate and task-oriented. Use after behavior changes and before release.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: haiku
+model: claude-haiku-4-5
 maxTurns: 8
 ---
 

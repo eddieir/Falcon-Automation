@@ -2,7 +2,7 @@
 name: product-manager
 description: Defines Falcon user problems, product outcomes, personas, success metrics, and roadmap options.
 tools: Read, Grep, Glob
-model: haiku
+model: claude-haiku-4-5
 maxTurns: 8
 ---
 

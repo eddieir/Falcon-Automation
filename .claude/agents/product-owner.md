@@ -2,7 +2,7 @@
 name: product-owner
 description: Converts approved Falcon product outcomes into prioritized, testable stories and acceptance criteria.
 tools: Read, Grep, Glob
-model: haiku
+model: claude-haiku-5-5
 maxTurns: 8
 ---
 
