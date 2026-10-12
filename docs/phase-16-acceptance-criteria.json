@@ -1127,11 +1127,13 @@
       "title": "No P0/P1 and release evidence",
       "priority": "Must",
       "text": "No unresolved P0/P1; QA, Code Review, Security, DevOps verdicts and CI evidence recorded against the exact final head; Release Manager verdict recorded",
-      "implementation": [],
+      "implementation": [
+        "docs/phase-16-review-verdicts.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "Release evidence (QA, Code Review, Security, DevOps verdicts on the exact head, Release Manager verdict) not yet recorded."
+      "status": "done",
+      "note": "No P0 or P1 defect is open. QA, Code Review, Security and DevOps verdicts and the hosted CI evidence are recorded per head in docs/phase-16-review-verdicts.md; the Release Manager verdict (RM-4, CONDITIONAL GO on 4693510, with the conditions listed there) is recorded there and confirmed on the final head in the pull request description."
     },
     {
       "id": "P16-AC-101",
