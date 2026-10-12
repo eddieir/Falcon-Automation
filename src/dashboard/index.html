@@ -643,6 +643,13 @@
   </div>
 </div>
 
+<div id="run-panel" role="status" aria-live="polite" aria-label="Run execution status">
+  <span id="run-mode">Mode: sequential</span>
+  <span id="run-workers">Workers: –</span>
+  <span id="run-shard"></span>
+  <span id="run-counts"></span>
+</div>
+
 <div id="coverage-section">
   <div id="coverage-header">
     <span>Coverage</span>
@@ -727,7 +734,7 @@
 </div>
 
 <script>
-  const state = { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map(), pages: new Map(), sweep: emptySweep(), locatorEntries: new Map(), locatorLegacy: new Map() };
+  const state = { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map(), pages: new Map(), sweep: emptySweep(), locatorEntries: new Map(), locatorLegacy: new Map(), run: null, workers: null };
 
   function emptySweep() {
     return { entryUrl: null, currentUrl: null, discovered: 0, budgetExhausted: false };
@@ -855,6 +862,14 @@
         renderFlaky();
         addRow("pass", "✅", `Unquarantined: ${payload.description || payload.locator}`, null, timestamp);
         break;
+      case "runPlan":
+        state.run = payload;
+        renderRunPanel();
+        break;
+      case "workerState":
+        state.workers = payload;
+        renderRunPanel();
+        break;
       case "pageStart":
         applyPageStart(payload);
         renderCoverage();
@@ -875,6 +890,20 @@
       default:
         addRow("info", "ℹ️", name, JSON.stringify(payload), timestamp);
     }
+  }
+
+  // ── Run panel (Phase 16) ── text only, via textContent
+  function renderRunPanel() {
+    const run = state.run || {};
+    const w = state.workers;
+    const n = (v) => (Number.isFinite(Number(v)) ? String(Number(v)) : "–");
+    $("run-mode").textContent = `Mode: ${typeof run.mode === "string" ? run.mode : "sequential"}`;
+    $("run-workers").textContent = `Workers: ${n(w ? w.configured : run.workers)}`;
+    const shard = run.shard && typeof run.shard === "object" ? run.shard : null;
+    $("run-shard").textContent = shard ? `Shard ${n(shard.index)}/${n(shard.total)}` : "";
+    $("run-counts").textContent = w
+      ? `Active ${n(w.active)} · Completed ${n(w.completed)} · Pending ${n(w.pending)} · Failed ${n(w.failed)}`
+      : "";
   }
 
   // ── Healing trust panel (Phase 8) ──
@@ -908,7 +937,7 @@
           ${rejectedWarning}
         </div>
         <div class="pending-actions">
-          <button class="btn btn-approve" data-action="approve" data-selector="${escapeHtml(entry.original)}">Approve</button>
+          <button class="btn btn-approve" data-action="approve" data-selector="${escapeHtml(entry.original)}" data-suggested="${escapeHtml(entry.suggested)}">Approve</button>
           <button class="btn btn-reject" data-action="reject" data-selector="${escapeHtml(entry.original)}">Reject</button>
         </div>
       `;
@@ -926,21 +955,21 @@
   $("healing-pending-list").addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-action]");
     if (!button) return;
-    const { action, selector } = button.dataset;
+    const { action, selector, suggested } = button.dataset;
     button.disabled = true;
     try {
-      await healingDecision(action, selector);
+      await healingDecision(action, selector, suggested);
     } catch (err) {
       button.disabled = false;
       alert(`Failed to ${action}: ${err.message}`);
     }
   });
 
-  async function healingDecision(action, original) {
+  async function healingDecision(action, original, suggested) {
     const res = await fetch(`/healing/${action}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ original }),
+      body: JSON.stringify(action === "approve" ? { original, suggested } : { original }),
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
     // The socket "healingApproved"/"healingRejected" event that follows
@@ -1320,7 +1349,10 @@
     const index = num(payload.index);
     // Pages are numbered from 1, so an index of 1 starts a new sweep — the
     // previous run's pages must not linger and overstate coverage.
-    if (index !== undefined && index <= 1 && state.pages.size > 0) {
+    // Concurrent pages can deliver index 1 late; only a restart when page 1
+    // was already recorded.
+    const hasFirst = [...state.pages.values()].some((p) => p.index === 1);
+    if (index !== undefined && index <= 1 && hasFirst) {
       state.pages.clear();
       state.sweep = emptySweep();
     }
@@ -1693,7 +1725,7 @@
 
   // Replay full history for late-joining tabs
   socket.on("replay", (events) => {
-    Object.assign(state, { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map(), pages: new Map(), sweep: emptySweep(), locatorEntries: new Map(), locatorLegacy: new Map() });
+    Object.assign(state, { pass: 0, fail: 0, skip: 0, heal: 0, quarantine: 0, startTs: null, pending: new Map(), flaky: new Map(), pages: new Map(), sweep: emptySweep(), locatorEntries: new Map(), locatorLegacy: new Map(), run: null, workers: null });
     $("feed").replaceChildren();
     for (const id of ["bar-pass", "bar-fail", "bar-skip", "bar-quarantine"]) $(id).style.width = "0%";
     $("run-time").textContent = "–";
@@ -1701,6 +1733,7 @@
     renderPending();
     renderFlaky();
     renderCoverage();
+    renderRunPanel();
     renderLocatorEntries();
     renderLocatorLegacy();
     events.forEach(handleEvent);

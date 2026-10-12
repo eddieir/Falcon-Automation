@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { PNG } = require("pngjs");
 const Logger = require("../../utils/Logger");
+const ParallelMode = require("./parallel/ParallelMode");
 
 // pixelmatch ships ESM-only. A plain require() throws ERR_REQUIRE_ESM on
 // Node <20.19 (it only happens to work on newer Node via unflagged
@@ -42,6 +43,11 @@ class VisualRegression {
      *                                            before the comparison is marked failed
      */
     constructor(page, { threshold = 0.1, diffThreshold = 0.5 } = {}) {
+        if (ParallelMode.isActive()) {
+            const err = new Error("VisualRegression is not supported in parallel mode: baseline and diff files cannot be merged deterministically");
+            err.code = "VISUAL_REGRESSION_UNSUPPORTED_PARALLEL";
+            throw err;
+        }
         if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1 ||
             !Number.isFinite(diffThreshold) || diffThreshold < 0 || diffThreshold > 100) {
             throw new TypeError("Visual thresholds must be within 0–1 and 0–100 respectively");

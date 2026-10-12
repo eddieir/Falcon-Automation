@@ -807,6 +807,8 @@ configuration selects.
 
 ## Phase 16 — Parallel execution
 
+**Status: implemented** on branch `phase-16/parallel-execution` (pull request #48); the owner decides the merge. Hosted CI results and review verdicts per head are in `docs/phase-16-review-verdicts.md` (see also docs/phase-16-operations.md).
+
 ### Why
 
 184 scenarios one at a time is a demo, not a pipeline. Phase 10 makes this acute: covering every page

@@ -58,6 +58,8 @@ const Dashboard       = require("./src/core/Dashboard");
 const Logger          = require("./utils/Logger");
 const ReportManager   = require("./src/core/ReportManager");
 const HealingReport   = require("./src/core/AIHealer/HealingReport");
+const { parseParallelArgs } = require("./src/core/parallel/Args");
+const ParallelRunner  = require("./src/core/parallel/Runner");
 
 const DEFAULT_URL = "https://www.saucedemo.com";
 
@@ -390,6 +392,41 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
     const dedupe           = !args.includes("--no-dedupe");
     const sameOriginOnly   = !args.includes("--allow-cross-origin");
 
+    // Phase 16: parallel/shard/merge flags are strict and parsed before the
+    // dashboard or the browser. `merge` is a separate command with its own
+    // exit codes (0/1 validated, 2 rejected input, 3 state not durable).
+    const parallel = parseParallelArgs(args);
+    if (args[0] === "merge") {
+        const argError = ParallelRunner.checkMergeArgv(args) || (parallel.ok ? null : parallel.message);
+        if (argError) {
+            Logger.error(`❌ ${argError}`);
+            await Logger.flush();
+            process.exit(2);
+        }
+        const expect = ParallelRunner.parseMergeExpect(args);
+        if (!expect.ok) {
+            Logger.error(`❌ ${expect.message}`);
+            await Logger.flush();
+            process.exit(2);
+        }
+        const code = await ParallelRunner.runMerge({
+            merge: { ...parallel.merge, expectRunId: expect.expectRunId, expectCommit: expect.expectCommit }, paths: ParallelRunner.defaultPaths(__dirname),
+        });
+        await Logger.flush();
+        process.exit(code);
+    }
+    if (!parallel.ok) {
+        Logger.error(`❌ ${parallel.message}`);
+        await Logger.flush();
+        process.exit(1);
+    }
+    const parallelRun = parallel.shard !== null || parallel.workers > 1;
+    if (parallelRun && singlePage) {
+        Logger.error("❌ --single-page cannot be combined with --workers or --shard.");
+        await Logger.flush();
+        process.exit(1);
+    }
+
     // AC-02: unlike max-pages/budget-ms above, an invalid --repeat is a hard
     // failure — process.exit(1) here, before the dashboard starts or the
     // browser launches, so a typo'd flag never produces a partial run.
@@ -426,6 +463,29 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
     const emit = (name, payload) => {
         if (dashboardUp) dashboard.emit(name, payload);
     };
+
+    // ── Phase 16: sharded / multi-worker run (never reached by default) ──────
+    if (parallelRun) {
+        let pBrowser;
+        try {
+            pBrowser = await chromium.launch({ headless });
+            let commit = "unknown";
+            try { commit = require("./src/core/history/GitInfo").getGitInfo().sha; } catch { /* unknown */ }
+            process.exitCode = await ParallelRunner.run({
+                browser: pBrowser, parsed: parallel, url, emit, repoRoot: __dirname, commit,
+                startedAt: Date.now(),
+                sweepOpts: { maxPages, budgetMs, dedupe, sameOriginOnly, repeat: repeatCount },
+            });
+        } catch (error) {
+            Logger.error(`❌ Fatal error: ${error.message}`);
+            process.exitCode = 1;
+        } finally {
+            await Logger.flush();
+            if (pBrowser) await pBrowser.close();
+            if (dashboardUp) await dashboard.stop();
+        }
+        return;
+    }
 
     // ── Browser ───────────────────────────────────────────────────────────────
     let browser;
@@ -517,7 +577,7 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
 
         if (dashboardUp) {
             const lingerMs = Number(process.env.DASHBOARD_LINGER_MS) || 60_000;
-            Logger.info(`🖥  Dashboard will stay up for ${(lingerMs / 1000).toFixed(0)} s — open ${dashboard.url} to review results.`);
+            Logger.info(`🖥  Dashboard will stay up for ${(lingerMs / 1000).toFixed(0)} s — open ${dashboard.safeUrl} to review results.`);
             Logger.info("    Press Ctrl-C to exit early.");
             await new Promise((r) => setTimeout(r, lingerMs));
             await dashboard.stop();
