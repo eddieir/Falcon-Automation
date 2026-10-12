@@ -171,7 +171,7 @@ npm run test:ui  # ← Still works
 **Now (new per-invocation):**
 ```bash
 export ANTHROPIC_API_KEY=<your-key>
-node falcon.js --llm-provider=anthropic --llm-model=claude-3-sonnet npm run test:ui
+node falcon.js --llm-provider=anthropic --llm-model=<anthropic-model-id>
 ```
 
 ### Rollback
