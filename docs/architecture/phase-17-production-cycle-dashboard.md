@@ -55,7 +55,7 @@ Schema: `pc-event/1` (immutable after publish). Fields:
 
 **Forbidden keys**: Hard-rejected by validator; never representable: `prompt`, `promptText`, `messages`, `reasoning`, `thinking`, `chainOfThought`, `transcript`, `rawDom`, `html`, `dom`, `token`, `apiKey`, `authorization`, `secret`, `credential`, `password`, `env`.
 
-**Bounds**: 
+**Bounds**:
 - Single line: <=4096 bytes
 - Ledger file: <=8 MiB
 - Event count: <=20000
