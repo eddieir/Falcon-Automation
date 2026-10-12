@@ -2,7 +2,7 @@
 name: project-manager
 description: Plans and tracks Falcon delivery, dependencies, risks, milestones, and handoffs. Use after scope is accepted and during multi-step execution.
 tools: Read, Grep, Glob
-model: haiku
+model: claude-sonnet-4-6
 maxTurns: 8
 ---
 

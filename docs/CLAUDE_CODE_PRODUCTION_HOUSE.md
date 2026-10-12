@@ -1,20 +1,20 @@
 # Claude Code Production House for Falcon
 
-Twelve available specialists, activated only when needed. Each owns a distinct decision or deliverable, uses an explicit economical model, and passes evidence to the next owner through the main session. Implementation never certifies itself.
+Twelve available specialists, activated only when needed. Each owns a distinct decision or deliverable, uses an explicit, version-pinned model (see the routing table in `CLAUDE.md`), and passes evidence to the next owner through the main session. Implementation never certifies itself.
 
 ## Start a cycle
 
 From the repository root:
 
 ```bash
-claude --model sonnet --effort medium
+claude --model claude-sonnet-5-5 --effort medium
 ```
 
 ```text
 /production-cycle Fix the dashboard socket limiter's unbounded per-IP state while preserving authorized connections.
 ```
 
-The project settings default the coordinator to Sonnet at medium effort. Check `/model`, `/effort` and `/context` before starting. Restart Claude Code if the agents directory was added after the session started. Install dependencies/browser binaries only if the selected verification needs them; documentation review does not require `npm ci` or Playwright downloads.
+The project settings default the coordinator to Sonnet 5.5 (`claude-sonnet-5-5`) at medium effort. Check `/model`, `/effort` and `/context` before starting. Restart Claude Code if the agents directory was added after the session started. Install dependencies/browser binaries only if the selected verification needs them; documentation review does not require `npm ci` or Playwright downloads.
 
 For a focused specialist task:
 
@@ -22,38 +22,38 @@ For a focused specialist task:
 Use the code-reviewer agent to review the current diff against main, restricted to the changed dashboard files and AC-01 through AC-03.
 ```
 
-The main session is normally the director; do not launch a second director to repeat coordination. A standalone director session is also available with `claude --model sonnet --effort medium --agent production-director`.
+The main session is normally the director; do not launch a second director to repeat coordination. A standalone director session is also available with `claude --model claude-sonnet-5-5 --effort medium --agent production-director`.
 
 ## Model and ownership map
 
-“Dedicated” means explicitly assigned per role, not twelve different model products.
+The routing table in `CLAUDE.md` is the single source of truth for models; this table repeats it for convenience and must match it and each agent's front matter. Only two low-risk pairs share a model (Product Manager/Technical Writer, Project Manager/Release Manager).
 
-| Role | Model | Turns per invocation | Exclusive responsibility | Main recipients |
+| Role | Model ID | Turns per invocation | Exclusive responsibility | Main recipients |
 |---|---|---:|---|---|
-| Production Director | Sonnet | 20 | Routing, evidence ledger, conflict resolution | Selected specialists |
-| Product Manager | Haiku | 8 | User problem, value and measurable outcome | Product Owner |
-| Product Owner | Haiku | 8 | Scope, priority, observable AC IDs | Developer, QA, planning roles |
-| Project Manager | Haiku | 8 | Dependency order, task ownership and delivery status | Director |
-| Solution Architect | Sonnet | 16 | Interfaces, boundaries, failure and migration design | Developer, QA, Security, DevOps |
-| Developer | Sonnet | 16 | Production implementation and focused tests | QA, Code Reviewer |
-| QA Engineer | Sonnet | 16 | Independent AC verification and defect evidence | Developer, Release Manager |
-| Security Engineer | Sonnet | 16 | Trust-boundary findings and security verdict | Developer, Release Manager |
-| DevOps Engineer | Sonnet | 16 | CI/runtime/configuration changes and operational evidence | Developer, Release Manager |
-| Code Reviewer | Sonnet | 16 | Independent read-only diff review | Developer, Release Manager |
-| Technical Writer | Haiku | 8 | Documentation of verified behavior | Code Reviewer, Release Manager |
-| Release Manager | Haiku | 8 | Evidence-based readiness decision | Director / human owner |
+| Production Director | `claude-sonnet-5-5` | 20 | Routing, evidence ledger, conflict resolution | Selected specialists |
+| Product Manager | `claude-haiku-4-5` | 8 | User problem, value and measurable outcome | Product Owner |
+| Product Owner | `claude-haiku-5-5` | 8 | Scope, priority, observable AC IDs | Developer, QA, planning roles |
+| Project Manager | `claude-sonnet-4-6` | 8 | Dependency order, task ownership and delivery status | Director |
+| Solution Architect | `claude-opus-5` | 16 | Interfaces, boundaries, failure and migration design | Developer, QA, Security, DevOps |
+| Developer | `claude-sonnet-5` | 16 | Production implementation and focused tests | QA, Code Reviewer |
+| QA Engineer | `claude-opus-4-7` | 16 | Independent AC verification and defect evidence | Developer, Release Manager |
+| Security Engineer | `claude-opus-5-5` | 16 | Trust-boundary findings and security verdict | Developer, Release Manager |
+| DevOps Engineer | `claude-opus-4-6` | 16 | CI/runtime/configuration changes and operational evidence | Developer, Release Manager |
+| Code Reviewer | `claude-opus-4-8` | 16 | Independent read-only diff review | Developer, Release Manager |
+| Technical Writer | `claude-haiku-4-5` | 8 | Documentation of verified behavior | Code Reviewer, Release Manager |
+| Release Manager | `claude-sonnet-4-6` | 8 | Evidence-based readiness decision | Director / human owner |
 
-Sonnet specialists use medium effort. Haiku roles avoid elaborate reasoning for bookkeeping and bounded synthesis. No role inherits the main session model or automatically escalates to Opus/Fable. Turn limits are per invocation, not per whole cycle; continuations count toward the dispatch budget.
+Fable models are prohibited in every assignment and fallback. No role inherits the main session model, and no role escalates or falls back to another model automatically. Turn limits are per invocation, not per whole cycle; continuations count toward the dispatch budget.
 
-Aliases are used for provider compatibility; they do not pin a price or immutable model version. Check the effective mapping on your account. Explicit full model IDs can be substituted only after verifying availability and cost, while retaining the Haiku/Sonnet policy.
+Models are pinned by full version-specific ID. Verify the effective model from runtime metadata at each role's first real dispatch and record requested ID and observed model in the ledger.
 
 ### Model preflight
 
 Before launching work, check for CLI, local, user, managed or environment settings that override the intended models. In particular, inspect `CLAUDE_CODE_EFFORT_LEVEL`, `CLAUDE_CODE_SUBAGENT_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_HAIKU_MODEL`, and configured fallback chains without printing unrelated environment variables or secrets. Remove conflicting overrides in the session configuration; never silently alter organization settings.
 
-On Claude Code versions before 2.1.251, the subagent environment override takes precedence over the agent file. Newer versions can also force one model globally. Invocation overrides, provider alias mappings, allowlists and fallback chains can change the actual model. If the assigned model is unavailable or resolves to a premium model, stop that task and report the configuration problem. Do not pay for a premium fallback.
+On Claude Code versions before 2.1.251, the subagent environment override takes precedence over the agent file. Newer versions can also force one model globally. Invocation overrides, provider alias mappings, allowlists and fallback chains can change the actual model. If the assigned model is unavailable, unsupported, remapped, or cannot be verified, stop before accepting that task's output and report the exact error. Never substitute another model and never fall back to Fable.
 
-Project `settings.json` provides a default, not an account-level spending lock. `maxTurns` limits agent turns, not tokens or dollars. Dispatch counts, word targets and context discipline below are workflow controls. Use actual provider usage data when available; otherwise report usage as unknown. No claimed savings percentage is meaningful without measurement.
+Project `settings.json` provides a default, not an account-level spending lock. Also inspect `ANTHROPIC_DEFAULT_OPUS_MODEL` for remapping. `maxTurns` limits agent turns, not tokens or dollars. Dispatch counts, word targets and context discipline below are workflow controls. Use actual provider usage data when available; otherwise report usage as unknown. No claimed savings percentage is meaningful without measurement.
 
 ## Choose the smallest sufficient route
 
@@ -110,7 +110,7 @@ A result is valid only for its recorded revision and environment. The coordinato
 - Keep one owner per deliverable; QA verifies behavior, Reviewer inspects correctness, Security checks threats. Share findings rather than duplicate the same sweep.
 - Run the smallest relevant test first. The verifier may independently rerun a necessary check, but do not repeat unchanged full suites without a reason.
 - Record dispatches, retries, actual model, status and usage when exposed. Do not invent token totals from word counts.
-- At the limit, persist partial evidence and remaining work, then replan. Do not restart discovery, recurse into more agents or switch to a premium model.
+- At the limit, persist partial evidence and remaining work, then replan. Do not restart discovery, recurse into more agents or switch models.
 
 ## Verification and release gates
 

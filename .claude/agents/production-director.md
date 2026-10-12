@@ -2,7 +2,7 @@
 name: production-director
 description: Orchestrates Falcon work across product, engineering, QA, security, DevOps, documentation, and release.
 tools: Read, Grep, Glob, Bash, Agent
-model: sonnet
+model: claude-sonnet-5-5
 effort: medium
 maxTurns: 20
 ---
