@@ -43,7 +43,11 @@
     "fixture:serve": "node scripts/fixture/server.js",
     "bench:parallel": "node scripts/benchmark/parallel.js",
     "production:event": "node scripts/production-cycle/append-event.js",
-    "production:dashboard": "node scripts/production-cycle/dashboard.js"
+    "production:dashboard": "node scripts/production-cycle/dashboard.js",
+    "llm:profile:list": "node scripts/llm/profile.js list",
+    "llm:profile:show": "node scripts/llm/profile.js show",
+    "llm:profile:set": "node scripts/llm/profile.js set",
+    "llm:profile:delete": "node scripts/llm/profile.js delete"
   },
   "keywords": [
     "AI",
