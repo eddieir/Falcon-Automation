@@ -1362,11 +1362,14 @@
       "title": "No unresolved P0/P1",
       "priority": "Must",
       "text": "No unresolved P0 or P1 security defect remains at release",
-      "implementation": [],
+      "implementation": [
+        "docs/security/phase-16-owner-acceptance.md",
+        "docs/security/phase-16-security-evidence.md"
+      ],
       "verifiedBy": "review",
       "tests": [],
-      "status": "planned",
-      "note": "BL-003 owner disposition and the GitHub code scanning, secret scanning and npm audit runs outstanding."
+      "status": "done",
+      "note": "No P0 or P1 security defect is open at release: the independent Security reviews (SEC-5 on 9385e72, SEC-6 on 0e68ce4) found none; CodeQL, GitGuardian and npm audit pass and no code-scanning or secret-scanning alert is open on the PR head; the BL-003 key disposition, T13/T17 and the CI Postgres image are recorded as accepted by the owner (docs/security/phase-16-owner-acceptance.md)."
     },
     {
       "id": "P16-AC-117",
