@@ -30,4 +30,4 @@
 ## Open items before design sign-off
 1. Done 2026-10-09: S07–S12 re-opened and verified (see the source register).
 2. Review third-party open-source Playwright shard orchestrators (UNKNOWN).
-3. Independent source review, Product Manager value review, Product Owner scope approval, QA testability review (Phase 0 exit gates) — not yet done.
+3. Done 2026-10-08: Product Manager review of the research (P16-PM-1: accepted, no overstatement), Product Owner scope approval (P16-PO-1: scope approved, 11 acceptance criteria tightened) and QA review (P16-QA-1: no factual errors; benchmark speedup informational). The source register was independently re-opened on 2026-10-09 (S07-S12 verified). No separate Project Manager review was run; the delivery plan is `docs/phase-16-plan.md`.

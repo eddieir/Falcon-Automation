@@ -80,6 +80,7 @@ Measured on one machine (Darwin 25.5.0 arm64, 10 CPUs, Node v22.19.0, headless C
 - Most of the end-to-end gain comes from the cheaper discovery pass (median 11.4 s sequential; about 1.1 s with 2 workers and 0.85 s with 4 workers).
 - Parallel and shard runs use a different discovery pass from the sequential crawl: plain anchors are resolved from their `href` instead of clicked, links that open a new tab are not clicked, other origins are recorded but never opened, and clicks on pages two hops away (whose results the sequential crawl discards) are skipped. On unusual sites the page set can differ from a sequential run. Discovery retries a failed page or click once; if a page still fails to load or the 400-task cap is reached, a warning is logged and the page set may be smaller on that shard than on others, which the merge then rejects as a mismatch (rerun the shard). Links with credentials in the URL or very long hrefs are skipped.
 - The thresholds (2 workers at least 1.5x, 4 workers at least 2.3x) are met on the fixture. They are evidence only and do not gate CI.
+- Memory: peak process-tree RSS is 530 MB (1 worker), 582 MB (2) and 759 MB (4). The bound is 1 GiB at 4 workers on the fixture, with about 100 MB of growth per added worker as the planning figure; beyond 4 workers that is an estimate, not a measurement (details in the benchmark document).
 - The results are specific to this fixture and machine. They do not show linear scaling.
 
 Source: `docs/benchmarks/phase-16-parallel-benchmark.md`.
