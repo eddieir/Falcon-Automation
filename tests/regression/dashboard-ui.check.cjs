@@ -82,11 +82,11 @@ function dashboardUI({ fetchImpl, search = "" } = {}) {
 }
 
 /** Simulates clicking a data-action button inside #healing-pending-list. */
-function clickHealingButton(nodes, { action, selector }) {
+function clickHealingButton(nodes, { action, selector, suggested }) {
   const list = nodes.get("healing-pending-list");
   const handler = list._listeners.click[0];
   const button = {
-    dataset: { action, selector },
+    dataset: { action, selector, suggested },
     disabled: false,
     closest: (sel) => (sel === "button[data-action]" ? button : null),
   };
@@ -334,14 +334,14 @@ test("Phase 8: approve button POSTs the selector without a token header (cookie 
   const { handlers, nodes, fetchCalls, storageWrites } = dashboardUI({ search: "?token=secret-token" });
   handlers.event(pendingEvent({ original: "#old", suggested: "#new" }));
 
-  const button = await clickHealingButton(nodes, { action: "approve", selector: "#old" });
+  const button = await clickHealingButton(nodes, { action: "approve", selector: "#old", suggested: "#new" });
 
   assert.equal(fetchCalls.length, 1);
   assert.equal(fetchCalls[0].url, "/healing/approve");
   assert.equal(fetchCalls[0].options.method, "POST");
   assert.equal(fetchCalls[0].options.headers["X-Dashboard-Token"], undefined);
   assert.deepEqual(storageWrites, [], "the token is never persisted to localStorage");
-  assert.deepEqual(JSON.parse(fetchCalls[0].options.body), { original: "#old" });
+  assert.deepEqual(JSON.parse(fetchCalls[0].options.body), { original: "#old", suggested: "#new" });
   assert.equal(button.disabled, true);
 });
 
@@ -355,7 +355,7 @@ test("Phase 8: reject button POSTs to /healing/reject with the selector", async 
 
 test("Phase 8: without a token, no auth header is sent", async () => {
   const { nodes, fetchCalls } = dashboardUI({ search: "" });
-  await clickHealingButton(nodes, { action: "approve", selector: "#old" });
+  await clickHealingButton(nodes, { action: "approve", selector: "#old", suggested: "#new" });
   assert.equal(fetchCalls[0].options.headers["X-Dashboard-Token"], undefined);
 });
 
@@ -376,7 +376,7 @@ test("Phase 8: a network-level failure (fetch rejects) also re-enables the butto
       throw new Error("Failed to fetch");
     },
   });
-  const button = await clickHealingButton(nodes, { action: "approve", selector: "#old" });
+  const button = await clickHealingButton(nodes, { action: "approve", selector: "#old", suggested: "#new" });
   assert.equal(button.disabled, false);
   assert.match(alerts[0], /Failed to fetch/);
 });

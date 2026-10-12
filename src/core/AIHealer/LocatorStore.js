@@ -1,5 +1,6 @@
 const path = require("path");
 const AtomicJsonStore = require("../util/AtomicJsonStore");
+const ParallelMode = require("../parallel/ParallelMode");
 
 /**
  * LocatorStore — persistent cache of alternative selectors (Tier 2 healing).
@@ -122,6 +123,12 @@ class LocatorStore {
     getAlternatives(original) {
         if (!Object.hasOwn(this.data, original)) return [];
         const entry = this.data[original];
+        const divert = ParallelMode.divertTarget();
+        if (divert) {
+            // Parallel page task: journal the touch, serve the load-time snapshot.
+            divert.record("locatorStore.use", { original });
+            return [...entry.alternatives];
+        }
         entry.lastUsed = Date.now();
         this._queue = this._queue.then(() => this._save());
         return [...entry.alternatives];

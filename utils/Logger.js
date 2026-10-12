@@ -39,25 +39,89 @@ const { sanitizeField } = require(path.join(__dirname, "..", "src", "core", "uti
  *   message containing an embedded newline, so this changes no current
  *   output.
  */
+/**
+ * Replace the user:password part of scheme://user:password@host with
+ * [redacted]. Written as a linear scan (no backtracking regex) because the
+ * input is arbitrary log text.
+ */
+function redactUrlUserinfo(text) {
+    let result = "";
+    let from = 0;
+    for (;;) {
+        const marker = text.indexOf("://", from);
+        if (marker === -1) break;
+        const start = marker + 3;
+        let end = start;
+        let at = -1;
+        let colon = -1;
+        // The authority ends at the first '/', '?', '#' or whitespace. The
+        // credentials end at the LAST '@' inside it, so a password that itself
+        // contains '@' is masked completely.
+        while (end < text.length) {
+            const ch = text[end];
+            if (ch === "/" || ch === "?" || ch === "#" || ch === " " || ch === "\n" || ch === "\r" || ch === "\t") break;
+            if (ch === "@") at = end;
+            else if (ch === ":" && colon === -1 && at === -1) colon = end;
+            end++;
+        }
+        if (at !== -1 && colon !== -1) {
+            result += text.slice(from, start) + "[redacted]@";
+            from = at + 1;
+        } else {
+            result += text.slice(from, marker + 3);
+            from = marker + 3;
+        }
+    }
+    return result + text.slice(from);
+}
+
+const SECRET_ENV_NAME = /TOKEN|KEY|SECRET|PASSWORD|PASS|CREDENTIAL|DATABASE_URL|CONNECTION/i;
+
+function toText(message) {
+    if (typeof message === "string") return message;
+    try {
+        return String(message);
+    } catch {
+        return "[unprintable]";
+    }
+}
+
+function redact(message) {
+    let out = toText(message);
+    for (const [name, value] of Object.entries(process.env)) {
+        if (typeof value === "string" && value.length >= 8 && SECRET_ENV_NAME.test(name)) {
+            out = out.split(value).join("[redacted]");
+        }
+    }
+    // URL userinfo: scheme://user:pass@host
+    out = redactUrlUserinfo(out);
+    // Authorization headers (scheme + value, or a bare value)
+    out = out.replace(/(Authorization\s*:\s*)(?:(?:Bearer|Basic|Token|Digest)\s+)?[^\s"',;]+/gi, "$1[redacted]");
+    // key=value forms, including URL-encoded values (%2E...)
+    out = out.replace(/\b((?:access_|id_|refresh_)?token|password|passwd|secret|api_?key)(=)[^\s&"',;]+/gi, "$1$2[redacted]");
+    out = out.replace(/(Bearer\s+)[^\s"',;]+/gi, "$1[redacted]");
+    return out;
+}
+
 class Logger {
     static logFilePath = path.join(__dirname, "..", "reports", "execution.log");
     static _writeQueue = Promise.resolve(); // serialise async writes
     static _dirEnsured = false;
 
     static info(message) {
-        const safe = sanitizeField(message);
+        const safe = sanitizeField(redact(message));
         console.log(`🟢 INFO: ${safe}`);
         Logger._enqueue(`[INFO]    ${new Date().toISOString()} - ${safe}\n`);
     }
 
     static error(message) {
-        const safe = sanitizeField(message);
+        const safe = sanitizeField(redact(message));
         console.error(`🔴 ERROR: ${safe}`);
         Logger._enqueue(`[ERROR]   ${new Date().toISOString()} - ${safe}\n`);
     }
 
     static warning(message) {
-        const safe = sanitizeField(message);
+        const safe = sanitizeField(redact(message));
         console.warn(`🟡 WARNING: ${safe}`);
         Logger._enqueue(`[WARNING] ${new Date().toISOString()} - ${safe}\n`);
     }
@@ -78,7 +142,7 @@ class Logger {
                 await fs.promises.mkdir(dir, { recursive: true });
                 Logger._dirEnsured = true;
             }
-            await fs.promises.appendFile(Logger.logFilePath, line, "utf8");
+            await fs.promises.appendFile(Logger.logFilePath, line, { encoding: "utf8", mode: 0o600 });
         } catch {
             // Swallow write errors — logging must never crash the test process
         }

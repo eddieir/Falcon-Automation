@@ -238,7 +238,7 @@ test("loopback bind: DASHBOARD_ALLOWED_ORIGIN is honoured for state-changing req
   const saved = process.env.DASHBOARD_ALLOWED_ORIGIN;
   process.env.DASHBOARD_ALLOWED_ORIGIN = "http://ui.example.test";
   t.after(() => { if (saved === undefined) delete process.env.DASHBOARD_ALLOWED_ORIGIN; else process.env.DASHBOARD_ALLOWED_ORIGIN = saved; });
-  const res = await rawRequest(d.port, { method: "POST", urlPath: "/emit", body: "{}", headers: { "Content-Type": "application/json", Origin: "http://ui.example.test" } });
+  const res = await rawRequest(d.port, { method: "POST", urlPath: "/emit", body: JSON.stringify({ name: "testPass" }), headers: { "Content-Type": "application/json", Origin: "http://ui.example.test" } });
   assert.equal(res.statusCode, 204);
 });
 

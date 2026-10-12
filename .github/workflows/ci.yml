@@ -54,7 +54,6 @@ jobs:
     timeout-minutes: 10
     env:
       HEADLESS: "true"
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       # falcon.js now reads CI=true itself to default the dashboard off (no
       # browser to view it here) — the --no-dashboard flag below is now
       # redundant but kept as an explicit belt-and-suspenders default.
@@ -72,7 +71,8 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        # Pinned by digest. Tag postgres:16-alpine, digest resolved 2026-10-08.
+        image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
         env:
           POSTGRES_USER: falcon
           POSTGRES_PASSWORD: falcon_ci_password
@@ -147,9 +147,13 @@ jobs:
 
       # ── Scenario tests (custom runner) ──────────────────────────────────────
       - name: Run Login test
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node tests/ui/LoginTest.js
 
       - name: Run Checkout test
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node tests/ui/CheckoutTest.js
 
       - name: Run User API test
@@ -223,6 +227,8 @@ jobs:
 
       # ── Autonomous exploration (no dashboard in CI) ─────────────────────────
       - name: Run Falcon autonomous pipeline
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node falcon.js --no-dashboard --repeat=3
 
       # Runs even if the pipeline step above failed — the exact case where a
@@ -325,6 +331,8 @@ jobs:
 
       # ── Playwright native suite (with Allure reporter) ──────────────────────
       - name: Run Playwright native tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: npx playwright test
 
 
@@ -358,3 +366,181 @@ jobs:
           path: data/run_history.json
           if-no-files-found: ignore
           retention-days: 90
+
+  # Phase 16: three shards of one run, each on a fresh runner. No secrets are
+  # exposed to these jobs and no cache is saved from them (caches are only
+  # restored read-only elsewhere); the fixture app is local, no external site.
+  shards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      HEADLESS: "true"
+      CI: "true"
+      RUN_ID: gh-${{ github.run_id }}-${{ github.run_attempt }}
+      SHARD_INDEX: ${{ matrix.shard }}
+      FIXTURE_PORT: "4173"
+      # Non-secret and identical on every shard and in the aggregate job, so
+      # locator signatures recorded by shards use the salt the merge expects.
+      FALCON_LOCATOR_SALT: falcon-ci-shards
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start local fixture app
+        run: |
+          nohup node scripts/fixture/server.js --port="$FIXTURE_PORT" > "$RUNNER_TEMP/fixture.log" 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:$FIXTURE_PORT/health" > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "::error::fixture app did not become healthy"
+          cat "$RUNNER_TEMP/fixture.log"
+          exit 1
+      - name: Run shard
+        run: node falcon.js --no-dashboard --url="http://127.0.0.1:$FIXTURE_PORT" --shard="$SHARD_INDEX/3" --run-id="$RUN_ID"
+      - name: Stage shard bundle
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/stage"
+          if [ -d "reports/shards/$RUN_ID/shard-$SHARD_INDEX-of-3" ]; then
+            cp -a "reports/shards/$RUN_ID/shard-$SHARD_INDEX-of-3" "$RUNNER_TEMP/stage/"
+          else
+            echo "::warning::no bundle produced for shard $SHARD_INDEX"
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: falcon-shard-${{ matrix.shard }}-of-3-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/stage
+          if-no-files-found: warn
+          retention-days: 7
+
+  aggregate:
+    needs: shards
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      CI: "true"
+      FALCON_LOCATOR_SALT: falcon-ci-shards
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: falcon-shard-*-of-3-${{ github.run_attempt }}
+          path: shards-in
+          merge-multiple: true
+      # Read-only restore; locator_memory.json is never part of any cache.
+      - name: Restore Falcon state
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            data/scenario_history.json
+            data/quarantine_decisions.json
+            data/healing_pending.json
+            data/healing_decisions.json
+          key: falcon-state-agg-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            falcon-state-agg-${{ github.ref_name }}-
+      # The exit code of the merge is the job result. The run id and commit are
+      # passed through env (never interpolated into the script) and the merge
+      # rejects bundles from another run or commit with exit 2.
+      - name: Merge shards
+        id: merge
+        env:
+          EXPECT_RUN_ID: gh-${{ github.run_id }}-${{ github.run_attempt }}
+          EXPECT_COMMIT: ${{ github.sha }}
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          node falcon.js merge --input=shards-in --expect-total=3 --expect-run-id="$EXPECT_RUN_ID" --expect-commit="$EXPECT_COMMIT" 2>&1 | tee reports/merge-output.txt
+      # Mirrors the sequential job: state is saved on if: always() for main
+      # (non-fork) so a failing run still records flaky history. The save fails
+      # with a Path Validation Error when no state file exists (for example the
+      # merge was rejected before writing any), so a check step reports whether
+      # any file exists and the save is skipped otherwise. continue-on-error is
+      # scoped to the cache save step alone, as in the sequential job; the merge
+      # step's exit code, which is the quality gate, is untouched.
+      - name: Check Falcon state files exist
+        id: state-files
+        if: always() && github.ref == 'refs/heads/main' && github.event.pull_request.head.repo.fork != true
+        run: |
+          mkdir -p data
+          found=false
+          for f in scenario_history quarantine_decisions healing_pending healing_decisions; do
+            if [ -f "data/$f.json" ]; then found=true; fi
+          done
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+          if [ "$found" != "true" ]; then echo "::notice::no Falcon state files to save"; fi
+      - name: Save Falcon state
+        if: always() && steps.state-files.outputs.found == 'true' && github.ref == 'refs/heads/main' && github.event.pull_request.head.repo.fork != true
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            data/scenario_history.json
+            data/quarantine_decisions.json
+            data/healing_pending.json
+            data/healing_decisions.json
+          key: falcon-state-agg-${{ github.ref_name }}-${{ github.run_id }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: falcon-merged-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            reports/
+            !reports/shards/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Proves a missing shard is rejected: merge over only 2 of 3 bundles while
+  # expecting 3 must exit 2 (rejected).
+  shard-negative:
+    needs: shards
+    if: needs.shards.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: falcon-shard-*-of-3-${{ github.run_attempt }}
+          path: shards-in
+          merge-multiple: true
+      - name: Merge with one shard missing must be rejected
+        env:
+          EXPECT_RUN_ID: gh-${{ github.run_id }}-${{ github.run_attempt }}
+          EXPECT_COMMIT: ${{ github.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/two"
+          cp -a shards-in/shard-1-of-3 shards-in/shard-2-of-3 "$RUNNER_TEMP/two/"
+          rc=0
+          node falcon.js merge --input="$RUNNER_TEMP/two" --expect-total=3 --expect-run-id="$EXPECT_RUN_ID" --expect-commit="$EXPECT_COMMIT" || rc=$?
+          if [ "$rc" -ne 2 ]; then
+            echo "::error::expected exit code 2 (rejected) for a missing shard, got $rc"
+            exit 1
+          fi

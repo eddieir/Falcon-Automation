@@ -148,7 +148,12 @@ class ReportManager {
      * @param {Object} [opts.coverage]   - SweepResult.coverage from SiteSweep (optional)
      * @param {Array}  [opts.pages]      - SweepResult per-page breakdown (optional)
      */
-    generateReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [] } = {}) {
+    /**
+     * Pure report construction (Phase 16): no clock, no console, no file I/O,
+     * no exit code. The caller supplies `runId` and `duration`. The same
+     * validation and tally rules as generateReport, which delegates here.
+     */
+    static buildReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [], runId, duration, timings = null } = {}) {
         if (!Array.isArray(tests) || !Array.isArray(uiIssues) || !Array.isArray(healingEvents) || !Array.isArray(pages)) {
             throw new TypeError("Report results, issues, healing events and pages must be arrays");
         }
@@ -158,11 +163,6 @@ class ReportManager {
         if (tests.some(result => !result || !["passed", "failed", "skipped", "quarantined", "deduped", "unavailable"].includes(result.status))) {
             throw new TypeError("Each test result must have a valid status");
         }
-        const endTime = Date.now();
-        const durationSeconds = this._startTime
-            ? ((endTime - this._startTime) / 1000).toFixed(2)
-            : "unknown";
-
         // Tally real outcomes
         const passed      = tests.filter((t) => t.status === "passed").length;
         const failed      = tests.filter((t) => t.status === "failed").length;
@@ -205,8 +205,8 @@ class ReportManager {
         }
 
         const report = {
-            runId: new Date().toISOString(),
-            duration: `${durationSeconds}s`,
+            runId,
+            duration,
             summary: { total, passed, failed, skipped, quarantined, deduped, unavailable },
             result: overallResult,
             tests,
@@ -215,6 +215,26 @@ class ReportManager {
             coverage,
             pages,
         };
+
+        // VOLATILE, parallel/shard runs only: stage wall times in ms. Strip
+        // `execution` before comparing reports for equivalence.
+        if (timings && typeof timings === "object") report.execution = { timings };
+
+        return report;
+    }
+
+    generateReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [] } = {}) {
+        const endTime = Date.now();
+        const durationSeconds = this._startTime
+            ? ((endTime - this._startTime) / 1000).toFixed(2)
+            : "unknown";
+        const report = ReportManager.buildReport({
+            tests, uiIssues, healingEvents, coverage, pages,
+            runId: new Date().toISOString(),
+            duration: `${durationSeconds}s`,
+        });
+        const { summary, result: overallResult } = report;
+        const { total, passed, failed, skipped, quarantined, deduped, unavailable } = summary;
 
         // Ensure the reports directory exists
         const reportsDir = path.join(process.cwd(), "reports");
