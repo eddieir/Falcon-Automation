@@ -95,7 +95,7 @@ Source: `docs/benchmarks/phase-16-parallel-benchmark.md`.
 
 - **Merge failed (exit 2 or 3):** fix the input or the storage problem and run the same `merge` command again. Inputs are preserved until the merge succeeds. A successful merge is idempotent.
 - **Merge crashed:** re-run the same `merge` command. The receipt is written last, so reduction runs again and converges.
-- **Re-running CI after a shard failure:** use "Re-run all jobs". The run id includes the attempt number and the aggregate is told to expect it, so "Re-run failed jobs" leaves the passing shards' bundles under the previous attempt and the merge rejects the set (exit 2, unexpected run id). That is the safe failure; nothing is published.
+- **Re-running CI after a shard failure:** use "Re-run all jobs". The run id includes the attempt number and the aggregate is told to expect it, so "Re-run failed jobs" (or re-running a single shard job) leaves the passing shards' bundles under the previous attempt. Observed on run 37948756226 (re-running only shard 1, attempt 2; "Re-run all jobs" then succeeded as attempt 3): the aggregate job downloaded only the attempt-2 bundle, `merge` exited 2 with `MISSING_SHARD 1/3`, and the shard-negative job also failed because its input was incomplete. No report was published and no state was saved. That is the safe failure; run "Re-run all jobs" to recover.
 - **Mixed plan digests (`MIXED_PLANDIGEST`):** every shard analyses all pages and records a digest of the plan. If shards reach the `--budget-ms` deadline at different points during analysis, their digests differ and the merge rejects the set (exit 2). CI does not use `--budget-ms`. When using it locally, give the budget enough room for analysis, or run without it when sharding.
 - **Clean up bundles:** delete `reports/shards` and `reports/merge`. Neither directory holds canonical state.
 - **Return to sequential:** stop passing `--workers`, `--shard` and `--run-id`. Canonical files written by a Phase 16 run are readable by the earlier build.
@@ -116,8 +116,8 @@ To undo the feature itself, revert the pull request; canonical file formats are 
 
 | Signal | Where it shows | Meaning | Action |
 | --- | --- | --- | --- |
-| `merge` exit 2 with `MISSING_SHARD`, `DUPLICATE_SHARD`, `MIXED_TOTAL` or `NO_SHARDS` | aggregate job log | Shard set incomplete or inconsistent | Re-run all jobs; check the failing shard job |
-| exit 2 with `UNEXPECTED_RUNID` or `UNEXPECTED_COMMIT` | aggregate job log | Bundles from another attempt or commit | Use "Re-run all jobs", not "Re-run failed jobs" |
+| `merge` exit 2 with `MISSING_SHARD`, `DUPLICATE_SHARD`, `MIXED_TOTAL` or `NO_SHARDS` | aggregate job log | Shard set incomplete or inconsistent; also what "Re-run failed jobs" produces (only the re-run shard's bundle is found) | Re-run all jobs; check the failing shard job |
+| exit 2 with `UNEXPECTED_RUNID` or `UNEXPECTED_COMMIT` | aggregate job log | Bundles from another run id or commit reached the merge (covered by tests; a partial re-run on GitHub shows `MISSING_SHARD` instead) | Use "Re-run all jobs" |
 | exit 2 with `PLAN_DIGEST_MISMATCH` or `FRONTIER_DIGEST_MISMATCH` | aggregate job log | Shards saw different pages (unstable app, or a failed discovery task: look for the discovery warnings in the shard logs) | Re-run the shards; if it repeats, stabilise the app under test |
 | exit 2 with `PAGE_UNOWNED`, `DUPLICATE_PAGE_OWNER` or `BAD_ASSIGNMENT` | aggregate job log | Page ownership broken | Treat as a defect; roll back to sequential and report it |
 | exit 3 | aggregate job log | A state write failed; inputs kept | Fix storage and re-run the same merge |
@@ -126,6 +126,8 @@ To undo the feature itself, revert the pull request; canonical file formats are 
 
 ## 7. Known open items
 
+- The aggregate job saves the canonical state cache only on the default branch for non-fork runs, so the save step is skipped on pull requests (observed: steps "Check Falcon state files exist" and "Save Falcon state" skipped on run 37948756226). It can only be observed on the first run on `main`. After the first merge, check the aggregate job's "Save Falcon state" step is green and that `gh cache list` shows a `falcon-state-agg-main-<run id>` entry; if not, the next run starts from an empty state, which is safe but loses history.
+- The GitHub "Code scanning AI findings" check (`github-advanced-security`) fails on every pull request in this repository with `You have exceeded your monthly quota` (read from the job log of run 37948763336). It is a GitHub-side Copilot quota limit, not a Falcon defect, and it is not a required check.
 - A historical private key (`client.key`, commits `8d1cff4` and `ef4b32c`, removed in `58cd66a`) is in git history. Owner disposition (2026-10-09): the Supabase project it belonged to is fully deleted, so the credential cannot authenticate; use of the same certificate elsewhere was not verified.
 - The CI Postgres service image is pinned by digest; no image vulnerability scan has been run. The owner accepted this on 2026-10-09 (`docs/security/phase-16-owner-acceptance.md`).
 - Discovery in parallel and shard runs: a URL that a click lands on is recorded as is (query strings and redirect targets are not stripped), and clicking runs page JavaScript that may make the browser load another origin without recording it. The sequential crawl behaves the same way.
