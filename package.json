@@ -41,7 +41,9 @@
     "history:check": "node scripts/history.js check",
     "dashboard": "node scripts/dashboard.js",
     "fixture:serve": "node scripts/fixture/server.js",
-    "bench:parallel": "node scripts/benchmark/parallel.js"
+    "bench:parallel": "node scripts/benchmark/parallel.js",
+    "production:event": "node scripts/production-cycle/append-event.js",
+    "production:dashboard": "node scripts/production-cycle/dashboard.js"
   },
   "keywords": [
     "AI",
