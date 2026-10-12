@@ -24,15 +24,22 @@ const Schema = require("../../src/production-cycle/EventSchema");
 const UI_PATH = path.join(__dirname, "..", "..", "src", "production-cycle", "ui", "index.html");
 const html = fs.readFileSync(UI_PATH, "utf8");
 
+function removeDelimited(src, open, close) {
+  // Linear scan: drop every open..close span; an unterminated opener drops the rest.
+  let out = "";
+  let i = 0;
+  for (;;) {
+    const start = src.indexOf(open, i);
+    if (start === -1) return out + src.slice(i);
+    out += src.slice(i, start);
+    const end = src.indexOf(close, start + open.length);
+    if (end === -1) return out;
+    i = end + close.length;
+  }
+}
+
 function stripComments(src) {
-  // Repeat until stable so removing one comment cannot splice a new one together.
-  let out = src;
-  let prev;
-  do {
-    prev = out;
-    out = out.replace(/<!--[\s\S]*?-->/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
-  } while (out !== prev);
-  return out;
+  return removeDelimited(removeDelimited(src, "<!--", "-->"), "/*", "*/");
 }
 
 test("UI: forbidden DOM-injection APIs are absent", { timeout: 8000 }, () => {
