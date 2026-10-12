@@ -87,7 +87,7 @@ test("raw-appended line bypassing the CLI is flagged as tampered", async () => {
   assert.equal(parsed.firstBadSeq, 99);
 });
 
-test("duplicate eventId is ignored, not double-counted", () => {
+test("duplicate eventId is not double-counted and is flagged as tampered", () => {
   const line1 =
     JSON.stringify(
       Object.assign({}, BASE_DRAFT, {
@@ -112,6 +112,22 @@ test("duplicate eventId is ignored, not double-counted", () => {
   const st = EventReader.parseChunk(Buffer.from(line1 + line2), undefined);
   assert.equal(st.events.length, 1);
   assert.equal(st.malformed.length, 0);
+  assert.equal(st.tampered, true);
+  assert.equal(st.firstBadSeq, 2);
+});
+
+test("a line with no newline that outgrows the line limit is dropped, not buffered", () => {
+  const big = Buffer.alloc(10000, 0x61);
+  let st = EventReader.parseChunk(big, undefined);
+  assert.equal(st.carry.length, 0, "nothing is retained");
+  for (let i = 0; i < 50; i += 1) st = EventReader.parseChunk(big, st);
+  assert.equal(st.carry.length, 0, "still nothing retained after 500 KB");
+  assert.equal(st.partialBytes, 51 * 10000);
+  st = EventReader.parseChunk(Buffer.from("tail\n"), st);
+  assert.equal(st.malformed.length, 1);
+  assert.equal(st.malformed[0].byteLength, 51 * 10000 + 4);
+  assert.equal(st.dropping, false);
+  assert.equal(st.partialBytes, 0, "no partial line remains once the bad line ends");
 });
 
 test("file modes: run dir 0700, ledger file 0600 after append", async () => {
