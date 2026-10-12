@@ -2,6 +2,8 @@
 
 Practical task-oriented guide for operators configuring and running Falcon with LLM-powered Tier 3 healing and the production-cycle dashboard.
 
+> For invocation-scoped (`--llm-*` flag/profile) provider selection and the Anthropic/Gemini providers, see [docs/maintenance-byok-operations.md](maintenance-byok-operations.md).
+
 ## Choosing a Provider
 
 Falcon Tier 3 (AI self-healing) requires an LLM provider. Set `FALCON_LLM_PROVIDER` in your environment:

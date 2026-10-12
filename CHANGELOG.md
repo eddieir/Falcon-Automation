@@ -6,6 +6,29 @@ See [README.md](README.md) for the current feature set, architecture, and usage.
 
 ---
 
+## Post-Phase-17 maintenance — Invocation-scoped BYOK providers
+
+Implemented on branch `maintenance/byok-frontier-providers`.
+
+### Added
+
+- **Invocation-scoped provider selection**: `--llm-profile=<name>`, `--llm-provider=<id>`, and `--llm-model=<id>` CLI flags resolve the LLM provider, model, and credential source once per `falcon.js` invocation, taking precedence over `FALCON_LLM_*` environment configuration. No flags means the existing Phase 17 environment-resolved behaviour is unchanged.
+- **Anthropic and Gemini providers**: First-class support over the same guarded REST transport used by the existing providers (fixed host, pinned path, no redirects, no proxy). No new npm dependency was added; both call the vendor REST endpoint directly rather than a vendor SDK.
+- **Local profile store**: `npm run llm:profile:list|show|set|delete` manage named profiles under a private, owner-only directory. Profiles store only non-secret metadata — provider, model, endpoint, and the name of the environment variable holding the key; plaintext API keys passed to the profile commands are rejected and never written to disk.
+- **`CONTENT_BLOCKED` error code**: Surfaced when the Gemini provider's safety/blocklist filtering blocks a response, added to the existing Phase 17 error code taxonomy.
+- **Per-invocation budgets**: Tier 3 call budgets and concurrency are tracked per invocation in addition to the existing process-wide ceilings.
+
+### Unchanged
+
+- `FALCON_LLM_*` environment variable behaviour and precedence are untouched; this work only adds flags/profiles above that layer.
+
+### Known Limitations
+
+- Mock-tested only: the regression suite exercises provider request/response protocols against mocks; no live model calls were made, and no model id is certified for quality.
+- Model ids are operator-supplied; there is no model discovery.
+- On Windows, profile file owner-only and symlink checks are skipped with a warning rather than enforced.
+- No support for Entra ID, AWS Bedrock, or Google Vertex AI.
+
 ## Phase 17 — Pluggable LLM Providers and Production-Cycle Visibility
 
 Implemented on branch `phase-17/pluggable-llm-providers` (base commit `023917306d28f85e677c866dedf48b77a2165beb`).
