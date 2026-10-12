@@ -106,10 +106,10 @@ async function main() {
     try { opts = parseArgs(process.argv.slice(2)); parseDelay(opts.delayMs); parsePort(opts.port); }
     catch (e) { process.stderr.write(`${e.message}\n`); process.exit(2); }
     const server = await start(opts);
-    process.stdout.write(`FIXTURE_URL=http://127.0.0.1:${server.address().port}\n`);
     const stop = () => { server.close(() => process.exit(0)); server.closeAllConnections(); };
     process.on('SIGTERM', stop);
     process.on('SIGINT', stop);
+    process.stdout.write(`FIXTURE_URL=http://127.0.0.1:${server.address().port}\n`);
 }
 
 module.exports = { createServer, start, parseDelay, parsePort, PAGE_COUNT, MAX_DELAY_MS };

@@ -3,9 +3,27 @@ const test = require('node:test');
 const assert = require('node:assert');
 const http = require('node:http');
 const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { start, parseDelay } = require('../../scripts/fixture/server.js');
 const bench = require('../../scripts/benchmark/parallel.js');
+
+// Preload module that synchronously sends SIGTERM to this process the instant
+// it observes the FIXTURE_URL line being written to stdout. This deterministically
+// exercises the race between publishing FIXTURE_URL and registering the SIGTERM
+// handler, instead of relying on timing luck.
+const KILL_ON_URL_PRELOAD = `
+'use strict';
+const orig = process.stdout.write.bind(process.stdout);
+process.stdout.write = function (chunk, ...rest) {
+    const r = orig(chunk, ...rest);
+    if (chunk.toString().includes('FIXTURE_URL=')) {
+        process.kill(process.pid, 'SIGTERM');
+    }
+    return r;
+};
+`;
 
 function get(url) {
     return new Promise((resolve, reject) => {
@@ -68,6 +86,22 @@ test('CLI prints FIXTURE_URL, rejects bad delay, stops on SIGTERM', async () => 
     p.kill('SIGTERM');
     const r = await exit;
     assert.strictEqual(r.c, 0);
+});
+
+test('CLI handles SIGTERM delivered the instant FIXTURE_URL is printed (no race)', async () => {
+    const script = path.join(__dirname, '..', '..', 'scripts', 'fixture', 'server.js');
+    const preloadPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'p16-fixture-preload-')), 'kill-on-url.js');
+    fs.writeFileSync(preloadPath, KILL_ON_URL_PRELOAD);
+    try {
+        const p = spawn(process.execPath, ['--require', preloadPath, script, '--port=0'], { stdio: ['ignore', 'pipe', 'inherit'] });
+        const line = await new Promise((resolve) => { let b = ''; p.stdout.on('data', (d) => { b += d; if (b.includes('\n')) resolve(b); }); });
+        assert.match(line, /^FIXTURE_URL=http:\/\/127\.0\.0\.1:\d+\n$/);
+        const r = await new Promise((resolve) => p.once('exit', (c, sig) => resolve({ c, sig })));
+        assert.strictEqual(r.sig, null, `process must not be killed by signal, got sig=${r.sig}`);
+        assert.strictEqual(r.c, 0, `process must exit 0 via the SIGTERM handler, got code=${r.c}`);
+    } finally {
+        fs.rmSync(path.dirname(preloadPath), { recursive: true, force: true });
+    }
 });
 
 test('benchmark stats helpers', () => {
