@@ -8,7 +8,11 @@ See [README.md](README.md) for the current feature set, architecture, and usage.
 
 ## Post-Phase-17 maintenance — Invocation-scoped BYOK providers
 
-Implemented on branch `maintenance/byok-frontier-providers`.
+Merged into `main` through pull request #50. No version tag or GitHub release has been created for this work yet; tagging remains a post-merge owner action.
+
+### Release-note copy
+
+Falcon now supports invocation-scoped bring-your-own-key LLM providers. Separate runs can select OpenAI, Anthropic, Gemini, Azure OpenAI, or an approved OpenAI-compatible endpoint without storing API-key values in Falcon profiles. Provider output remains locally validated, and a proposed selector must be approved before it can be trusted and reused. Provider protocols are mock-tested; this release does not certify every model in a vendor catalogue, and no live provider calls were made during the release cycle.
 
 ### Added
 
@@ -52,7 +56,7 @@ Implemented on branch `phase-17/pluggable-llm-providers` (base commit `023917306
 - **Production-cycle coordination dashboard**: Local (loopback-only) server and event ledger for tracking dispatch history, verdicts, and evidence during release cycles (`npm run production:dashboard`, `npm run production:event`). Hash chain and tamper detection included.
 - **SSRF and transport hardening**: Endpoint policy enforcement (always-deny cloud metadata, loopback/private ranges opt-in), DNS pinning, no proxy support, response size caps, budget tracking per run.
 - **Error code taxonomy**: Closed enumeration of 19 provider/config error codes for consistent troubleshooting.
-- **Data minimization**: Prompt capped at 20 candidates and 8 KiB UTF-8 (DOM collection still 60); never sends full DOM, cookies, storage, or env.
+- **Data minimization**: Prompt candidates default to 20 and are configurable up to the 60-element DOM collection cap; the complete prompt is capped at 8 KiB UTF-8. It never sends full DOM, cookies, storage, or env.
 
 ### Changed
 
@@ -69,7 +73,7 @@ Implemented on branch `phase-17/pluggable-llm-providers` (base commit `023917306
 
 ### Known Limitations
 
-1. Prompt candidates capped at 20 (down from 60) for size/latency targets; benchmark healing quality before/after if concerned.
+1. Prompt candidates default to 20 (configurable from 1 to the 60-element collection cap) for size/latency targets; benchmark healing quality after changing the default.
 2. Production-cycle ledger local only (no remote replication); cloned repos have no event history.
 3. Custom endpoints and private ranges require explicit opt-in flags.
 4. Proxies unsupported; dedicated Agent per transport.

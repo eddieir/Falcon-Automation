@@ -139,7 +139,7 @@ Exit codes: 0 (ok), 2 (usage/validation/redaction), 3 (full/I/O), 4 (lock timeou
 ## Known Limitations
 
 1. Ledger lives in `.git/production-cycle/<run-id>/events.jsonl`; cloned repos have no history.
-2. Prompt candidates capped at 20 (down from 60 in DOM collection) to meet size and latency targets.
+2. Prompt candidates default to 20 and are configurable from 1 to the 60-element DOM collection cap; the complete prompt remains capped at 8 KiB.
 3. Healing outcome may differ before and after cap reduction; benchmark advised.
 4. Custom endpoints (loopback, private ranges) require explicit opt-in flags.
 5. Proxies unsupported; dedicated HTTP agent used.
