@@ -1,9 +1,9 @@
 # Falcon — Engineering Phase Plans (10 onward)
 
-> **Status:** Phases 1–9 merged. Phase 10 in implementation.
-> **Purpose:** the durable, cross-machine engineering plan. `HANDOFF.md` is deliberately untracked
-> (it holds local-only internal notes and has been lost once because of that), so everything a future
-> session or a different machine needs in order to continue this work lives **here**, in the repo,
+> **Status:** Phases 1–17 are merged on `main`. The invocation-scoped BYOK maintenance work was merged through pull request #50. Plans below retain their original design context; each phase section records its delivered status and limits.
+> **Purpose:** the durable, cross-machine engineering plan. `HANDOFF.md` is tracked and ships with
+> the repository, but this file remains the detailed plan of record so a future session or a
+> different machine can continue the work from versioned evidence,
 > and travels with `git clone`.
 > **Companion docs:** [`README.md`](../README.md) for the product story, [`CHANGELOG.md`](../CHANGELOG.md)
 > for the per-defect engineering history.
@@ -777,9 +777,9 @@ The full set of criteria is in the detailed plan and will be enforced by
 
 ## Phase 17 — Pluggable LLM providers
 
-**Status: implemented** on branch `phase-17/pluggable-llm-providers`; the owner decides the merge. See docs/phase-17-operations.md, docs/architecture/phase-17-pluggable-llm-providers.md, docs/architecture/phase-17-production-cycle-dashboard.md and docs/security/phase-17-threat-model.md.
+**Status: merged** into `main`. See docs/phase-17-operations.md, docs/architecture/phase-17-pluggable-llm-providers.md, docs/architecture/phase-17-production-cycle-dashboard.md and docs/security/phase-17-threat-model.md.
 
-**Post-Phase-17 maintenance: BYOK.** Invocation-scoped provider/model/credential selection plus first-class Anthropic and Gemini providers is implemented on branch `maintenance/byok-frontier-providers`, submitted as PR #50 — pending review and the owner's merge decision. See docs/maintenance-byok-operations.md.
+**Post-Phase-17 maintenance: BYOK.** Invocation-scoped provider/model/credential selection plus first-class Anthropic and Gemini providers was merged through pull request #50. See docs/maintenance-byok-operations.md. Provider protocols were verified against mocks; no live provider call was made during that release cycle, and the project does not claim universal frontier-model compatibility.
 
 Renumbered and reduced. This was "Healing without a third party", and the larger half of it — a
 deterministic local tier that heals with no external call — shipped as Phase 14. What remains is the
