@@ -121,7 +121,10 @@ function resolve(get, env = process.env) {
         // Belt-and-braces: resolve() must never throw. Any unexpected
         // failure (a hostile `get` implementation, etc.) becomes a plain
         // configuration error rather than crashing the caller.
-        return fail("CONFIG_INVALID", `Unexpected configuration error: ${error && error.message}`);
+        // Fixed, value-free detail — never interpolate error.message, which
+        // may embed a caller-supplied raw value from a hostile `get`
+        // implementation or validator.
+        return fail("CONFIG_INVALID", "Unexpected configuration error.");
     }
 }
 
@@ -215,8 +218,11 @@ function resolveInner(get, env) {
         try {
             const value = validateIntSetting(key, get(key), bound);
             numeric[bound.prop] = value === null ? bound.def : value;
-        } catch (error) {
-            return fail("CONFIG_INVALID", error.message);
+        } catch {
+            // Fixed, value-free detail — `key` is a known, fixed setting
+            // name (not caller-controlled); never interpolate error.message,
+            // which embeds the raw received value.
+            return fail("CONFIG_INVALID", `${key} must be an integer within the allowed bounds.`);
         }
     }
 

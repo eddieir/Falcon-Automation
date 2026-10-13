@@ -134,16 +134,19 @@ function safeParse(text) {
     }
     const forbiddenField = findForbiddenField(parsed);
     if (forbiddenField) {
-        return fail("CONFIG_INVALID", `field "${forbiddenField}" is not permitted in a profile.`);
+        // Fixed, value-free detail — the field NAME is itself attacker-
+        // controlled (an arbitrary JSON key from the profile file) and must
+        // never be interpolated into a message that could reach logs/stderr.
+        return fail("CONFIG_INVALID", "profile contains a forbidden or credential-shaped field.");
     }
     const clean = Object.create(null);
     for (const key of Object.keys(parsed)) {
         if (!ALLOWED_KEY_SET.has(key)) {
-            return fail("CONFIG_INVALID", `field "${key}" is not a recognized profile field.`);
+            return fail("CONFIG_INVALID", "profile contains an unrecognized field.");
         }
         const value = parsed[key];
         if (value !== null && typeof value === "object") {
-            return fail("CONFIG_INVALID", `field "${key}" must be a scalar value.`);
+            return fail("CONFIG_INVALID", "profile contains a non-scalar field value.");
         }
         clean[key] = value;
     }
@@ -450,16 +453,17 @@ async function set(name, profile, { env = process.env, cwd = process.cwd() } = {
     }
     const forbiddenField = findForbiddenField(profile);
     if (forbiddenField) {
-        return fail("CONFIG_INVALID", `field "${forbiddenField}" is not permitted in a profile.`);
+        // Fixed, value-free detail — see safeParse() above for rationale.
+        return fail("CONFIG_INVALID", "profile contains a forbidden or credential-shaped field.");
     }
     const preClean = Object.create(null);
     for (const key of Object.keys(profile)) {
         if (!ALLOWED_KEY_SET.has(key)) {
-            return fail("CONFIG_INVALID", `field "${key}" is not a recognized profile field.`);
+            return fail("CONFIG_INVALID", "profile contains an unrecognized field.");
         }
         const value = profile[key];
         if (value !== null && typeof value === "object") {
-            return fail("CONFIG_INVALID", `field "${key}" must be a scalar value.`);
+            return fail("CONFIG_INVALID", "profile contains a non-scalar field value.");
         }
         preClean[key] = value;
     }
