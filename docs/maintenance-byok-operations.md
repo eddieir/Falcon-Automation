@@ -234,7 +234,7 @@ The key is read from the chosen environment variable **at first use**, never cac
 
 ## Migration from Phase 17 (FALCON_LLM_* Environment Only)
 
-Phase 17 used environment variables like `FALCON_LLM_PROVIDER`, `FALCON_LLM_API_KEY`, `FALCON_LLM_MODEL`. This configuration path **remains fully supported** with no deprecation warning.
+Phase 17 used environment variables like `FALCON_LLM_PROVIDER`, `FALCON_LLM_API_KEY`, `FALCON_LLM_MODEL`. This configuration path remains supported for `openai`, `azure-openai`, `anthropic`, `gemini` and `disabled`, with no deprecation warning. The one exception is `openai-compatible`: relying on `FALCON_LLM_API_KEY` for it through the environment alone is **deprecated** and may be removed in a later release. Selecting `openai-compatible` by flag or profile already requires an explicit `credentialEnvVar` (see "Credential Precedence (Special Case)" below and the profile table).
 
 ### Phase 17 Still Works
 
