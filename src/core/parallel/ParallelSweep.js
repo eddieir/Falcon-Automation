@@ -55,6 +55,7 @@ async function runInJournalMode(opts) {
     const {
         context, entryUrl, runId, commit = "unknown", bundleDir = null,
         maxPages = 20, dedupe = true, sameOriginOnly = true, repeat = 1, pageTimeoutMs = 20000,
+        providerContext = null,
     } = opts;
     const shard = opts.shard && Number.isInteger(opts.shard.index) ? { index: opts.shard.index, total: opts.shard.total } : null;
     const workers = Math.max(1, Math.floor(opts.workers) || 1);
@@ -70,7 +71,7 @@ async function runInJournalMode(opts) {
 
     const tDiscovery = nowMs();
     // Stage 1-3: discover once, canonical order, ordinals.
-    const sweep = new SiteSweep(context, { maxPages: Limits.MAX_PAGES, sameOriginOnly, budgetMs: budgetMs === null ? undefined : budgetMs, pageTimeoutMs, dedupe, repeat });
+    const sweep = new SiteSweep(context, { maxPages: Limits.MAX_PAGES, sameOriginOnly, budgetMs: budgetMs === null ? undefined : budgetMs, pageTimeoutMs, dedupe, repeat, providerContext });
     const discovered = await sweep._discover(entry, { concurrency: workers });
     const planned = sweep._plan(entry, discovered);
     const auth = await takeAuthState(context);
@@ -193,7 +194,7 @@ async function runInJournalMode(opts) {
                     ParallelMode.setPosition(null, rep);
                     if (rep > 1 && plan.url) await page.goto(plan.url, { waitUntil: "load" }).catch(() => {});
                     try {
-                        const out = await TestRunner.runRepeatedTestPlan(page, plan, 1);
+                        const out = await TestRunner.runRepeatedTestPlan(page, plan, 1, { providerContext });
                         for (const r of out) results.push({ ...r, repetition: rep });
                     } catch (error) {
                         const partial = Array.isArray(error && error.partialResults) ? error.partialResults : [];

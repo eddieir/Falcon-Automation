@@ -24,7 +24,7 @@
  * alias for "disabled" and is normalised to "disabled" by LlmConfig before
  * this list is consulted; it is intentionally not itself a member.
  */
-const PROVIDER_IDS = Object.freeze(["openai", "azure-openai", "openai-compatible", "disabled"]);
+const PROVIDER_IDS = Object.freeze(["openai", "azure-openai", "openai-compatible", "anthropic", "gemini", "disabled"]);
 
 /**
  * Endpoint classes a provider's configured target can be classified into,
@@ -34,6 +34,8 @@ const PROVIDER_IDS = Object.freeze(["openai", "azure-openai", "openai-compatible
 const ENDPOINT_CLASSES = Object.freeze([
     "openai_public",
     "azure",
+    "anthropic_public",
+    "gemini_public",
     "custom_loopback",
     "custom_private",
     "custom_public",
@@ -64,6 +66,7 @@ const ERROR_CODES = Object.freeze([
     "MALFORMED_RESPONSE",
     "OVERSIZED",
     "UNSUPPORTED_CAPABILITY",
+    "CONTENT_BLOCKED",
 ]);
 
 const ERROR_CODE_SET = new Set(ERROR_CODES);
