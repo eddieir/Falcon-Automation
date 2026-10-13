@@ -198,7 +198,7 @@
       "section": "Privacy",
       "title": "Data minimisation",
       "priority": "Must",
-      "text": "Outbound payload is at most 20 candidates and 8192 bytes; planted markers outside candidate context never reach the wire",
+      "text": "Outbound payload defaults to 20 candidates, permits an explicit 1–60 candidate setting, and is always at most 8192 bytes; planted markers outside candidate context never reach the wire",
       "implementation": [
         "src/core/AIHealer/AIHealer.js"
       ],

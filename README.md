@@ -1,6 +1,6 @@
 # Falcon-Automation: Self-Healing Test Automation with AI-Assisted Locator Recovery
 
-> **Status:** Active development · Phases 1–15 merged and verified on `main` at `6e7f5f1`. Phase 10 covers every page of an app in one run; Phase 11 heals every action type; Phase 12 makes healing state and flaky decisions survive CI via cached state files; Phase 13 ("Decisions that can't rot") keeps review decisions from going stale; Phase 14 ("Evidence-based locator matching") adds a deterministic local healing tier that needs no model and no network; Phase 15 ("Run history and trend") records every run and flags when quality is drifting. See [Roadmap](#roadmap) for what's next, [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md) for the detailed plans behind it, and [CHANGELOG.md](CHANGELOG.md) for the full per-bug engineering history.
+> **Status:** Active development · Phases 1–17 and the invocation-scoped BYOK maintenance release are merged on `main`. Phase 16 added parallel execution and deterministic CI sharding. Phase 17 added pluggable LLM providers and a local production-cycle dashboard. The BYOK release in pull request #50 lets each Falcon invocation select OpenAI, Anthropic, Gemini, Azure OpenAI, or an approved OpenAI-compatible endpoint while keeping credentials in the operator's environment. See [Bring your own provider key](#bring-your-own-provider-key), [Roadmap](#roadmap), [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md), and [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -27,7 +27,7 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 **What that looks like in practice:**
 
 - **UI automation** via Playwright — Chromium is continuously validated in CI; Firefox and WebKit are supported at the `BrowserManager` level but not covered by CI
-- **Layered self-healing, on every action:** direct attempt (AdaptiveRetry) → LocatorStore replay → deterministic local evidence matching → LLM inference (gpt-4o-mini), for clicks, form fills and dropdown selections alike
+- **Layered self-healing, on every action:** direct attempt (AdaptiveRetry) → LocatorStore replay → deterministic local evidence matching → optional inference through the configured LLM provider, for clicks, form fills and dropdown selections alike
 - **Whole-app coverage:** one command sweeps every page it discovers, bounded by a page cap and a time budget, deduplicating shared navigation and reporting every page it did *not* cover, with a reason
 - **Autonomous UI exploration:** recursive crawler (ClickExplorer) + rule-based DOM issue scanning (DOMIssueScanner)
 - **DOM-driven interaction generation:** PageAnalyser maps the DOM; TestGenerator creates scenarios; TestRunner executes them with full healing
@@ -39,7 +39,7 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 - **Database testing:** PostgreSQL via `pg` Pool with full mTLS support
 - **CI/CD ready:** GitHub Actions pipeline with Allure report upload
 
-**Delivered so far:** core healing + reporting foundation → a stability audit (14 defects fixed) → visual regression, live dashboard, DOM-driven test generation, and Allure reporting → repository hygiene → a single consolidated self-healing engine with a bounded LocatorStore → real Postgres coverage in CI → a token-gated dashboard → a comprehensive regression layer (491 `node:test` cases and 43 Playwright browser tests across two CI jobs) and a real selector-anchoring fix in `PageAnalyser` → an approval gate for AI-inferred selector fixes, so a Tier 3 guess is reviewed by a human before it's ever trusted again → flaky-test detection and quarantine, so a genuinely unreliable interaction stops blocking CI without ever being silently hidden → whole-app coverage, so one run sweeps every page it finds instead of only the one you named → healing state and flaky decisions that survive CI via cached state files → review decisions that can't go stale → a deterministic local healing tier that works with no model and no network, and refuses rather than guess. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md). See [Roadmap](#roadmap) for what's next.
+**Delivered so far:** core healing and reporting → visual regression, dashboard, DOM-driven test generation, and Allure reporting → PostgreSQL coverage in CI → human approval for inferred selector fixes → flaky-test detection and quarantine → bounded whole-app coverage → durable healing and quarantine decisions → deterministic local locator matching → run-history trends → parallel execution and deterministic CI sharding → pluggable, invocation-scoped BYOK providers. The pull request #50 release gate measured **2,076 `node:test` regression cases and 61 Playwright browser tests**; these are dated release measurements, not a promise that counts never change. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -304,11 +304,11 @@ needed" is not mistaken for "not considered."
 
 ### What Tier 3 sends to the LLM provider
 
-Tier 3 sends a numbered list of candidate elements to the configured LLM provider, not the page. Only elements that fit the failed action are listed: fillable fields for a type, `<select>` for a select, clickable elements for a click. Each must be visible and enabled; hidden, zero-opacity, `inert`, `pointer-events: none` and off-document elements are left out, and the list stops at 60. For each candidate it sends the tag name, a fixed set of attributes (`id`, `name`, `type`, `data-testid`, `data-test`, `data-qa`, `aria-label`, `role`, and the path of an `href`), and its text. Every value has control characters removed and is capped at 200 characters; password values are never sent. Those labels, IDs, test IDs and texts leave your network. The prompt also carries the original selector, the step description and the action, and states that page text is untrusted data whose instructions must not be followed.
+Tier 3 sends a numbered list of candidate elements to the configured LLM provider, not the page. Only elements that fit the failed action are listed: fillable fields for a type, `<select>` for a select, clickable elements for a click. Each must be visible and enabled; hidden, zero-opacity, `inert`, `pointer-events: none` and off-document elements are left out. Collection is capped at 60 elements. The provider prompt defaults to 20 candidate descriptors, is configurable up to 60, and is always capped at 8 KiB. For each candidate it sends the tag name, a fixed set of attributes (`id`, `name`, `type`, `data-testid`, `data-test`, `data-qa`, `aria-label`, `role`, and the path of an `href`), and its text. Every value has control characters removed and is capped at 200 characters; password values are never sent. Those labels, IDs, test IDs and texts leave your network. The prompt also carries the original selector, the step description and the action, and states that page text is untrusted data whose instructions must not be followed.
 
 The model may answer only with a candidate's number, or `null`. It never writes a selector: the selector for each candidate is built locally, and the chosen one is re-checked in the page (still unique, same identifying attributes, still eligible) before Falcon acts on it. Any other answer is rejected and the heal fails exactly as an unresolved one would, with `status: "rejected"` and one of these reasons in the healing report: `no_eligible_candidates`, `model_declined`, `invalid_reply`, `index_out_of_range`, `selector_not_unique`. One limit remains: a page that controls visible, action-compatible elements can still bias which of them the model picks. Whatever is picked runs once in the current run and goes to review as pending; it is never reused without human approval.
 
-Tier 3 is opt-in and requires explicit provider selection, either via the environment (`FALCON_LLM_PROVIDER`) or per invocation via the `--llm-provider`/`--llm-profile` CLI flags (see [Pluggable LLM providers](#pluggable-llm-providers) below). `OPENAI_API_KEY` alone does not enable Tier 3; you must set both the provider and the corresponding API key. A run with no provider configured falls back to Tiers 1–2.5; it never attempts Tier 3.
+Tier 3 is opt-in and requires explicit provider selection, either via the environment (`FALCON_LLM_PROVIDER`) or per invocation via the `--llm-provider`/`--llm-profile` CLI flags (see [Bring your own provider key](#bring-your-own-provider-key) below). `OPENAI_API_KEY` alone does not enable Tier 3; you must set both the provider and the corresponding API key. A run with no provider configured falls back to Tiers 1–2.5; it never attempts Tier 3.
 
 ### Healing every action, demonstrated against the same real site
 
@@ -520,7 +520,7 @@ flowchart TD
     subgraph Healing["Three-tier self-healing"]
         Healer --> T1["Tier 1: AdaptiveRetry\nbackoff + jitter"]
         T1 -->|still failing| T2["Tier 2: LocatorStore\ncached alternatives"]
-        T2 -->|no cached match| T3["Tier 3: OpenAI gpt-4o-mini\nlive selector inference"]
+        T2 -->|no cached match| T3["Tier 3: configured LLM provider\nlive selector inference"]
         T3 -->|resolved, unreviewed| Trust["HealingTrust\npending-approval gate (Phase 8)"]
         Trust -->|human approves| Store[("data/locator_store.json\nbounded, LRU-evicted")]
         Trust -->|human rejects| Decisions[("data/healing_decisions.json\naudit ledger")]
@@ -670,7 +670,7 @@ BROWSER=chromium           # chromium | firefox | webkit
 HEADLESS=true               # true for CI; false to watch the browser locally
 
 # LLM (optional): Tier 3 AI healing needs FALCON_LLM_PROVIDER (see
-# "Pluggable LLM providers"). OPENAI_API_KEY alone does not enable it.
+# "Bring your own provider key"). OPENAI_API_KEY alone does not enable it.
 OPENAI_API_KEY=
 
 # API base URL: optional, defaults to jsonplaceholder
@@ -724,7 +724,7 @@ Falcon's healing engine operates in three tiers, in order:
 |------|-----------|----------|-------|
 | 1 | Direct selector attempt (3 retries, 2 s timeout each) | None | Fast |
 | 2 | LocatorStore: alternatives learned from prior runs | None | Fast |
-| 3 | LLM inference: live DOM snapshot + OpenAI gpt-4o-mini | ~$0.001/call | ~1-2 s |
+| 3 | LLM inference: bounded candidate payload + configured provider | Provider/model dependent | Provider/model dependent |
 
 Every supported action goes through that chain, not just clicks. A renamed input or a restructured dropdown is healed exactly as a renamed button is, and Tiers 2 and 3 perform the *real* interaction against the resolved selector — a fill fills, a select selects. Healing a form field by clicking it would report a pass for something that never happened, which is worse than the failure it was hiding. Every healing record notes which action was healed, so the audit trail distinguishes a repaired click from a repaired form fill.
 
@@ -754,7 +754,7 @@ Approving writes the fix into `LocatorStore` (Tier 2 reuses it from then on) and
 
 ---
 
-## Pluggable LLM providers
+## Bring your own provider key
 
 Tier 3 inference is optional and requires explicit provider selection. Supported provider ids: `openai`, `azure-openai`, `anthropic`, `gemini`, `openai-compatible` (plus `disabled`/`none` to turn Tier 3 off). `OPENAI_API_KEY` alone does not enable Tier 3; you must set both the provider and the corresponding credentials.
 
@@ -766,6 +766,66 @@ Provider, model, and credentials can be chosen two ways:
 **BYOK (bring your own key):** Falcon never stores or logs your API key. A profile or the environment only names the environment variable that holds it (e.g. `ANTHROPIC_API_KEY`); the value is read from your shell environment when the selected provider builds its request and is sent only to that provider's endpoint.
 
 Untested or newly released model ids are not certified by Falcon — there is no model discovery, so you type the model id yourself, and the regression suite exercises mocked provider protocols, not live model quality. See [docs/maintenance-byok-operations.md](docs/maintenance-byok-operations.md) for full operational details.
+
+### Five-minute quickstart
+
+Install dependencies, export a key in your shell, and select exactly one provider for the run. Replace the URL and model placeholders with values available to your account; never put a real key in a profile, command argument, source file, or commit.
+
+```bash
+npm ci
+
+# OpenAI (the model flag is optional; Falcon's current default is gpt-4o-mini)
+export OPENAI_API_KEY='<openai-key>'
+node falcon.js --url=https://staging.example.com --llm-provider=openai --llm-model='<openai-model-id>'
+
+# Anthropic
+export ANTHROPIC_API_KEY='<anthropic-key>'
+node falcon.js --url=https://staging.example.com --llm-provider=anthropic --llm-model='<anthropic-model-id>'
+
+# Gemini
+export GEMINI_API_KEY='<gemini-key>'
+node falcon.js --url=https://staging.example.com --llm-provider=gemini --llm-model='<gemini-model-id>'
+```
+
+Run these commands separately. If `FALCON_LLM_PROVIDER` is already set to a different provider, unset it first; Falcon refuses conflicting provider configuration with `CONFIG_CONFLICT`. Use only a staging or disposable target because discovery clicks and fills real controls.
+
+### Provider compatibility
+
+“Supported” describes the implemented transport and mocked contract tests, not certification of every model sold by a vendor. No live provider calls were made during the Phase 17/BYOK release cycle because live keys were unavailable.
+
+| Route | Integration status | Test evidence | Live certification |
+|---|---|---|---|
+| OpenAI API | Native | Mock-tested request, response, failure, budget, and redaction paths | None in this release cycle |
+| Anthropic API | Native | Mock-tested request, response, failure, budget, and redaction paths | None in this release cycle |
+| Gemini API | Native | Mock-tested request, response, content-block, budget, and redaction paths | None in this release cycle |
+| Azure OpenAI | Native, API-key authentication | Mock-tested transport and isolation; Entra ID is not implemented | None in this release cycle |
+| OpenAI-compatible endpoint | Compatible transport with explicit endpoint opt-in and credential reference | Mock-tested custom-endpoint isolation and negative credential-forwarding cases | Endpoint/model dependent; not certified here |
+| AWS Bedrock | Unsupported | No native signing, authentication, or transport | None |
+| Google Vertex AI authentication | Unsupported | Gemini's direct API route does not implement Vertex IAM/authentication | None |
+| Other provider-specific APIs | Unsupported unless they implement the tested OpenAI-compatible contract | No native adapter | None |
+
+Model IDs are operator-supplied and may evolve independently of Falcon. Falcon does not discover vendor catalogues or claim universal frontier-model compatibility.
+
+### Switch providers safely
+
+Keep provider credentials in separate environment variables and select one provider per invocation. For example:
+
+```bash
+unset FALCON_LLM_PROVIDER
+export OPENAI_API_KEY='<openai-key>'
+node falcon.js --url=https://staging.example.com --llm-provider=openai --llm-model='<openai-model-id>'
+
+unset OPENAI_API_KEY
+export ANTHROPIC_API_KEY='<anthropic-key>'
+node falcon.js --url=https://staging.example.com --llm-provider=anthropic --llm-model='<anthropic-model-id>'
+```
+
+For repeatable switching, use named profiles that store only a provider, model, and credential-variable name—not its value:
+
+```bash
+npm run llm:profile:set -- team-anthropic --provider=anthropic --model='<anthropic-model-id>' --credential-env=ANTHROPIC_API_KEY
+node falcon.js --url=https://staging.example.com --llm-profile=team-anthropic
+```
 
 ```ini
 # Provider configuration (all optional; Tier 3 disabled if unset)
@@ -802,11 +862,11 @@ node falcon.js --llm-profile=my-saved-profile
 
 Without a provider configured (by flag, profile, or environment), Falcon runs Tiers 1, 2 and 2.5 only; no network call is made. An unresolved selector falls back gracefully instead of failing.
 
-**Data sent to the LLM provider:** the failing selector, step description, action type, and up to 20 candidate element descriptors (tag name, stable attributes, accessible name, text), capped at 8 KiB total. Never sent: full DOM, cookies, storage, environment variables, complete form contents, authentication tokens, or full page HTML.
+**Data sent to the LLM provider:** the failing selector, step description, action type, and candidate element descriptors (tag name, selected attributes including `aria-label`, and text). The candidate count defaults to 20 and is configurable up to the 60-element collection cap; the complete prompt is always capped at 8 KiB. Never sent: full DOM, cookies, storage, environment variables, complete form contents, authentication tokens, or full page HTML.
 
 **Approval gate:** unchanged from Phase 8. An inferred selector is a proposal, not trusted evidence. It runs once in the current test and awaits human review before being stored for reuse. See [Healing trust: reviewing and approving Tier 3 fixes (Phase 8)](#healing-trust-reviewing-and-approving-tier-3-fixes-phase-8).
 
-For detailed configuration and operations, see [docs/phase-17-operations.md](docs/phase-17-operations.md) and [docs/architecture/phase-17-pluggable-llm-providers.md](docs/architecture/phase-17-pluggable-llm-providers.md).
+For detailed configuration and operations, see [docs/phase-17-operations.md](docs/phase-17-operations.md) and [docs/architecture/phase-17-pluggable-llm-providers.md](docs/architecture/phase-17-pluggable-llm-providers.md). Maintainers preparing a public update should also use the factual boundary and checklist in [docs/ANNOUNCEMENT-READINESS.md](docs/ANNOUNCEMENT-READINESS.md).
 
 ---
 
@@ -1000,8 +1060,8 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_
 
 **`regression` job** (~1 minute): the `node:test` + Playwright layer added alongside the community-health files:
 1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
-2. `npm run test:coverage`: 417 `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
-3. `npm run test:browser`: 38 Playwright specs (`tests/regression/browser.spec.js`) exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
+2. `npm run test:coverage`: the current `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
+3. `npm run test:browser`: the Playwright specs in `tests/regression/browser.spec.js`, exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
 4. Uploads `reports/` as the `regression-reports` artifact
 
 **`test` job** (~1.5 minutes): the original scenario/E2E pipeline, against a real seeded Postgres:
@@ -1023,7 +1083,7 @@ Node 22+ is required locally (the openai SDK's floor; `test:coverage`/`test:regr
 
 ## Parallel execution and sharding (Phase 16)
 
-Status: implemented on `phase-16/parallel-execution` (pull request #48); the owner decides the merge. Sequential runs remain the default.
+Status: merged into `main` through pull request #48. Sequential runs remain the default.
 
 ```bash
 node falcon.js --url=https://your-app.example --workers=2          # page-level parallelism, 1 to 16
@@ -1087,8 +1147,8 @@ npm run test:unit
 
 # The larger node:test + Playwright regression layer (needs Node 22+;
 # see Installation). This is what the "regression" CI job runs.
-npm run test:regression   # 417 node:test cases, tests/regression/*.check.cjs
-npm run test:browser      # 38 Playwright specs, tests/regression/browser.spec.js
+npm run test:regression   # current node:test cases, tests/regression/*.check.cjs
+npm run test:browser      # Playwright specs, tests/regression/browser.spec.js
 npm run test:coverage     # same as test:regression, with coverage collection
 
 # Same, but reporting into an already-running `node falcon.js` dashboard
