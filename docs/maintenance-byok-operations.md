@@ -72,7 +72,7 @@ export ANTHROPIC_API_KEY=<your-key>
 node falcon.js --llm-provider=anthropic --llm-model=<anthropic-model-id>
 ```
 
-Credentials: `ANTHROPIC_API_KEY` by default (or use `--llm-credential-env=<name>` to override, if supported).
+Credentials: `ANTHROPIC_API_KEY` by default (there is no `falcon.js` flag to override this; to use a different environment variable name, create a profile with `npm run llm:profile:set -- <name> --provider=anthropic --model=<id> --credential-env=<NAME>` and select it with `--llm-profile=<name>`).
 
 ### Gemini
 
@@ -85,19 +85,34 @@ Credentials: `GEMINI_API_KEY` by default.
 
 ### Azure OpenAI
 
+`falcon.js` has no CLI flags for the Azure resource or deployment names; they are set via `FALCON_LLM_AZURE_*` environment variables (Phase 17 compat) or a profile:
+
 ```bash
 export FALCON_LLM_API_KEY=<your-key>
-node falcon.js --llm-provider=azure-openai \
-  --llm-model=gpt-4 \
-  --llm-azure-resource=my-resource \
-  --llm-azure-deployment=my-deployment
+export FALCON_LLM_AZURE_RESOURCE=my-resource
+export FALCON_LLM_AZURE_HOST_SUFFIX=<your-azure-host-suffix>
+export FALCON_LLM_AZURE_DEPLOYMENT=my-deployment
+node falcon.js --llm-provider=azure-openai --llm-model=gpt-4
+```
+
+Or, via a profile (see "CLI Profile Commands" below):
+
+```bash
+npm run llm:profile:set -- my-azure \
+  --provider=azure-openai \
+  --model=gpt-4 \
+  --azure-resource=my-resource \
+  --azure-host-suffix=<your-azure-host-suffix> \
+  --azure-deployment=my-deployment
+
+node falcon.js --llm-profile=my-azure
 ```
 
 Credentials: `FALCON_LLM_API_KEY` (key-based auth only; Entra ID unsupported).
 
 ### OpenAI-Compatible Endpoint (Ollama on Loopback)
 
-`provider=openai-compatible` requires an explicit `credentialEnvVar` naming the environment variable that holds the key for that specific endpoint. There is no fallback to `FALCON_LLM_API_KEY`, `OPENAI_API_KEY`, or any other provider's variable — this prevents a credential meant for one provider from being forwarded to an unrelated custom endpoint. A `credentialEnvVar` can currently only be set on a profile (there is no `--llm-credential-env` flag on `falcon.js` itself), so selecting `openai-compatible` via a profile is the supported path:
+`provider=openai-compatible` requires an explicit `credentialEnvVar` naming the environment variable that holds the key for that specific endpoint. There is no fallback to `FALCON_LLM_API_KEY`, `OPENAI_API_KEY`, or any other provider's variable — this prevents a credential meant for one provider from being forwarded to an unrelated custom endpoint. A `credentialEnvVar` can currently only be set on a profile (there is no CLI flag on `falcon.js` itself for it), so selecting `openai-compatible` via a profile is the supported path:
 
 ```bash
 export COMPAT_API_KEY=<your-key>
@@ -119,13 +134,14 @@ Selecting `openai-compatible` directly with `--llm-provider=openai-compatible` a
 
 ```bash
 # REJECTED: no credentialEnvVar can be attached to a bare flag
-node falcon.js --llm-provider=openai-compatible --llm-endpoint=http://127.0.0.1:11434/v1 --llm-model=llama2
+# (falcon.js has no CLI flag for the endpoint or the credential; both live on a profile)
+node falcon.js --llm-provider=openai-compatible --llm-model=llama2
 # -> exits with CONFIG_MISSING_CREDENTIALS
 ```
 
 **Opt-in required:** Custom endpoints must explicitly enable `FALCON_LLM_ALLOW_CUSTOM_ENDPOINT=true`. HTTP is allowed only on loopback (`127.0.0.1`, `::1`) with `FALCON_LLM_ALLOW_HTTP_LOOPBACK=true`. Private IP ranges (e.g., `10.0.0.0/8`) require `FALCON_LLM_ALLOW_PRIVATE_ENDPOINT=true`.
 
-**Deprecated — env-only compat path:** `FALCON_LLM_PROVIDER=openai-compatible` set purely through the environment, with `FALCON_LLM_API_KEY` and no `--llm-*` flag and no profile, still works (Phase 17 compatibility layer) but is **deprecated** and may be removed in a later release. New setups should use a profile with an explicit `credentialEnvVar` as shown above.
+**Deprecated — env-only compat path:** `FALCON_LLM_PROVIDER=openai-compatible` set purely through the environment, with `FALCON_LLM_API_KEY` and no `--llm-profile`/`--llm-provider`/`--llm-model` flag and no profile, still works (Phase 17 compatibility layer) but is **deprecated** and may be removed in a later release. New setups should use a profile with an explicit `credentialEnvVar` as shown above. No removal date has been set for this deprecated path.
 
 ## Running Two Invocations with Different Providers
 
@@ -301,13 +317,13 @@ Your LLM provider's retention, billing, and data policies apply.
 | `AUTH_FAILED` | API key invalid, expired, or revoked. | Rotate your API key in your provider console. |
 | `BAD_REQUEST` | Request was malformed (bad model ID, missing required fields). | Verify model ID and provider type match. |
 | `CONTENT_BLOCKED` | Provider blocked response (Gemini safety/blocklist). | Review prompt or candidate context; may indicate offensive/copyrighted selector text. Retry with different scenario. |
-| `RATE_LIMITED` | Provider returned HTTP 429 (too many requests). | Increase `--llm-timeout-ms`, reduce concurrency, or retry after a delay. |
+| `RATE_LIMITED` | Provider returned HTTP 429 (too many requests). | Increase the timeout (`FALCON_LLM_TIMEOUT_MS` env var, or `--timeout-ms` on the profile), reduce concurrency, or retry after a delay. |
 | `PROVIDER_ERROR` | Provider returned HTTP 5xx error. | Check provider status page; retry if transient. |
-| `TIMEOUT` | Request exceeded configured timeout. | Increase `--llm-timeout-ms` or check network latency to provider. |
+| `TIMEOUT` | Request exceeded configured timeout. | Increase the timeout (`FALCON_LLM_TIMEOUT_MS` env var, or `--timeout-ms` on the profile) or check network latency to provider. |
 | `NETWORK_ERROR` | DNS, connection, or TLS failure. | Check endpoint URL, firewall, and DNS resolution. Set `NODE_EXTRA_CA_CERTS` if using a custom CA. |
 | `MALFORMED_RESPONSE` | Provider response was not valid JSON or schema mismatch. | Verify endpoint URL and model compatibility. |
 | `OVERSIZED` | Response body exceeded size limit. | Increase limit or check provider behavior. |
-| `ENDPOINT_POLICY_REJECTED` | Endpoint is non-public (loopback/private) without opt-in. | Add `--llm-allow-http-loopback` or `--llm-allow-private-endpoint` as needed. |
+| `ENDPOINT_POLICY_REJECTED` | Endpoint is non-public (loopback/private) without opt-in. | Set `FALCON_LLM_ALLOW_HTTP_LOOPBACK=true` / `FALCON_LLM_ALLOW_PRIVATE_ENDPOINT=true`, or `--allow-http-loopback=true` / `--allow-private-endpoint=true` on the profile, as needed. |
 | `REDIRECT_REJECTED` | Provider endpoint returned HTTP redirect (3xx). | Use the final target endpoint directly; redirects are not followed. |
 | `BUDGET_EXHAUSTED` | Run LLM call limit reached. | Increase `FALCON_LLM_RUN_BUDGET` or reduce test scenarios. |
 | `PROVIDER_DISABLED` | Provider explicitly set to `disabled`. | Set `--llm-provider` to an active provider or omit to use Tiers 1/2 only. |

@@ -190,3 +190,43 @@ test("docs contain no AI attribution text", () => {
         }
     }
 });
+
+// --- Flag accuracy: docs may only show falcon.js BYOK flags that exist. ---
+
+const FLAG_DOC_PATHS = [
+    "docs/maintenance-byok-operations.md",
+    "docs/architecture/maintenance-byok-invocation-scoped-providers.md",
+    "docs/phase-17-operations.md",
+    "README.md",
+    "CHANGELOG.md",
+    ".env.example",
+];
+const SUPPORTED_LLM_FLAGS = new Set(["llm-profile", "llm-provider", "llm-model"]);
+
+function findUnsupportedLlmFlags(text) {
+    const bad = [];
+    for (const line of text.split("\n")) {
+        for (const match of line.matchAll(/--(llm-[a-z0-9-]+)/g)) {
+            const name = match[1];
+            if (SUPPORTED_LLM_FLAGS.has(name)) continue;
+            // A refused key-carrier flag may appear only on a line that says it is refused.
+            if (name === "llm-api-key" && /REJECTED|refused/i.test(line)) continue;
+            bad.push(name);
+        }
+    }
+    return bad;
+}
+
+test("AC25: docs only show --llm-* flags that falcon.js really supports", () => {
+    for (const rel of FLAG_DOC_PATHS) {
+        const text = fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
+        assert.deepEqual(findUnsupportedLlmFlags(text), [], `${rel} shows an unsupported --llm-* flag`);
+    }
+});
+
+test("AC25: negative control - the flag guard detects a nonexistent flag and an unmarked key flag", () => {
+    assert.deepEqual(findUnsupportedLlmFlags("node falcon.js --llm-endpoint=x"), ["llm-endpoint"]);
+    assert.deepEqual(findUnsupportedLlmFlags("node falcon.js --llm-api-key=x"), ["llm-api-key"]);
+    assert.deepEqual(findUnsupportedLlmFlags("node falcon.js --llm-api-key=x # REJECTED"), []);
+    assert.deepEqual(findUnsupportedLlmFlags("node falcon.js --llm-profile=a --llm-provider=b --llm-model=c"), []);
+});
