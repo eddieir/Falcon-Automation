@@ -18,6 +18,14 @@ Implemented on branch `maintenance/byok-frontier-providers`.
 - **`CONTENT_BLOCKED` error code**: Surfaced when the Gemini provider's safety/blocklist filtering blocks a response, added to the existing Phase 17 error code taxonomy.
 - **Per-invocation budgets**: Tier 3 call budgets and concurrency are tracked per invocation in addition to the existing process-wide ceilings.
 
+### Changed
+
+- **OpenAI-compatible endpoints require an explicit credential reference**: when `openai-compatible` is selected by `--llm-provider` or a profile, the profile must set `credentialEnvVar`; otherwise the run fails with `CONFIG_MISSING_CREDENTIALS`. There is no fallback to `FALCON_LLM_API_KEY`, `OPENAI_API_KEY` or another provider's variable, so a credential intended for one provider is never sent to a custom endpoint.
+
+### Deprecated
+
+- **Environment-only `openai-compatible` credential fallback**: `FALCON_LLM_PROVIDER=openai-compatible` with `FALCON_LLM_API_KEY` and no flag or profile still works, but is deprecated and may be removed in a later release. Use a profile with `credentialEnvVar`.
+
 ### Unchanged
 
 - `FALCON_LLM_*` environment variable behaviour and precedence are untouched; this work only adds flags/profiles above that layer.

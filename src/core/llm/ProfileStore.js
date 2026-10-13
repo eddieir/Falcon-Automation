@@ -283,6 +283,13 @@ function validateProfileSchema(profile) {
         const credResult = validateCredentialEnvVarName(profile.credentialEnvVar);
         if (!credResult.ok) return credResult;
         out.credentialEnvVar = credResult.value;
+    } else if (provider === "openai-compatible") {
+        // Security (Dev-16): openai-compatible has no Phase 17 fallback —
+        // a profile selecting it must name its own credential explicitly.
+        return fail(
+            "CONFIG_MISSING_CREDENTIALS",
+            "provider=openai-compatible requires an explicit credentialEnvVar (no fallback to FALCON_LLM_API_KEY or another provider's variable).",
+        );
     }
 
     if (profile.timeoutMs !== undefined) {
