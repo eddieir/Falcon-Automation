@@ -17,7 +17,7 @@ Bring Your Own Key (BYOK): Falcon does not ship, broker, proxy, or store your LL
 | **openai-compatible** | First-class | Custom OpenAI-compatible endpoint (e.g. Ollama, vLLM) | operator-supplied | CLI flag, requires explicit endpoint | Requires `FALCON_LLM_ALLOW_CUSTOM_ENDPOINT=true` |
 | **disabled** or blank | None | — | — | Skip Tier 3 | Tiers 1/2 remain active |
 
-**Note:** No models are live-tested or certified. Tests use mocks only to verify protocol behavior, not model quality. Model discovery is not implemented; you must type model IDs manually.
+**Note:** No models are live-tested or certified. Tests use mocks only to verify protocol behavior, not model quality. Model discovery is not implemented; you must type model IDs manually. Falcon keeps no allowlist of approved model IDs and makes no certification claim about any model's healing quality — any model ID you supply for your chosen provider is passed through as-is.
 
 ## Per-Invocation Provider Selection
 
@@ -124,6 +124,16 @@ node falcon.js --llm-provider=anthropic --llm-model=<anthropic-model-id>
 ```
 
 **In-process:** Do not attempt to switch providers mid-run. Create separate processes with distinct flags and environment.
+
+## Where the Invocation Provider Context Applies
+
+Falcon resolves a per-invocation `providerContext` once at startup in `falcon.js` and threads the same object, by identity, through every run mode in that process — it is never rebuilt, swapped, or re-resolved from `FALCON_LLM_*` partway through a run:
+
+- **Default whole-app run** (`node falcon.js <url>`): `providerContext` flows from `falcon.js` into `SiteSweep`, which passes it to `TestRunner.runRepeatedTestPlan` for every page it sweeps, and from there into the `AIHealer` instance used for Tier 3 healing.
+- **`--single-page`**: the pre-Phase-10 single-page pipeline forwards the same `providerContext` directly to `TestRunner.runRepeatedTestPlan`, bypassing `SiteSweep` but reaching the same healer wiring.
+- **In-process parallel/sharded runs** (`--workers`, `--shard`): `providerContext` is carried in `sweepOpts` into `ParallelSweep.runInJournalMode`, which builds a single `SiteSweep` for frontier discovery with that context, then passes the same context into `TestRunner.runRepeatedTestPlan` for every page executed across the worker pool. All workers in the same invocation share that one resolved context; none re-resolve or re-select a provider independently.
+
+**Provider selection** (which provider/model/credential a run uses) is resolved once per invocation, by field precedence `options > profile > FALCON_LLM_* env-compat > defaults` (see "Configuration Precedence" below): a directly-selected provider (via `--llm-provider` or a profile) never silently falls back to a *different* provider named by `FALCON_LLM_PROVIDER` — that is refused with `CONFIG_CONFLICT`. This precedence is per field, not all-or-nothing: `FALCON_LLM_*` env vars can still supply individual fields the flags/profile leave unset for that same invocation (e.g. `FALCON_LLM_TIMEOUT_MS`, `FALCON_LLM_MAX_ATTEMPTS`) without affecting which provider was selected, and that resolved mix applies identically inside parallel workers.
 
 ## Profile Store and Safe Credential Management
 
@@ -282,6 +292,8 @@ Your LLM provider's retention, billing, and data policies apply.
 | `PROVIDER_DISABLED` | Provider explicitly set to `disabled`. | Set `--llm-provider` to an active provider or omit to use Tiers 1/2 only. |
 
 **Safe debugging:** Error messages do not contain key values, endpoint hostnames, or model IDs longer than 20 chars. If you need to troubleshoot, review logs and check your configuration without pasting sensitive values.
+
+**Fixed, value-free error details:** Every `detail` string returned by profile and config resolution (`LlmConfig.resolve`, `ProfileStore.safeParse`/`set`, and the `llm:profile` CLI's stderr output) is a fixed, hard-coded sentence describing the error class — never the caller-supplied value, field name, raw argv, or `error.message` that triggered it. A malformed model ID, an invalid profile field, or a hostile `FALCON_LLM_*` value is reported as a category (e.g. "profile contains an unrecognized field.") and never echoed back, so troubleshooting output is always safe to paste into a bug report or log.
 
 ## Known Limitations
 
