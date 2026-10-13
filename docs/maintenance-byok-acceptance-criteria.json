@@ -1,12 +1,12 @@
 {
   "phase": "maintenance/byok-frontier-providers",
   "title": "BYOK: invocation-scoped multi-provider LLM support (M17)",
-  "evidenceRevision": "9abbf7b",
+  "evidenceRevision": "a8df6db",
   "criteriaSource": "M17-BYOK AC-register-text.md (owner mandate, texts FIXED) + PO-01 negative criteria N01..N13",
   "textFreeze": "The 28 AC texts are the sole source of truth; tests/regression/m17-byok-traceability.check.cjs enforces an SHA256 freeze over AC01..AC28 and parity between this register and the canonical array in that test.",
   "statusMeaning": {
     "verified": "A named regression test observed passing on this revision asserts the criterion.",
-    "pending": "Verification outstanding (docs, exact-head governance evidence, or external gate). Allowed only for AC20, AC24, AC25, AC26 under traceability policy."
+    "pending": "Verification outstanding (exact-head governance evidence or external gate that cannot be observed from in-process tests). Allowed only for AC24, AC26 under traceability policy; AC20 and AC25 closed once docs/m17-byok-docs.check.cjs passed."
   },
   "owner": "QA-01 (claude-opus-4-7, independent verification)",
   "criteria": [
@@ -20,11 +20,25 @@
         ".env.example"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-credentials.check.cjs", "name": "AC15: resolve() reads no credential value; only config.apiKey access does" },
-        { "file": "tests/regression/m17-byok-cli.check.cjs", "name": ".env.example: FALCON_LLM_*/ANTHROPIC_API_KEY/GEMINI_API_KEY optional entries are blank with no key-shaped text" }
+        {
+          "file": "tests/regression/m17-byok-credentials.check.cjs",
+          "name": "AC15: resolve() reads no credential value; only config.apiKey access does"
+        },
+        {
+          "file": "tests/regression/m17-byok-cli.check.cjs",
+          "name": ".env.example: FALCON_LLM_*/ANTHROPIC_API_KEY/GEMINI_API_KEY optional entries are blank with no key-shaped text"
+        },
+        {
+          "file": "tests/regression/m17-byok-detail-redaction.check.cjs",
+          "name": "LlmConfig.resolve: a sentinel-bearing FALCON_LLM_TIMEOUT_MS value never reaches detail"
+        },
+        {
+          "file": "tests/regression/m17-byok-detail-redaction.check.cjs",
+          "name": "LlmConfig.resolve: a hostile `get` that throws a sentinel-bearing message never reaches detail"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
-      "limitation": "No Falcon-shared credential is present in code or env templates; verified by env-template scan and resolve-time behaviour.",
+      "evidenceRevision": "a8df6db",
+      "limitation": "No Falcon-shared credential is present in code or env templates; verified by env-template scan and resolve-time behaviour. LlmConfig error `detail` strings are now proven fixed/value-free even for hostile/sentinel-bearing inputs.",
       "owner": "Developer"
     },
     {
@@ -36,13 +50,33 @@
         "src/core/llm/LlmProviderRegistry.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC02: precedence options > profile for the same field" },
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC02: profile fills a field options omits" },
-        { "file": "tests/regression/m17-byok-isolation.check.cjs", "name": "N01: two ProviderContexts with the same provider id get distinct provider instances" },
-        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC02/N01: two openai contexts with different keys/models never share cache or carry each other's secrets" }
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "AC02: precedence options > profile for the same field"
+        },
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "AC02: profile fills a field options omits"
+        },
+        {
+          "file": "tests/regression/m17-byok-isolation.check.cjs",
+          "name": "N01: two ProviderContexts with the same provider id get distinct provider instances"
+        },
+        {
+          "file": "tests/regression/m17-byok-concurrency.check.cjs",
+          "name": "AC02/N01: two openai contexts with different keys/models never share cache or carry each other's secrets"
+        },
+        {
+          "file": "tests/regression/m17-byok-propagation.check.cjs",
+          "name": "SiteSweep: a separate sweep with an OpenAI context never sees the Anthropic context (no swap)"
+        },
+        {
+          "file": "tests/regression/m17-byok-propagation.check.cjs",
+          "name": "AIHealer built via TestRunner resolves the injected Anthropic context's provider id, ignoring FALCON_LLM_PROVIDER=openai"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
-      "limitation": "Per-context WeakMap memoisation and deep-frozen config; verified by distinct-instance assertions.",
+      "evidenceRevision": "a8df6db",
+      "limitation": "Per-context WeakMap memoisation and deep-frozen config; verified by distinct-instance assertions, and now also by end-to-end propagation through SiteSweep/ParallelSweep/TestRunner/AIHealer.",
       "owner": "Developer"
     },
     {
@@ -55,10 +89,17 @@
         "src/core/llm/providers/AnthropicProvider.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC03/AC02/AC09/AC12/N01: concurrent openai+anthropic executions isolate keys, models, and markers" }
+        {
+          "file": "tests/regression/m17-byok-concurrency.check.cjs",
+          "name": "AC03/AC02/AC09/AC12/N01: concurrent openai+anthropic executions isolate keys, models, and markers"
+        },
+        {
+          "file": "tests/regression/m17-byok-dashboard-ledger.check.cjs",
+          "name": "AC03/AC22: concurrent openai+anthropic dispatches leave zero cross-markers in the ledger file or any dashboard response"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
-      "limitation": "Dashboard/ledger not exercised in this test (QA-01 covers requests/logs/errors/stdout/stderr/telemetry/inspect sweep); dashboard concurrency is tracked under AC22.",
+      "evidenceRevision": "a8df6db",
+      "limitation": "Dashboard/ledger are now directly exercised: concurrent openai+anthropic executions run alongside real EventLog ledger writes and a live Server.js dashboard, asserting zero cross-marker leakage across the ledger file, /api/state, / (UI), and captured logs/console/stdout/stderr.",
       "owner": "QA Engineer"
     },
     {
@@ -70,12 +111,24 @@
         "src/core/llm/transport/guardedFetch.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "success: exact request shape, text extracted, usage mapped" },
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "AC04/AC09: an arbitrary valid model id is sent verbatim" },
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "oversized response => OVERSIZED, zero retries (not retryable)" },
-        { "file": "tests/regression/m17-byok-payload-approval.check.cjs", "name": "sanity: a clean in-range integer from either adapter still heals normally (anthropic)" }
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "success: exact request shape, text extracted, usage mapped"
+        },
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "AC04/AC09: an arbitrary valid model id is sent verbatim"
+        },
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "oversized response => OVERSIZED, zero retries (not retryable)"
+        },
+        {
+          "file": "tests/regression/m17-byok-payload-approval.check.cjs",
+          "name": "sanity: a clean in-range integer from either adapter still heals normally (anthropic)"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "Contract verified against deterministic local mocks; no live Anthropic traffic in CI (AC21 label applies).",
       "owner": "Developer"
     },
@@ -88,12 +141,29 @@
         "src/core/llm/ProviderContext.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC01: direct options provider=openai with credentialEnvVar resolves ok" },
-        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC02/N01: two openai contexts with different keys/models never share cache or carry each other's secrets" },
-        { "file": "tests/regression/m17-byok-wiring.check.cjs", "name": "AIHealer with providerContext uses that context's provider, not the default" }
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "AC01: direct options provider=openai with credentialEnvVar resolves ok"
+        },
+        {
+          "file": "tests/regression/m17-byok-concurrency.check.cjs",
+          "name": "AC02/N01: two openai contexts with different keys/models never share cache or carry each other's secrets"
+        },
+        {
+          "file": "tests/regression/m17-byok-wiring.check.cjs",
+          "name": "AIHealer with providerContext uses that context's provider, not the default"
+        },
+        {
+          "file": "tests/regression/m17-byok-propagation.check.cjs",
+          "name": "falcon.js source: SiteSweep is constructed from an opts spread, and both the whole-app call site and runWholeApp's opts object carry providerContext"
+        },
+        {
+          "file": "tests/regression/m17-byok-propagation.check.cjs",
+          "name": "SiteSweep: an Anthropic providerContext reaches TestRunner.runRepeatedTestPlan by identity"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
-      "limitation": "Compatibility is behavioural (invocation-scoped) and verified via injected OpenAI SDK seam.",
+      "evidenceRevision": "a8df6db",
+      "limitation": "Compatibility is behavioural (invocation-scoped) and verified via injected OpenAI SDK seam, plus source/behavioural proof that falcon.js's whole-app path forwards the same providerContext down to SiteSweep/TestRunner.",
       "owner": "Developer"
     },
     {
@@ -105,11 +175,20 @@
         "src/core/llm/transport/guardedFetch.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "success: exact request shape, text extracted, usage mapped" },
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "AC06/AC09: an arbitrary valid model id is sent verbatim in the path" },
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "oversized response => OVERSIZED" }
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "success: exact request shape, text extracted, usage mapped"
+        },
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "AC06/AC09: an arbitrary valid model id is sent verbatim in the path"
+        },
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "oversized response => OVERSIZED"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "Verified against deterministic mock; stricter Gemini model-id charset enforced (C1).",
       "owner": "Developer"
     },
@@ -122,11 +201,20 @@
         "src/core/llm/ProviderContext.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "N04: azureDeployment is rejected for provider=openai (azure* fields pinned to azure-openai)" },
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "N04: model and azureDeployment cannot both be set" },
-        { "file": "tests/regression/p17-provider-contract.check.cjs", "name": "(AzureOpenAIProvider) AC03/AC20: path is /openai/v1/chat/completions, body.model is the deployment, Bearer auth, no api-version" }
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "N04: azureDeployment is rejected for provider=openai (azure* fields pinned to azure-openai)"
+        },
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "N04: model and azureDeployment cannot both be set"
+        },
+        {
+          "file": "tests/regression/p17-provider-contract.check.cjs",
+          "name": "(AzureOpenAIProvider) AC03/AC20: path is /openai/v1/chat/completions, body.model is the deployment, Bearer auth, no api-version"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "No live Azure resource in CI; Entra ID excluded by owner decision D4.",
       "owner": "Developer"
     },
@@ -139,11 +227,20 @@
         "src/core/llm/transport/EndpointPolicy.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC05: endpoint field rejected (CONFIG_CONFLICT) for provider=openai" },
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "C6: profile endpoint field rejected for provider!=openai-compatible" },
-        { "file": "tests/regression/m17-byok-transport.check.cjs", "name": "fixed-host: policy is forced no-loopback/no-private even if caller opts in" }
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "AC05: endpoint field rejected (CONFIG_CONFLICT) for provider=openai"
+        },
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "C6: profile endpoint field rejected for provider!=openai-compatible"
+        },
+        {
+          "file": "tests/regression/m17-byok-transport.check.cjs",
+          "name": "fixed-host: policy is forced no-loopback/no-private even if caller opts in"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "Phase 17 EndpointPolicy inherited; opt-in rules re-asserted through ProviderContext.",
       "owner": "Developer"
     },
@@ -157,12 +254,24 @@
         "src/core/llm/providers/GeminiProvider.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "AC04/AC09: an arbitrary valid model id is sent verbatim" },
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "AC06/AC09: an arbitrary valid model id is sent verbatim in the path" },
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "C1: gemini model id traversal/escape shapes are rejected by the stricter charset" },
-        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC03/AC02/AC09/AC12/N01: concurrent openai+anthropic executions isolate keys, models, and markers" }
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "AC04/AC09: an arbitrary valid model id is sent verbatim"
+        },
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "AC06/AC09: an arbitrary valid model id is sent verbatim in the path"
+        },
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "C1: gemini model id traversal/escape shapes are rejected by the stricter charset"
+        },
+        {
+          "file": "tests/regression/m17-byok-concurrency.check.cjs",
+          "name": "AC03/AC02/AC09/AC12/N01: concurrent openai+anthropic executions isolate keys, models, and markers"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "No certification claim; model id is user input constrained to charset+length.",
       "owner": "Developer"
     },
@@ -176,12 +285,24 @@
         "src/core/llm/LlmProviderRegistry.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC10: a resolve failure never falls back to another provider — it just fails" },
-        { "file": "tests/regression/m17-byok-wiring.check.cjs", "name": "AC10: provider auth failure surfaces as an error result; a different context's provider is never touched" },
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "AC10: a provider failure never triggers the other provider or another endpoint" },
-        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC10/AC12: provider A 401 => AUTH_FAILED and provider B's endpoint is never probed, no fallback" }
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "AC10: a resolve failure never falls back to another provider — it just fails"
+        },
+        {
+          "file": "tests/regression/m17-byok-wiring.check.cjs",
+          "name": "AC10: provider auth failure surfaces as an error result; a different context's provider is never touched"
+        },
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "AC10: a provider failure never triggers the other provider or another endpoint"
+        },
+        {
+          "file": "tests/regression/m17-byok-concurrency.check.cjs",
+          "name": "AC10/AC12: provider A 401 => AUTH_FAILED and provider B's endpoint is never probed, no fallback"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "No automatic provider switching exists in the code path (registry resolves one provider per context).",
       "owner": "Developer"
     },
@@ -194,9 +315,12 @@
         "src/core/AIHealer/AIHealer.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-wiring.check.cjs", "name": "AC11: Tier1 heal success never reads any provider credential or touches the registry" }
+        {
+          "file": "tests/regression/m17-byok-wiring.check.cjs",
+          "name": "AC11: Tier1 heal success never reads any provider credential or touches the registry"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "No-credential paths tested through AIHealer; Tier2.5 corpus not re-exercised here (inherited from Phase 17).",
       "owner": "Developer"
     },
@@ -211,14 +335,32 @@
         "src/production-cycle/Redact.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC12: apiKey-named field is rejected, nothing written, marker never echoed" },
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC12: nested secret field is rejected, nothing written" },
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC12: key-shaped model value (Gemini-shaped) is rejected, marker absent from detail" },
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "error body marker and api key marker never appear in the result or thrown messages" },
-        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC03/AC02/AC09/AC12/N01: concurrent openai+anthropic executions isolate keys, models, and markers" },
-        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC10/AC12: provider A 401 => AUTH_FAILED and provider B's endpoint is never probed, no fallback" }
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC12: apiKey-named field is rejected, nothing written, marker never echoed"
+        },
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC12: nested secret field is rejected, nothing written"
+        },
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC12: key-shaped model value (Gemini-shaped) is rejected, marker absent from detail"
+        },
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "error body marker and api key marker never appear in the result or thrown messages"
+        },
+        {
+          "file": "tests/regression/m17-byok-concurrency.check.cjs",
+          "name": "AC03/AC02/AC09/AC12/N01: concurrent openai+anthropic executions isolate keys, models, and markers"
+        },
+        {
+          "file": "tests/regression/m17-byok-concurrency.check.cjs",
+          "name": "AC10/AC12: provider A 401 => AUTH_FAILED and provider B's endpoint is never probed, no fallback"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "In-process sweep covers requests, results, telemetry, stdout/stderr, console.*, util.inspect. 'tracked/untracked artifacts' and 'crash output/PR text' are enforced by secret-scanning and process convention (external to in-process tests).",
       "owner": "QA Engineer"
     },
@@ -231,14 +373,32 @@
         "scripts/llm/profile.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC13 name matrix: valid and invalid profile names" },
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC13: symlinked profile file is rejected on get()" },
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC13: symlinked profile directory is rejected" },
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC13: profile file with mode 0644 is rejected by get()" },
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC13: oversize profile file (>16KiB) is rejected by get()" },
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC13: __proto__/constructor keys are rejected on write and read" }
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC13 name matrix: valid and invalid profile names"
+        },
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC13: symlinked profile file is rejected on get()"
+        },
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC13: symlinked profile directory is rejected"
+        },
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC13: profile file with mode 0644 is rejected by get()"
+        },
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC13: oversize profile file (>16KiB) is rejected by get()"
+        },
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC13: __proto__/constructor keys are rejected on write and read"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "Windows path is skipped with a one-time warning (ADR-0019 §6); documented residual risk.",
       "owner": "Developer"
     },
@@ -251,12 +411,24 @@
         "src/core/llm/InvocationContext.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC02: precedence options > profile for the same field" },
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC14: options/profile provider vs conflicting FALCON_LLM_PROVIDER env-compat => CONFIG_CONFLICT" },
-        { "file": "tests/regression/m17-byok-wiring.check.cjs", "name": "InvocationContext: direct --llm-model overrides the profile's model (direct > profile)" },
-        { "file": "tests/regression/m17-byok-wiring.check.cjs", "name": "InvocationContext: profile-vs-flag provider conflict => CONFIG_CONFLICT" }
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "AC02: precedence options > profile for the same field"
+        },
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "AC14: options/profile provider vs conflicting FALCON_LLM_PROVIDER env-compat => CONFIG_CONFLICT"
+        },
+        {
+          "file": "tests/regression/m17-byok-wiring.check.cjs",
+          "name": "InvocationContext: direct --llm-model overrides the profile's model (direct > profile)"
+        },
+        {
+          "file": "tests/regression/m17-byok-wiring.check.cjs",
+          "name": "InvocationContext: profile-vs-flag provider conflict => CONFIG_CONFLICT"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "Precedence pinned by pickField(); ambiguity rejected with CONFIG_CONFLICT.",
       "owner": "Developer"
     },
@@ -270,12 +442,24 @@
         "src/core/llm/providers/OpenAIProvider.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-credentials.check.cjs", "name": "AC15: resolve() reads no credential value; only config.apiKey access does" },
-        { "file": "tests/regression/m17-byok-credentials.check.cjs", "name": "AC15: import of ProviderContext.js performs no credential reads (module load is side-effect-free)" },
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "apiKey is read lazily: a getter is untouched before complete(), read at most once per attempt" },
-        { "file": "tests/regression/m17-byok-wiring.check.cjs", "name": "AC11: Tier1 heal success never reads any provider credential or touches the registry" }
+        {
+          "file": "tests/regression/m17-byok-credentials.check.cjs",
+          "name": "AC15: resolve() reads no credential value; only config.apiKey access does"
+        },
+        {
+          "file": "tests/regression/m17-byok-credentials.check.cjs",
+          "name": "AC15: import of ProviderContext.js performs no credential reads (module load is side-effect-free)"
+        },
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "apiKey is read lazily: a getter is untouched before complete(), read at most once per attempt"
+        },
+        {
+          "file": "tests/regression/m17-byok-wiring.check.cjs",
+          "name": "AC11: Tier1 heal success never reads any provider credential or touches the registry"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "Lazy getter with existence-only check at resolve time (peekOwnValue).",
       "owner": "Developer"
     },
@@ -289,10 +473,16 @@
         "src/core/llm/providers/GeminiProvider.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "success: exact request shape, text extracted, usage mapped" },
-        { "file": "tests/regression/p17-healer-provider.check.cjs", "name": "data minimisation + redaction (AC08/S-17): markers in cookie/hidden-DOM/localStorage/env never reach prompt, request, logs, or report" }
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "success: exact request shape, text extracted, usage mapped"
+        },
+        {
+          "file": "tests/regression/p17-healer-provider.check.cjs",
+          "name": "data minimisation + redaction (AC08/S-17): markers in cookie/hidden-DOM/localStorage/env never reach prompt, request, logs, or report"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "AnthropicProvider enforces exact header + body key set; Phase 17 bounds inherited for prompt size.",
       "owner": "Developer"
     },
@@ -305,11 +495,20 @@
         "src/core/AIHealer/HealingTrust.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-payload-approval.check.cjs", "name": "sanity: a clean in-range integer from either adapter still heals normally (anthropic)" },
-        { "file": "tests/regression/m17-byok-payload-approval.check.cjs", "name": "sanity: a clean in-range integer from either adapter still heals normally (gemini)" },
-        { "file": "tests/regression/tier3-allowlist.check.cjs", "name": "a free-form selector reply is rejected and nothing is clicked" }
+        {
+          "file": "tests/regression/m17-byok-payload-approval.check.cjs",
+          "name": "sanity: a clean in-range integer from either adapter still heals normally (anthropic)"
+        },
+        {
+          "file": "tests/regression/m17-byok-payload-approval.check.cjs",
+          "name": "sanity: a clean in-range integer from either adapter still heals normally (gemini)"
+        },
+        {
+          "file": "tests/regression/tier3-allowlist.check.cjs",
+          "name": "a free-form selector reply is rejected and nothing is clicked"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "Pipeline inherited from Phase 17; m17 sanity tests confirm anthropic/gemini outputs flow through the same gate.",
       "owner": "Developer"
     },
@@ -324,17 +523,44 @@
         "src/core/llm/LlmProvider.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "401/403 => AUTH_FAILED, 1 attempt" },
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "404/413/422 => BAD_REQUEST, never retried" },
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "429 RATE_LIMITED retried up to maxAttempts, then surfaced" },
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "504 => TIMEOUT; 500/529 => PROVIDER_ERROR" },
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "oversized response => OVERSIZED, zero retries (not retryable)" },
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "invalid JSON body => MALFORMED_RESPONSE" },
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "401/403 => AUTH_FAILED; 400/404/413/422 => BAD_REQUEST not retried; 429 retried bounded; 504 TIMEOUT; 5xx PROVIDER_ERROR" },
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "N11: promptFeedback.blockReason => CONTENT_BLOCKED, never an empty success" },
-        { "file": "tests/regression/m17-byok-transport.check.cjs", "name": "ERROR_CODES includes CONTENT_BLOCKED, frozen, length 20" }
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "401/403 => AUTH_FAILED, 1 attempt"
+        },
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "404/413/422 => BAD_REQUEST, never retried"
+        },
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "429 RATE_LIMITED retried up to maxAttempts, then surfaced"
+        },
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "504 => TIMEOUT; 500/529 => PROVIDER_ERROR"
+        },
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "oversized response => OVERSIZED, zero retries (not retryable)"
+        },
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "invalid JSON body => MALFORMED_RESPONSE"
+        },
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "401/403 => AUTH_FAILED; 400/404/413/422 => BAD_REQUEST not retried; 429 retried bounded; 504 TIMEOUT; 5xx PROVIDER_ERROR"
+        },
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "N11: promptFeedback.blockReason => CONTENT_BLOCKED, never an empty success"
+        },
+        {
+          "file": "tests/regression/m17-byok-transport.check.cjs",
+          "name": "ERROR_CODES includes CONTENT_BLOCKED, frozen, length 20"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "Closed error-code enum; adapters map upstream statuses deterministically; bodies never leak.",
       "owner": "Developer"
     },
@@ -347,22 +573,47 @@
         "src/core/llm/ProviderContext.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-credentials.check.cjs", "name": "C16: util.inspect/JSON.stringify of the context never reveals the credential value" },
-        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC03/AC02/AC09/AC12/N01: concurrent openai+anthropic executions isolate keys, models, and markers" },
-        { "file": "tests/regression/p17-telemetry.check.cjs", "name": "S-10: telemetry serializes a success result from the allowlist only" }
+        {
+          "file": "tests/regression/m17-byok-credentials.check.cjs",
+          "name": "C16: util.inspect/JSON.stringify of the context never reveals the credential value"
+        },
+        {
+          "file": "tests/regression/m17-byok-concurrency.check.cjs",
+          "name": "AC03/AC02/AC09/AC12/N01: concurrent openai+anthropic executions isolate keys, models, and markers"
+        },
+        {
+          "file": "tests/regression/p17-telemetry.check.cjs",
+          "name": "S-10: telemetry serializes a success result from the allowlist only"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "credentialEnvVarName property is non-enumerable; apiKey getter non-enumerable.",
       "owner": "Developer"
     },
     {
       "id": "M17-BYOK-AC20",
       "text": "discovery absent => docs say manual model IDs (decision: not implemented).",
-      "status": "pending",
-      "implementationPaths": [],
-      "testPaths": [],
-      "evidenceRevision": "9abbf7b",
-      "limitation": "No discovery feature exists by owner decision; this must be documented in operator docs (pending Technical Writer).",
+      "status": "verified",
+      "implementationPaths": [
+        "docs/maintenance-byok-operations.md",
+        ".env.example"
+      ],
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-docs.check.cjs",
+          "name": "AC20: docs state there is no model discovery, no allowlist, and no certification claim"
+        },
+        {
+          "file": "tests/regression/m17-byok-docs.check.cjs",
+          "name": "AC20: .env.example optional BYOK entries are genuinely blank, not fake placeholders"
+        },
+        {
+          "file": "tests/regression/m17-byok-docs.check.cjs",
+          "name": "AC25/AC20: no key-shaped (real-looking) strings anywhere in the BYOK doc or .env.example"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
+      "limitation": "No discovery feature exists by owner decision; verified by static text/heuristic assertions that the operator doc explicitly states no model discovery, no allowlist, and no certification claim, and that .env.example's optional BYOK entries are genuinely blank. This is a documentation-accuracy check, not a live-provider or live-discovery test.",
       "owner": "Technical Writer"
     },
     {
@@ -373,10 +624,16 @@
         "src/core/locator/HealingBenchmark.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/p17-benchmark-provider.check.cjs", "name": "formatProviderDimensionText: labels mock rows with claimScope and never emits comparative/superiority wording" },
-        { "file": "tests/regression/p17-benchmark-provider.check.cjs", "name": "claimScope is a frozen, exact string" }
+        {
+          "file": "tests/regression/p17-benchmark-provider.check.cjs",
+          "name": "formatProviderDimensionText: labels mock rows with claimScope and never emits comparative/superiority wording"
+        },
+        {
+          "file": "tests/regression/p17-benchmark-provider.check.cjs",
+          "name": "claimScope is a frozen, exact string"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "Mock-only claim scope inherited from P17-AC11; no m17-specific benchmark test added (test coverage is the P17 benchmark suite). No live-model path exercised anywhere in CI.",
       "owner": "Developer"
     },
@@ -390,12 +647,33 @@
         "src/production-cycle/Redact.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC12: apiKey-named field is rejected, nothing written, marker never echoed" },
-        { "file": "tests/regression/p17-pc-schema.check.cjs", "name": "unknown top-level key is rejected" },
-        { "file": "tests/regression/p17-pc-redact.check.cjs", "name": "pattern review: ghp_ GitHub token is refused" }
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC12: apiKey-named field is rejected, nothing written, marker never echoed"
+        },
+        {
+          "file": "tests/regression/p17-pc-schema.check.cjs",
+          "name": "unknown top-level key is rejected"
+        },
+        {
+          "file": "tests/regression/p17-pc-redact.check.cjs",
+          "name": "pattern review: ghp_ GitHub token is refused"
+        },
+        {
+          "file": "tests/regression/m17-byok-dashboard-ledger.check.cjs",
+          "name": "AC03/AC22: concurrent openai+anthropic dispatches leave zero cross-markers in the ledger file or any dashboard response"
+        },
+        {
+          "file": "tests/regression/m17-byok-dashboard-ledger.check.cjs",
+          "name": "AC22: appendEvent rejects a key-shaped value in a free-text field via the real Redact.scan path"
+        },
+        {
+          "file": "tests/regression/m17-byok-dashboard-ledger.check.cjs",
+          "name": "AC22/AC12: appendEvent rejects an apiKey-named top-level field via the real EventValidator path"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
-      "limitation": "No m17-specific dashboard test asserts byok provider/profile metadata rendering; coverage is 'profile persistence rejects secrets' + inherited Phase 17 Redact/EventSchema tests. Full dashboard-concurrency path not re-exercised against byok dispatches.",
+      "evidenceRevision": "a8df6db",
+      "limitation": "Dashboard/ledger byok provider/profile metadata rendering is now directly exercised: real EventLog ledger writes for concurrent openai+anthropic dispatches are served by a live Server.js dashboard (/, /api/state) with safe metadata (provider id, model label, cred-env-var name) present and zero markers leaked; key-shaped and apiKey-named fields are proven rejected end-to-end via the real Redact/EventValidator path.",
       "owner": "Developer"
     },
     {
@@ -407,10 +685,16 @@
         "src/core/llm/LlmConfig.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC23: env-only path is unchanged — OPENAI_API_KEY alone => CONFIG_PROVIDER_REQUIRED" },
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC23: env-only path with no settings at all resolves to disabled, byte-identical to LlmConfig" }
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "AC23: env-only path is unchanged — OPENAI_API_KEY alone => CONFIG_PROVIDER_REQUIRED"
+        },
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "AC23: env-only path with no settings at all resolves to disabled, byte-identical to LlmConfig"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "Env-only path delegates verbatim to LlmConfig.resolve(); conflict rejection pins behavior.",
       "owner": "Developer"
     },
@@ -422,20 +706,43 @@
         ".github/workflows/ci.yml"
       ],
       "testPaths": [],
-      "evidenceRevision": "9abbf7b",
-      "limitation": "GitHub CodeQL + code scanning + secret scanning verdicts are recorded on the final PR head by the Release Manager; cannot be observed from in-process tests.",
+      "evidenceRevision": "a8df6db",
+      "limitation": "External, revision-bound release gate: exact-head GitHub Advanced Security (CodeQL, code scanning, secret scanning) results are recorded for the final PR head in the PR body and the production-cycle ledger by the DevOps Engineer and Release Manager. Committing that evidence would change the head and invalidate it, so it is resolved at release time and not by a register commit.",
       "owner": "Release Manager"
     },
     {
       "id": "M17-BYOK-AC25",
       "text": "docs configure OpenAI, Claude, Gemini, Azure, compatible with own keys using placeholders only.",
-      "status": "pending",
+      "status": "verified",
       "implementationPaths": [
+        "docs/maintenance-byok-operations.md",
+        "README.md",
         ".env.example"
       ],
-      "testPaths": [],
-      "evidenceRevision": "9abbf7b",
-      "limitation": "Operator-facing docs for the new BYOK providers (Claude/Gemini) are not yet written; placeholder-only env template is in place.",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-docs.check.cjs",
+          "name": "AC25: docs/maintenance-byok-operations.md documents all five providers with a placeholder-only example each"
+        },
+        {
+          "file": "tests/regression/m17-byok-docs.check.cjs",
+          "name": "AC25: README.md references BYOK provider configuration without real-looking keys"
+        },
+        {
+          "file": "tests/regression/m17-byok-docs.check.cjs",
+          "name": "AC25/AC20: no key-shaped (real-looking) strings anywhere in the BYOK doc or .env.example"
+        },
+        {
+          "file": "tests/regression/m17-byok-docs.check.cjs",
+          "name": "every `node ...` command referenced in the BYOK doc points at a real file"
+        },
+        {
+          "file": "tests/regression/m17-byok-docs.check.cjs",
+          "name": "every `npm run ...` script referenced in the BYOK doc exists in package.json"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
+      "limitation": "Operator-facing docs for all five providers (OpenAI, Anthropic, Gemini, Azure OpenAI, OpenAI-compatible) are written in docs/maintenance-byok-operations.md; verified by static text/heuristic checks (placeholder-only examples, no key-shaped strings, referenced commands/scripts exist). This proves documentation accuracy and consistency with the shipped CLI/config surface, not a live-provider certification of the documented steps.",
       "owner": "Technical Writer"
     },
     {
@@ -446,8 +753,8 @@
         "CLAUDE.md"
       ],
       "testPaths": [],
-      "evidenceRevision": "9abbf7b",
-      "limitation": "Governance/exact-head independent verdicts land only at release time (Release Manager owns the ledger evidence); routing policy in CLAUDE.md is already pinned by p17-governance tests.",
+      "evidenceRevision": "a8df6db",
+      "limitation": "External, revision-bound release gate: the twelve-role routing, zero Fable use and the exact-head independent verdicts are recorded in the production-cycle ledger and the PR body for the final head. They cannot be committed without invalidating themselves, so they are resolved at release time and not by a register commit. Routing policy in CLAUDE.md is pinned by p17-governance tests.",
       "owner": "Release Manager"
     },
     {
@@ -460,10 +767,16 @@
         "package.json"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "success: exact request shape, text extracted, usage mapped" },
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "success: exact request shape, text extracted, usage mapped" }
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "success: exact request shape, text extracted, usage mapped"
+        },
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "success: exact request shape, text extracted, usage mapped"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "ADR-0019 chose guarded REST (no SDK) for Anthropic/Gemini. OpenAI SDK is the only runtime SDK; adapter tests prove no SDK code paths execute for unselected providers (constructor-side only).",
       "owner": "Developer"
     },
@@ -478,14 +791,32 @@
         "src/core/llm/ProfileStore.js"
       ],
       "testPaths": [
-        { "file": "tests/regression/m17-byok-limits.check.cjs", "name": "LlmBudget.processCeiling: independent budgets together cannot exceed 2000 total attempts" },
-        { "file": "tests/regression/m17-byok-limits.check.cjs", "name": "LlmBudget.processCeiling: independent semaphores together cannot exceed 8 concurrent in-flight" },
-        { "file": "tests/regression/m17-byok-limits.check.cjs", "name": "Semaphore: a waiter that times out rejects without leaking a permit, and the queue drains" },
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC28: timeoutMs and maxAttempts out-of-bounds values are rejected" },
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC28: model length bound (>64 chars) is rejected" },
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC28: profile size bound (>16KiB serialized) is rejected at write time" }
+        {
+          "file": "tests/regression/m17-byok-limits.check.cjs",
+          "name": "LlmBudget.processCeiling: independent budgets together cannot exceed 2000 total attempts"
+        },
+        {
+          "file": "tests/regression/m17-byok-limits.check.cjs",
+          "name": "LlmBudget.processCeiling: independent semaphores together cannot exceed 8 concurrent in-flight"
+        },
+        {
+          "file": "tests/regression/m17-byok-limits.check.cjs",
+          "name": "Semaphore: a waiter that times out rejects without leaking a permit, and the queue drains"
+        },
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC28: timeoutMs and maxAttempts out-of-bounds values are rejected"
+        },
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC28: model length bound (>64 chars) is rejected"
+        },
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC28: profile size bound (>16KiB serialized) is rejected at write time"
+        }
       ],
-      "evidenceRevision": "9abbf7b",
+      "evidenceRevision": "a8df6db",
       "limitation": "Discovery results limit is not implemented (feature absent, AC20); other limits all have tests.",
       "owner": "Developer"
     },
@@ -493,12 +824,21 @@
       "id": "M17-BYOK-N01",
       "text": "no ambient key/default model crosses providers.",
       "status": "verified",
-      "implementationPaths": ["src/core/llm/LlmProviderRegistry.js", "src/core/llm/ProviderContext.js"],
-      "testPaths": [
-        { "file": "tests/regression/m17-byok-isolation.check.cjs", "name": "N01: two ProviderContexts with the same provider id get distinct provider instances" },
-        { "file": "tests/regression/m17-byok-concurrency.check.cjs", "name": "AC02/N01: two openai contexts with different keys/models never share cache or carry each other's secrets" }
+      "implementationPaths": [
+        "src/core/llm/LlmProviderRegistry.js",
+        "src/core/llm/ProviderContext.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-isolation.check.cjs",
+          "name": "N01: two ProviderContexts with the same provider id get distinct provider instances"
+        },
+        {
+          "file": "tests/regression/m17-byok-concurrency.check.cjs",
+          "name": "AC02/N01: two openai contexts with different keys/models never share cache or carry each other's secrets"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "WeakMap-by-context memoisation.",
       "owner": "Developer"
     },
@@ -506,12 +846,28 @@
       "id": "M17-BYOK-N02",
       "text": "registry keyed by invocation not provider id.",
       "status": "verified",
-      "implementationPaths": ["src/core/llm/LlmProviderRegistry.js"],
-      "testPaths": [
-        { "file": "tests/regression/m17-byok-isolation.check.cjs", "name": "N02: legacy Map-by-provider-id memoization is unchanged (existing p17 behaviour)" },
-        { "file": "tests/regression/m17-byok-isolation.check.cjs", "name": "N02: a context and a legacy plain config for the same provider id are independent" }
+      "implementationPaths": [
+        "src/core/llm/LlmProviderRegistry.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-isolation.check.cjs",
+          "name": "N02: legacy Map-by-provider-id memoization is unchanged (existing p17 behaviour)"
+        },
+        {
+          "file": "tests/regression/m17-byok-isolation.check.cjs",
+          "name": "N02: a context and a legacy plain config for the same provider id are independent"
+        },
+        {
+          "file": "tests/regression/m17-byok-propagation.check.cjs",
+          "name": "ParallelSweep.runInJournalMode source: providerContext flows into both the SiteSweep constructor and runRepeatedTestPlan's options"
+        },
+        {
+          "file": "tests/regression/m17-byok-propagation.check.cjs",
+          "name": "ParallelSweep: SiteSweep built inside runInJournalMode honours the same providerContext identity (behavioural, via SiteSweep's own seam)"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "",
       "owner": "Developer"
     },
@@ -519,13 +875,24 @@
       "id": "M17-BYOK-N03",
       "text": "redirects not followed.",
       "status": "verified",
-      "implementationPaths": ["src/core/llm/transport/guardedFetch.js"],
-      "testPaths": [
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "redirect 30x is rejected, surfaced as REDIRECT_REJECTED (not retried)" },
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "redirect 30x rejected" },
-        { "file": "tests/regression/m17-byok-transport.check.cjs", "name": "fixed-host: a 30x redirect response is rejected and never followed" }
+      "implementationPaths": [
+        "src/core/llm/transport/guardedFetch.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "redirect 30x is rejected, surfaced as REDIRECT_REJECTED (not retried)"
+        },
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "redirect 30x rejected"
+        },
+        {
+          "file": "tests/regression/m17-byok-transport.check.cjs",
+          "name": "fixed-host: a 30x redirect response is rejected and never followed"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "",
       "owner": "Developer"
     },
@@ -533,12 +900,20 @@
       "id": "M17-BYOK-N04",
       "text": "model id >64 or off-charset rejected.",
       "status": "verified",
-      "implementationPaths": ["src/core/llm/ProviderContext.js"],
-      "testPaths": [
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "C1: gemini model id traversal/escape shapes are rejected by the stricter charset" },
-        { "file": "tests/regression/m17-byok-profiles.check.cjs", "name": "AC28: model length bound (>64 chars) is rejected" }
+      "implementationPaths": [
+        "src/core/llm/ProviderContext.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "C1: gemini model id traversal/escape shapes are rejected by the stricter charset"
+        },
+        {
+          "file": "tests/regression/m17-byok-profiles.check.cjs",
+          "name": "AC28: model length bound (>64 chars) is rejected"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "",
       "owner": "Developer"
     },
@@ -546,12 +921,20 @@
       "id": "M17-BYOK-N05",
       "text": "case/non-canonical config rejected.",
       "status": "verified",
-      "implementationPaths": ["src/core/llm/ProviderContext.js"],
-      "testPaths": [
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "N05: timeoutMs out of bounds is rejected (CONFIG_INVALID), not silently clamped" },
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC07: unsupported provider value is rejected" }
+      "implementationPaths": [
+        "src/core/llm/ProviderContext.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "N05: timeoutMs out of bounds is rejected (CONFIG_INVALID), not silently clamped"
+        },
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "AC07: unsupported provider value is rejected"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "",
       "owner": "Developer"
     },
@@ -559,12 +942,20 @@
       "id": "M17-BYOK-N06",
       "text": "oversize aborts, no partial text.",
       "status": "verified",
-      "implementationPaths": ["src/core/llm/transport/guardedFetch.js"],
-      "testPaths": [
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "oversized response => OVERSIZED, zero retries (not retryable)" },
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "oversized response => OVERSIZED" }
+      "implementationPaths": [
+        "src/core/llm/transport/guardedFetch.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "oversized response => OVERSIZED, zero retries (not retryable)"
+        },
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "oversized response => OVERSIZED"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "",
       "owner": "Developer"
     },
@@ -572,13 +963,25 @@
       "id": "M17-BYOK-N07",
       "text": "concurrency cap + exhausted budget zero calls.",
       "status": "verified",
-      "implementationPaths": ["src/core/llm/Semaphore.js", "src/core/llm/LlmBudget.js"],
-      "testPaths": [
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "BUDGET_EXHAUSTED: canSend() false and a zero-budget complete() make zero requests" },
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "BUDGET_EXHAUSTED: zero-budget complete() makes zero requests" },
-        { "file": "tests/regression/m17-byok-limits.check.cjs", "name": "LlmBudget.processCeiling: exhaustion makes zero network calls (returns false synchronously)" }
+      "implementationPaths": [
+        "src/core/llm/Semaphore.js",
+        "src/core/llm/LlmBudget.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "BUDGET_EXHAUSTED: canSend() false and a zero-budget complete() make zero requests"
+        },
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "BUDGET_EXHAUSTED: zero-budget complete() makes zero requests"
+        },
+        {
+          "file": "tests/regression/m17-byok-limits.check.cjs",
+          "name": "LlmBudget.processCeiling: exhaustion makes zero network calls (returns false synchronously)"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "",
       "owner": "Developer"
     },
@@ -586,12 +989,21 @@
       "id": "M17-BYOK-N08",
       "text": "provider error bodies never surface.",
       "status": "verified",
-      "implementationPaths": ["src/core/llm/providers/AnthropicProvider.js", "src/core/llm/providers/GeminiProvider.js"],
-      "testPaths": [
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "error body marker and api key marker never appear in the result or thrown messages" },
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "error body marker and api key marker never appear in the result" }
+      "implementationPaths": [
+        "src/core/llm/providers/AnthropicProvider.js",
+        "src/core/llm/providers/GeminiProvider.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "error body marker and api key marker never appear in the result or thrown messages"
+        },
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "error body marker and api key marker never appear in the result"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "",
       "owner": "Developer"
     },
@@ -599,13 +1011,24 @@
       "id": "M17-BYOK-N09",
       "text": "unset/path-like credential ref fails closed.",
       "status": "verified",
-      "implementationPaths": ["src/core/llm/ProviderContext.js"],
-      "testPaths": [
-        { "file": "tests/regression/m17-byok-credentials.check.cjs", "name": "Missing credential at resolve time => CONFIG_MISSING_CREDENTIALS, value never read" },
-        { "file": "tests/regression/m17-byok-credentials.check.cjs", "name": "C11: GITHUB_TOKEN is rejected as a credentialEnvVar (name shape mismatch)" },
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "N09: provider value containing control characters is rejected" }
+      "implementationPaths": [
+        "src/core/llm/ProviderContext.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-credentials.check.cjs",
+          "name": "Missing credential at resolve time => CONFIG_MISSING_CREDENTIALS, value never read"
+        },
+        {
+          "file": "tests/regression/m17-byok-credentials.check.cjs",
+          "name": "C11: GITHUB_TOKEN is rejected as a credentialEnvVar (name shape mismatch)"
+        },
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "N09: provider value containing control characters is rejected"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "",
       "owner": "Developer"
     },
@@ -613,12 +1036,20 @@
       "id": "M17-BYOK-N10",
       "text": "Anthropic 400 / max_tokens-without-text -> BAD_REQUEST/MALFORMED no retry.",
       "status": "verified",
-      "implementationPaths": ["src/core/llm/providers/AnthropicProvider.js"],
-      "testPaths": [
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "N10: 400 BAD_REQUEST never retried (exactly 1 attempt)" },
-        { "file": "tests/regression/m17-byok-anthropic.check.cjs", "name": "N10: max_tokens stop_reason with only a thinking block (no text) => MALFORMED_RESPONSE" }
+      "implementationPaths": [
+        "src/core/llm/providers/AnthropicProvider.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "N10: 400 BAD_REQUEST never retried (exactly 1 attempt)"
+        },
+        {
+          "file": "tests/regression/m17-byok-anthropic.check.cjs",
+          "name": "N10: max_tokens stop_reason with only a thinking block (no text) => MALFORMED_RESPONSE"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "",
       "owner": "Developer"
     },
@@ -626,12 +1057,20 @@
       "id": "M17-BYOK-N11",
       "text": "Gemini safety block = failure.",
       "status": "verified",
-      "implementationPaths": ["src/core/llm/providers/GeminiProvider.js"],
-      "testPaths": [
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "N11: promptFeedback.blockReason => CONTENT_BLOCKED, never an empty success" },
-        { "file": "tests/regression/m17-byok-gemini.check.cjs", "name": "N11: blocked finishReason variants => CONTENT_BLOCKED even when text is present" }
+      "implementationPaths": [
+        "src/core/llm/providers/GeminiProvider.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "N11: promptFeedback.blockReason => CONTENT_BLOCKED, never an empty success"
+        },
+        {
+          "file": "tests/regression/m17-byok-gemini.check.cjs",
+          "name": "N11: blocked finishReason variants => CONTENT_BLOCKED even when text is present"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "",
       "owner": "Developer"
     },
@@ -639,12 +1078,21 @@
       "id": "M17-BYOK-N12",
       "text": "OPENAI_API_KEY alone never selects provider.",
       "status": "verified",
-      "implementationPaths": ["src/core/llm/ProviderContext.js", "src/core/llm/LlmConfig.js"],
-      "testPaths": [
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "AC23: env-only path is unchanged — OPENAI_API_KEY alone => CONFIG_PROVIDER_REQUIRED" },
-        { "file": "tests/regression/m17-byok-config.check.cjs", "name": "N12: blank/whitespace-only model is rejected, not treated as unset" }
+      "implementationPaths": [
+        "src/core/llm/ProviderContext.js",
+        "src/core/llm/LlmConfig.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "AC23: env-only path is unchanged — OPENAI_API_KEY alone => CONFIG_PROVIDER_REQUIRED"
+        },
+        {
+          "file": "tests/regression/m17-byok-config.check.cjs",
+          "name": "N12: blank/whitespace-only model is rejected, not treated as unset"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "",
       "owner": "Developer"
     },
@@ -652,18 +1100,39 @@
       "id": "M17-BYOK-N13",
       "text": "dashboard escapes provider/model.",
       "status": "verified",
-      "implementationPaths": ["src/production-cycle/ui/index.html", "src/production-cycle/Redact.js"],
-      "testPaths": [
-        { "file": "tests/regression/p17-pc-ui-static.check.cjs", "name": "UI: no chain-of-thought field names read as properties" },
-        { "file": "tests/regression/p17-pc-redact.check.cjs", "name": "D-22: M06 short hostile HTML is accepted by Redact, stays a plain escaped string" }
+      "implementationPaths": [
+        "src/production-cycle/ui/index.html",
+        "src/production-cycle/Redact.js"
       ],
-      "evidenceRevision": "9abbf7b",
+      "testPaths": [
+        {
+          "file": "tests/regression/p17-pc-ui-static.check.cjs",
+          "name": "UI: no chain-of-thought field names read as properties"
+        },
+        {
+          "file": "tests/regression/p17-pc-redact.check.cjs",
+          "name": "D-22: M06 short hostile HTML is accepted by Redact, stays a plain escaped string"
+        }
+      ],
+      "evidenceRevision": "a8df6db",
       "limitation": "No m17-specific dashboard escape test; coverage inherited from p17 ui-static + redact suites.",
       "owner": "Developer"
     }
   ],
   "totals": {
-    "ac": { "total": 28, "verified": 24, "pending": 4, "pendingIds": ["M17-BYOK-AC20", "M17-BYOK-AC24", "M17-BYOK-AC25", "M17-BYOK-AC26"] },
-    "n": { "total": 13, "verified": 13, "pending": 0 }
+    "ac": {
+      "total": 28,
+      "verified": 26,
+      "pending": 2,
+      "pendingIds": [
+        "M17-BYOK-AC24",
+        "M17-BYOK-AC26"
+      ]
+    },
+    "n": {
+      "total": 13,
+      "verified": 13,
+      "pending": 0
+    }
   }
 }

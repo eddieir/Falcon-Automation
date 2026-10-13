@@ -182,10 +182,16 @@ test("totals block agrees with per-id statuses", () => {
     assert.deepEqual(pendingIds, reportedPendingIds, "totals.ac.pendingIds must list exactly the pending ACs");
 });
 
-test("every entry carries evidenceRevision=9abbf7b", () => {
+test("every entry carries evidenceRevision equal to the register's top-level evidenceRevision", () => {
     const r = loadRegister();
+    const SHA_SHAPE = /^[0-9a-f]{7,40}$/;
+    assert.match(r.evidenceRevision, SHA_SHAPE, "top-level evidenceRevision must be a git short/long SHA");
     for (const c of r.criteria) {
-        assert.equal(c.evidenceRevision, "9abbf7b", `${c.id}: evidenceRevision must be 9abbf7b`);
+        assert.equal(
+            c.evidenceRevision,
+            r.evidenceRevision,
+            `${c.id}: evidenceRevision must equal the top-level evidenceRevision (${r.evidenceRevision})`,
+        );
     }
 });
 

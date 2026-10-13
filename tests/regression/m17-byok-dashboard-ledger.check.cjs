@@ -198,6 +198,17 @@ async function startServer(runDir) {
   return { instance, port: bound.port };
 }
 
+// Credential ENV VAR NAMES (not values) are secret-source info and must
+// never appear in a ledger summary or any dashboard response. This is a
+// simple, linear, anchored detector: any `_API_KEY`-suffixed SCREAMING_SNAKE
+// identifier, which covers ANTHROPIC_API_KEY, GEMINI_API_KEY, and custom
+// names such as FALCON_QA_DASH_A_API_KEY alike.
+const ENV_VAR_NAME_RE = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_API_KEY\b/;
+
+function containsEnvVarName(text) {
+  return typeof text === "string" && ENV_VAR_NAME_RE.test(text);
+}
+
 function baseDraft(overrides) {
   return Object.assign(
     {
@@ -239,6 +250,7 @@ test(
     const MODEL_A = "gpt-dash-test";
     const MODEL_B = "claude-dash-test";
     const CRED_VAR_A = "FALCON_QA_DASH_A_API_KEY";
+    const CRED_VAR_B = "ANTHROPIC_API_KEY";
 
     const envA = { [CRED_VAR_A]: KEY_A };
     const envB = { ANTHROPIC_API_KEY: KEY_B };
@@ -271,14 +283,18 @@ test(
 
     try {
       // Record real dispatch/provider-metadata ledger events for BOTH
-      // concurrently-dispatched contexts, using only safe metadata per
-      // AC19/AC22 (provider id, model label, credential ENV VAR NAME —
-      // never the credential value itself).
+      // concurrently-dispatched contexts. Approved policy: ledger/dashboard
+      // may show provider id, model id, and a safe profile label ONLY.
+      // Secret-source info — both credential VALUES and credential
+      // ENV VAR NAMES (e.g. ANTHROPIC_API_KEY, GEMINI_API_KEY, custom
+      // *_API_KEY names) — must never appear in a ledger summary or any
+      // dashboard response; ProviderContext keeps _credentialEnvVarName
+      // non-enumerable for exactly this reason.
       const appendA = EventLog.appendEvent(
         runDir,
         baseDraft({
           taskId: "Dev-13",
-          summary: "dispatch openai model=" + MODEL_A + " cred_env=" + CRED_VAR_A,
+          summary: "dispatch provider=openai model=" + MODEL_A + " profile=openai-dispatch",
           requestedLabel: "openai-dispatch",
           resolvedModelId: MODEL_A,
         })
@@ -287,7 +303,7 @@ test(
         runDir,
         baseDraft({
           taskId: "Dev-13",
-          summary: "dispatch anthropic model=" + MODEL_B + " cred_env=ANTHROPIC_API_KEY",
+          summary: "dispatch provider=anthropic model=" + MODEL_B + " profile=anthropic-dispatch",
           requestedLabel: "anthropic-dispatch",
           resolvedModelId: MODEL_B,
         })
@@ -308,17 +324,22 @@ test(
       assert.equal(appendResultA.ok, true, "dispatch-A ledger append must succeed: " + JSON.stringify(appendResultA));
       assert.equal(appendResultB.ok, true, "dispatch-B ledger append must succeed: " + JSON.stringify(appendResultB));
 
-      // --- Ledger file contents: zero cross-markers, and zero markers at
-      // all (keys must never be persisted anywhere, per AC12/AC01). ---
+      // --- Ledger file contents: zero cross-markers, and zero markers or
+      // credential ENV VAR NAMES at all (keys AND their env-var names must
+      // never be persisted anywhere, per AC01/AC12/AC19). ---
       const ledgerPath = path.join(runDir, "events.jsonl");
       const ledgerRaw = await fsp.readFile(ledgerPath, "utf8");
       assert.ok(!ledgerRaw.includes(KEY_A), "ledger file must never contain KEY_A");
       assert.ok(!ledgerRaw.includes(KEY_B), "ledger file must never contain KEY_B");
+      assert.ok(!ledgerRaw.includes(CRED_VAR_A), "ledger file must never contain the credential env-var name A");
+      assert.ok(!ledgerRaw.includes(CRED_VAR_B), "ledger file must never contain the credential env-var name B");
+      assert.equal(containsEnvVarName(ledgerRaw), false, "ledger file must never contain any *_API_KEY env-var name");
       // Safe metadata IS expected to be present (AC22: real dispatch
-      // packets + safe provider/model/cred-env-name metadata are served).
+      // packets + safe provider id/model label/profile label are served).
       assert.ok(ledgerRaw.includes(MODEL_A), "ledger must retain safe model label A");
       assert.ok(ledgerRaw.includes(MODEL_B), "ledger must retain safe model label B");
-      assert.ok(ledgerRaw.includes(CRED_VAR_A), "ledger must retain safe cred ENV VAR NAME, not the value");
+      assert.ok(ledgerRaw.includes("provider=openai"), "ledger must retain safe provider id A");
+      assert.ok(ledgerRaw.includes("provider=anthropic"), "ledger must retain safe provider id B");
 
       // --- Dashboard HTTP responses: zero markers in state/events/UI. ---
       const { instance, port } = await startServer(runDir);
@@ -338,17 +359,34 @@ test(
         ]) {
           assert.ok(!body.includes(KEY_A), `${label} leaked KEY_A`);
           assert.ok(!body.includes(KEY_B), `${label} leaked KEY_B`);
+          assert.ok(!body.includes(CRED_VAR_A), `${label} leaked credential env-var name A`);
+          assert.ok(!body.includes(CRED_VAR_B), `${label} leaked credential env-var name B`);
+          assert.equal(containsEnvVarName(body), false, `${label} leaked some *_API_KEY env-var name`);
         }
         assert.ok(!JSON.stringify(rState.headers).includes(KEY_A), "state headers leaked KEY_A");
         assert.ok(!JSON.stringify(rState.headers).includes(KEY_B), "state headers leaked KEY_B");
+        assert.ok(!JSON.stringify(rState.headers).includes(CRED_VAR_A), "state headers leaked credential env-var name A");
+        assert.ok(!JSON.stringify(rState.headers).includes(CRED_VAR_B), "state headers leaked credential env-var name B");
 
         // AC22: dashboard serves the real dispatch packets + safe metadata
-        // (provider dispatch summary, model label, cred env var name) for
-        // byok dispatches — never fabricated.
+        // (provider id, model label, profile label) for byok dispatches —
+        // never fabricated, and never the credential source (value or
+        // env-var name).
         assert.ok(rState.body.includes(MODEL_A), "/api/state must surface the real model label A");
         assert.ok(rState.body.includes(MODEL_B), "/api/state must surface the real model label B");
-        assert.ok(rState.body.includes(CRED_VAR_A), "/api/state must surface the safe cred ENV VAR NAME");
+        assert.ok(rState.body.includes("provider=openai"), "/api/state must surface the real provider id A");
+        assert.ok(rState.body.includes("provider=anthropic"), "/api/state must surface the real provider id B");
+        assert.ok(rState.body.includes("openai-dispatch"), "/api/state must surface the safe profile label A");
+        assert.ok(rState.body.includes("anthropic-dispatch"), "/api/state must surface the safe profile label B");
         assert.ok(rState.body.includes("Dev-13"), "/api/state must surface the real taskId, not a fabricated one");
+
+        // Positive control: prove the env-var-name absence check is not a
+        // vacuous no-op by running it against a synthetic string that does
+        // contain a credential env-var name, and against the real values.
+        assert.equal(containsEnvVarName("cred_env=" + CRED_VAR_A), true, "detector must flag a planted env-var name");
+        assert.equal(containsEnvVarName("cred_env=" + CRED_VAR_B), true, "detector must flag ANTHROPIC_API_KEY");
+        assert.equal(containsEnvVarName("GEMINI_API_KEY"), true, "detector must flag GEMINI_API_KEY");
+        assert.equal(containsEnvVarName("no secrets here"), false, "detector must not false-positive on plain text");
       } finally {
         await instance.close();
       }
