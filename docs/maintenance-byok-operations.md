@@ -141,7 +141,7 @@ node falcon.js --llm-provider=openai-compatible --llm-model=llama2
 
 **Opt-in required:** Custom endpoints must explicitly enable `FALCON_LLM_ALLOW_CUSTOM_ENDPOINT=true`. HTTP is allowed only on loopback (`127.0.0.1`, `::1`) with `FALCON_LLM_ALLOW_HTTP_LOOPBACK=true`. Private IP ranges (e.g., `10.0.0.0/8`) require `FALCON_LLM_ALLOW_PRIVATE_ENDPOINT=true`.
 
-**Deprecated — env-only compat path:** `FALCON_LLM_PROVIDER=openai-compatible` set purely through the environment, with `FALCON_LLM_API_KEY` and no `--llm-profile`/`--llm-provider`/`--llm-model` flag and no profile, still works (Phase 17 compatibility layer) but is **deprecated** and may be removed in a later release. New setups should use a profile with an explicit `credentialEnvVar` as shown above. No removal date has been set for this deprecated path.
+**Deprecated — env-only compat path:** `FALCON_LLM_PROVIDER=openai-compatible` set purely through the environment, with `FALCON_LLM_API_KEY` and no `--llm-profile`/`--llm-provider`/`--llm-model` flag and no profile, still works (Phase 17 compatibility layer) but is **deprecated** and may be removed in a later release. **Security note:** on this path Falcon sends the value of `FALCON_LLM_API_KEY` to the custom endpoint you configured with `FALCON_LLM_ENDPOINT`, so only use it when that variable holds a key meant for that endpoint and never one issued for another provider such as OpenAI. New setups should use a profile with an explicit `credentialEnvVar` as shown above. No removal date has been set for this deprecated path.
 
 ## Running Two Invocations with Different Providers
 
