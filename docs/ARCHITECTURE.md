@@ -62,23 +62,73 @@ Component names above map to the repository so an evaluator can move from this o
 ### Locator-recovery path
 
 ```mermaid
-flowchart TD
-    Start["Action with developer selector"] --> Retry{"Original selector succeeds?"}
-    Retry -- Yes --> Act["Perform action and capture evidence"]
-    Retry -- No --> Approved{"Approved scoped evidence resolves uniquely and remains compatible?"}
-    Approved -- Yes --> Replay["Perform action with approved replacement"]
-    Approved -- No --> Local{"Local candidate match clears identity, confidence, and ambiguity checks?"}
-    Local -- Yes --> Proposal["Perform once and create review proposal"]
-    Local -- No --> Enabled{"Tier 3 explicitly enabled?"}
-    Enabled -- No --> Fail["Report target unavailable"]
-    Enabled -- Yes --> LLM["Send bounded candidate list to selected provider"]
-    LLM --> Verify{"Chosen candidate is still unique, visible, and action-compatible?"}
-    Verify -- Yes --> Proposal
-    Verify -- No --> Fail
-    Proposal --> Decision{"Human decision"}
-    Decision -- Approve --> Trusted["Persist scoped trusted evidence"]
-    Decision -- Reject --> Rejected["Retain rejection audit; do not reuse"]
-    Trusted --> Approved
+flowchart LR
+    subgraph Direct["1 · Direct attempt"]
+        direction TB
+        Start(["Action with<br/>developer selector"])
+        Retry{"Original selector<br/>works?"}
+        Execute["Execute action<br/>and capture evidence"]
+        Start --> Retry
+        Retry -- "Yes" --> Execute
+    end
+
+    subgraph Local["2 · Local recovery"]
+        direction TB
+        Approved{"Approved scoped<br/>replacement valid?"}
+        Replay["Execute approved<br/>replacement"]
+        Match{"Local match confident<br/>and unambiguous?"}
+        Approved -- "Yes" --> Replay
+        Approved -- "No" --> Match
+    end
+
+    subgraph Provider["3 · Optional AI provider"]
+        direction TB
+        Enabled{"Tier 3<br/>enabled?"}
+        Request["Send bounded<br/>candidate list"]
+        Verify{"Candidate still unique,<br/>visible, and compatible?"}
+        Enabled -- "Yes" --> Request
+        Request --> Verify
+    end
+
+    subgraph Governance["4 · Review and trust"]
+        direction TB
+        Proposal["Execute once<br/>Create review proposal"]
+        Decision{"Human review"}
+        Trusted(["Approved<br/>Scoped reuse allowed"])
+        Rejected(["Rejected<br/>Audited, never reused"])
+        Proposal --> Decision
+        Decision -- "Approve" --> Trusted
+        Decision -- "Reject" --> Rejected
+    end
+
+    Complete(["Action completed"])
+    Failed(["Target unavailable"])
+
+    Retry -- "No" --> Approved
+    Match -- "Yes" --> Proposal
+    Match -- "No" --> Enabled
+    Enabled -- "No" --> Failed
+    Verify -- "Yes" --> Proposal
+    Verify -- "No" --> Failed
+    Execute --> Complete
+    Replay --> Complete
+
+    classDef entry fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e,stroke-width:2px
+    classDef decision fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
+    classDef action fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef review fill:#f3e8ff,stroke:#9333ea,color:#581c87,stroke-width:2px
+    classDef failure fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:2px
+
+    class Start entry
+    class Retry,Approved,Match,Enabled,Verify,Decision decision
+    class Execute,Replay,Complete,Trusted action
+    class Request,Proposal,Rejected review
+    class Failed failure
+
+    style Direct fill:#f8fafc,stroke:#94a3b8,color:#0f172a
+    style Local fill:#f8fafc,stroke:#94a3b8,color:#0f172a
+    style Provider fill:#f8fafc,stroke:#94a3b8,color:#0f172a
+    style Governance fill:#f8fafc,stroke:#94a3b8,color:#0f172a
 ```
 
 A locator identity is scoped by the application, origin, pathname, action, and original selector. Replay checks the current page again before acting. Local matching refuses when identity evidence is insufficient, the best candidate falls below the confidence threshold, or competing candidates are too close. Tier 3 never accepts a model-authored selector: Falcon builds selectors for locally collected candidates, asks the provider for a candidate number, and verifies that candidate against the live page before using it.
