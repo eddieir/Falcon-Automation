@@ -128,7 +128,9 @@ async function main() {
                 return usageError("Usage: node scripts/llm/profile.js show <name>");
             }
             const result = await ProfileStore.get(name, {});
-            if (!result.ok) return appError(`Profile "${name}" is invalid or not found: ${result.errorCode}`);
+            // Fixed, value-free detail — never echo the raw argv profile
+            // name into stderr; only the error code identifies the failure.
+            if (!result.ok) return appError(`Profile is invalid or not found: ${result.errorCode}`);
             printProfile(result.name, result.profile);
             return;
         }
@@ -139,7 +141,9 @@ async function main() {
                 return usageError("Usage: node scripts/llm/profile.js delete <name>");
             }
             const result = await ProfileStore.remove(name, {});
-            if (!result.ok) return appError(`Could not delete profile "${name}": ${result.errorCode}`);
+            // Fixed, value-free detail — never echo the raw argv profile
+            // name into stderr; only the error code identifies the failure.
+            if (!result.ok) return appError(`Could not delete profile: ${result.errorCode}`);
             process.stdout.write(`Deleted profile "${result.name}".\n`);
             return;
         }
@@ -152,7 +156,9 @@ async function main() {
             const parsed = parseFlags(flagArgs);
             if (!parsed.ok) return usageError(parsed.usage);
             const result = await ProfileStore.set(name, parsed.value, {});
-            if (!result.ok) return appError(`Could not save profile "${name}": ${result.errorCode}`);
+            // Fixed, value-free detail — never echo the raw argv profile
+            // name into stderr; only the error code identifies the failure.
+            if (!result.ok) return appError(`Could not save profile: ${result.errorCode}`);
             process.stdout.write(`Saved profile "${result.name}".\n`);
             return;
         }
