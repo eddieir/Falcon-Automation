@@ -14,7 +14,7 @@ Bring Your Own Key (BYOK): Falcon does not ship, broker, proxy, or store your LL
 | **azure-openai** | First-class | Azure API v1 + resource/deployment | operator-supplied | CLI flag or `FALCON_LLM_PROVIDER` | Tested with mock; Entra ID unsupported |
 | **anthropic** | First-class (new) | REST /v1/messages, guarded | operator-supplied, required | CLI flag or `FALCON_LLM_PROVIDER` | Tested with mock; no live models certified |
 | **gemini** | First-class (new) | REST /v1beta/models/:generateContent, guarded | operator-supplied, required, stricter charset | CLI flag or `FALCON_LLM_PROVIDER` | Tested with mock; no live models certified |
-| **openai-compatible** | First-class | Custom OpenAI-compatible endpoint (e.g. Ollama, vLLM) | operator-supplied | CLI flag, requires explicit endpoint | Requires `FALCON_LLM_ALLOW_CUSTOM_ENDPOINT=true` |
+| **openai-compatible** | First-class | Custom OpenAI-compatible endpoint (e.g. Ollama, vLLM) | operator-supplied | CLI flag/profile, requires explicit endpoint and a profile `credentialEnvVar` (no fallback) | Requires `FALCON_LLM_ALLOW_CUSTOM_ENDPOINT=true` |
 | **disabled** or blank | None | — | — | Skip Tier 3 | Tiers 1/2 remain active |
 
 **Note:** No models are live-tested or certified. Tests use mocks only to verify protocol behavior, not model quality. Model discovery is not implemented; you must type model IDs manually. Falcon keeps no allowlist of approved model IDs and makes no certification claim about any model's healing quality — any model ID you supply for your chosen provider is passed through as-is.
@@ -97,16 +97,35 @@ Credentials: `FALCON_LLM_API_KEY` (key-based auth only; Entra ID unsupported).
 
 ### OpenAI-Compatible Endpoint (Ollama on Loopback)
 
+`provider=openai-compatible` requires an explicit `credentialEnvVar` naming the environment variable that holds the key for that specific endpoint. There is no fallback to `FALCON_LLM_API_KEY`, `OPENAI_API_KEY`, or any other provider's variable — this prevents a credential meant for one provider from being forwarded to an unrelated custom endpoint. A `credentialEnvVar` can currently only be set on a profile (there is no `--llm-credential-env` flag on `falcon.js` itself), so selecting `openai-compatible` via a profile is the supported path:
+
 ```bash
-export FALCON_LLM_API_KEY=<key-if-required>
+export COMPAT_API_KEY=<your-key>
 export FALCON_LLM_ALLOW_CUSTOM_ENDPOINT=true
 export FALCON_LLM_ALLOW_HTTP_LOOPBACK=true
-node falcon.js --llm-provider=openai-compatible \
-  --llm-endpoint=http://127.0.0.1:11434/v1 \
-  --llm-model=llama2
+
+npm run llm:profile:set -- my-compat \
+  --provider=openai-compatible \
+  --model=llama2 \
+  --endpoint=http://127.0.0.1:11434/v1 \
+  --allow-custom-endpoint=true \
+  --allow-http-loopback=true \
+  --credential-env=COMPAT_API_KEY
+
+node falcon.js --llm-profile=my-compat
+```
+
+Selecting `openai-compatible` directly with `--llm-provider=openai-compatible` and no profile (no way to supply `credentialEnvVar`) always exits with `CONFIG_MISSING_CREDENTIALS`:
+
+```bash
+# REJECTED: no credentialEnvVar can be attached to a bare flag
+node falcon.js --llm-provider=openai-compatible --llm-endpoint=http://127.0.0.1:11434/v1 --llm-model=llama2
+# -> exits with CONFIG_MISSING_CREDENTIALS
 ```
 
 **Opt-in required:** Custom endpoints must explicitly enable `FALCON_LLM_ALLOW_CUSTOM_ENDPOINT=true`. HTTP is allowed only on loopback (`127.0.0.1`, `::1`) with `FALCON_LLM_ALLOW_HTTP_LOOPBACK=true`. Private IP ranges (e.g., `10.0.0.0/8`) require `FALCON_LLM_ALLOW_PRIVATE_ENDPOINT=true`.
+
+**Deprecated — env-only compat path:** `FALCON_LLM_PROVIDER=openai-compatible` set purely through the environment, with `FALCON_LLM_API_KEY` and no `--llm-*` flag and no profile, still works (Phase 17 compatibility layer) but is **deprecated** and may be removed in a later release. New setups should use a profile with an explicit `credentialEnvVar` as shown above.
 
 ## Running Two Invocations with Different Providers
 
@@ -146,7 +165,7 @@ Profiles store non-secret metadata for reuse, avoiding repeated CLI flags. Keys 
 | `provider` | string | Yes | `openai`, `azure-openai`, `anthropic`, `gemini`, `openai-compatible` |
 | `model` | string | Yes | Model ID (e.g., `gpt-4o-mini`); operator-supplied |
 | `endpoint` | string | No | Custom endpoint URL (openai-compatible only) |
-| `credentialEnvVar` | string | No | Environment variable name holding the key (e.g., `ANTHROPIC_API_KEY`); default provider-specific |
+| `credentialEnvVar` | string | No (**required for `openai-compatible`**) | Environment variable name holding the key (e.g., `ANTHROPIC_API_KEY`). Default provider-specific for `openai`/`azure-openai`/`anthropic`/`gemini`; `openai-compatible` has no default and no fallback — a missing `credentialEnvVar` fails with `CONFIG_MISSING_CREDENTIALS` |
 | `azureResource` | string | No | Azure resource name (azure-openai only) |
 | `azureHostSuffix` | string | No | Azure host suffix (azure-openai only) |
 | `azureDeployment` | string | No | Azure deployment name (azure-openai only) |
@@ -210,6 +229,8 @@ For the API key environment variable:
 4. Provider-pinned default: `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, etc.
 
 The key is read from the chosen environment variable **at first use**, never cached or stored.
+
+**No exception for `openai-compatible`:** when `openai-compatible` is selected directly (via `--llm-provider=openai-compatible` or a profile), step 3/4 above do not apply to it — there is no Phase 17 compat fallback and no provider-pinned default. An explicit profile `credentialEnvVar` is mandatory; its absence fails with `CONFIG_MISSING_CREDENTIALS` rather than silently reading `FALCON_LLM_API_KEY`, `OPENAI_API_KEY`, or another provider's variable. This is deliberate: it stops a key meant for one provider from being forwarded to an unrelated custom endpoint. The only exception is the deprecated env-only path described under "Migration from Phase 17" below, which never goes through this flag/profile selection path at all.
 
 ## Migration from Phase 17 (FALCON_LLM_* Environment Only)
 
@@ -276,7 +297,7 @@ Your LLM provider's retention, billing, and data policies apply.
 | `CONFIG_CONFLICT` | Profile provider conflicts with `--llm-provider` or `FALCON_LLM_PROVIDER`. | Use consistent provider setting or omit `--llm-profile`. |
 | `CONFIG_INVALID` | Malformed flag value (e.g., model ID with invalid charset). | Check model ID, endpoint, and timeout values. |
 | `CONFIG_PROVIDER_REQUIRED` | Tier 3 invoked with no provider selected. | Set `--llm-provider`, `FALCON_LLM_PROVIDER`, or profile. |
-| `CONFIG_MISSING_CREDENTIALS` | API key environment variable is empty or unset. | Set `export ANTHROPIC_API_KEY=<your-key>` (or equivalent for your provider) before running. |
+| `CONFIG_MISSING_CREDENTIALS` | API key environment variable is empty or unset, or an `openai-compatible` selection has no `credentialEnvVar`. | Set `export ANTHROPIC_API_KEY=<your-key>` (or equivalent for your provider) before running. For `openai-compatible`, add `--credential-env=<NAME>_API_KEY` to the profile; there is no fallback to `FALCON_LLM_API_KEY`. |
 | `AUTH_FAILED` | API key invalid, expired, or revoked. | Rotate your API key in your provider console. |
 | `BAD_REQUEST` | Request was malformed (bad model ID, missing required fields). | Verify model ID and provider type match. |
 | `CONTENT_BLOCKED` | Provider blocked response (Gemini safety/blocklist). | Review prompt or candidate context; may indicate offensive/copyrighted selector text. Retry with different scenario. |

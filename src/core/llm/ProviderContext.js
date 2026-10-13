@@ -485,6 +485,20 @@ function resolveInner(options, profile, get, env) {
         credentialEnvVarName = refCheck.name;
         readCredential = makeNamedCredentialReader(credentialEnvVarName, env);
     } else if (provider === "openai" || provider === "azure-openai" || provider === "openai-compatible") {
+        // Security (Dev-16): an invocation-scoped (options/profile-selected)
+        // openai-compatible provider must NEVER receive a credential
+        // intended for another provider. Unlike openai/azure-openai, it has
+        // no Phase 17 compat fallback here — an explicit credentialEnvVar is
+        // mandatory when selected via options/profile. The Phase 17
+        // env-only path (FALCON_LLM_PROVIDER=openai-compatible with no
+        // flags/profile) is handled entirely by the `!direct` delegation to
+        // LlmConfig.resolve() above and never reaches this branch.
+        if (provider === "openai-compatible") {
+            return fail(
+                "CONFIG_MISSING_CREDENTIALS",
+                "provider=openai-compatible requires an explicit credentialEnvVar (no fallback to FALCON_LLM_API_KEY or another provider's variable).",
+            );
+        }
         // Phase 17 compat — byte-identical credential-source semantics to
         // LlmConfig.resolve(): FALCON_LLM_API_KEY always, OPENAI_API_KEY only
         // for provider=openai, both read via `get` (not `env`).
