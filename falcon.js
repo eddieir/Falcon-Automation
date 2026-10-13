@@ -575,7 +575,7 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerCon
             process.exitCode = await ParallelRunner.run({
                 browser: pBrowser, parsed: parallel, url, emit, repoRoot: __dirname, commit,
                 startedAt: Date.now(),
-                sweepOpts: { maxPages, budgetMs, dedupe, sameOriginOnly, repeat: repeatCount },
+                sweepOpts: { maxPages, budgetMs, dedupe, sameOriginOnly, repeat: repeatCount, providerContext },
             });
         } catch (error) {
             Logger.error(`❌ Fatal error: ${error.message}`);
@@ -608,6 +608,7 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerCon
                 dedupe,
                 sameOriginOnly,
                 repeat: repeatCount,
+                providerContext,
             });
 
         // One flat array for ReportManager: the tally, the pass/fail branch
