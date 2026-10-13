@@ -62,69 +62,75 @@ Component names above map to the repository so an evaluator can move from this o
 ### Locator-recovery path
 
 ```mermaid
-flowchart LR
-    subgraph Direct["1 · Direct attempt"]
-        direction TB
-        Start(["Action with<br/>developer selector"])
-        Retry{"Original selector<br/>works?"}
-        Execute["Execute action<br/>and capture evidence"]
-        Start --> Retry
-        Retry -- "Yes" --> Execute
+flowchart TB
+    subgraph TopRow[" "]
+        direction LR
+
+        subgraph Direct["1 · Direct attempt"]
+            direction TB
+            Start(["Action with<br/>developer selector"])
+            Retry{"Original selector<br/>works?"}
+            Execute(["Execute action<br/>Capture evidence"])
+            Start --> Retry
+            Retry -- "Yes" --> Execute
+        end
+
+        subgraph Local["2 · Local recovery"]
+            direction TB
+            Approved{"Approved scoped<br/>replacement valid?"}
+            Replay(["Execute approved<br/>replacement"])
+            Match{"Local match confident<br/>and unambiguous?"}
+            Approved -- "Yes" --> Replay
+            Approved -- "No" --> Match
+        end
     end
 
-    subgraph Local["2 · Local recovery"]
-        direction TB
-        Approved{"Approved scoped<br/>replacement valid?"}
-        Replay["Execute approved<br/>replacement"]
-        Match{"Local match confident<br/>and unambiguous?"}
-        Approved -- "Yes" --> Replay
-        Approved -- "No" --> Match
-    end
+    subgraph BottomRow[" "]
+        direction LR
 
-    subgraph Provider["3 · Optional AI provider"]
-        direction TB
-        Enabled{"Tier 3<br/>enabled?"}
-        Request["Send bounded<br/>candidate list"]
-        Verify{"Candidate still unique,<br/>visible, and compatible?"}
-        Enabled -- "Yes" --> Request
-        Request --> Verify
-    end
+        subgraph Provider["3 · Optional AI provider"]
+            direction TB
+            Enabled{"Tier 3<br/>enabled?"}
+            Request["Send bounded<br/>candidate list"]
+            Verify{"Candidate still unique,<br/>visible, and compatible?"}
+            Failed(["Target unavailable"])
+            Enabled -- "Yes" --> Request
+            Enabled -- "No" --> Failed
+            Request --> Verify
+            Verify -- "No" --> Failed
+        end
 
-    subgraph Governance["4 · Review and trust"]
-        direction TB
-        Proposal["Execute once<br/>Create review proposal"]
-        Decision{"Human review"}
-        Trusted(["Approved<br/>Scoped reuse allowed"])
-        Rejected(["Rejected<br/>Audited, never reused"])
-        Proposal --> Decision
-        Decision -- "Approve" --> Trusted
-        Decision -- "Reject" --> Rejected
+        subgraph Governance["4 · Review and trust"]
+            direction TB
+            Proposal["Execute once<br/>Create review proposal"]
+            Decision{"Human review"}
+            Trusted(["Approved<br/>Scoped reuse allowed"])
+            Rejected(["Rejected<br/>Audited, never reused"])
+            Proposal --> Decision
+            Decision -- "Approve" --> Trusted
+            Decision -- "Reject" --> Rejected
+        end
     end
-
-    Complete(["Action completed"])
-    Failed(["Target unavailable"])
 
     Retry -- "No" --> Approved
-    Match -- "Yes" --> Proposal
     Match -- "No" --> Enabled
-    Enabled -- "No" --> Failed
+    Match -- "Yes" --> Proposal
     Verify -- "Yes" --> Proposal
-    Verify -- "No" --> Failed
-    Execute --> Complete
-    Replay --> Complete
 
     classDef entry fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e,stroke-width:2px
     classDef decision fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
-    classDef action fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef success fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
     classDef review fill:#f3e8ff,stroke:#9333ea,color:#581c87,stroke-width:2px
     classDef failure fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:2px
 
     class Start entry
     class Retry,Approved,Match,Enabled,Verify,Decision decision
-    class Execute,Replay,Complete,Trusted action
+    class Execute,Replay,Trusted success
     class Request,Proposal,Rejected review
     class Failed failure
 
+    style TopRow fill:transparent,stroke:transparent
+    style BottomRow fill:transparent,stroke:transparent
     style Direct fill:#f8fafc,stroke:#94a3b8,color:#0f172a
     style Local fill:#f8fafc,stroke:#94a3b8,color:#0f172a
     style Provider fill:#f8fafc,stroke:#94a3b8,color:#0f172a
