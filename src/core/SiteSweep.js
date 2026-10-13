@@ -46,6 +46,11 @@ class SiteSweep {
         this.dedupe = opts.dedupe !== false;
         this.repeat = Number.isFinite(opts.repeat) ? opts.repeat : DEFAULTS.repeat;
         this.onEvent = typeof opts.onEvent === "function" ? opts.onEvent : null;
+        // BYOK (ADR-0019): the invocation-scoped provider context, threaded
+        // down from falcon.js through to every TestRunner/AIHealer this sweep
+        // constructs. Stays null when no --llm-* flag was given, which keeps
+        // the Phase 17 process-level default unchanged.
+        this.providerContext = opts.providerContext || null;
 
         // Signature → the URL that first ran it. Lives on the instance, not on
         // the module, so two sweeps in one process never contaminate each other.
@@ -390,7 +395,9 @@ class SiteSweep {
             record.scenariosDeduplicated = deduped.length;
 
             const repeatedPlan = { ...testPlan, test_scenarios: kept };
-            const results = await TestRunner.runRepeatedTestPlan(page, repeatedPlan, this.repeat);
+            const results = await TestRunner.runRepeatedTestPlan(page, repeatedPlan, this.repeat, {
+                providerContext: this.providerContext,
+            });
 
             // Deduped scenarios are appended, never executed — that is what keeps
             // them out of FlakinessTracker, which TestRunner feeds from inside

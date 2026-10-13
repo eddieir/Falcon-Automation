@@ -308,7 +308,7 @@ Tier 3 sends a numbered list of candidate elements to the configured LLM provide
 
 The model may answer only with a candidate's number, or `null`. It never writes a selector: the selector for each candidate is built locally, and the chosen one is re-checked in the page (still unique, same identifying attributes, still eligible) before Falcon acts on it. Any other answer is rejected and the heal fails exactly as an unresolved one would, with `status: "rejected"` and one of these reasons in the healing report: `no_eligible_candidates`, `model_declined`, `invalid_reply`, `index_out_of_range`, `selector_not_unique`. One limit remains: a page that controls visible, action-compatible elements can still bias which of them the model picks. Whatever is picked runs once in the current run and goes to review as pending; it is never reused without human approval.
 
-Tier 3 is opt-in and requires explicit provider selection via `FALCON_LLM_PROVIDER` (see [Pluggable LLM providers](#pluggable-llm-providers) below). `OPENAI_API_KEY` alone does not enable Tier 3; you must set both the provider and the corresponding API key. A run with no provider configured falls back to Tiers 1–2.5; it never attempts Tier 3.
+Tier 3 is opt-in and requires explicit provider selection, either via the environment (`FALCON_LLM_PROVIDER`) or per invocation via the `--llm-provider`/`--llm-profile` CLI flags (see [Pluggable LLM providers](#pluggable-llm-providers) below). `OPENAI_API_KEY` alone does not enable Tier 3; you must set both the provider and the corresponding API key. A run with no provider configured falls back to Tiers 1–2.5; it never attempts Tier 3.
 
 ### Healing every action, demonstrated against the same real site
 
@@ -756,25 +756,51 @@ Approving writes the fix into `LocatorStore` (Tier 2 reuses it from then on) and
 
 ## Pluggable LLM providers
 
-Tier 3 inference is optional and requires explicit provider selection. Set `FALCON_LLM_PROVIDER` to one of: `openai`, `azure-openai`, `openai-compatible`, or leave it unset to disable Tier 3 entirely. `OPENAI_API_KEY` alone no longer enables Tier 3 (breaking change from prior versions); you must set both the provider and the corresponding credentials.
+Tier 3 inference is optional and requires explicit provider selection. Supported provider ids: `openai`, `azure-openai`, `anthropic`, `gemini`, `openai-compatible` (plus `disabled`/`none` to turn Tier 3 off). `OPENAI_API_KEY` alone does not enable Tier 3; you must set both the provider and the corresponding credentials.
+
+Provider, model, and credentials can be chosen two ways:
+
+- **Environment (process-wide):** `FALCON_LLM_PROVIDER` and the related `FALCON_LLM_*` variables below, resolved once per process. This behaviour is unchanged.
+- **Per invocation (CLI flags or a saved profile):** `--llm-profile=<name>`, `--llm-provider=<id>`, `--llm-model=<id>` resolve a provider for that single Falcon run. For fields like model, timeouts, and budgets, flags/profile take precedence over the environment. The provider itself is the exception: if `FALCON_LLM_PROVIDER` in the environment names a *different* provider than the flag/profile selects — including `FALCON_LLM_PROVIDER=disabled` or `=none`, the kill switch — Falcon exits with `CONFIG_CONFLICT` instead of overriding it; the operator must unset `FALCON_LLM_PROVIDER` (or select the same provider) to run with a different one. Saved profiles are non-secret metadata (provider, model, endpoint, credential variable name — never the key itself) managed with `npm run llm:profile:list|show|set|delete`. Precedence per field is: CLI flags > profile > `FALCON_LLM_*` environment > defaults.
+
+**BYOK (bring your own key):** Falcon never stores or logs your API key. A profile or the environment only names the environment variable that holds it (e.g. `ANTHROPIC_API_KEY`); the value is read from your shell environment when the selected provider builds its request and is sent only to that provider's endpoint.
+
+Untested or newly released model ids are not certified by Falcon — there is no model discovery, so you type the model id yourself, and the regression suite exercises mocked provider protocols, not live model quality. See [docs/maintenance-byok-operations.md](docs/maintenance-byok-operations.md) for full operational details.
 
 ```ini
 # Provider configuration (all optional; Tier 3 disabled if unset)
-FALCON_LLM_PROVIDER=openai              # openai | azure-openai | openai-compatible
-OPENAI_API_KEY=<your-key>              # OpenAI API key (required when FALCON_LLM_PROVIDER=openai)
+FALCON_LLM_PROVIDER=openai              # openai | azure-openai | anthropic | gemini | openai-compatible | disabled
+FALCON_LLM_API_KEY=<your-key>           # or OPENAI_API_KEY for provider=openai
+FALCON_LLM_MODEL=<model-id>             # required for anthropic/gemini; optional elsewhere (openai default: gpt-4o-mini)
 
 # Azure OpenAI (when FALCON_LLM_PROVIDER=azure-openai)
-# AZURE_OPENAI_API_KEY=<your-key>
-# AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com/
-# AZURE_OPENAI_DEPLOYMENT=<deployment-name>
+# FALCON_LLM_AZURE_RESOURCE=<your-resource>
+# FALCON_LLM_AZURE_HOST_SUFFIX=openai.azure.com
+# FALCON_LLM_AZURE_DEPLOYMENT=<deployment-name>
+
+# Anthropic (when FALCON_LLM_PROVIDER=anthropic)
+# ANTHROPIC_API_KEY=<your-key>
+# FALCON_LLM_MODEL=<anthropic-model-id>
+
+# Gemini (when FALCON_LLM_PROVIDER=gemini)
+# GEMINI_API_KEY=<your-key>
+# FALCON_LLM_MODEL=<gemini-model-id>
 
 # OpenAI-compatible endpoint (when FALCON_LLM_PROVIDER=openai-compatible)
-# OPENAI_COMPATIBLE_ENDPOINT=http://localhost:8000/v1
-# OPENAI_COMPATIBLE_MODEL=<model-name>
-# OPENAI_API_KEY=<your-key>  (reuses this for authentication)
+# FALCON_LLM_ENDPOINT=https://<host>/v1
+# FALCON_LLM_ALLOW_CUSTOM_ENDPOINT=true
+# FALCON_LLM_ALLOW_HTTP_LOOPBACK=true   # only to allow http:// on loopback
 ```
 
-Without a provider configured, Falcon runs Tiers 1, 2 and 2.5 only; no network call is made. An unresolved selector falls back gracefully instead of failing.
+Per-invocation equivalents, instead of environment variables:
+
+```bash
+node falcon.js --llm-provider=anthropic --llm-model=<anthropic-model-id>
+node falcon.js --llm-provider=gemini --llm-model=<gemini-model-id>
+node falcon.js --llm-profile=my-saved-profile
+```
+
+Without a provider configured (by flag, profile, or environment), Falcon runs Tiers 1, 2 and 2.5 only; no network call is made. An unresolved selector falls back gracefully instead of failing.
 
 **Data sent to the LLM provider:** the failing selector, step description, action type, and up to 20 candidate element descriptors (tag name, stable attributes, accessible name, text), capped at 8 KiB total. Never sent: full DOM, cookies, storage, environment variables, complete form contents, authentication tokens, or full page HTML.
 

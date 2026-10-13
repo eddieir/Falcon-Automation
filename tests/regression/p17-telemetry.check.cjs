@@ -8,7 +8,7 @@ test("closed error-code list is frozen and matches ADR-0017 section 5", () => {
   assert.throws(() => {
     ERROR_CODES.push("NEW_CODE");
   });
-  assert.equal(ERROR_CODES.length, 19);
+  assert.equal(ERROR_CODES.length, 20);
   assert.ok(ERROR_CODES.includes("PROVIDER_DISABLED"));
   assert.ok(ERROR_CODES.includes("CONFIG_PROVIDER_REQUIRED"));
 });

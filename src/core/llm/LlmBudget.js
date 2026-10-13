@@ -39,4 +39,60 @@ class LlmBudget {
     }
 }
 
+/**
+ * Process-wide hard ceilings shared by every per-context LlmBudget/Semaphore
+ * (ADR-0019 C15, resolves Sec-01 S-01 vs per-context budget): no matter how
+ * many invocation-scoped contexts exist in this process, their combined
+ * attempts/in-flight requests can never exceed these ceilings. Per-context
+ * budgets/semaphores consult this singleton in addition to their own local
+ * limit; consulting it is a synchronous, allocation-free check — exhaustion
+ * returns false and makes no network call.
+ */
+const TOTAL_ATTEMPTS_CEILING = 2000;
+const CONCURRENT_IN_FLIGHT_CEILING = 8;
+
+let totalAttemptsRemaining = TOTAL_ATTEMPTS_CEILING;
+let inFlightCount = 0;
+
+const processCeiling = {
+    /** @returns {boolean} true if a process-wide attempt unit was consumed. */
+    tryConsumeAttempt() {
+        if (totalAttemptsRemaining <= 0) return false;
+        totalAttemptsRemaining -= 1;
+        return true;
+    },
+
+    /** @returns {boolean} true if an in-flight slot was claimed. */
+    enterFlight() {
+        if (inFlightCount >= CONCURRENT_IN_FLIGHT_CEILING) return false;
+        inFlightCount += 1;
+        return true;
+    },
+
+    /** Release an in-flight slot previously claimed by enterFlight(). */
+    leaveFlight() {
+        if (inFlightCount > 0) inFlightCount -= 1;
+    },
+
+    /** @returns {number} remaining process-wide attempt units. */
+    remainingAttempts() {
+        return totalAttemptsRemaining;
+    },
+
+    /** @returns {number} current process-wide in-flight count. */
+    inFlight() {
+        return inFlightCount;
+    },
+
+    /** Test-only seam: reset both ceilings to their initial values. */
+    _resetForTests() {
+        totalAttemptsRemaining = TOTAL_ATTEMPTS_CEILING;
+        inFlightCount = 0;
+    },
+};
+
+LlmBudget.processCeiling = processCeiling;
+LlmBudget.TOTAL_ATTEMPTS_CEILING = TOTAL_ATTEMPTS_CEILING;
+LlmBudget.CONCURRENT_IN_FLIGHT_CEILING = CONCURRENT_IN_FLIGHT_CEILING;
+
 module.exports = LlmBudget;

@@ -779,6 +779,8 @@ The full set of criteria is in the detailed plan and will be enforced by
 
 **Status: implemented** on branch `phase-17/pluggable-llm-providers`; the owner decides the merge. See docs/phase-17-operations.md, docs/architecture/phase-17-pluggable-llm-providers.md, docs/architecture/phase-17-production-cycle-dashboard.md and docs/security/phase-17-threat-model.md.
 
+**Post-Phase-17 maintenance: BYOK.** Invocation-scoped provider/model/credential selection plus first-class Anthropic and Gemini providers is implemented on branch `maintenance/byok-frontier-providers`, submitted as PR #50 — pending review and the owner's merge decision. See docs/maintenance-byok-operations.md.
+
 Renumbered and reduced. This was "Healing without a third party", and the larger half of it — a
 deterministic local tier that heals with no external call — shipped as Phase 14. What remains is the
 provider question, which is a procurement blocker rather than a capability gap, so it no longer

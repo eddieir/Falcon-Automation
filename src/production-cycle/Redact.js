@@ -24,7 +24,8 @@ const CODE = "SCHEMA_SECRET_SHAPED";
 // token shape — no `.*.*`, no adjacent `+`/`*` over the same character
 // class, so there is no catastrophic-backtracking surface.
 const SECRET_PATTERNS = [
-    /sk-[A-Za-z0-9_-]{16,}/, // M01 — OpenAI-style secret key (sk-live-, sk-proj-, sk-..._... all match)
+    /sk-[A-Za-z0-9_-]{16,}/, // M01 — OpenAI-style secret key (sk-live-, sk-proj-, sk-ant-..., sk-..._... all match)
+    /\bAIza[0-9A-Za-z_-]{35}\b/, // C14/T-07 — Gemini (Google) API key shape
     /\bBearer\s+[A-Za-z0-9._=-]{8,}/i, // M02 — Authorization: Bearer ...
     /\bauthorization\s*[:=]\s*\S+/i,
     /\b(api[_-]?key|secret|password|credential|token)\s*[:=]\s*\S+/i,
@@ -101,4 +102,22 @@ function scan(obj) {
     return { ok: true };
 }
 
-module.exports = { scan, looksLikeDomDump, CODE };
+/**
+ * Per-field secret-shape check (ADR-0019 C14/T-07): the same secret-shape
+ * test used by scan()'s free-text fields, exposed for callers that hold a
+ * single candidate value outside the pc-event shape (e.g. a profile field,
+ * a model id, a CLI argument) and need the same refusal semantics without
+ * ever echoing the value. Same result style as scan(): {ok:true} or
+ * {ok:false, code}; no `field` is set since there is no containing event.
+ *
+ * @param {*} value
+ * @returns {{ok: boolean, code?: string}}
+ */
+function scanField(value) {
+    if (fieldLooksSecret(value)) {
+        return { ok: false, code: CODE };
+    }
+    return { ok: true };
+}
+
+module.exports = { scan, scanField, looksLikeDomDump, CODE };

@@ -3,8 +3,8 @@ const HealingReport = require("./HealingReport");
 const HealingTrust = require("./HealingTrust");
 const AdaptiveRetry = require("./AdaptiveRetry");
 const ConfigManager = require("../ConfigManager");
-const LlmConfig = require("../llm/LlmConfig");
 const LlmProviderRegistry = require("../llm/LlmProviderRegistry");
+const ProviderContext = require("../llm/ProviderContext");
 const LlmTelemetry = require("../llm/LlmTelemetry");
 const SharedLocatorMemory = require("../locator/sharedLocatorMemory");
 const LocatorIdentity = require("../locator/LocatorIdentity");
@@ -178,8 +178,15 @@ function _promptValue(v) {
 }
 
 class AIHealer {
-    constructor(page, { locatorMemory, elementFactsCollector } = {}) {
+    constructor(page, { locatorMemory, elementFactsCollector, providerContext } = {}) {
         this.page = page;
+        // ADR-0019: an explicitly injected, invocation-scoped ProviderContext
+        // (see src/core/llm/ProviderContext.js) takes priority over the
+        // Phase 17 process-level default in _resolveProvider() below. Two
+        // AIHealer instances given distinct contexts never share a resolved
+        // provider, budget, or semaphore (LlmProviderRegistry memoizes per
+        // context object, not per provider id, for this path).
+        this._providerContext = providerContext || null;
         // Phase 17: lazily resolved once per healer via LlmConfig/
         // LlmProviderRegistry — see _resolveProvider(). `_openai` below is a
         // compatibility accessor (get/set) for tests that inject a fake
@@ -972,7 +979,17 @@ class AIHealer {
             throw new Error("OPENAI_API_KEY is not set");
         }
         const OpenAI = require("openai");
-        const client = new OpenAI({ apiKey });
+        // Legacy compat seam only: explicit, fixed connection settings so no
+        // ambient OPENAI_BASE_URL/OPENAI_ORG_ID/OPENAI_PROJECT_ID env value
+        // can redirect or relabel this pre-Phase-17 path, and no SDK-level
+        // retry layer double-retries on top of AdaptiveRetry.
+        const client = new OpenAI({
+            apiKey,
+            baseURL: "https://api.openai.com/v1",
+            organization: null,
+            project: null,
+            maxRetries: 0,
+        });
         this._openai = client;
         return client;
     }
@@ -991,19 +1008,32 @@ class AIHealer {
         if (this._resolvedProvider) return this._resolvedProvider;
         if (this._providerResolutionFailed) return null;
 
-        const configResult = LlmConfig.resolve((key) => ConfigManager.get(key));
-        if (!configResult.ok) {
+        // ADR-0019: an injected, invocation-scoped context always wins —
+        // never falls back to the process default, and never falls back to
+        // a different provider on failure (AC10).
+        if (this._providerContext) {
+            this._llmConfig = this._providerContext.config;
+            this._resolvedProvider = LlmProviderRegistry.resolve(this._providerContext);
+            return this._resolvedProvider;
+        }
+
+        // No context injected: fall back to the Phase 17 env-compat default,
+        // one lazily created ProviderContext per process (memoized in
+        // ProviderContext itself) — preserves Phase 17 error codes, the
+        // per-process budget, and the warning-latch behaviour below.
+        const contextResult = ProviderContext.getDefaultContext((key) => ConfigManager.get(key));
+        if (!contextResult.ok) {
             this._providerResolutionFailed = true;
-            this._lastProviderErrorCode = configResult.errorCode;
+            this._lastProviderErrorCode = contextResult.errorCode;
             if (!this._loggedProviderConfigError) {
                 this._loggedProviderConfigError = true;
-                Logger.warning(`AI-Healer Tier 3: LLM provider configuration error (${configResult.errorCode})`);
+                Logger.warning(`AI-Healer Tier 3: LLM provider configuration error (${contextResult.errorCode})`);
             }
             return null;
         }
 
-        this._llmConfig = configResult.config;
-        this._resolvedProvider = LlmProviderRegistry.resolve(configResult.config);
+        this._llmConfig = contextResult.context.config;
+        this._resolvedProvider = LlmProviderRegistry.resolve(contextResult.context);
         return this._resolvedProvider;
     }
 }

@@ -60,6 +60,8 @@ const ReportManager   = require("./src/core/ReportManager");
 const HealingReport   = require("./src/core/AIHealer/HealingReport");
 const { parseParallelArgs } = require("./src/core/parallel/Args");
 const ParallelRunner  = require("./src/core/parallel/Runner");
+const InvocationContext = require("./src/core/llm/InvocationContext");
+const { isKeyShapedValue } = require("./src/core/llm/transport/guardedFetch");
 
 const DEFAULT_URL = "https://www.saucedemo.com";
 
@@ -201,6 +203,73 @@ const requireRepeatCount = (args) => {
     return value;
 };
 
+/**
+ * Flags that could carry a credential VALUE. A key must never reach this
+ * process via argv (it would land in shell history, `ps`, and process
+ * listings) — any of these, with or without a value, is a hard failure
+ * named only by the flag, never by whatever value followed it.
+ */
+const KEY_CARRIER_FLAGS = ["--llm-api-key", "--api-key", "--llm-key", "--key", "--token"];
+
+/**
+ * Reject any argv entry that is, or assigns a value to, a key-carrier flag.
+ * Checked before anything else touches argv so a credential-shaped
+ * invocation never reaches logging, parsing, or provider resolution.
+ *
+ * @param {string[]} args
+ * @returns {boolean} true iff no key-carrier flag was found
+ */
+const rejectKeyCarrierFlags = (args) => {
+    for (const flag of KEY_CARRIER_FLAGS) {
+        const prefix = `${flag}=`;
+        if (args.includes(flag) || args.some((a) => a.startsWith(prefix))) {
+            Logger.error(`❌ ${flag} is not accepted — a credential must never be passed on the command line.`);
+            return false;
+        }
+    }
+    return true;
+};
+
+/**
+ * Strictly read a `--<flag>=<value>` BYOK flag (--llm-profile, --llm-provider,
+ * --llm-model). Unlike --max-pages/--budget-ms, a bad occurrence here is a
+ * hard failure (mirrors AC-02's --repeat convention): an empty value, a
+ * duplicate/conflicting occurrence, or a credential-shaped value all exit
+ * non-zero before any browser/page work, naming only the flag — never the
+ * value, which could itself be a leaked credential.
+ *
+ * @param {string[]} args
+ * @param {string} flag - flag name without the leading `--` (e.g. "llm-model")
+ * @returns {{ok:true, value:(string|undefined)}|{ok:false}}
+ */
+const readStrictValueFlag = (args, flag) => {
+    const prefix = `--${flag}=`;
+    const occurrences = args.filter((a) => a.startsWith(prefix));
+    if (occurrences.length === 0) return { ok: true, value: undefined };
+
+    const rawValues = [...new Set(occurrences.map((a) => a.slice(prefix.length)))];
+    if (rawValues.length > 1) {
+        Logger.error(`❌ Conflicting --${flag} values supplied — pass --${flag} once.`);
+        return { ok: false };
+    }
+    if (occurrences.length > 1) {
+        Logger.error(`❌ --${flag} supplied more than once — pass it once.`);
+        return { ok: false };
+    }
+
+    const raw = rawValues[0];
+    if (raw.trim() === "") {
+        Logger.error(`❌ --${flag} requires a value, e.g. --${flag}=<value>.`);
+        return { ok: false };
+    }
+    if (isKeyShapedValue(raw)) {
+        Logger.error(`❌ --${flag} was given a credential-shaped value — a key must never be passed on the command line.`);
+        return { ok: false };
+    }
+
+    return { ok: true, value: raw };
+};
+
 /** Count a page's scenario outcomes, "deduped" included. */
 const tally = (results) => results.reduce((counts, r) => {
     counts[r.status] = (counts[r.status] || 0) + 1;
@@ -293,7 +362,7 @@ const runWholeApp = async (context, entryUrl, emit, opts) => {
  * expectations are pinned to that behaviour. Its one page is returned in
  * SweepResult shape so the reporting path below stays common to both modes.
  */
-const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
+const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerContext = null) => {
     Logger.warning("⚠️  --single-page: only the entry page will be tested (pre-Phase-10 behaviour).");
     const startedAt = Date.now();
 
@@ -337,7 +406,7 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
 
     // ── Step 4: Execute Generated Test Plan ──────────────────────────────────
     Logger.info(`▶  Step 4: Executing generated test scenarios (repeat=${repeatCount})…`);
-    const results = await TestRunner.runRepeatedTestPlan(page, testPlan, repeatCount);
+    const results = await TestRunner.runRepeatedTestPlan(page, testPlan, repeatCount, { providerContext });
 
     const only = {
         url,
@@ -375,6 +444,14 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
 
 (async () => {
     const args        = process.argv.slice(2);
+
+    // A key must never come from argv (AC: key-carrier flags). Checked first,
+    // before any other parsing or logging touches these args.
+    if (!rejectKeyCarrierFlags(args)) {
+        await Logger.flush();
+        process.exit(1);
+    }
+
     const urlArg      = args.find((a) => a.startsWith("--url="));
     const rawUrl      = urlArg ? urlArg.slice("--url=".length) : DEFAULT_URL;
     const url         = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
@@ -435,6 +512,30 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
         process.exit(1);
     }
 
+    // BYOK (ADR-0019): resolve --llm-profile/--llm-provider/--llm-model once,
+    // at startup, after argument validation and before any browser/page
+    // work. `providerContext` stays `null` when no --llm-* flag was given at
+    // all, which keeps the Phase 17 process-level default unchanged (AC23).
+    const llmProfileFlag  = readStrictValueFlag(args, "llm-profile");
+    const llmProviderFlag = readStrictValueFlag(args, "llm-provider");
+    const llmModelFlag    = readStrictValueFlag(args, "llm-model");
+    if (!llmProfileFlag.ok || !llmProviderFlag.ok || !llmModelFlag.ok) {
+        await Logger.flush();
+        process.exit(1);
+    }
+
+    const invocationResult = await InvocationContext.resolveFromFlags({
+        llmProfile: llmProfileFlag.value,
+        llmProvider: llmProviderFlag.value,
+        llmModel: llmModelFlag.value,
+    });
+    if (!invocationResult.ok) {
+        Logger.error(`❌ BYOK configuration error: ${invocationResult.errorCode}`);
+        await Logger.flush();
+        process.exit(1);
+    }
+    const providerContext = invocationResult.context;
+
     if (!urlArg) {
         Logger.info(`ℹ️  No --url supplied — defaulting to ${DEFAULT_URL}`);
     }
@@ -474,7 +575,7 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
             process.exitCode = await ParallelRunner.run({
                 browser: pBrowser, parsed: parallel, url, emit, repoRoot: __dirname, commit,
                 startedAt: Date.now(),
-                sweepOpts: { maxPages, budgetMs, dedupe, sameOriginOnly, repeat: repeatCount },
+                sweepOpts: { maxPages, budgetMs, dedupe, sameOriginOnly, repeat: repeatCount, providerContext },
             });
         } catch (error) {
             Logger.error(`❌ Fatal error: ${error.message}`);
@@ -500,13 +601,14 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
         const context = await browser.newContext();
 
         const sweep = singlePage
-            ? await runEntryPageOnly(context, url, emit, repeatCount)
+            ? await runEntryPageOnly(context, url, emit, repeatCount, providerContext)
             : await runWholeApp(context, url, emit, {
                 maxPages,
                 budgetMs,
                 dedupe,
                 sameOriginOnly,
                 repeat: repeatCount,
+                providerContext,
             });
 
         // One flat array for ReportManager: the tally, the pass/fail branch
@@ -548,7 +650,7 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1) => {
         // executeExploratoryTest() only formats and writes the summary — it
         // never touches this.page — and SiteSweep has already closed the
         // pages it opened, so there is no live page to hand it here.
-        await new TestRunner(null, null).executeExploratoryTest({
+        await new TestRunner(null, null, { providerContext }).executeExploratoryTest({
             uiIssues,
             exploredPages: sweep.pages.map((p) => p.url),
         });
