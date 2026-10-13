@@ -1,1215 +1,242 @@
-# Falcon-Automation: Self-Healing Test Automation with AI-Assisted Locator Recovery
+# Falcon Automation
 
-> **Status:** Active development · Phases 1–17 and the invocation-scoped BYOK maintenance release are merged on `main`. Phase 16 added parallel execution and deterministic CI sharding. Phase 17 added pluggable LLM providers and a local production-cycle dashboard. The BYOK release in pull request #50 lets each Falcon invocation select OpenAI, Anthropic, Gemini, Azure OpenAI, or an approved OpenAI-compatible endpoint while keeping credentials in the operator's environment. See [Bring your own provider key](#bring-your-own-provider-key), [Roadmap](#roadmap), [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md), and [CHANGELOG.md](CHANGELOG.md).
+### Self-healing browser tests. Reviewable recovery. Clear release evidence.
 
----
+Falcon is an open-source test automation framework built on Playwright. It explores a web application, generates interaction scenarios from the live page, and runs them with layered locator recovery. Teams can follow execution in a live dashboard, inspect what changed, and decide which recovered selectors to trust.
 
-## Why Falcon exists
+**For QA leaders and engineering teams evaluating how to reduce selector maintenance and make test results easier to investigate.**
 
-If you've run a QA team, you already know this story. You've probably lived it this week.
+**Technical preview · Node.js 22+ · Playwright · MIT licensed**
 
-A designer ships a "small" redesign. Nothing about the actual product logic changed: a button moved, a class name got renamed, a `<div>` grew a wrapper it didn't have yesterday. And by the next morning, a third of your suite is red. Not because the product broke. Because a locator did. So instead of testing anything, your team spends the day doing the least valuable work in software: hunting through the DOM for whatever the "Submit" button is called today and swapping one string for another, across a dozen files, in a suite nobody's touched in months because everyone's afraid of what else might be stale in there.
-
-Do that enough times and something worse than lost hours happens: people stop trusting the red. A failing build used to mean "something's broken." After enough selector-drift false alarms, it starts meaning "probably just the tests again, check it later." And the day it's a real bug, it ships anyway, because everyone's learned to shrug at red.
-
-Meanwhile the actual backlog (the new features, the new pages, the new flows nobody has *any* coverage for yet) just keeps growing, because there's no time left to write new tests when all the time goes to nursing the old ones.
-
-This is the real bottleneck in QA. It was never that testing is hard. It's that *maintaining* tests costs more than writing them did, and that cost compounds every single sprint.
-
-Falcon was built to remove that tax, not paper over it. Not a bigger locator library, not a smarter list of fallback selectors somebody has to keep updating by hand. Instead, an engine that behaves the way a good manual tester actually does when a button moves: try again, remember what worked before, and if neither of those lands, actually look at the page and figure out where the thing went. Three tiers, in that exact order, and the third one is a real, live call to an LLM, not a hardcoded map dressed up as "AI."
-
-The rest of Falcon follows from that same instinct. If tests shouldn't need constant hand-holding to survive a redesign, they also shouldn't need to be hand-written in the first place for every new page, so Falcon crawls the app itself, reads the live DOM, and generates the test plan. If a report says "passed," that needs to be true, not aspirational, so every result is a real pass/fail/skip tally, not a hopeful default. And if your team is going to trust an AI-healed selector in production, you need to be able to see exactly what it healed and why, and approve it yourself, not take it on faith. The same goes for a red build: before you quarantine it, you need to know whether it's actually broken or just unreliable, not guess.
-
-## ⚠️ Safety Requirements
-
-**Falcon autonomously clicks links and buttons and fills form controls during discovery.** `ClickExplorer` clicks several elements per page, and `--allow-cross-origin` widens that further. Always run Falcon against a **staging, test, or otherwise disposable environment** — never production. An unreviewed AI-inferred selector can click a real element, which in a real application could delete data, submit a payment, or publish content.
-
-**What that looks like in practice:**
-
-- **UI automation** via Playwright — Chromium is continuously validated in CI; Firefox and WebKit are supported at the `BrowserManager` level but not covered by CI
-- **Layered self-healing, on every action:** direct attempt (AdaptiveRetry) → LocatorStore replay → deterministic local evidence matching → optional inference through the configured LLM provider, for clicks, form fills and dropdown selections alike
-- **Whole-app coverage:** one command sweeps every page it discovers, bounded by a page cap and a time budget, deduplicating shared navigation and reporting every page it did *not* cover, with a reason
-- **Autonomous UI exploration:** recursive crawler (ClickExplorer) + rule-based DOM issue scanning (DOMIssueScanner)
-- **DOM-driven interaction generation:** PageAnalyser maps the DOM; TestGenerator creates scenarios; TestRunner executes them with full healing
-- **Locator recovery without a model:** when a selector fails and no approved replacement exists, Falcon scores live candidates against the element's stored signature locally — no network, no model, no randomness — and refuses rather than guess when the evidence is weak or ambiguous
-- **AI-assisted locator recovery:** if local matching refuses too, Tier 3 (LLM inference via pluggable provider) infers a replacement and a human approves it before reuse
-- **Visual regression testing:** pixel-level screenshot comparison with diff images and cumulative summary
-- **Real-time live dashboard:** express + socket.io stream every test event to a browser UI at `localhost:3000`
-- **Accurate reporting:** structured pass/fail/skip tallying + Allure HTML report via `allure-playwright`
-- **Database testing:** PostgreSQL via `pg` Pool with full mTLS support
-- **CI/CD ready:** GitHub Actions pipeline with Allure report upload
-
-**Delivered so far:** core healing and reporting → visual regression, dashboard, DOM-driven test generation, and Allure reporting → PostgreSQL coverage in CI → human approval for inferred selector fixes → flaky-test detection and quarantine → bounded whole-app coverage → durable healing and quarantine decisions → deterministic local locator matching → run-history trends → parallel execution and deterministic CI sharding → pluggable, invocation-scoped BYOK providers. The pull request #50 release gate measured **2,076 `node:test` regression cases and 61 Playwright browser tests**; these are dated release measurements, not a promise that counts never change. Every defect behind these milestones, with root cause and fix, is in [CHANGELOG.md](CHANGELOG.md).
+[See the demo](#see-falcon-in-action) · [Try it locally](#quick-start) · [View the architecture](docs/ARCHITECTURE.md) · [Explore the docs](#documentation)
 
 ---
 
-## Demo
+## Why teams evaluate Falcon
 
-One command, no hand-written test code: Falcon loads a site, crawls it, turns what it finds into test scenarios, executes them with self-healing, and streams every step to a live dashboard as it happens. This is one demo, one site, start to finish.
+A changed button ID can break a test even when the application still works. Repeated locator failures consume maintenance time and make genuine product failures harder to distinguish.
 
-### Watch it run: a recorded UI test against the live site
+Falcon brings discovery, execution, recovery, and review into one workflow:
 
-![Falcon healing a stale selector against a live site and the feed actually filtering](docs/demo/axonradar-ui-test.gif)
+| Team need | What Falcon provides |
+| --- | --- |
+| Spend less time repairing selectors | Retries, approved replacements, local evidence matching, and optional AI-assisted recovery for clicks, text entry, and dropdown selection. |
+| Explore an unfamiliar application | A bounded crawl that discovers pages and generates interaction scenarios from their DOM. |
+| Understand what a run actually covered | Page-level coverage, explicit reasons for untested pages, and pass/fail/skip results. |
+| Review recovery decisions | Scoped locator proposals, approve/reject controls, rollback, and persisted decision history. |
+| Investigate unstable tests | Repeated execution, flaky-scenario tracking, quarantine review, and run-history trends. |
+| Fit into an existing delivery workflow | CLI execution, GitHub Actions, reports, page-level parallelism, and deterministic sharding. |
 
-That is a real Chromium, a real third-party site, and no editing. The test hands Falcon `#news-search` — an id that does not exist anywhere on the page, which is exactly what an old test suite is left holding after somebody refactors the markup. Tier 1 spends about ten seconds genuinely exhausting its retries against it (the page sits still because nothing can resolve), Tier 2 supplies the alternative it learned earlier, and the value lands in the real, React-wired search field. The proof is the last two seconds: the feed collapses to the one article that matches. Nothing was stubbed and no `OPENAI_API_KEY` was involved — Tier 2 needs neither, which is why it's the tier on camera.
+Generated scenarios provide a starting point for interaction coverage. Your team still defines the business assertions that establish whether a checkout, calculation, permission, or other customer journey is correct.
 
-The full recording of all six tests is [`docs/demo/axonradar-ui-test.mp4`](docs/demo/axonradar-ui-test.mp4) (GitHub won't play it inline; download or open it from the file view).
+<a id="demo"></a>
 
-| # | Test | What has to be true for it to pass | Duration |
-|---|---|---|---|
-| 1 | Every route in the primary navigation loads | All 11 routes read off the live nav return 200 and render a heading. The route list is read from the page, not hardcoded, so a route the site adds is covered automatically | 7.1s |
-| 2 | Searching the feed narrows it to real matches | Every card still on screen contains the query; a query nothing matches produces the empty state and zero cards; clearing it brings the feed back | 1.5s |
-| 3 | A category chip filters to that category only | The headline set changes *and* every remaining card carries the Robotics kicker — a chip that reorders without filtering passes a count check and fails this | 1.8s |
-| 4 | The comparator renders a column per model | A model the table isn't already showing is selected, its column appears, and the comparison rows survive | 0.7s |
-| 5 | **Self-healing a `type`:** a stale selector still fills the real field | Tier 1 exhausts, Tier 2 resolves, the live feed filters, the field holds the value, and `HealingReport` records it as one Tier 2 repair of a `type` | 10.8s |
-| 6 | **Self-healing a `select`:** a stale selector still drives the real dropdown | Same chain, ending in the comparison table growing the column. This is the case that was silently `skipped` before Phase 11 | 9.9s |
+## See Falcon in action
 
-```sh
-npm run test:demo                 # headless, records a video per test
-HEADLESS=false npm run test:demo  # watch it happen in a visible browser
-npm run demo:record               # run it, then rebuild the GIF and MP4 above
-```
+![Recorded Falcon demo: recovering a stale search selector and filtering the feed](docs/demo/axonradar-ui-test.gif)
 
-Last measured run: **6 passed in 32.5s**. The suite is deliberately **not** in CI — it depends on a third-party site staying up and on real network timing, and gating merges on somebody else's deploy is how a pipeline becomes noise. `playwright.config.js` ignores `tests/demo/` for the same reason, so a routine `npx playwright test` never reaches it. The spec is [`tests/demo/axonradar.ui.spec.js`](tests/demo/axonradar.ui.spec.js); its config, including `video: "on"`, is [`playwright.demo.config.js`](playwright.demo.config.js).
+**What this recording demonstrates:** a browser test starts with a stale search selector, recovers through a stored alternative, fills the real field, and verifies that the feed filters. This historical recording demonstrates locator recovery without an LLM call; it predates the current scoped approval workflow.
 
-### Real-world case study: a live site Falcon had never seen before
+[Watch the full recorded UI suite](docs/demo/axonradar-ui-test.mp4) · [Read the demo test](tests/demo/axonradar.ui.spec.js)
 
-A demo against a fixture built for exactly this kind of test doesn't prove much. So instead, everything below comes from pointing Falcon at a real, independently-built, publicly deployed product it had no prior knowledge of: [axonradar.netlify.app](https://axonradar.netlify.app/) (a TypeScript AI-intelligence platform, [source](https://github.com/eddieir/AI-agency)). No config, no fixtures, no hints about the site's structure. Just its 11 real pages (`/`, `/news`, `/models`, `/benchmarks`, `/playground`, `/evaluations`, `/router`, `/operations`, `/developers`, `/creators`, `/compare`), run through the same explore, generate, heal pipeline and streamed to one live dashboard:
+<a id="architecture"></a>
 
-```sh
-node falcon.js --url=https://axonradar.netlify.app --max-pages=11
-```
+## Architecture guide
 
-![Dashboard showing the real aggregate totals across all 11 pages](docs/demo/axonradar-04-full-sweep-totals.png)
+Falcon is a self-hosted Node.js application that runs beside the application under test. Playwright owns the browser session, while Falcon coordinates discovery, scenario generation, execution, locator recovery, human review, and reporting.
 
-**184 scenarios generated across 11 pages. 133 passed, 11 failed, 40 deduplicated, 0 skipped. 23 real UI issues found. Exit code 1.**
+The architecture guide explains:
 
-Every one of those numbers is disclosed as measured, including the unflattering ones. The 40 deduplicated scenarios are shared navigation that repeats on every page, counted rather than hidden. The 11 failures are almost all cases where Tier 1 and Tier 2 healing genuinely ran out of options and Tier 3 would take over, but this run had no `OPENAI_API_KEY` configured, so Tier 3 never fired. The healing log for the run records **0 selectors actually repaired against 11 attempts that resolved nothing** — Falcon says exactly that in its summary rather than reporting the attempts as successes.
+- Runtime layers and their source components
+- End-to-end execution and locator-recovery flows
+- Human approval, trust, and data boundaries
+- Local, CI, parallel-worker, and sharded deployment models
+- Optional LLM provider isolation and local state ownership
 
-The `0 skipped` is the part worth pausing on. Running the identical command against the previous release gives:
+**[Open the complete Falcon architecture guide →](docs/ARCHITECTURE.md)**
 
-| | before Phase 11 | after Phase 11 |
-|---|---|---|
-| Total | 184 | 184 |
-| Passed | 132 | 133 |
-| Failed | 10 | 11 |
-| **Skipped** | **2** | **0** |
-| Deduped | 40 | 40 |
+## Capabilities at a glance
 
-Those two skips were real and silent — `⏭ Skipping Fill input field: Element is not visible`, twice, on a live site, never reaching the healing chain. They now reach it and resolve into an actual verdict: one passes, one fails honestly. On this particular site the run was red anyway, so nothing was being hidden behind a green build here; the site where those two skips are the *only* problem is the one Phase 11 exists for.
+| Capability | Available today | Evaluation boundary |
+| --- | --- | --- |
+| Browser automation | Playwright-based UI execution | Chromium is exercised in CI; Firefox and WebKit are available through `BrowserManager` but are not CI-validated. |
+| Discovery and generation | Page exploration, DOM issue scanning, generated interaction scenarios | Discovery is bounded and can miss unreachable or state-dependent journeys. |
+| Locator recovery | Direct retries, scoped approved replay, deterministic matching, optional LLM selection | Recovery depends on available evidence; weak or ambiguous matches can be refused. |
+| Visual regression | Screenshot comparison and diff images | Baselines and tolerances need to suit your application and execution environment. |
+| API and database testing | API scenario examples and PostgreSQL tests, including TLS/mTLS configuration | Configure endpoints, credentials, fixtures, and assertions for your system. |
+| Review and reporting | Live dashboard, structured results, healing history, flaky-test review, Allure integration | Local review channels are not an enterprise identity or role-based access system. |
+| Parallel execution | Independent pages across workers; shard bundles merged into a combined result | Scenarios within each page remain sequential; worker session state is not synchronized. |
+| Optional AI providers | OpenAI, Anthropic, Gemini, Azure OpenAI, approved OpenAI-compatible endpoints | Integrations have mocked contract tests; live model quality is not certified by those tests. |
 
-### How it works, one page at a time
+<a id="self-healing-architecture"></a>
+<a id="scoped-healing-and-review"></a>
 
-The screenshots below zoom in on a single page of that same sweep (the homepage) so you can see the mechanism firsthand, in the order it actually happens: dashboard connects, the crawler explores, scenarios generate and run. `PageAnalyser.generateActions()` caps navigation-type scenarios at 3 per page by design, to avoid infinite click loops, which is why one page alone only produces a handful of scenarios; the total above is what you get when the sweep runs that same mechanism across every page of the site.
+## How self-healing works
 
-To watch it against a single page instead, narrow the sweep:
+Falcon tries recovery in order and stops when an action succeeds.
 
-```sh
-node falcon.js --url=https://axonradar.netlify.app --single-page
-```
+| Stage | What happens | External model required? |
+| --- | --- | --- |
+| **1 · Retry** | Retry the original selector. A successful interaction can capture element evidence. | No |
+| **2 · Approved replay** | Reuse an approved replacement in the same application, origin, pathname, action, and original-selector scope, after checking the live element. | No |
+| **2.5 · Local matching** | Compare live candidates with stored element evidence. Require sufficient identity, confidence, and separation from competing candidates. | No |
+| **3 · AI-assisted selection** | Ask the selected provider to choose from eligible candidates. Build selectors locally and revalidate the chosen element before acting. | Yes, explicitly enabled |
 
-![Falcon live dashboard: connect, explore, generate, run](docs/demo/falcon-axonradar-demo.gif)
+**Human review controls trusted reuse.** Local matching and AI inference may execute a recovered action in the current run. A successful recovery creates a proposal; it does not automatically become an approved replacement. Approval is scoped to the current proposal and persisted before it takes effect.
 
-*(Recording generated from a real local run against axonradar.netlify.app; see [`docs/demo/`](docs/demo/) for the source frames and regeneration steps below.)*
+Use the dashboard's locator panel or inspect proposals from the CLI:
 
-**1. Dashboard comes up first**, empty and connected, before any exploration or test scenario runs. This is `Dashboard.start()` completing while `falcon.js` is still navigating to the target URL:
-
-![Dashboard connects with zero events](docs/demo/axonradar-01-connects.png)
-
-**2. `ClickExplorer` crawls the page** and streams an `explorerPage` event for every page it visits, in real time, over the same socket the dashboard is already listening on:
-
-![Crawler explores and reports the visited page](docs/demo/axonradar-02-explores.png)
-
-**3. `PageAnalyser` scans the live DOM, `TestGenerator` turns it into a scenario plan, and `TestRunner` executes it** through the three-tier self-healing chain. Each scenario's pass/fail/heal event lands on the dashboard the instant it happens:
-
-![Generated scenarios pass with live counters](docs/demo/axonradar-03-generated-tests-pass.png)
-
-**4. Terminal output for that single page.** No scenario file existed anywhere in the repo for axonradar.netlify.app; everything below was generated from the DOM:
-
-```
-🟢 INFO: 🖥  Dashboard → http://localhost:3000
-🟢 INFO: 🌍 Navigating to https://axonradar.netlify.app/…
-🟢 INFO: ✅ Loaded: https://axonradar.netlify.app/
-🟢 INFO: 🔍 Step 1: Detecting UI issues with DOMIssueScanner…
-🟢 INFO: 🔍 Scanning the DOM for rule-based UI issues...
-🟢 INFO: 🧐 Rule-based scan flagged 2 potential UI issue(s) — heuristics, may include false positives.
-🟢 INFO:   → 2 issue(s) found
-🟢 INFO: 🔍 Step 2: Mapping site with ClickExplorer…
-🟢 INFO:   → 1 page(s) explored
-🟢 INFO: 🔍 Step 3: Generating test scenarios from DOM analysis…
-🟢 INFO: ✅ [PageAnalyser] Found 66 interactive elements
-🟢 INFO:   → 4 scenario(s) generated for https://axonradar.netlify.app/
-🟢 INFO: ▶  Step 4: Executing generated test scenarios (repeat=1)…
-🟢 INFO: ▶ Executing [1/1]: Click RESCAN ↻ (click)
-🟢 INFO: 🔹 Tier 1: Trying Click RESCAN ↻ (html:nth-of-type(1) > body:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(1) > button:nth-of-type(1))
-🟢 INFO: ✅ Passed: Click RESCAN ↻ (59ms)
-🟢 INFO: ▶ Executing [1/1]: Navigate: AXON//RADAR (click)
-🟢 INFO: ✅ Passed: Navigate: AXON//RADAR (30ms)
-🟢 INFO: ▶ Executing [1/1]: Navigate: News (click)
-🟢 INFO: ✅ Passed: Navigate: News (31ms)
-🟢 INFO: ▶ Executing [1/1]: Navigate: Models (click)
-🟢 INFO: ✅ Passed: Navigate: Models (37ms)
-🟢 INFO: 🛠 Writing exploratory scan summary...
-🟢 INFO: 📊 Exploratory Test Summary:
-🟢 INFO: ❗ UI Issues Found:  2
-🟢 INFO: 🌍 Pages Explored:  1
-
-✅ Test Run Complete: PASSED
-   Total: 4  |  Passed: 4  |  Failed: 0  |  Skipped: 0
-   Duration: 4.61s
-   UI Issues detected: 2
-   Report written to: reports/test-report.json
-```
-
-Those 2 UI issues aren't fabricated, but they illustrate the limits of rule-based heuristics. `DOMIssueScanner` flagged the site's mobile menu button as a known false positive: a hidden element with `innerText` empty (`<button aria-label="Open menu" class="menu-toggle"><span></span><span></span></button>`). The element **does** have an accessible label, and a menu button hidden at desktop width is behaving as designed. The rule checks only `innerText`, not accessible names, so this exact false positive recurs. The 23 UI issues flagged across all 11 pages are heuristic findings, not confirmed defects — a human reviewer can distinguish real problems from expected behavior. This is why `DOMIssueScanner` reports them as "potential" issues and notes that heuristics may include false positives.
-
-### Scoped healing and review
-
-Tier 1 retries the developer's selector. Tier 2 reuses only a replacement approved in
-`LocatorMemory` for the same application, origin, pathname, action and original selector.
-The replacement must still resolve uniquely and pass current visibility, action compatibility
-and signature checks. A legacy `LocatorStore` selector is inspectable but cannot authorise replay.
-The historical AxonRadar demo scripts predate this scoped review flow.
-
-Tier 3 can execute an inferred selector in the current run. A successful inference creates a
-scoped review proposal; success alone does not grant trust. Legacy `HealingTrust` commands
-remain available for inspecting and recording old decisions, but an old approval does not
-make a selector eligible for replay. Migrate by collecting fresh evidence in the intended scope
-and reviewing the resulting locator proposal.
-
-Use the dashboard's locator panel, or the CLI:
-
-```sh
+```bash
 node scripts/healing/review.js locator-list
 node scripts/healing/review.js locator-show "<identity-key>"
 node scripts/healing/review.js locator-approve "<identity-key>" "<proposal-id>"
 node scripts/healing/review.js locator-reject "<identity-key>" "<proposal-id>"
-node scripts/healing/review.js locator-rollback "<identity-key>" "<expected-revision>" "<note>"
 ```
 
-Copy the proposal ID or revision from the current review output. Replacing a proposal changes
-its ID, so a stale approval cannot approve an unseen replacement. Successful decisions retain
-the approved selector, actor channel, bounded evidence and audit history. `cli` and `dashboard`
-identify the decision channel, not an authenticated person's identity. The API returns 400 for
-invalid requests, 404 for an unknown identity, 409 for a stale or revoked proposal, and 503 when
-the decision cannot be persisted. The CLI exits nonzero on failure. Approval is installed only
-after its durable write succeeds.
+Copy the identity and current proposal ID from the review output. Old `LocatorStore` entries and legacy healing approvals do not authorize the current scoped replay path.
 
-### Healing without a model, and refusing when the evidence is thin
+Local matching needs previously captured evidence with a stable identifier. It is designed to decline when that evidence is missing or ambiguous. Healing also does not establish business correctness: retain assertions that verify the intended outcome.
 
-Tier 2 only helps when the exact replacement has already been approved. Tier 3 needs a key, a
-network, and a willingness to send DOM to a third party. Between them sits the common case: the
-element is plainly still there and recognisable to a human — its id was regenerated by the build, a
-wrapper appeared, the copy was reworded — but nothing has taught Falcon the new selector yet.
+<a id="installation"></a>
 
-That tier is deterministic and entirely local. It scores each live candidate against the signature
-of the element Falcon last interacted with successfully: tag, role, an allow-listed set of stable
-attributes, accessible name, own text, structural path and a coarse geometry bucket. No model, no
-network, no randomness. `CandidateMatcher` has no `require` statement at all, so its verdict is
-reproducible from its inputs alone, and it reports the per-dimension contributions behind that
-verdict rather than only the result.
+## Quick start
 
-**It refuses, and the reason is part of the output.** Below the confidence floor, inside the
-required margin between the best and second-best candidate, incompatible with the action,
-contradictory role, or an ambiguous stable identity — each is reported distinctly, written to the
-healing log, and falls through to Tier 3 exactly as an empty cache would. A refusal is never a run
-failure.
+**Prerequisites:** Git, Node.js **22 or newer**, and npm. CI uses Node.js 24.
 
-**It will only act on an element that carries a stable identifier.** If the stored evidence has no
-`id`, `data-testid`, `data-test` or `data-qa`, Falcon refuses with `insufficient_identity_evidence` before it
-scores anything, and the chain falls through to Tier 3. That is a deliberate limit rather than a
-missing feature: with no identifier in the stored snapshot, nothing can separate "the real element
-changed" from "a different element still matches the old snapshot," and attempting it produced a
-wrong-element click on ordinary markup during this phase's own review. If your application doesn't
-use test ids, this tier will mostly decline and the LLM tier will do the work.
+> **Use a local fixture, staging, or disposable test environment.** Discovery clicks links and buttons and fills real controls. These actions can change application data, even before a recovery proposal is approved. Do not point autonomous exploration at production.
 
-The ambiguity reason is worth spelling out, because it was found by this phase's own benchmark rather
-than by review. A `data-testid` is written by hand to identify one element, so an exact match on it
-is allowed to outweigh an id the build regenerated. But when two candidates carry the same
-`data-testid`, it identifies neither — and a stale duplicate elsewhere on the page can match the
-old evidence *better* than the real element does once the real element's copy has legitimately
-changed. Falcon refuses outright in that case, by a structural rule that reads neither the
-confidence floor nor the margin, so it cannot be tuned away later.
+### 1. Install
 
-**A candidate accepted here is not trusted.** It is recorded as a proposal and only becomes trusted
-evidence when a human approves it, through the dashboard's locator panel or
-`node scripts/healing/review.js locator-list`. Trust comes from a successful interaction using the developer's selector or an explicit
-approval of the current scoped proposal. A successful approved replay retains that approval; it
-does not manufacture a new proposal. Rolling an entry back marks it revoked with an attributed audit record and keeps
-the prior signature; it earns trust again only by passing for real, never by re-approving the
-evidence that was rejected.
-
-**What's stored, and what isn't.** Identity-bearing attribute values are salted HMAC-SHA256 hashes,
-so the dashboard and CLI name *which* field matched, never the value. Accessible name and own text
-stay as bounded plaintext because similarity cannot run on a hash, passed through redaction
-patterns first. The collector excludes input, textarea, select and contenteditable contents from own-text
-evidence. Native roles are inferred, and accessible names are approximated from labels and ARIA
-references; this is not a complete accessible-name implementation. Never stored by the signature
-collector: form values, passwords, hidden tokens, cookies, storage,
-authorization data, raw `outerHTML`, full DOM, scripts, complete forms, URL credentials, raw
-queries, unrestricted `data-*`, or unbounded text.
-
-Two honest caveats. Unless you set `FALCON_LOCATOR_SALT`, the salt is generated and stored in the
-same file as the hashes it protects, so low-entropy values stay brute-forceable offline by anyone
-who can read that file — Falcon warns you once, on first use, and the hashed values are **not**
-irrecoverable. And redaction of accessible name and text is a shape heuristic, not a guarantee: a
-short one-time-code-style secret is not caught by it. Treat the local file as sensitive: bounded
-plaintext names, text, paths and selectors can still contain arbitrary application data.
-
-**Locator memory is local-only.** `data/locator_memory.json` lives on the machine that produced it.
-It is gitignored, and it is deliberately **not** restored or saved by CI — the state cache's exact
-key can never hit, so every restore falls back to a branch prefix, and caching this file would let
-one branch inherit evidence another branch's reviewer approved. Nothing here is uploaded anywhere.
-
-Run `npm run healing:benchmark` for the 27-case mutation corpus and its per-case expected
-outcomes. The harness collects signatures, ranks candidates, builds a selector using the production
-builder and verifies unique resolution against the fixture's declared ground-truth node. It reports
-correct heals, refusals, missing candidates, false heals and bytes of an actual persisted memory
-snapshot. Separate regression tests exercise action execution, scoped replay and durable review.
-These measurements describe this authored corpus, not a healing rate for arbitrary applications.
-The confidence floor (0.85) and winner margin (0.15) remain provisional and uncalibrated; the
-[correction decisions](docs/architecture/phase-14-correction-decisions.md) specify holdout validation.
-
-Memory accepts schema version 1, at most 500 identities, 50 retained audit rows per entry,
-2 KiB signatures and an 8 MiB serialized envelope. Unsupported schema and salt-fingerprint
-mismatches fail closed and preserve the original file. `FALCON_LOCATOR_SALT` stays outside the
-serialized file; a fingerprint detects a changed salt. Keep that value stable across restarts.
-New memory writes and corruption sidecars use mode 0600. This does not change permissions on
-existing files or secure their containing directory.
-
-An adjacent exclusive lock covers the durable-file digest check and replacement. A stale store
-instance cannot overwrite another writer's work: restart it to reload current state after a writer
-conflict. Each lock records the host that created it, the owner PID and the creation time. A lock left by a
-crashed process on the same host is automatically reclaimed: if its recorded PID is gone (verified via
-`process.kill(pid, 0)` returning `ESRCH`), or if the lock has no readable owner and is older than
-60 seconds, the next writer moves it aside and retries once. A lock naming a live PID, or the current
-process's own PID, is never reclaimed. A lock created on another host is never reclaimed automatically,
-because a PID means nothing across machines: the write stops with `LOCK_FOREIGN_HOST` and changes
-nothing. Stop writers, confirm the owner is gone, then remove the lock by hand. Hostnames that change
-between runs on a shared volume (for example ephemeral containers) hit the same rule and need the same
-manual step. A reused PID on the same host also still needs manual recovery. A narrow window remains in
-which a live owner displaced mid-reclaim can briefly overlap with the next holder; neither can remove the
-other's lock. The
-conflict message names the owner PID and age to aid diagnosis. There is no merge of competing
-snapshots.
-
-One consequence of refusing on ambiguity is worth stating rather than leaving for someone to
-discover. Because a second element sharing the stored `data-testid` forces a refusal regardless of
-how well the real element scores, anyone able to inject a visible, action-compatible element into
-the page under test can suppress this tier at will. The security review that found it rated it an
-acceptable trade and so do we: the result is a refusal that falls through to Tier 3, never a
-wrong-element action, and the ability to inject arbitrary DOM into your application under test is
-already a far larger problem than suppressed self-healing. It is recorded here so that "no fix
-needed" is not mistaken for "not considered."
-
-### What Tier 3 sends to the LLM provider
-
-Tier 3 sends a numbered list of candidate elements to the configured LLM provider, not the page. Only elements that fit the failed action are listed: fillable fields for a type, `<select>` for a select, clickable elements for a click. Each must be visible and enabled; hidden, zero-opacity, `inert`, `pointer-events: none` and off-document elements are left out. Collection is capped at 60 elements. The provider prompt defaults to 20 candidate descriptors, is configurable up to 60, and is always capped at 8 KiB. For each candidate it sends the tag name, a fixed set of attributes (`id`, `name`, `type`, `data-testid`, `data-test`, `data-qa`, `aria-label`, `role`, and the path of an `href`), and its text. Every value has control characters removed and is capped at 200 characters; password values are never sent. Those labels, IDs, test IDs and texts leave your network. The prompt also carries the original selector, the step description and the action, and states that page text is untrusted data whose instructions must not be followed.
-
-The model may answer only with a candidate's number, or `null`. It never writes a selector: the selector for each candidate is built locally, and the chosen one is re-checked in the page (still unique, same identifying attributes, still eligible) before Falcon acts on it. Any other answer is rejected and the heal fails exactly as an unresolved one would, with `status: "rejected"` and one of these reasons in the healing report: `no_eligible_candidates`, `model_declined`, `invalid_reply`, `index_out_of_range`, `selector_not_unique`. One limit remains: a page that controls visible, action-compatible elements can still bias which of them the model picks. Whatever is picked runs once in the current run and goes to review as pending; it is never reused without human approval.
-
-Tier 3 is opt-in and requires explicit provider selection, either via the environment (`FALCON_LLM_PROVIDER`) or per invocation via the `--llm-provider`/`--llm-profile` CLI flags (see [Bring your own provider key](#bring-your-own-provider-key) below). `OPENAI_API_KEY` alone does not enable Tier 3; you must set both the provider and the corresponding API key. A run with no provider configured falls back to Tiers 1–2.5; it never attempts Tier 3.
-
-### Healing every action, demonstrated against the same real site
-
-The two sections above heal a *click*. Until Phase 11 that was the only action Falcon could heal: a `type` or `select` whose locator broke was marked `skipped` before the healer was ever consulted, and a skip doesn't fail a run. A renamed input id cost you coverage and left the build green.
-
-Below, two real controls on the live site have their locators broken the way a deploy between analysis and execution breaks them — the `/news` search field, and the second model dropdown on `/compare`. Neither element carries an id, a name, or a `data-testid`, so the plan holds a structural selector, which is exactly what a front-end refactor invalidates. The LLM call itself is stubbed (there is no API key in this environment, and the script says so in its own output); everything downstream is the real code path:
-
-```
-=== Scenario 1: /news — search input's locator breaks between plan and run (type) ===
-✓ PageAnalyser plans "input" for the /news search field (got "input")
-✓ the real search field is uniquely findable by its placeholder (count=1)
-❌ Tier 1 exhausted for News search field. Engaging Tier 2/3 healing.
-🤖 Asking AI to infer locator for: input
-  [stubbed LLM] would infer: input[placeholder="Search headline, body, or source"]
-Read back from the live field: "quantum computing"
-✓ the typed text actually landed in the real /news search field
-✓ Tier 1 genuinely failed and Tier 3 genuinely resolved this — not a disguised Tier 1 pass (tier=LLM)
-
-=== Scenario 2: /compare — second model dropdown's locator breaks between plan and run (select) ===
-✓ the plan selector resolves to exactly one element before the mutation (count=1)
-❌ Tier 1 exhausted for Compare model 2 dropdown. Engaging Tier 2/3 healing.
-Read back from the live dropdown: "kimi-k2-6"
-✓ the option actually changed in the real /compare dropdown
-✓ Tier 1 genuinely failed and Tier 3 genuinely resolved this — not a disguised Tier 1 pass (tier=LLM)
-
-=== Scenario 3: neither fix was silently trusted — Phase 8's gate applies to type/select too ===
-LocatorStore.getAlternatives("input") -> []
-✓ LocatorStore has nothing for the healed input selector (a guess earns no automatic trust)
-✓ the type fix is sitting in HealingTrust as pending review
-✓ the select fix is sitting in HealingTrust as pending review
-```
-
-The value is read back out of the live page in both cases, because a `passed` line proves nothing on its own: a healed fill that reports success without filling anything would be worse than the failure it replaced. The healing record now carries the action it repaired (`"action":"type"`, `"action":"select"`), and the Phase 8 trust gate applies unchanged — an LLM guess for a form field waits for a human exactly as one for a button does.
-
-Reproduce it yourself: `node docs/demo/phase-11-heal-every-action-demo.js`.
-
-### Exit codes that mean what they say
-
-Every guarantee above is worth nothing if the process exits 0 regardless. This demo spawns each case as a real child process and compares the reported result against the exit code the operating system actually saw:
-
-```
-case                              reported      claimed  observed  match
-every scenario passed             PASSED        0        0         yes
-one real failure among passes     PARTIAL       1        1         yes
-a failure a human quarantined     PASSED        0        0         yes
-Phase 11: every scenario skipped  NO_TESTS_RUN  1        1         yes
-Phase 10: every scenario deduped  NO_TESTS_RUN  1        1         yes
-no scenarios at all               NO_TESTS_RUN  1        1         yes
-```
-
-The fourth and fifth rows are the interesting ones. Work that never ran cannot be a pass: a run made entirely of skipped or deduplicated scenarios verified nothing, and now exits 1 exactly as an empty run does. Before Phase 10 and Phase 11 respectively, both of those reported PASSED.
-
-Reproduce it yourself: `node docs/demo/honest-exit-code-demo.js`.
-
-### Flaky-test detection, demonstrated against the same real site
-
-The same interaction, run repeatedly against the real page, sometimes passes and sometimes fails, exactly the way a genuinely timing-sensitive element behaves in a real suite. Below, `FlakinessTracker` watches six real `TestRunner` runs of the same scenario, classifies it, and a human quarantines it so it stops blocking CI without the instability ever being hidden:
-
-```
-=== Step 1: run the exact same scenario 6 times against the real page ===
-run 1: element present -> passed
-run 2: element removed -> failed
-run 3: element present -> passed
-run 4: element present -> passed
-run 5: element removed -> failed
-run 6: element present -> passed
-
-=== Step 2: FlakinessTracker classifies "Flaky Target" from that real history ===
-{
-  "classification": "flaky",
-  "flakeRate": 0.33,
-  "sampleSize": 6,
-  "history": ["passed", "failed", "passed", "passed", "failed", "passed"]
-}
-
-=== Step 3: a human reviews it and quarantines it ===
-Quarantined by "demo-script".
-
-=== Step 4: run it again with the element removed. It fails again, but now reports "quarantined", not "failed" ===
-status: quarantined
-
-=== Step 5: ReportManager still reports PASSED: a quarantined failure never blocks the run ===
-✅ Test Run Complete: PASSED
-   Total: 1  |  Passed: 0  |  Failed: 0  |  Skipped: 0  |  Quarantined: 1
-```
-
-Nothing about this is a separate, simplified code path: every run above is a real `TestRunner.executeTest()` call, `ReportManager` is the same one every scenario test file uses, and quarantining changes only how a failure is *reported*, never whether the interaction actually passed or failed. Review flaky scenarios and quarantine/unquarantine them either from the live dashboard's "Flaky tests" panel, or headlessly:
-
-```sh
-node scripts/flakiness/review.js list                       # every tracked scenario
-node scripts/flakiness/review.js list flaky                 # or filter: new | stable | broken | flaky
-node scripts/flakiness/review.js quarantine "<scenario-key>"
-node scripts/flakiness/review.js unquarantine "<scenario-key>"
-node scripts/flakiness/review.js rehab                       # rehabilitation candidates (Phase 13)
-```
-
-The same demo ends by showing what quarantine will *not* do. A scenario that has failed every time it has ever run is refused outright:
-
-```
-=== Step 6: a scenario that has failed every single time cannot be quarantined at all ===
-Refused: quarantine() threw code "QUARANTINE_REFUSED"
-
-=== Step 7: the same scenario becomes quarantinable the moment it genuinely passes once ===
-```
-
-That is a regression, not flakiness, and quarantining it would turn a genuinely red run green. The rule is "has passed at least once", not "isn't classified `broken`" — a scenario that has only ever failed twice is still classified `new`, because two samples are under the verdict threshold, and hiding that would be just as effective a way to lose a real failure. There is no force flag anywhere.
-
-Reproduce the demo above yourself: `node docs/demo/flaky-test-detection-demo.js`.
-
-### Visual regression, demonstrated against the same real site
-
-A real baseline screenshot of the live page, compared against itself (0 px changed), then compared again after a real DOM change was injected (a "MAINTENANCE MODE" banner) and caught:
-
-```
-✅ [VisualRegression] "axonradar-home" passed: 0 px changed (0.00%)
-❌ [VisualRegression] "axonradar-home" FAILED: 62007 px changed (0.49% > threshold 0.1%)
-```
-
-Reproduce it yourself: `node docs/demo/visual-regression-axonradar-demo.js`.
-
-**Why this matters for evaluating Falcon:** this is a site Falcon's authors did not build, did not tune selectors for, and had no advance knowledge of. It's the actual bar a QA team would need it to clear, exercised across every page of the product, not a cherry-picked golden path.
-
-### Try it against your own app
-
-No fixture required, just a URL:
-
-```sh
-node falcon.js --url=https://your-app.example.com
-```
-
-### Regenerating this demo
-
-The recordings above aren't hand-drawn. They're real frames captured from a live `node falcon.js` run with Playwright, assembled with `ffmpeg`. Frame timing depends on real network/render latency, so a fixed frame index (e.g. "frame 6 is always the explore state") silently goes stale between runs. `docs/demo/build-gif-list.js` instead hashes every captured frame, collapses consecutive duplicates, and keeps one frame per *actual* dashboard state change, whatever real time that landed at:
-
-```sh
-# 1. Start the run and the capture together. Waiting for the dashboard to
-#    answer before starting the capture lets a short run finish first — the
-#    empty and explore states are then already gone. capture-dashboard.js
-#    waits for the port itself, so both start at once.
-node falcon.js --url=https://axonradar.netlify.app &
-
-# 2. Capture frames with Playwright while the run streams events
-#    (frameCount, intervalMs, output directory under docs/demo/)
-node docs/demo/capture-dashboard.js 60 120 frames-axonradar
-wait
-
-# 3. Pick one frame per real state change (connect / explore / results)
-node docs/demo/build-gif-list.js docs/demo/frames-axonradar docs/demo/axonradar-gif-list.txt 3.0
-
-# 4. Assemble into a GIF
-cd docs/demo
-ffmpeg -y -f concat -safe 0 -i axonradar-gif-list.txt \
-  -vf "fps=10,scale=900:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
-  falcon-axonradar-demo.gif
-```
-
-`docs/demo/capture-dashboard.js` and `docs/demo/build-gif-list.js` are checked in so this is reproducible against any future run, not a one-off screenshot. The full-sweep, self-healing, healing-trust, flaky-detection, and visual-regression sections above are each their own standalone, reproducible script:
-
-```sh
-# Full 11-page sweep, real aggregate totals streamed to the live dashboard
-node docs/demo/multi-page-axonradar-dashboard-demo.js
-
-# Self-healing: Tier 1 exhausted -> Tier 2 healed, against a real element
-node docs/demo/self-heal-axonradar-demo.js
-
-# Healing trust: Tier 3 succeeds but isn't trusted until a human approves it
-node docs/demo/healing-trust-axonradar-demo.js
-
-# Flaky-test detection: the same interaction, genuinely nondeterministic, quarantined —
-# and a scenario that has never passed being refused quarantine outright
-node docs/demo/flaky-test-detection-demo.js
-
-# Visual regression: a real baseline vs. a genuine injected change
-node docs/demo/visual-regression-axonradar-demo.js
-
-# Healing on every action: a real search field and a real dropdown whose locators
-# break between analysis and execution, healed through the same three tiers
-node docs/demo/phase-11-heal-every-action-demo.js
-
-# Exit-code honesty: every reported result checked against the real process exit code
-node docs/demo/honest-exit-code-demo.js
-```
-
-The recorded UI test at the top is rebuilt the same way, from the videos Playwright records rather than from a screen capture:
-
-```sh
-npm run demo:record
-```
-
-`docs/demo/build-ui-test-recording.js` finds each video through `reports/ui-demo-results.json` rather than by walking the artefact directory — Playwright names those directories after a truncated, hashed form of the test title, so matching on the directory name silently stops working the first time a title is edited. Reading the reporter's JSON also means the script can see each test's status, and it refuses to write either file if any test failed or any video is missing. A recording is published as evidence the suite works; one built from a red run would be evidence of nothing. Needs `ffmpeg` on `PATH`.
-
-Each one exits non-zero if its own assertions fail, so a demo cannot quietly succeed while the mechanism behind it is broken.
-
----
-
-## Architecture
-
-```mermaid
-flowchart TD
-    CLI["falcon.js: CLI entry point"] --> Explore["DOMIssueScanner\nrule-based UI issue scan"]
-    CLI --> Crawl["ClickExplorer\nrecursive autonomous crawl"]
-    Crawl --> Analyse["PageAnalyser\nDOM → element map"]
-    Analyse --> Gen["TestGenerator\nscenario plan"]
-    Gen --> Runner["TestRunner\nexecutes generated + hand-written scenarios"]
-
-    Suite["tests/ui, tests/api, tests/db\n(LoginTest, CheckoutTest, UserApiTest, ...)"] --> Runner
-
-    Runner --> Healer["AIHealer: self-healing chain"]
-    subgraph Healing["Three-tier self-healing"]
-        Healer --> T1["Tier 1: AdaptiveRetry\nbackoff + jitter"]
-        T1 -->|still failing| T2["Tier 2: LocatorStore\ncached alternatives"]
-        T2 -->|no cached match| T3["Tier 3: configured LLM provider\nlive selector inference"]
-        T3 -->|resolved, unreviewed| Trust["HealingTrust\npending-approval gate (Phase 8)"]
-        Trust -->|human approves| Store[("data/locator_store.json\nbounded, LRU-evicted")]
-        Trust -->|human rejects| Decisions[("data/healing_decisions.json\naudit ledger")]
-        T2 -.reads.-> Store
-    end
-
-    Runner --> VR["VisualRegression\npixel-diff vs. baseline"]
-    Runner --> RM["ReportManager\nreal pass/fail/skip/quarantined tally"]
-    Healer --> HR["HealingReport\naudit log + reviewable trend"]
-
-    Runner --> Flaky["FlakinessTracker\nclassify: new/stable/broken/flaky (Phase 9)"]
-    Flaky -->|human quarantines| QDecisions[("data/quarantine_decisions.json\naudit ledger")]
-    Flaky -.reads.-> ScenarioHistory[("data/scenario_history.json\nbounded, LRU-evicted")]
-    Flaky --> RM
-
-    RM --> Dash["Dashboard\nlive WebSocket UI @ :3000"]
-    HR --> Dash
-    Explore --> Dash
-    Trust <-->|GET/POST /healing/*| Dash
-    Flaky <-->|GET/POST /flakiness/*| Dash
-    CLIReview["scripts/healing/review.js\nheadless approve/reject"] --> Trust
-    FlakyReview["scripts/flakiness/review.js\nheadless quarantine/unquarantine"] --> Flaky
-
-    RM --> ReportsJSON[("reports/test-report.json")]
-    HR --> HealLogJSON[("reports/healing_logs.json")]
-    VR --> DiffJSON[("reports/visual-regression.json")]
-    Explore --> ExploreJSON[("reports/exploratory_test_results.json")]
-
-    DB["DBClient\nPostgreSQL + mTLS"] --> Suite
-```
-
-The pipeline has two entry paths that converge on the same healing engine: the **autonomous path** (`falcon.js`: explore, generate, and run scenarios with no hand-written test code) and the **explicit path** (hand-written scenario files under `tests/`). Both go through the identical `AIHealer` three-tier chain, so a selector fix learned by one path benefits the other via the shared `LocatorStore`, once it's been through the `HealingTrust` approval gate described below.
-
----
-
-## Project Structure
-
-```
-Falcon-Automation/
-├── .github/workflows/
-│   └── ci.yml                       # GitHub Actions pipeline (see CI/CD)
-├── src/
-│   ├── config/
-│   │   └── testConfig.json          # ConfigManager's JSON config source
-│   ├── dashboard/
-│   │   └── index.html               # Live dashboard front-end (socket.io client)
-│   └── core/
-│       ├── AIHealer/
-│       │   ├── AIHealer.js          # Three-tier self-healing engine (Tier 3: pluggable LLM provider)
-│       │   ├── HealingReport.js     # Audit log for all healing events + reviewable trend (summary())
-│       │   ├── HealingTrust.js      # Tier 3 approval gate: pending review -> approve/reject (Phase 8)
-│       │   ├── LocatorStore.js      # Persisted alternative locators (Tier 2 cache, bounded)
-│       │   └── AdaptiveRetry.js     # Tier 1: backoff + jitter retry
-│       ├── APIClient.js             # HTTP client used by tests/api/*.js
-│       ├── BaseTest.js              # Dependency-injection base class
-│       ├── BrowserManager.js        # Playwright wrapper (chromium/firefox/webkit)
-│       ├── ClickExplorer.js         # Recursive autonomous crawler
-│       ├── ConfigManager.js         # JSON + env config singleton
-│       ├── Dashboard.js             # express + socket.io live dashboard server
-│       ├── DBClient.js              # PostgreSQL pool with mTLS support
-│       ├── ErrorHandler.js
-│       ├── DOMIssueScanner.js       # Rule-based DOM issue scanner (heuristic findings, may include false positives)
-│       ├── FlakinessTracker.js      # Pass/fail history, classification, quarantine gate (Phase 9)
-│       ├── Middleware.js            # Lifecycle hooks + cross-process event emit
-│       ├── PageAnalyser.js          # DOM scanner (single source of truth; see CHANGELOG.md#phase-3--competitive-features)
-│       ├── ReportManager.js         # Accurate pass/fail/skip/quarantined reporting, sets process.exitCode
-│       ├── ServiceContainer.js      # Partial DI container (browserManager, apiClient, dbClient, reportManager)
-│       ├── SiteSweep.js             # Whole-app sweep: bounded frontier, dedupe, coverage accounting (Phase 10)
-│       ├── TestGenerator.js         # Delegates to PageAnalyser for scenario generation
-│       ├── TestRunner.js            # Scenario + exploratory test orchestrator
-│       └── VisualRegression.js      # Pixel-diff screenshot comparison
-├── tests/
-│   ├── ui/                          # LoginTest, CheckoutTest, GoogleSearchTest
-│   ├── api/                         # UserApiTest, ProductApiTest
-│   ├── db/                          # UserDBTest, OrderDBTest, TestDBConnection
-│   ├── unit/                        # Fast regression checks: no browser, no DB
-│   │   ├── ReportManagerExitCode.check.js
-│   │   ├── DBConfigBehavior.check.js
-│   │   └── DashboardAuth.check.js
-│   ├── regression/                  # The node:test + Playwright regression layer
-│   │   ├── *.check.cjs              # node:test suites, one per module area
-│   │   ├── browser.spec.js          # Playwright specs against inline HTML fixtures
-│   │   └── helpers.cjs              # Module loader with injectable dependencies
-│   ├── demo/                        # The recorded UI suite: real browser, live
-│   │   └── axonradar.ui.spec.js     # third-party site, not in CI (npm run test:demo)
-│   ├── fixtures/                    # Shared test fixtures (cli-preload.cjs)
-│   └── full_automation.test.js      # Playwright-native suite (allure-playwright reporter)
-├── scripts/
-│   ├── db/
-│   │   └── ci-seed.sql              # Minimal schema/seed applied to CI's Postgres
-│   ├── healing/
-│   │   └── review.js                # Headless list/approve/reject CLI for pending healing fixes
-│   └── flakiness/
-│       └── review.js                # Headless list/quarantine/unquarantine CLI for flaky scenarios
-├── utils/
-│   └── Logger.js                    # Async file logging (non-blocking)
-├── data/                            # Gitignored
-│   ├── locator_store.json           # Persisted LocatorStore entries (Tier 2, bounded)
-│   ├── healing_pending.json         # Tier 3 fixes awaiting human review (Phase 8)
-│   ├── healing_decisions.json       # Approved/rejected audit ledger (Phase 8)
-│   ├── scenario_history.json        # Per-scenario pass/fail history, bounded (Phase 9)
-│   ├── quarantine_decisions.json    # Quarantine/unquarantine audit ledger (Phase 9)
-│   └── *.corrupt-*-*-*              # Recovered corrupted state files (Phase 12, manual cleanup)
-├── reports/                         # Generated at runtime (gitignored)
-│   ├── execution.log
-│   ├── test-report.json
-│   ├── exploratory_test_results.json
-│   └── healing_logs.json
-├── playwright.config.js             # Playwright native-suite config
-├── falcon.js                        # Main entry point (autonomous pipeline)
-├── package.json
-├── .env.example                     # Template: copy to .env
-└── .env                             # Local secrets (not committed)
-```
-
----
-
-## Installation
-
-### 1. Clone
-
-```sh
+```bash
 git clone https://github.com/eddieir/Falcon-Automation.git
 cd Falcon-Automation
-```
-
-### 2. Install dependencies
-
-Requires **Node 22+** (declared in `package.json`'s `engines` field). The openai SDK declares Node 22, and the regression suite's `node:test` scripts (`test:regression`, `test:coverage`) use flags that don't exist on older Node builds.
-
-```sh
-npm install
-npx playwright install chromium firefox webkit
-```
-
-### 3. Configure environment variables
-
-Copy the template and fill in your values:
-
-```sh
+npm ci
+npx playwright install chromium
 cp .env.example .env
 ```
 
-```ini
-# Browser
-BROWSER=chromium           # chromium | firefox | webkit
-HEADLESS=true               # true for CI; false to watch the browser locally
+On Linux environments that need browser system libraries, use `npx playwright install --with-deps chromium`.
 
-# LLM (optional): Tier 3 AI healing needs FALCON_LLM_PROVIDER (see
-# "Bring your own provider key"). OPENAI_API_KEY alone does not enable it.
-OPENAI_API_KEY=
+### 2. Start the included local application
 
-# API base URL: optional, defaults to jsonplaceholder
-API_BASE_URL=https://jsonplaceholder.typicode.com
-
-# Live dashboard: optional
-DASHBOARD_PORT=3000         # port for `node falcon.js`'s live dashboard
-DASHBOARD_HOST=             # blank = 127.0.0.1 (this machine only). Set a LAN address
-                            # or 0.0.0.0 only together with DASHBOARD_TOKEN — the
-                            # dashboard refuses to start otherwise.
-DASHBOARD_LINGER_MS=60000   # how long the dashboard stays up after a run finishes
-# DASHBOARD_URL=http://localhost:3000  # set on a standalone test run (e.g.
-                                        # `node tests/ui/LoginTest.js`) to report
-                                        # its events into an already-running dashboard
-
-# DASHBOARD_TOKEN=              # optional on the default loopback bind (unset =
-                                 # unauthenticated, logs a warning on startup).
-                                 # REQUIRED when DASHBOARD_HOST is not loopback —
-                                 # it's then required on every API route and the
-                                 # socket connection, via an Authorization: Bearer
-                                 # or X-Dashboard-Token header or the dashboard cookie.
-                                 # ?token= is NOT accepted on API routes. Open
-                                 # http://localhost:3000/?token=<value> once; the
-                                 # dashboard sets an HttpOnly cookie and redirects.
-
-# PostgreSQL: required only for DB tests. Leave DB_HOST/DB_USER blank to
-# skip tests/db/*.js cleanly. Don't fill these in with placeholder text,
-# DBClient only checks for truthiness, so a non-empty placeholder is treated
-# as "configured" and it'll try to connect instead of skipping.
-DB_HOST=
-DB_PORT=5432
-DB_USER=
-DB_PASS=
-DB_NAME=
-DB_SSL=false                # set to true only if your Postgres requires TLS
-
-# SSL/mTLS: only needed when DB_SSL=true and using client certs
-# SSL_CA_FILE=./certs/ca.pem
-# SSL_KEY_FILE=./certs/client.key
-# SSL_CERT_FILE=./certs/client.crt
-# SSL_REJECT_UNAUTHORIZED=true
-```
-
----
-
-## Self-Healing Architecture
-
-Falcon's healing engine operates in three tiers, in order:
-
-| Tier | Mechanism | API cost | Speed |
-|------|-----------|----------|-------|
-| 1 | Direct selector attempt (3 retries, 2 s timeout each) | None | Fast |
-| 2 | LocatorStore: alternatives learned from prior runs | None | Fast |
-| 3 | LLM inference: bounded candidate payload + configured provider | Provider/model dependent | Provider/model dependent |
-
-Every supported action goes through that chain, not just clicks. A renamed input or a restructured dropdown is healed exactly as a renamed button is, and Tiers 2 and 3 perform the *real* interaction against the resolved selector — a fill fills, a select selects. Healing a form field by clicking it would report a pass for something that never happened, which is worse than the failure it was hiding. Every healing record notes which action was healed, so the audit trail distinguishes a repaired click from a repaired form fill.
-
-A successful Tier 2 match was already reviewed once (it's how it got into `LocatorStore` in the first place) and is reused immediately. A successful Tier 3 result is different: nobody has looked at it yet. It does not get written to `LocatorStore` automatically. Instead it goes to `HealingTrust` as a fix awaiting human review, and the exact same broken selector pays the Tier 3 cost again on every subsequent run until a human approves it. "Self-healing" should never mean "silently trusted": an LLM guess earns reuse rights by being reviewed, not by having worked once.
-
-The healing engine captures a targeted DOM snapshot (interactive elements only, ≤ 6 KB) rather than the full page, keeping inference prompts small and latency predictable.
-
-`AIHealer` is now the single healing implementation used by every entry point (`LoginTest`, `CheckoutTest`, `GoogleSearchTest`, etc.). The older, parallel `SelfHealingManager` path (and its sole caller, `LoginPage.js`) has been removed. `LocatorStore` also tracks a `lastUsed` timestamp per selector and is bounded: at most 5 alternatives are kept per selector and at most 500 distinct selectors are tracked overall, with the least-recently-used entries evicted first, so `data/locator_store.json` can't grow without limit across a long project history.
-
-### Healing trust: reviewing and approving Tier 3 fixes (Phase 8)
-
-Every healing attempt, across all three tiers, is already recorded by `HealingReport`. Beyond the flat event log, `HealingReport.summary()` aggregates it into a reviewable trend, one row per selector, showing how many times it broke, which tiers resolved it and how often, and its most recent outcome, instead of an unreadable list of individual events.
-
-A pending Tier 3 fix can be reviewed and decided on two ways:
-
-- **The live dashboard's "Healing trust" panel** (`localhost:3000`, or wherever `DASHBOARD_PORT` points): lists every fix awaiting review with its suggested replacement, description, Tier 3 invocation count, and rejection history (if any), with **Approve**/**Reject** buttons. Backed by `GET /healing/pending`, `GET /healing/trend`, `POST /healing/approve`, and `POST /healing/reject`, gated by the same `DASHBOARD_TOKEN` and rate limiter as `/emit` and `/events`.
-- **`scripts/healing/review.js`**, for headless environments where the dashboard isn't open:
-
-  ```sh
-  node scripts/healing/review.js list                        # what's awaiting review (shows rejection history)
-  node scripts/healing/review.js approve "<original-selector>"
-  node scripts/healing/review.js reject  "<original-selector>"
-  node scripts/healing/review.js approve-all
-  ```
-
-Approving writes the fix into `LocatorStore` (Tier 2 reuses it from then on) and records the decision in `data/healing_decisions.json`. Rejecting discards it, never touching `LocatorStore`, but keeps the same audit record so a rejected guess doesn't quietly get re-suggested with no memory of having been turned down. Rejection memory carries a count and timestamps; when the same selector-suggestion pair is proposed again, the history is flagged so a human can see it was previously rejected. Both `data/healing_pending.json` and `data/healing_decisions.json` are gitignored, the same as `locator_store.json`.
-
----
-
-## Bring your own provider key
-
-Tier 3 inference is optional and requires explicit provider selection. Supported provider ids: `openai`, `azure-openai`, `anthropic`, `gemini`, `openai-compatible` (plus `disabled`/`none` to turn Tier 3 off). `OPENAI_API_KEY` alone does not enable Tier 3; you must set both the provider and the corresponding credentials.
-
-Provider, model, and credentials can be chosen two ways:
-
-- **Environment (process-wide):** `FALCON_LLM_PROVIDER` and the related `FALCON_LLM_*` variables below, resolved once per process. This behaviour is unchanged.
-- **Per invocation (CLI flags or a saved profile):** `--llm-profile=<name>`, `--llm-provider=<id>`, `--llm-model=<id>` resolve a provider for that single Falcon run. For fields like model, timeouts, and budgets, flags/profile take precedence over the environment. The provider itself is the exception: if `FALCON_LLM_PROVIDER` in the environment names a *different* provider than the flag/profile selects — including `FALCON_LLM_PROVIDER=disabled` or `=none`, the kill switch — Falcon exits with `CONFIG_CONFLICT` instead of overriding it; the operator must unset `FALCON_LLM_PROVIDER` (or select the same provider) to run with a different one. Saved profiles are non-secret metadata (provider, model, endpoint, credential variable name — never the key itself) managed with `npm run llm:profile:list|show|set|delete`. Precedence per field is: CLI flags > profile > `FALCON_LLM_*` environment > defaults.
-
-**BYOK (bring your own key):** Falcon never stores or logs your API key. A profile or the environment only names the environment variable that holds it (e.g. `ANTHROPIC_API_KEY`); the value is read from your shell environment when the selected provider builds its request and is sent only to that provider's endpoint.
-
-Untested or newly released model ids are not certified by Falcon — there is no model discovery, so you type the model id yourself, and the regression suite exercises mocked provider protocols, not live model quality. See [docs/maintenance-byok-operations.md](docs/maintenance-byok-operations.md) for full operational details.
-
-### Five-minute quickstart
-
-Install dependencies, export a key in your shell, and select exactly one provider for the run. Replace the URL and model placeholders with values available to your account; never put a real key in a profile, command argument, source file, or commit.
+In the first terminal, from the repository directory:
 
 ```bash
-npm ci
-
-# OpenAI (the model flag is optional; Falcon's current default is gpt-4o-mini)
-export OPENAI_API_KEY='<openai-key>'
-node falcon.js --url=https://staging.example.com --llm-provider=openai --llm-model='<openai-model-id>'
-
-# Anthropic
-export ANTHROPIC_API_KEY='<anthropic-key>'
-node falcon.js --url=https://staging.example.com --llm-provider=anthropic --llm-model='<anthropic-model-id>'
-
-# Gemini
-export GEMINI_API_KEY='<gemini-key>'
-node falcon.js --url=https://staging.example.com --llm-provider=gemini --llm-model='<gemini-model-id>'
+npm run fixture:serve -- --port=4173
 ```
 
-Run these commands separately. If `FALCON_LLM_PROVIDER` is already set to a different provider, unset it first; Falcon refuses conflicting provider configuration with `CONFIG_CONFLICT`. Use only a staging or disposable target because discovery clicks and fills real controls.
+This starts a disposable fixture at `http://127.0.0.1:4173`. Keep it running.
 
-### Provider compatibility
+### 3. Run Falcon
 
-“Supported” describes the implemented transport and mocked contract tests, not certification of every model sold by a vendor. No live provider calls were made during the Phase 17/BYOK release cycle because live keys were unavailable.
-
-| Route | Integration status | Test evidence | Live certification |
-|---|---|---|---|
-| OpenAI API | Native | Mock-tested request, response, failure, budget, and redaction paths | None in this release cycle |
-| Anthropic API | Native | Mock-tested request, response, failure, budget, and redaction paths | None in this release cycle |
-| Gemini API | Native | Mock-tested request, response, content-block, budget, and redaction paths | None in this release cycle |
-| Azure OpenAI | Native, API-key authentication | Mock-tested transport and isolation; Entra ID is not implemented | None in this release cycle |
-| OpenAI-compatible endpoint | Compatible transport with explicit endpoint opt-in and credential reference | Mock-tested custom-endpoint isolation and negative credential-forwarding cases | Endpoint/model dependent; not certified here |
-| AWS Bedrock | Unsupported | No native signing, authentication, or transport | None |
-| Google Vertex AI authentication | Unsupported | Gemini's direct API route does not implement Vertex IAM/authentication | None |
-| Other provider-specific APIs | Unsupported unless they implement the tested OpenAI-compatible contract | No native adapter | None |
-
-Model IDs are operator-supplied and may evolve independently of Falcon. Falcon does not discover vendor catalogues or claim universal frontier-model compatibility.
-
-### Switch providers safely
-
-Keep provider credentials in separate environment variables and select one provider per invocation. For example:
+In a second terminal, from the same directory:
 
 ```bash
-unset FALCON_LLM_PROVIDER
-export OPENAI_API_KEY='<openai-key>'
-node falcon.js --url=https://staging.example.com --llm-provider=openai --llm-model='<openai-model-id>'
-
-unset OPENAI_API_KEY
-export ANTHROPIC_API_KEY='<anthropic-key>'
-node falcon.js --url=https://staging.example.com --llm-provider=anthropic --llm-model='<anthropic-model-id>'
+node falcon.js --url=http://127.0.0.1:4173 --max-pages=5 --budget-ms=120000
 ```
 
-For repeatable switching, use named profiles that store only a provider, model, and credential-variable name—not its value:
+Open the dashboard URL printed in the terminal; the default is `http://localhost:3000`. Review the execution events, result totals, and pages omitted by the limits. The default configuration keeps the dashboard available for 60 seconds after completion; increase `DASHBOARD_LINGER_MS` in `.env` before a presentation if needed.
+
+**No API key or database is needed for this walkthrough.** With the fresh configuration above, Tier 3 is disabled. A first run collects evidence; it does not guarantee that a healing event will occur. This fixture walkthrough demonstrates discovery and execution.
+
+To watch Chromium as it runs, set `HEADLESS=false` in `.env`. Stop the fixture with **Ctrl+C** when finished.
+
+### 4. Evaluate your own staging app
+
+Replace the example URL with a test environment you control:
 
 ```bash
-npm run llm:profile:set -- team-anthropic --provider=anthropic --model='<anthropic-model-id>' --credential-env=ANTHROPIC_API_KEY
-node falcon.js --url=https://staging.example.com --llm-profile=team-anthropic
+node falcon.js --url=https://staging.example.com --max-pages=10 --budget-ms=180000
 ```
 
-```ini
-# Provider configuration (all optional; Tier 3 disabled if unset)
-FALCON_LLM_PROVIDER=openai              # openai | azure-openai | anthropic | gemini | openai-compatible | disabled
-FALCON_LLM_API_KEY=<your-key>           # or OPENAI_API_KEY for provider=openai
-FALCON_LLM_MODEL=<model-id>             # required for anthropic/gemini; optional elsewhere (openai default: gpt-4o-mini)
+For a customer pilot, choose a small set of representative journeys, prepare disposable data and any required authentication, and agree on success criteria before running. Measure coverage gaps, maintenance effort, recovery accuracy, and review effort on that application.
 
-# Azure OpenAI (when FALCON_LLM_PROVIDER=azure-openai)
-# FALCON_LLM_AZURE_RESOURCE=<your-resource>
-# FALCON_LLM_AZURE_HOST_SUFFIX=openai.azure.com
-# FALCON_LLM_AZURE_DEPLOYMENT=<deployment-name>
+<a id="bring-your-own-provider-key"></a>
 
-# Anthropic (when FALCON_LLM_PROVIDER=anthropic)
-# ANTHROPIC_API_KEY=<your-key>
-# FALCON_LLM_MODEL=<anthropic-model-id>
+## Optional AI: bring your own provider
 
-# Gemini (when FALCON_LLM_PROVIDER=gemini)
-# GEMINI_API_KEY=<your-key>
-# FALCON_LLM_MODEL=<gemini-model-id>
+Falcon's local recovery works without an LLM. Enable Tier 3 when your evaluation needs provider-assisted candidate selection.
 
-# OpenAI-compatible endpoint (when FALCON_LLM_PROVIDER=openai-compatible)
-# FALCON_LLM_ENDPOINT=https://<host>/v1
-# FALCON_LLM_ALLOW_CUSTOM_ENDPOINT=true
-# FALCON_LLM_ALLOW_HTTP_LOOPBACK=true   # only to allow http:// on loopback
-```
+| Provider route | Provider ID | Key consideration |
+| --- | --- | --- |
+| OpenAI | `openai` | Explicit provider selection and credentials required. |
+| Anthropic | `anthropic` | Supply a model ID available to your account. |
+| Gemini direct API | `gemini` | Supply a model ID; Vertex AI authentication is not implemented. |
+| Azure OpenAI | `azure-openai` | API-key authentication; configure resource, host suffix, and deployment. Entra ID is not implemented. |
+| OpenAI-compatible endpoint | `openai-compatible` | Requires explicit custom-endpoint opt-in; compatibility depends on the endpoint and model. |
 
-Per-invocation equivalents, instead of environment variables:
+After supplying `OPENAI_API_KEY` through your environment or secret manager:
 
 ```bash
-node falcon.js --llm-provider=anthropic --llm-model=<anthropic-model-id>
-node falcon.js --llm-provider=gemini --llm-model=<gemini-model-id>
-node falcon.js --llm-profile=my-saved-profile
+node falcon.js --url=https://staging.example.com --llm-provider=openai --llm-model="<model-id>"
 ```
 
-Without a provider configured (by flag, profile, or environment), Falcon runs Tiers 1, 2 and 2.5 only; no network call is made. An unresolved selector falls back gracefully instead of failing.
+Replace `<model-id>` with a model available to your account. An API key alone does not enable Tier 3. A conflicting `FALCON_LLM_PROVIDER` setting causes `CONFIG_CONFLICT`; align or unset it before selecting a different provider.
 
-**Data sent to the LLM provider:** the failing selector, step description, action type, and candidate element descriptors (tag name, selected attributes including `aria-label`, and text). The candidate count defaults to 20 and is configurable up to the 60-element collection cap; the complete prompt is always capped at 8 KiB. Never sent: full DOM, cookies, storage, environment variables, complete form contents, authentication tokens, or full page HTML.
+Named profiles store provider settings and a credential environment-variable name, **never the key value**. See the [BYOK operations guide](docs/maintenance-byok-operations.md) for profiles, credential isolation, budgets, and provider switching.
 
-**Approval gate:** unchanged from Phase 8. An inferred selector is a proposal, not trusted evidence. It runs once in the current test and awaits human review before being stored for reuse. See [Healing trust: reviewing and approving Tier 3 fixes (Phase 8)](#healing-trust-reviewing-and-approving-tier-3-fixes-phase-8).
+**What leaves the machine:** the failing selector, action, step description, and bounded candidate descriptors such as tag names, selected attributes, and text are sent to the selected endpoint. The prompt defaults to 20 candidates, supports up to 60, and is capped at 8 KiB. Falcon does not send the full page DOM, cookies, storage, or environment variables in this payload. Candidate labels and text can still contain application data.
 
-For detailed configuration and operations, see [docs/phase-17-operations.md](docs/phase-17-operations.md) and [docs/architecture/phase-17-pluggable-llm-providers.md](docs/architecture/phase-17-pluggable-llm-providers.md). Maintainers preparing a public update should also use the factual boundary and checklist in [docs/ANNOUNCEMENT-READINESS.md](docs/ANNOUNCEMENT-READINESS.md).
+The provider release was tested against mocked protocols. It does not certify live provider behavior, every vendor model, AWS Bedrock, or other unimplemented authentication methods.
 
----
+<a id="ci-cd"></a>
 
-## Production-cycle dashboard
+## Results your team can review
 
-Falcon records and streams test execution events to a production-cycle coordinator and offers a read-only dashboard for viewing recorded runs:
+- **Execution results:** pass, fail, and skip outcomes, plus pages left untested and the reason.
+- **Recovery evidence:** which recovery stage was used, proposals awaiting review, and scoped decisions.
+- **Visual evidence:** screenshot baselines and differences when visual regression checks are used.
+- **Stability signals:** repeated-run classification, quarantine review, and history trends.
+- **CI artifacts:** regression reports, scenario reports, and Allure output from the repository workflow.
 
-```sh
-npm run production:event                          # emit a custom event (manual use)
-npm run production:dashboard -- --run-id=<id>    # view recorded events for a run (loopback only)
-```
+The [GitHub Actions workflow](.github/workflows/ci.yml) exercises regression checks, browser tests, scenario tests with a seeded PostgreSQL service, and sharding/merge behavior. See [current workflow runs](https://github.com/eddieir/Falcon-Automation/actions/workflows/ci.yml) for commit-specific results.
 
-The dashboard connects to localhost only; it is read-only and displays coordinator-recorded events. All data shown is ledger-asserted and not authenticated — it reflects what the coordinator has persisted, not external verification. Use the `--run-id` parameter to filter events to a specific run.
+<a id="running-tests"></a>
 
-For detailed information, see [docs/architecture/phase-17-production-cycle-dashboard.md](docs/architecture/phase-17-production-cycle-dashboard.md).
+### Useful commands
 
----
+Run these from the repository root after installation:
 
-## State Durability and Recovery (Phase 12)
+| Task | Command |
+| --- | --- |
+| Run without the live dashboard | `node falcon.js --url=http://127.0.0.1:4173 --no-dashboard` |
+| Repeat generated scenarios for stability analysis | `node falcon.js --url=http://127.0.0.1:4173 --repeat=3` |
+| Run independent pages with two workers | `node falcon.js --url=http://127.0.0.1:4173 --workers=2` |
+| Run Node.js regression checks | `npm run test:regression` |
+| Run browser regression checks | `npm run test:browser` |
+| Run both regression layers | `npm test` |
+| Inspect run history | `npm run history:list` |
+| Run the recorded third-party UI demo suite | `npm run test:demo` |
+| Generate and open an Allure report from existing results | `npm run report` |
 
-Falcon's decision ledgers and scenario history are persisted across runs. To ensure an interrupted write cannot truncate a file, all four state files (`scenario_history.json`, `quarantine_decisions.json`, `healing_pending.json`, `healing_decisions.json`) are now written to a temporary file in the same directory and renamed into place, making the write atomic at the filesystem level.
+Keep the local fixture running for commands targeting port 4173. The recorded third-party suite needs network access and is intentionally excluded from CI. For sharding, merge validation, and worker limitations, see [parallel execution operations](docs/phase-16-operations.md).
 
-If a state file cannot be parsed (corrupt JSON), Falcon logs a warning naming the file, preserves the original bytes beside it as `<name>.corrupt-<timestamp>-<pid>-<uuid>`, starts from empty state and continues the run. An existing sidecar is never overwritten. The warning does not include the parser's own message to avoid quoting file contents in logs.
+## Deployment and data handling
 
-When you see a `.corrupt-*` file appear next to a state file, the operator should:
-1. Inspect the sidecar to understand what was lost or corrupted
-2. Manually recover any critical decisions (e.g., re-quarantine a scenario if its decision was lost)
-3. Delete the sidecar deliberately once recovered
+Falcon runs in your own Node.js environment or CI runner. The dashboard binds to loopback by default; a non-loopback bind requires `DASHBOARD_TOKEN`. Use the printed dashboard URL and follow the [configuration reference](.env.example) when enabling remote access.
 
-A concurrent-write scenario is not supported by the atomic-rename model: two Falcon processes writing the same state file can still lose one another's updates. The supported model is one writer at a time per state file.
+Local locator memory, reports, screenshots, and history can contain application details. Keep runtime artifacts out of source control and apply your team's access and retention rules. Locator memory includes bounded plaintext fields; hashed attributes do not make the file anonymous. For sensitive evaluations, configure and securely retain a stable `FALCON_LOCATOR_SALT`.
 
----
+The current review audit records decision channels such as CLI and dashboard, not authenticated individual identities. Evaluate those controls against your organization's requirements before broader adoption. Report vulnerabilities through the [security policy](SECURITY.md).
 
-## Staleness and Rehabilitation (Phase 13)
+## Documentation
 
-Falcon creates queues of human decisions: pending healing fixes await review, and quarantined scenarios remain hidden from the build. Neither creates enough urgency on its own, so both can accumulate indefinitely while the framework stays silent about the cost.
+| Start here | What you will find |
+| --- | --- |
+| [Architecture guide](docs/ARCHITECTURE.md) | Runtime layers, execution flows, recovery, trust boundaries, deployment, and detailed design links. |
+| [Environment configuration](.env.example) | Browser, dashboard, database, provider, and history settings. |
+| [BYOK operations](docs/maintenance-byok-operations.md) | Invocation-scoped providers, profiles, and credentials. |
+| [Provider architecture](docs/architecture/maintenance-byok-invocation-scoped-providers.md) | Provider context and isolation design. |
+| [Parallel execution operations](docs/phase-16-operations.md) | Workers, shards, merge behavior, and constraints. |
+| [Historical technical reference](docs/technical-reference.md) | The previous detailed README, including demo walkthroughs, operational background, and phase history. |
+| [Release history](CHANGELOG.md) | Delivered changes and fixes. |
+| [Development plans](docs/PHASE-PLANS.md) | Phase plans and implementation context. |
+| [Contributing](CONTRIBUTING.md) | Development and contribution guidance. |
 
-Phase 13 makes both visible. A pending fix older than a configurable threshold or a quarantined scenario that has passed its last N runs surfaces in a new review status check, so the queue cannot rot unnoticed.
+<a id="roadmap"></a>
 
-### Staleness thresholds
+## Project status and license
 
-Three new optional environment variables, validated at read time (reject invalid values with a clear message naming the setting):
+Falcon is an **open-source technical preview in active development**. Evaluate it against your own application, assertions, data policies, and CI requirements. The repository's [announcement readiness notes](docs/ANNOUNCEMENT-READINESS.md) document the evidence and limits behind the provider release.
 
-```ini
-# How long an unreviewed pending healing fix can sit before it's flagged stale.
-# Integer 1-3650 days; default 14. Age measured from the fix's firstSeen.
-# Boundary rule: a record exactly ON the threshold is NOT stale.
-HEALING_PENDING_STALE_DAYS=14
-
-# How long a flaky, non-quarantined scenario can sit before it's flagged stale.
-# Integer 1-3650 days; default 14. Age measured from the scenario's flakySince.
-FLAKY_UNREVIEWED_STALE_DAYS=14
-
-# How many consecutive passed results a quarantined scenario needs to surface
-# as a rehabilitation candidate (still quarantined, never auto-unquarantined).
-# Integer 1-20; default 5. A failure resets the counter.
-REHAB_CANDIDATE_WINDOW=5
-```
-
-### Review status check
-
-`scripts/review/status.js` reports staleness and surfaces rehabilitation candidates:
-
-```sh
-npm run review:status          # soft-warning mode: print findings, exit 0
-npm run review:status:strict   # hard-gate mode: print findings, exit 1 if anything stale
-node scripts/review/status.js --fail-on-stale  # same as :strict
-```
-
-Exit codes:
-
-| Situation | Exit |
-|---|---|
-| Nothing stale | 0 |
-| Something stale, no `--fail-on-stale` flag | 0 (findings printed) |
-| Something stale, with `--fail-on-stale` | 1 |
-| Invalid configuration (bad env values) | 2 |
-| Unrecognized argument | 3 |
-| State files missing or empty | 0 |
-| State file corrupt (JSON parse error) | 0 (recovered to empty, warned, original preserved as `.corrupt-*`) |
-
-The check accepts exactly one flag, `--fail-on-stale`, and deliberately no flag that takes a path or reads a config file.
-
-### Quarantine rehabilitation
-
-A quarantined scenario is surfaced as a rehabilitation candidate once its most recent `REHAB_CANDIDATE_WINDOW` recorded outcomes **from after it was quarantined** have all passed. Only results timestamped at or after `quarantinedAt` count, so passes the scenario accumulated *before* being quarantined can never make it look recovered — the point is evidence of good behaviour since the quarantine, not before it. A scenario with fewer than that many post-quarantine results is not a candidate, and a legacy quarantine with no usable `quarantinedAt` is conservatively never a candidate rather than being judged on guessed timing.
-
-It remains quarantined (never auto-unquarantined — lifting a quarantine stays an explicit human action), but the candidate shows up:
-
-- In `npm run review:status` output
-- In the `flaky:list` command, filtered or unfiltered
-- In `node scripts/flakiness/review.js rehab` (read-only subcommand)
-- In the dashboard's `GET /flakiness/rehabilitation` route and "Flaky tests" panel
-
-A scenario with fewer than N recorded outcomes is not a candidate. Any failure removes candidacy and resets the counter. `unavailable` (a form field that can't be found) is stored as a failure, so it disqualifies.
-
-### Rejection memory
-
-A pending healing fix now carries `previouslyRejected: { count, lastRejectedAt, lastRejectedBy }`, visible in the CLI and dashboard. When a selector-suggestion pair that was previously rejected is proposed again, the rejection is flagged so a human can see the history.
-
-**Important limitation:** Rejection memory is computed by folding the healing decision ledger, which is now capped at the newest 500 rows. Once a rejection ages out of that window, the pair can be proposed again as if new. This is a deliberate consequence of closing D7 and D9 together with a single source of truth rather than a second store that could disagree — read [CHANGELOG.md](CHANGELOG.md#phase-13) for the trade-off.
-
-### Tier 3 invocation visibility
-
-A pending fix carries `tier3Invocations`, counted at the real Tier 3 call boundary — every call to the selector-inference step, including calls that return nothing or whose healed action then fails. This counter is displayed by `scripts/healing/review.js list` and in the dashboard healing panel.
-
-**Terminology is binding: this is an INVOCATION COUNT, not a cost estimate.** No dollar figure, token count, or pricing data is captured or displayed anywhere. `occurrences` (times re-recorded as pending) and `tier3Invocations` (times Tier 3 was called) are distinct and must never be conflated.
-
-### Bounded state
-
-Both decision ledgers — healing approvals/rejections and quarantine decisions — are now newest-N ring buffers at 500 rows. The pending healing queue is LRU-capped at 200 entries by `lastSeen`. Eviction is logged at `info` level.
-
-Both ledgers and the pending queue are capped on load and persisted to disk, so an already-oversized file is genuinely repaired rather than re-trimmed on every start. The pending queue keeps the newest 200 entries by `lastSeen`; entries with no usable `lastSeen` sort oldest with ties broken by key (deterministic). Every eviction is logged by selector identity so nothing disappears silently.
-
----
-
-## Flaky-Test Detection (Phase 9)
-
-A failing scenario has always been reported as `failed`, full stop, with no way to tell "the app genuinely broke" from "this interaction is just unreliable." That distinction matters: test-maintenance surveys consistently point at flaky tests as one of the fastest-growing sources of wasted QA time, and a team that can't tell the two apart either chases ghosts or, worse, starts ignoring red builds altogether.
-
-`FlakinessTracker` records every scenario's outcome (`passed`/`failed`; `skipped` carries no signal about the interaction itself and isn't recorded), keyed by `<page url>::<action>::<locator>`, independent of the scenario's occasionally-regenerated human-readable description. Each scenario's most recent 10 outcomes are classified:
-
-| Classification | Meaning |
-|---|---|
-| `new` | Fewer than 3 outcomes recorded yet; not enough data to say anything |
-| `stable` | Every recent outcome passed |
-| `broken` | Every recent outcome failed: a real, consistent regression. This stays loud; it is never a quarantine candidate |
-| `flaky` | A mix of passes and failures for the *exact same* interaction |
-
-Every scenario's outcome is one of: `passed`, `failed`, `skipped`, `quarantined`, `deduped`, or `unavailable`. The `unavailable` status is new in Phase 12: a supported `type` or `select` target that the full three-tier healing chain cannot resolve. `unavailable` is distinct from `skipped` (an action type Falcon does not implement), is its own reporting bucket, and gates the run like a failure — a run containing unavailable scenarios cannot report PASSED. Unavailable samples are recorded by `FlakinessTracker` and count toward classification: a target that is sometimes present and sometimes absent classifies as `flaky`, not `stable`.
-
-Classifying a scenario as flaky never changes what happens on its own: nothing is auto-quarantined. A **human** decides, either from the live dashboard's "Flaky tests" panel or headlessly:
-
-A scenario that has never passed cannot be quarantined at all, and that's enforced rather than merely documented: `FlakinessTracker.quarantineEligibility()` is the single rule, and the tracker, the `POST /flakiness/quarantine` route (409, with the reason), the CLI (`Refused: …`, exit 1) and the dashboard panel (no button, just why) all defer to it. The rule is "has passed at least once", not "isn't classified `broken`" — a scenario that has only ever failed twice is still `new`, because two samples are under the verdict threshold, and buying *that* out of the exit code would hide a regression just as effectively. There's no force flag. It becomes quarantinable the moment it genuinely passes once, which is the moment "unreliable" becomes the true description of it.
-
-```sh
-node scripts/flakiness/review.js list                       # every tracked scenario; add new|stable|broken|flaky to filter
-node scripts/flakiness/review.js quarantine "<scenario-key>"
-node scripts/flakiness/review.js unquarantine "<scenario-key>"
-node scripts/flakiness/review.js rehab                       # read-only: rehabilitation candidates (Phase 13)
-```
-
-Quarantining a scenario changes only how a subsequent failure is *reported*: `TestRunner` reports it as `quarantined` instead of `failed`, a status `ReportManager` deliberately excludes from both the "does this run pass" and "is this a real regression" checks, so a quarantined failure never flips a green build red, never merges silently into `passed` either, and always stays visible in the run summary (`Total: 5 | Passed: 3 | Failed: 0 | Skipped: 0 | Quarantined: 2`). The quarantined interaction is still run, still recorded, and still contributes to its own classification going forward. Quarantining is a CI-blocking decision, not a coverage decision.
-
-**Phase 13 — Rehabilitation candidates:** A quarantined scenario that has passed its last `REHAB_CANDIDATE_WINDOW` consecutive runs **since being quarantined** (default 5) is surfaced as a rehabilitation candidate, in the CLI, the API routes, and the dashboard panel. Pre-quarantine passes do not count. It remains quarantined until a human explicitly unquarantines it — nothing is auto-promoted. If it fails again, it drops out of candidacy and the counter resets.
-
-`GET /flakiness/scenarios`, `GET /flakiness/scenarios?classification=flaky`, `POST /flakiness/quarantine`, and `POST /flakiness/unquarantine` back the dashboard panel, gated by the same `DASHBOARD_TOKEN` and rate limiter as every other dashboard route. `data/scenario_history.json` (bounded to 500 tracked scenarios, LRU-evicted, 20 outcomes kept per scenario) and `data/quarantine_decisions.json` (the audit ledger) are both gitignored, the same as the Phase 8 healing files.
-
-The `by` field recorded in `data/quarantine_decisions.json` is a free-text operator label, not a validated email address or user ID, and now persists across CI runs via the workflow's state cache — audit consumers should not assume uniqueness, identity-verification, or email format.
-
----
-
-## Run History and Trend
-
-Falcon records aggregate data from each `node falcon.js` run to track quality over time: pass rate, heal rate, test duration, review queue depth, and quarantine count. The ledger (`data/run_history.json`) holds up to 500 records, one per run, with no URLs, selectors, page text, error messages or scenario names — only outcome counts, coverage, tier-specific heal classifications, and commit/branch info.
-
-```sh
-npm run history:list                          # newest first; --limit=N for N ≤ 500 (default 20)
-npm run history:export -- --format=json       # all valid runs, oldest first
-npm run history:export -- --format=csv        # CSV with one row per run
-npm run history:check                         # advisory trend flags for the latest complete run
-npm run history:check -- --strict             # same, but exit 1 if any flag is raised
-```
-
-Exit codes: `0` success (including a missing ledger or `FALCON_RUN_HISTORY=off`); `1` from `history:check --strict` when a flag is raised; `2` on usage error, unreadable ledger, or invalid config.
-
-**Trend signals** (advisory only; never change `falcon.js`'s exit code):
-- **Heal-rate spike:** current ≥ 0.10 and rises above baseline
-- **Pass-rate decay:** current < 0.95 and falls below baseline
-- **Duration regression:** current grows beyond baseline
-- **Review backlog:** pending-approval count rises across runs
-- **Quarantine growth:** quarantine count exceeds baseline
-
-Flags require **10 complete baseline runs on the same branch with the same repeat count**. The 11th run is the first that can raise a flag. Baseline size and minimum are overridable via `FALCON_TREND_BASELINE_N` and `FALCON_TREND_MIN_BASELINE`. Flags are suppressed (with a reason reported) for incomplete runs, reduced coverage, or fewer than 10 eligible baselines.
-
-View history without running a test:
-
-```sh
-npm run dashboard              # serves the dashboard (incl. History panel) on localhost:3000; Ctrl-C to stop
-```
-
-**Optional:** disable history recording with `FALCON_RUN_HISTORY=off` (`0` and `false` also work).
-
-**In CI:** history is cached on a separate per-branch key; exports appear in `reports/history/` under the 14-day `falcon-reports` artifact; an advisory trend summary is written to the job page; `main` also uploads the ledger as a 90-day `run-history` artifact. Idle branches lose cached history after 7 days; PR runs start with an empty ledger.
-
----
-
-## CI/CD
-
-GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `New_era_Falcon`, `main`, `feat/**`, and `test/**` branches, and on every pull request targeting `New_era_Falcon` or `main`. It's two independent jobs, not one:
-
-**`regression` job** (~1 minute): the `node:test` + Playwright layer added alongside the community-health files:
-1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
-2. `npm run test:coverage`: the current `node:test` cases across `tests/regression/*.check.cjs` (reporting, DB scenarios, healing, flakiness, CLI, API, boundaries, dashboard, visual regression, plan generation)
-3. `npm run test:browser`: the Playwright specs in `tests/regression/browser.spec.js`, exercising `PageAnalyser`/`ClickExplorer`/`AIHealer`/`TestGenerator`/`TestRunner` directly against inline HTML fixtures, no real target site
-4. Uploads `reports/` as the `regression-reports` artifact
-
-**`test` job** (~1.5 minutes): the original scenario/E2E pipeline, against a real seeded Postgres:
-1. Checkout → `actions/setup-node@v4` (Node 24) → `npm ci` → `npx playwright install --with-deps chromium`
-2. Three fast, no-browser/no-DB regression checks: `tests/unit/ReportManagerExitCode.check.js`, `tests/unit/DBConfigBehavior.check.js`, and `tests/unit/DashboardAuth.check.js`
-3. **Postgres service container** (`postgres:16-alpine`, disposable, health-checked) is seeded via `scripts/db/ci-seed.sql`
-4. Visual-regression baselines restored from cache (`actions/cache@v4`, keyed on branch name)
-5. **Flakiness and healing state restored from cache** (`data/scenario_history.json`, `data/quarantine_decisions.json`, `data/healing_pending.json`, `data/healing_decisions.json`), branch-keyed with fallback to the most recent cache on that branch. This enables flaky-test classification and quarantine decisions to survive across CI runs. Note: `data/locator_store.json` is deliberately not cached (restoring approved Tier 2 selectors would change how healing behaves in CI); CI reads it fresh. State is saved back after the pipeline runs, even on failure, because a failure is a sample.
-6. Scenario tests: `LoginTest`, `CheckoutTest`, `UserApiTest`, `ProductApiTest`, then `UserDBTest` and `OrderDBTest` against the real seeded database. None of these use `continue-on-error`; a real failure fails the job
-7. `node falcon.js --no-dashboard --repeat=3`, the autonomous pipeline with three repetitions per page, enabling classification without depending on cached history
-8. `npx playwright test`, the Playwright-native suite with the Allure reporter — no `continue-on-error` here either, so a failure in it fails the job
-9. Allure report generated (`npx allure awesome`) and uploaded alongside `reports/` as the `falcon-reports` artifact
-
-The full, current file is the source of truth; see `.github/workflows/ci.yml`. [CHANGELOG.md](CHANGELOG.md)'s Phase 3, Phase 6, and Phase 7 sections document why specific pieces of the `test` job exist (Allure's CLI quirks, the visual-regression cache, the Postgres service container, the three regression checks).
-
-Node 22+ is required locally (the openai SDK's floor; `test:coverage`/`test:regression` also need a recent Node for `--test-concurrency` and `--experimental-test-coverage` alongside `--test`; see `engines` in `package.json`); CI is pinned to Node 24 and has always been fine, but an older local Node fails these two scripts with a plain `node: bad option` instead of a useful message.
-
----
-
-## Parallel execution and sharding (Phase 16)
-
-Status: merged into `main` through pull request #48. Sequential runs remain the default.
-
-```bash
-node falcon.js --url=https://your-app.example --workers=2          # page-level parallelism, 1 to 16
-node falcon.js --url=https://your-app.example --shard=1/2 --run-id=local-run-1
-node falcon.js merge --input=reports/shards/local-run-1 --expect-total=2
-# optional strict checks, exit 2 on mismatch: --expect-run-id=<id> --expect-commit=<sha>
-```
-
-- `--workers=N` runs pages in parallel. Scenarios within a page stay sequential.
-- `--shard=I/N --run-id=<id>` runs one shard and writes a bundle only. The merge command combines bundles into one report and one history record. `--workers=M` can be added to a shard to run that shard's pages M at a time; page ownership and the merged result do not change with M.
-- Benchmark on a local fixture (200 ms page delay): 2.80x end to end with 2 workers and 4.15x with 4 workers. Most of that gain is a cheaper parallel discovery pass (about 11.4 s of sequential discovery becomes about 1 s); the page work alone scales 1.11x and 1.88x. The numbers are specific to this fixture and machine and do not show linear scaling.
-- Only pages run in parallel. Pages must be independent. `storageState` is copied into each worker context and is not synchronized across contexts.
-- Parallel and shard runs use a different link-discovery pass from the sequential crawl, so the page set can differ on unusual sites.
-
-Limitations, merge exit codes and CI details: [docs/phase-16-operations.md](docs/phase-16-operations.md).
-
-## Running Tests
-
-```sh
-# Full autonomous pipeline with live dashboard
-node falcon.js
-
-# Same, with the dashboard requiring a token (see CHANGELOG.md#phase-7--dashboard-hardening). Open the
-# printed URL once; it carries ?token=..., which the dashboard swaps for a cookie
-DASHBOARD_TOKEN=some-secret node falcon.js --dashboard
-
-# Autonomous pipeline without dashboard (CI / headless environments)
-node falcon.js --no-dashboard
-
-# Whole-app coverage (Phase 10). A run sweeps every page it discovers,
-# bounded by a page cap and a wall-clock budget. Every page it doesn't
-# cover appears in the report with a reason.
-node falcon.js --url=https://your-app.example.com --max-pages=25
-node falcon.js --url=https://your-app.example.com --budget-ms=120000
-node falcon.js --url=https://your-app.example.com --no-dedupe          # run shared nav on every page
-node falcon.js --url=https://your-app.example.com --allow-cross-origin # follow links off-origin
-node falcon.js --url=https://your-app.example.com --single-page        # entry page only
-
-# Repetition for classification (Phase 12). A single run can now reach the
-# 3-sample minimum needed to classify a scenario without waiting for cached history.
-# Re-executes each page's generated test plan N times, starting from a fresh load.
-# Valid values: 1–50. Invalid values fail before the dashboard starts (unlike 
-# --max-pages/--budget-ms, which warn and fall back; a silent --repeat=1 would be
-# indistinguishable from a user not asking to repeat). With --repeat=3, the
-# budget-ms is checked between pages and covers all repetitions collectively, so
-# later pages may be skipped if time is exhausted.
-node falcon.js --url=https://your-app.example.com --repeat=3
-
-# Individual scenario tests
-node tests/ui/LoginTest.js
-node tests/ui/CheckoutTest.js
-node tests/api/UserApiTest.js
-node tests/api/ProductApiTest.js
-
-# Database tests: skip cleanly (exit 0) if DB_HOST/DB_USER aren't set
-node tests/db/UserDBTest.js
-node tests/db/OrderDBTest.js
-
-# Regression tests (no browser, no DB): safe to run anywhere, anytime
-npm run test:unit
-
-# The larger node:test + Playwright regression layer (needs Node 22+;
-# see Installation). This is what the "regression" CI job runs.
-npm run test:regression   # current node:test cases, tests/regression/*.check.cjs
-npm run test:browser      # Playwright specs, tests/regression/browser.spec.js
-npm run test:coverage     # same as test:regression, with coverage collection
-
-# Same, but reporting into an already-running `node falcon.js` dashboard
-# (each test file is its own process, so this needs the explicit URL, and,
-# if the dashboard requires a token, DASHBOARD_TOKEN too)
-DASHBOARD_URL=http://localhost:3000 node tests/ui/LoginTest.js
-
-# Review status: pending healing fixes and flaky scenarios (Phase 13)
-npm run review:status            # soft-warning: print staleness, exit 0
-npm run review:status:strict     # hard-gate: print staleness, exit 1 if anything stale
-node scripts/review/status.js --fail-on-stale  # same as review:status:strict
-
-# The recorded UI suite: a real browser against the live axonradar.netlify.app.
-# Not part of `npx playwright test` and not in CI — it depends on a
-# third-party site being up. Records a video per test into reports/.
-npm run test:demo
-HEADLESS=false npm run test:demo   # watch it in a visible browser
-npm run demo:record                # ...then rebuild the README GIF/MP4 (needs ffmpeg)
-
-# Playwright native suite (allure-playwright reporter active)
-npx playwright test
-
-# Generate and open Allure report
-npx allure awesome allure-results -o allure-report
-npx allure open allure-report
-```
-
----
-
-## Roadmap
-
-Falcon's differentiator is genuine self-healing, not a hardcoded selector list, but "AI healed this selector" is only as trustworthy as the visibility behind it, and a red build is only as trustworthy as the data behind why it's red. That's the throughline for what's next.
-
-Detailed plans for the phases ahead, with implementation specifications and acceptance criteria, are in [docs/PHASE-PLANS.md](docs/PHASE-PLANS.md).
-
-✅ Shipped since the last update:
-- **Run history and trend analysis.** A QA lead's question is "are we getting better or worse?" Falcon now records a bounded ledger of aggregate data from each run (`data/run_history.json`, ≤500 records): pass rate, heal rate, duration, review queue depth, quarantine count, and commit/branch metadata. Advisory trend signals flag heal-rate spikes, pass-rate decay, duration regression, review backlog growth, and quarantine growth, raising a flag only after 10 complete baseline runs on the same branch. `npm run history:list|export|check` provides CLI access; `npm run dashboard` serves the history panel without a test run. CI caches the ledger per branch, exports it to the reports artifact, and uploads a 90-day recovery copy on main. Flags are advisory and never change the test run's exit code.
-- **Healing that needs no model, and refuses rather than guess.** Between scoped replay of an already-approved selector and an LLM tier that needs a key and a network, there was nothing — so an evaluator without `OPENAI_API_KEY` effectively had two tiers, the second of which only fired when the exact replacement had been approved earlier. Falcon now scores live candidates against the stored signature of the element it last interacted with, deterministically and entirely locally, and treats refusal as a first-class outcome that carries its reason. A candidate it accepts is a proposal, not trusted evidence: only a human approval, or a real successful interaction with the developer's own selector, creates trust. Identity values are stored as salted hashes, locator memory never leaves the machine, and the published mutation benchmark reports the cases Falcon gets wrong alongside the ones it gets right.
-- **Healing that covers every action, and a run that can't go green having verified nothing.** Healing used to apply to clicks alone: a renamed input was marked `skipped` before the healer was ever consulted, and because a skip isn't a failure, two skips beside one pass reported PASSED and exited 0. A renamed field quietly cost coverage and the build stayed green over it. `type` and `select` now go through the same three tiers a click does, with the same approval gate; an unresolvable target fails instead of skipping; and `passed`, `failed` and `quarantined` are the only statuses that count as a verdict, so a run without one of them exits 1 like an empty run. A scenario that navigates away also no longer leaves the rest of its plan running against the page it landed on.
-- **Coverage of the whole app, not just the page you pointed at.** Falcon used to crawl a site, discard every page it found, and generate tests for the entry URL alone. A run now sweeps every page it discovers, bounded by a page cap and a wall-clock budget, deduplicating the navigation that repeats on every page, and reporting each page it didn't cover along with why. Against a real 11-page site that's the difference between 1 page and 4 scenarios, and 6 pages and 91 scenarios, from the same command.
-- **Flaky-test detection and quarantine.** `FlakinessTracker` classifies every scenario (`new`/`stable`/`broken`/`flaky`) from its real pass/fail history, so a genuinely unreliable interaction is told apart from a real regression instead of both just being "failed." A human quarantines a flaky scenario, from the dashboard's "Flaky tests" panel or `scripts/flakiness/review.js`; a quarantined failure is reported as `quarantined`, not `failed`, still visible in every report, and never silently merged into a passing result either.
-- **An approval gate for AI-inferred selector fixes.** A Tier 3 (LLM) success used to be written straight into `LocatorStore` and trusted for reuse the moment it worked once. It now produces a scoped `LocatorMemory` proposal, visible on the dashboard locator panel or via `scripts/healing/review.js locator-list`, and only becomes a trusted Tier 2 alternative after durable approval of its current proposal ID; rejecting it discards the fix while keeping an audit record. `HealingReport.summary()` also aggregates the full healing log into a reviewable trend, selector by selector, tier by tier, instead of a flat event list.
-- A single, consolidated self-healing engine across every entry point: one three-tier chain (retry to locator cache to LLM), with `LocatorStore` now bounded so it can't grow unbounded over a long project history.
-- **Real coverage of the data layer, not just the UI.** DB tests now run against a real, disposable Postgres in CI instead of being silently absent, and, more fundamentally, every scenario test's process exit code now actually matches its reported pass/fail result, so a green CI check means the tests actually passed, not just that the process didn't crash.
-- **A dashboard built for teams, not just a laptop.** Token-gated auth means the live dashboard can now be safely pointed at from CI or a shared environment, not just a single trusted laptop. Unauthenticated requests and socket connections are rejected outright rather than quietly allowed through.
-
-This roadmap tracks ongoing engineering priorities, not a fixed release schedule.
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, validation, and pull request guidance. All participants must follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately using the [security policy](SECURITY.md).
-
-1. Branch off `main`; every merged PR to date has targeted it directly
-2. One logical change per commit; write the commit body as a tech-lead-quality explanation of *why*, not just *what*
-3. Update this README for any new capability or changed behaviour
-4. All tests must pass in headless mode before opening a PR
-
----
-
-## License
-
-MIT. See [LICENSE](LICENSE)
+Released under the [MIT License](LICENSE). Created by **Peyman Iravani**.
