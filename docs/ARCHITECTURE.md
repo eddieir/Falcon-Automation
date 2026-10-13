@@ -63,59 +63,39 @@ Component names above map to the repository so an evaluator can move from this o
 
 ```mermaid
 flowchart TB
-    subgraph TopRow[" "]
-        direction LR
+    Start(["Action with developer selector"])
+    Retry{"1 · Original selector works?"}
+    DirectOK(["Action completed<br/>Evidence captured"])
 
-        subgraph Direct["1 · Direct attempt"]
-            direction TB
-            Start(["Action with<br/>developer selector"])
-            Retry{"Original selector<br/>works?"}
-            Execute(["Execute action<br/>Capture evidence"])
-            Start --> Retry
-            Retry -- "Yes" --> Execute
-        end
+    Approved{"2 · Approved replacement valid?"}
+    ApprovedOK(["Action completed<br/>Approved replacement used"])
+    Match{"2 · Local match confident<br/>and unambiguous?"}
 
-        subgraph Local["2 · Local recovery"]
-            direction TB
-            Approved{"Approved scoped<br/>replacement valid?"}
-            Replay(["Execute approved<br/>replacement"])
-            Match{"Local match confident<br/>and unambiguous?"}
-            Approved -- "Yes" --> Replay
-            Approved -- "No" --> Match
-        end
-    end
+    Enabled{"3 · Tier 3 enabled?"}
+    Request["Provider selects from<br/>bounded candidates"]
+    Verify{"3 · Candidate still unique,<br/>visible, and compatible?"}
+    Failed(["Target unavailable"])
 
-    subgraph BottomRow[" "]
-        direction LR
+    Proposal["Action completed once<br/>Review proposal created"]
+    Decision{"4 · Human review"}
+    Trusted(["Approved<br/>Scoped reuse allowed"])
+    Rejected(["Rejected<br/>Audited, never reused"])
 
-        subgraph Provider["3 · Optional AI provider"]
-            direction TB
-            Enabled{"Tier 3<br/>enabled?"}
-            Request["Send bounded<br/>candidate list"]
-            Verify{"Candidate still unique,<br/>visible, and compatible?"}
-            Failed(["Target unavailable"])
-            Enabled -- "Yes" --> Request
-            Enabled -- "No" --> Failed
-            Request --> Verify
-            Verify -- "No" --> Failed
-        end
-
-        subgraph Governance["4 · Review and trust"]
-            direction TB
-            Proposal["Execute once<br/>Create review proposal"]
-            Decision{"Human review"}
-            Trusted(["Approved<br/>Scoped reuse allowed"])
-            Rejected(["Rejected<br/>Audited, never reused"])
-            Proposal --> Decision
-            Decision -- "Approve" --> Trusted
-            Decision -- "Reject" --> Rejected
-        end
-    end
-
+    Start --> Retry
+    Retry -- "Yes" --> DirectOK
     Retry -- "No" --> Approved
-    Match -- "No" --> Enabled
+    Approved -- "Yes" --> ApprovedOK
+    Approved -- "No" --> Match
     Match -- "Yes" --> Proposal
+    Match -- "No" --> Enabled
+    Enabled -- "No" --> Failed
+    Enabled -- "Yes" --> Request
+    Request --> Verify
+    Verify -- "No" --> Failed
     Verify -- "Yes" --> Proposal
+    Proposal --> Decision
+    Decision -- "Approve" --> Trusted
+    Decision -- "Reject" --> Rejected
 
     classDef entry fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e,stroke-width:2px
     classDef decision fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px
@@ -125,16 +105,9 @@ flowchart TB
 
     class Start entry
     class Retry,Approved,Match,Enabled,Verify,Decision decision
-    class Execute,Replay,Trusted success
+    class DirectOK,ApprovedOK,Trusted success
     class Request,Proposal,Rejected review
     class Failed failure
-
-    style TopRow fill:transparent,stroke:transparent
-    style BottomRow fill:transparent,stroke:transparent
-    style Direct fill:#f8fafc,stroke:#94a3b8,color:#0f172a
-    style Local fill:#f8fafc,stroke:#94a3b8,color:#0f172a
-    style Provider fill:#f8fafc,stroke:#94a3b8,color:#0f172a
-    style Governance fill:#f8fafc,stroke:#94a3b8,color:#0f172a
 ```
 
 A locator identity is scoped by the application, origin, pathname, action, and original selector. Replay checks the current page again before acting. Local matching refuses when identity evidence is insufficient, the best candidate falls below the confidence threshold, or competing candidates are too close. Tier 3 never accepts a model-authored selector: Falcon builds selectors for locally collected candidates, asks the provider for a candidate number, and verifies that candidate against the live page before using it.
