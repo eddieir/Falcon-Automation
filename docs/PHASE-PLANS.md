@@ -844,6 +844,367 @@ concurrent workers; a sharded CI run and a single-runner run produce identical a
 
 ---
 
+## Forward strategy — audit-first, self-hosted healing
+
+**Recorded:** 2026-10-14.
+
+Falcon is an open-source, developer-first, audit-focused, self-healing Playwright framework. It is a
+technical preview, not an enterprise testing platform. The forward plan does not attempt to copy
+every feature from every vendor. Its category position is narrower:
+
+> Every recovery should be scoped, explainable, locally validated, reversible and supported by
+> evidence, without silently turning a real failure green.
+
+The plan is informed by the dated competitor research under `docs/research/` and a broader public
+market review. Vendor documentation establishes documented capabilities, not comparative accuracy.
+Marketing claims are not benchmark results. `NOT_FOUND_IN_REVIEWED_DOCS` must never be interpreted
+as proof that a competitor lacks a capability.
+
+Before implementation begins, Phase 18 must refresh the research package with:
+
+- a dated source register using first-party technical, security, deployment and pricing sources;
+- a category map covering enterprise suites, agentic testing platforms, developer-first tools,
+  open-source healing libraries and visual-testing products;
+- a cell-level capability matrix with explicit evidence status;
+- a Falcon gap analysis and allowed/prohibited public claims;
+- owner approval of the final Phase 18 scope.
+
+The evidence vocabulary is `VERIFIED`, `MARKETING_CLAIM`,
+`NOT_FOUND_IN_REVIEWED_DOCS`, `ACCOUNT_REQUIRED`, `FETCH_BLOCKED` and
+`NOT_APPLICABLE`.
+
+---
+
+## Phase 18 — Safe authenticated customer pilots
+
+**Status:** planned; implementation must not begin before the Phase 0 research gate and owner
+approval.
+
+### Outcome
+
+Make Falcon safe enough to evaluate against realistic authenticated staging applications. This is
+not a production-safety certification and does not add enterprise SSO or multi-tenant RBAC.
+
+### Scope
+
+**Authentication lifecycle**
+
+- Import and export Playwright `storageState` without recording credential values.
+- Provide a supported login-setup workflow.
+- Detect login redirects, expired sessions and unexpected anonymous execution.
+- Fail explicitly when authentication is required but unavailable.
+- Propagate the selected role's state into sequential, parallel and sharded runs without allowing
+  workers or roles to share mutable credentials.
+- Support named pilot roles such as administrator, customer and read-only user.
+
+**Dry-run planning**
+
+- Add a dry-run mode that discovers pages and generates proposed actions without clicking, filling,
+  submitting, invoking a provider or changing target data.
+- Produce a stable, reviewable action plan and digest.
+- Ensure the executed plan cannot silently differ from the approved plan; material drift requires a
+  new review.
+
+**Pilot policy**
+
+- Add a versioned manifest for base URL, allowed origins, allowed and denied routes, roles, page and
+  time limits, permitted actions, protected actions and required assertions.
+- Default to same-origin, bounded execution.
+- Deterministically detect potentially destructive actions such as delete, pay, transfer, publish,
+  send and submit from accessible name, visible text, role, form action, URL and configured business
+  vocabulary.
+- Allow provider assistance to add caution, never to weaken a deterministic denial.
+- Require an explicit, revision-bound approval for protected actions.
+
+**Secret and artifact safety**
+
+- Verify that cookies, authorization headers, passwords, tokens and storage-state values cannot
+  enter logs, reports, dashboard events, screenshots, shard bundles, locator memory or error text.
+- Document where application-derived text can still appear and how operators should retain or
+  delete artifacts.
+
+### Required fixture and adversarial tests
+
+- successful and failed login;
+- expired session and redirect-to-login;
+- multiple roles with distinct permissions;
+- CSRF-protected form;
+- destructive and misleadingly labelled controls;
+- duplicate and dynamically replaced controls;
+- state propagation through sequential, worker and shard paths;
+- malicious values designed to reach logs, reports and provider prompts;
+- dry-run proof of zero target mutation and zero provider request.
+
+### Acceptance gate
+
+Phase 18 passes only when denied actions cannot execute, protected actions require current approval,
+authentication loss cannot report meaningful authenticated coverage, role state remains isolated,
+dry-run performs no target mutation, and all credential-bearing values are absent from every
+persisted or displayed artifact.
+
+---
+
+## Phase 19 — Assertion-aware healing
+
+**Status:** planned after Phase 18.
+
+### Outcome
+
+A recovered locator is not successful merely because an action did not throw. Falcon must prove the
+intended business outcome occurred and no forbidden side effect occurred.
+
+### Scope
+
+- Define a versioned journey contract with steps, expected outcomes and forbidden side effects.
+- Support outcome checks for URL transitions, element state, accessible text, field values, network
+  responses, downloads, bounded cookie/storage facts, visual checkpoints, controlled API/database
+  verification and custom Playwright assertions.
+- Require important customer-pilot journeys to carry at least one business assertion.
+- Record original-selector failure, candidate evidence, candidate selection, local selector
+  construction, action result and outcome result separately.
+- Mark missing or contradictory evidence `INCONCLUSIVE`; never promote it to pass.
+- Permit trusted reuse only after selector validation, action success, outcome success and human
+  approval.
+
+### Acceptance gate
+
+A planted wrong-element heal that completes the browser action but violates the journey assertion
+must fail. A correct heal must produce a complete evidence chain. The same evidence must be
+replayable without disclosing secrets.
+
+---
+
+## Phase 20 — Open healing benchmark and live certification
+
+**Status:** planned after assertion-aware healing.
+
+### Outcome
+
+Replace qualitative marketing with reproducible, revision-bound measurements.
+
+### Benchmark corpus
+
+Include controlled changes for IDs, classes, text, wrappers, order, roles, accessible names,
+duplicate elements, hidden clones, ambiguous candidates, same selectors on different routes,
+iframes, shadow DOM, post-read mutations, destructive lookalikes and cross-origin candidates.
+
+### Metrics
+
+- correct-heal, false-heal and refusal rates;
+- unsafe-action rate;
+- business-outcome success rate;
+- latency and provider-request count;
+- provider tokens and estimated cost when rates are sourced;
+- review time, replay success and rejection recurrence;
+- reproducibility across repeated runs.
+
+### Provider certification
+
+- Exercise real, explicitly funded accounts for selected OpenAI, Anthropic, Gemini, Azure OpenAI
+  and compatible-endpoint configurations.
+- Keep transport support separate from model-quality certification.
+- Record provider, model, API version, date, Falcon revision and benchmark version.
+- Publish negative results and blocked configurations.
+
+### Integrity gate
+
+Fixtures, expected ground truth and raw outcomes must be public and versioned. Local-only and
+provider-assisted tracks remain separate. Falcon results must not be numerically compared with
+vendor marketing figures unless the conditions and ground truth match.
+
+---
+
+## Phase 21 — Optional team control plane
+
+**Status:** planned; local operation remains the default.
+
+### Outcome
+
+Support team collaboration without turning a network service into a prerequisite for Falcon.
+
+### Scope
+
+- Add an optional PostgreSQL-backed store for locator evidence, proposals, decisions, rollback
+  history, flaky-test decisions, pilot policies and run records.
+- Use append-only audit events, immutable revisions and optimistic concurrency.
+- Add authenticated actor identity and the roles Viewer, Tester, Reviewer, Release Approver and
+  Administrator.
+- Isolate organizations, projects and environments.
+- Store credential references only; never store provider or application keys in Falcon records.
+- Provide backup, restore, retention, signed export, local-JSON migration and conflict handling.
+- Define offline behavior explicitly; never split or merge trust state silently.
+
+### Acceptance gate
+
+Concurrent reviewers cannot approve stale proposals. Every decision identifies its actor, channel,
+revision and evidence. A lost database connection cannot silently fall back to a different trust
+history.
+
+---
+
+## Phase 22 — Product packaging and stable releases
+
+**Status:** planned; may precede Phase 21 when pilot users value local installation first.
+
+### Outcome
+
+Make Falcon installable, versioned and safely upgradeable without cloning an arbitrary branch.
+
+### Scope
+
+- Publish a versioned npm CLI and documented Node compatibility matrix.
+- Add `falcon init`, `falcon doctor`, `falcon plan`, `falcon run` and `falcon review`.
+- Produce signed tags, checksums, provenance and an SBOM.
+- Publish a Docker image and reusable GitHub Action.
+- Version configuration and state schemas with tested migrations and rollback.
+- Establish semantic-versioning, deprecation and support policies.
+- Provide a sample pilot repository and CI templates.
+
+`falcon doctor` must check runtime versions, browser availability, filesystem safety, provider
+configuration, endpoint policy, database availability, dashboard exposure and conflicting settings
+without printing secret values.
+
+### Acceptance gate
+
+A clean environment can install a pinned release, run the fixture walkthrough, upgrade stored state,
+roll back and reproduce the documented result without using repository-internal paths.
+
+---
+
+## Phase 23 — Governed agentic test creation
+
+**Status:** planned only after Phases 18, 19 and 20 establish safety and measurement.
+
+### Outcome
+
+Generate reviewable tests without allowing natural-language automation to bypass deterministic
+policy or business assertions.
+
+### Workflow
+
+Requirement → proposed journeys → dry-run plan → human review → Playwright code → business
+assertion validation → version-controlled pull request.
+
+### Scope
+
+- Accept structured YAML, Markdown or Gherkin requirements.
+- Trace every generated journey to a requirement and report uncovered requirements.
+- Refuse vague success conditions that provide no observable assertion.
+- Generate standard Playwright code rather than an opaque hosted-only format.
+- Show the exact source diff and evidence used.
+- Preserve human-authored code and prohibit automatic merge.
+- Record provider/model/policy versions without persisting sensitive prompt material.
+
+### Acceptance gate
+
+Generated code must pass deterministic formatting, static checks, policy checks and the declared
+journey assertions. Removing the assertions or safety policy must make the acceptance test fail.
+
+---
+
+## Phase 24 — Evidence-based failure classification and repair proposals
+
+**Status:** planned after governed journeys exist.
+
+### Outcome
+
+Distinguish product regression, locator drift, assertion drift, authentication failure, test-data
+failure, environment outage, network instability, browser incompatibility, provider failure,
+Falcon defect and inconclusive evidence.
+
+### Scope
+
+- Ground every classification in the failing step, previous results, DOM changes, network events,
+  screenshots, console errors, assertion results and healing attempts.
+- Report confidence and missing evidence.
+- Default low-confidence or contradictory cases to `INCONCLUSIVE`.
+- For automation defects, propose a pull request; never edit the protected branch silently.
+- Keep classification separate from release gating until reviewed policy explicitly connects them.
+
+### Acceptance gate
+
+Adversarial fixtures must demonstrate that Falcon cannot convert a planted product regression into a
+test-maintenance repair. Classification quality must be measured on a labelled corpus.
+
+---
+
+## Phase 25 — Cross-browser and application depth
+
+**Status:** planned after the web pilot path is reliable.
+
+### Scope
+
+- Continuously validate Chromium, Firefox and WebKit.
+- Cover authenticated sessions, iframes, shadow DOM, uploads, downloads, email/OTP adapters,
+  API-assisted setup, database verification, accessibility assertions and controlled viewport
+  matrices.
+- Make visual baselines reproducible across documented environments.
+
+Mobile and desktop automation are separate product decisions. They must not be added merely to
+increase a feature count before web reliability and customer evidence are established.
+
+### Acceptance gate
+
+Each advertised browser and integration must run in hosted CI with explicit platform-specific
+results. Unsupported combinations remain documented rather than silently skipped.
+
+---
+
+## Phase 26 — Enterprise and regulated-pilot readiness
+
+**Status:** planned only in response to proven customer demand.
+
+### Scope
+
+- OIDC/SAML and, if required by actual customers, SCIM;
+- tenancy, authenticated audit exports and configurable retention;
+- regional deployment and data-flow documentation;
+- backup, restore and disaster-recovery exercises;
+- release threat models, penetration testing and vulnerability handling;
+- signed provenance, dependency policy, SBOM and privacy/deletion workflows.
+
+Falcon must not claim SOC 2, ISO 27001, HIPAA, GDPR compliance or equivalent certification without
+the organizational controls and independent evidence those claims require.
+
+---
+
+## Competitive moat — Healing Evidence Bundle
+
+Every recovery should produce a bounded, secret-safe, machine-readable and human-readable bundle
+covering:
+
+- original intent and selector;
+- stored evidence and scope;
+- live candidates and deterministic scoring;
+- provider decision when enabled;
+- local selector construction;
+- pre-action validation;
+- action result;
+- business outcome and forbidden-side-effect checks;
+- approval, rejection and rollback history.
+
+The bundle must be revision-bound, hash-verifiable, exportable and diffable between runs. This is a
+more defensible product direction than an unmeasured claim that Falcon's AI heals better.
+
+---
+
+## Forward priority
+
+1. Phase 18 — safe authenticated pilots.
+2. Phase 19 — assertion-aware healing.
+3. Phase 20 — open benchmark and live certification.
+4. Phase 22 — packaging and stable releases.
+5. Phase 21 — optional team control plane.
+6. Phase 23 — governed agentic creation.
+7. Phase 24 — evidence-based failure classification.
+8. Phase 25 — cross-browser and application depth.
+9. Phase 26 — enterprise readiness driven by actual demand.
+
+The order of Phases 21 and 22 may change after pilot feedback. No phase may claim market leadership,
+uniqueness or superiority without matched public evidence.
+
+---
+
 ## Sequencing
 
 ```
@@ -865,6 +1226,16 @@ healing chain rather than in the reporting on top of it: an evaluator with no `O
 two usable tiers, and the second only fired when an approved replacement already existed. Phase 17
 is what remains of the phase Tier 2.5 was originally bundled with, and it is a procurement concern
 rather than a capability gap, so it can proceed independently at any point.
+
+The forward sequence starts with customer safety and business correctness, then proof and
+packaging. Shared infrastructure and agentic generation follow only after the local pilot path is
+measured:
+
+```
+Phase 18 ── Phase 19 ── Phase 20 ──┬── Phase 22
+                                   ├── Phase 21
+                                   └── Phase 23 ── Phase 24 ── Phase 25 ── Phase 26
+```
 
 ---
 
