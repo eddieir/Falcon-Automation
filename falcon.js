@@ -58,6 +58,7 @@ const Dashboard       = require("./src/core/Dashboard");
 const Logger          = require("./utils/Logger");
 const ReportManager   = require("./src/core/ReportManager");
 const HealingReport   = require("./src/core/AIHealer/HealingReport");
+const PlanFile        = require("./src/core/PlanFile");
 const { parseParallelArgs } = require("./src/core/parallel/Args");
 const ParallelRunner  = require("./src/core/parallel/Runner");
 const InvocationContext = require("./src/core/llm/InvocationContext");
@@ -362,7 +363,7 @@ const runWholeApp = async (context, entryUrl, emit, opts) => {
  * expectations are pinned to that behaviour. Its one page is returned in
  * SweepResult shape so the reporting path below stays common to both modes.
  */
-const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerContext = null) => {
+const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerContext = null, savePlanPath = null) => {
     Logger.warning("⚠️  --single-page: only the entry page will be tested (pre-Phase-10 behaviour).");
     const startedAt = Date.now();
 
@@ -403,6 +404,10 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerCon
     const generator = new TestGenerator(page);
     const testPlan  = await generator.generateTestScenarios();
     Logger.info(`  → ${testPlan.test_scenarios.length} scenario(s) generated for ${testPlan.url}`);
+    if (savePlanPath) {
+        await PlanFile.save(savePlanPath, testPlan);
+        Logger.info(`💾 Test plan saved (${testPlan.test_scenarios.length} scenario(s)) — replay it with --plan.`);
+    }
 
     // ── Step 4: Execute Generated Test Plan ──────────────────────────────────
     Logger.info(`▶  Step 4: Executing generated test scenarios (repeat=${repeatCount})…`);
@@ -442,6 +447,30 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerCon
     return { entryUrl: url, pages, coverage: deriveCoverage(pages) };
 };
 
+/**
+ * --plan=<file>: replay a saved plan through the same TestRunner → AIHealer
+ * path every other mode uses. No discovery, no crawl: the plan is the test.
+ */
+const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContext = null) => {
+    const startedAt = Date.now();
+    const page = await context.newPage();
+    await page.goto(plan.url, { waitUntil: "load" });
+    Logger.info(`✅ Loaded: ${plan.url}`);
+    emit("explorerPage", { url: plan.url });
+    Logger.info(`▶  Running saved plan: ${plan.test_scenarios.length} step(s), repeat=${repeatCount}…`);
+    const results = await TestRunner.runRepeatedTestPlan(page, plan, repeatCount, { providerContext });
+    const only = {
+        url: plan.url,
+        status: "tested",
+        scenariosGenerated: plan.test_scenarios.length,
+        scenariosDeduplicated: 0,
+        results,
+        uiIssues: [],
+        durationMs: Date.now() - startedAt,
+    };
+    return { entryUrl: plan.url, pages: [only], coverage: deriveCoverage([only]) };
+};
+
 (async () => {
     const args        = process.argv.slice(2);
 
@@ -452,9 +481,45 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerCon
         process.exit(1);
     }
 
+    // Saved plans: a rejected plan is input the user must fix (exit 2), checked
+    // before the dashboard or the browser exist.
+    const planFlag     = readStrictValueFlag(args, "plan");
+    const savePlanFlag = readStrictValueFlag(args, "save-plan");
+    if (!planFlag.ok || !savePlanFlag.ok) {
+        await Logger.flush();
+        process.exit(1);
+    }
+    const planPath     = planFlag.value;
+    const savePlanPath = savePlanFlag.value;
+    if (planPath && (savePlanPath || args.includes("--single-page"))) {
+        Logger.error("❌ --plan replays a saved plan; it cannot be combined with --save-plan or --single-page.");
+        await Logger.flush();
+        process.exit(1);
+    }
+    if (savePlanPath && !args.includes("--single-page")) {
+        Logger.error("❌ --save-plan needs --single-page: a sweep produces one plan per page.");
+        await Logger.flush();
+        process.exit(1);
+    }
+    let savedPlan = null;
+    if (planPath) {
+        try {
+            savedPlan = await PlanFile.load(planPath);
+        } catch (error) {
+            Logger.error(`❌ ${error.message}`);
+            await Logger.flush();
+            process.exit(error instanceof PlanFile.PlanError ? 2 : 1);
+        }
+    }
+
     const urlArg      = args.find((a) => a.startsWith("--url="));
-    const rawUrl      = urlArg ? urlArg.slice("--url=".length) : DEFAULT_URL;
+    const rawUrl      = urlArg ? urlArg.slice("--url=".length) : (savedPlan ? savedPlan.url : DEFAULT_URL);
     const url         = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
+    if (savedPlan && new URL(url).origin !== new URL(savedPlan.url).origin) {
+        Logger.error("❌ --url does not match the origin of the saved plan's URL.");
+        await Logger.flush();
+        process.exit(2);
+    }
     // Default off in CI (process.env.CI is the conventional signal nearly
     // every CI system sets) so a headless run never blocks on a dashboard
     // server nobody can see; --dashboard forces it back on if ever needed.
@@ -498,8 +563,8 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerCon
         process.exit(1);
     }
     const parallelRun = parallel.shard !== null || parallel.workers > 1;
-    if (parallelRun && singlePage) {
-        Logger.error("❌ --single-page cannot be combined with --workers or --shard.");
+    if (parallelRun && (singlePage || savedPlan)) {
+        Logger.error("❌ --single-page and --plan cannot be combined with --workers or --shard.");
         await Logger.flush();
         process.exit(1);
     }
@@ -536,7 +601,7 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerCon
     }
     const providerContext = invocationResult.context;
 
-    if (!urlArg) {
+    if (!urlArg && !savedPlan) {
         Logger.info(`ℹ️  No --url supplied — defaulting to ${DEFAULT_URL}`);
     }
 
@@ -600,8 +665,10 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerCon
         browser = await chromium.launch({ headless });
         const context = await browser.newContext();
 
-        const sweep = singlePage
-            ? await runEntryPageOnly(context, url, emit, repeatCount, providerContext)
+        const sweep = savedPlan
+            ? await runSavedPlan(context, savedPlan, emit, repeatCount, providerContext)
+            : singlePage
+            ? await runEntryPageOnly(context, url, emit, repeatCount, providerContext, savePlanPath)
             : await runWholeApp(context, url, emit, {
                 maxPages,
                 budgetMs,

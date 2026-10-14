@@ -1128,6 +1128,15 @@ node falcon.js --url=https://your-app.example.com --no-dedupe          # run sha
 node falcon.js --url=https://your-app.example.com --allow-cross-origin # follow links off-origin
 node falcon.js --url=https://your-app.example.com --single-page        # entry page only
 
+# Saved plans. --save-plan (with --single-page) writes the plan Falcon generated as a
+# versioned JSON document ("falcon-test-plan", version 1); --plan replays one through
+# the normal TestRunner -> AIHealer -> dashboard -> report path, with no discovery.
+# A plan that does not validate exits 2 before any browser or dashboard starts; a
+# failed run exits 1. --plan cannot be combined with --save-plan, --single-page,
+# --workers or --shard, and --url (optional) must share the plan URL's origin.
+node falcon.js --url=https://your-app.example.com --single-page --save-plan=plan.json
+node falcon.js --plan=plan.json
+
 # Repetition for classification (Phase 12). A single run can now reach the
 # 3-sample minimum needed to classify a scenario without waiting for cached history.
 # Re-executes each page's generated test plan N times, starting from a fresh load.
