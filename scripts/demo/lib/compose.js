@@ -9,7 +9,6 @@
 const fs = require("fs");
 const path = require("path");
 const { execFile } = require("child_process");
-const { pathToFileURL } = require("url");
 
 const ROOT = path.join(__dirname, "..", "..", "..");
 const Logger = require(path.join(ROOT, "utils", "Logger"));
@@ -238,9 +237,12 @@ async function buildPoster() {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 1200, height: 627 } });
-    const imgUrl = pathToFileURL(framePath).href;
-    const url = `${pathToFileURL(POSTER_HTML).href}?img=${encodeURIComponent(imgUrl)}`;
-    await page.goto(url);
+    // Embed the frame as a base64 data URI (characters are limited to [A-Za-z0-9+/=]),
+    // so the poster page needs no script and no URL-derived value.
+    const frameData = (await fs.promises.readFile(framePath)).toString("base64");
+    const html = (await fs.promises.readFile(POSTER_HTML, "utf8"))
+      .replace("__FRAME_DATA_URI__", `data:image/png;base64,${frameData}`);
+    await page.setContent(html, { waitUntil: "load" });
     await page.waitForFunction(() => {
       const img = document.getElementById("frame-img");
       return img && img.complete && img.naturalWidth > 0;
