@@ -6,35 +6,48 @@ See [README.md](README.md) for the current feature set, architecture, and usage.
 
 ---
 
-## Customer demo: local locator recovery and dashboard healing events
+## Saved-plan replay and an end-to-end Falcon recovery demo
 
-Merged into `main` through pull request #52. No version tag or GitHub release has been created for this work yet; tagging remains a post-merge owner action.
+Pull request #54, not yet merged. No version tag or GitHub release has been created for this work.
 
 ### Release-note copy
 
-Falcon now ships with a recorded customer demo showing local locator recovery without LLM API keys or external services: the original selector (Tier 1) fails, and local evidence matching (Tier 2.5) recovers it. The demo captures a test recovering from a button selector change in real time, with approval and reuse through the dashboard. Dashboard healing stages (`original_failed`, `recovery_started`, `candidate_selected`, `action_completed`, `proposal_pending`) are now streamed as events, and the Healed tile counts only resolved (approved or reused) recoveries.
+Falcon can replay a saved test plan (`--plan`), write the plan it generated (`--save-plan`), and check a page with `expect` steps. A new customer demo records one real run on a local copy of AI-agency: a saved customer journey passes; a UI refactor renames one test hook; Falcon recovers because the control kept strong identity evidence; a person approves the repair in the dashboard; and a fresh Falcon process reuses it. In a separate run Falcon refuses a structural change when the control has no stable identity, instead of guessing. Recovery uses local evidence only (no API keys, no LLM).
 
 ### Added
 
-- **Customer demo package**: `npm run demo:customer` and `npm run demo:customer:reset` commands; `node scripts/demo/customer-demo.js` entry point with `--layout`, `--record`, `--build-only`, and `--out` flags. See [`docs/demo/CUSTOMER-DEMO.md`](docs/demo/CUSTOMER-DEMO.md) for reproduction, story, and limitations.
-- **Healing stage events**: Dashboard reports discrete healer transitions (`original_failed`, `recovery_started`, `candidate_selected`, `action_completed`, `proposal_pending`) via `healingStage` field in event stream. The empty Tier 3 review panel is hidden only in the demo recording (injected CSS); it is not removed from the product.
-- **Tier 1 and pacing options**: New healer configuration options `tier1` (`maxAttempts`, `baseDelayMs`, `selectorTimeoutMs`) and `pacing` (`stageDelayMs`) with defaults unchanged. Flags and profiles take precedence over environment configuration.
+- **Saved plans**: `--save-plan=<file>` (with `--single-page`) writes the generated plan as a versioned document (`falcon-test-plan`, version 1); `--plan=<file>` replays one through the normal runner, healer, dashboard and report path. A plan that does not validate exits 2 before any browser or dashboard starts; a failed run exits 1. Unknown properties, malformed selectors, non-http(s) or credentialed URLs and credential-shaped values are rejected without echoing plan contents.
+- **`expect` steps**: `visible`, `containsText`, `attributeExists` and `attributeEquals`, with a timeout. Results appear in the report and the exit code; an assertion is never healed. A missing target is reported unavailable and an ambiguous one is reported as such.
+- **Journey plans** (`"journey": true`): ordered steps without returning to the start page, stop at the first step that does not pass, and fail the run if a step leaves the plan's origin.
+- **Customer demo on a local AI-agency app**: `scripts/demo/gate-run.js` (the positive and negative gates), `scripts/demo/record-run.js`, `scripts/demo/media/build.js` and `poster.js`; demo-only patches in `docs/demo/ai-agency/` (deterministic seed, stable test hooks, a controlled test-hook rename, and a structural change used as the negative case). Pinned AI-agency commit `f56928fbf2eaf2622c7f7e36157e0abbc2a5996d`. See [`docs/demo/CUSTOMER-DEMO.md`](docs/demo/CUSTOMER-DEMO.md).
+- **Videos**: [full demo (16:9)](docs/demo/falcon-customer-demo-full-16x9.mp4), [LinkedIn cut (4:5)](docs/demo/falcon-customer-demo-linkedin-4x5.mp4) and a poster, composed from one recorded run. No GIF.
+- **Human approval and reuse, proven end to end**: the repair stays pending until a click on Approve in the real dashboard; a fresh Falcon process then reports `approved_reuse` with no new scoring, refusal or pending proposal.
+- **Safe refusal without identity evidence**: a structural change on a control with no stable hook is refused (`insufficient_identity_evidence`) before scoring; no proposal is created and nothing is clicked. The demo gate counts that as a pass.
+- **Healing stage events**: the dashboard receives discrete healer transitions (`original_failed`, `recovery_started`, `candidate_selected`, `action_completed`, `proposal_pending`) in a `healingStage` field.
+- **Tier 1 and pacing options**: healer options `tier1` (`maxAttempts`, `baseDelayMs`, `selectorTimeoutMs`) and `pacing` (`stageDelayMs`), with unchanged defaults.
+
+### Changed
+
+- The earlier checkout-fixture demo (its private recorder, videos, GIF and poster) is removed. The checkout fixture stays as automated test coverage only. `npm run demo:customer` and `demo:customer:reset` are replaced by `demo:gate`, `demo:record-run` and `demo:build`.
 
 ### Fixed
 
-- **Healed tile counter**: Now counts only resolved (approved or reused) recoveries, not pending proposals.
+- **Healed tile counter** counts only resolved (approved or reused) recoveries, not pending proposals.
 
-### Intentionally excluded
+### Security
 
-- Tier 3 (optional provider-assisted LLM): not exercised in the demo; removed from environment.
-- Third-party validation (AxonRadar): excluded from recording; tested separately in `npm run test:demo` (live suite, not CI-gated).
-- Authenticated reviewer identity: dashboard approval is channel-based.
+- Demo processes run in their own process groups with credential-like environment variables removed; SIGINT and SIGTERM stop AI-agency, Falcon, the dashboard and their browsers, and a test proves ports are freed.
+- AI-agency must listen on loopback only (checked after start); patches are limited to the files shipped in `docs/demo/ai-agency`; a clone source cannot be an option string; the gate empties only a directory it created.
+- Plan files are written through an exclusive temporary file, so a planted link is never written through; sizes are checked after reading as well as before.
+- `gate-result.json` is versioned, free of machine paths, timestamps, ports and credentials, and written atomically.
 
-### Known Limitations
+### Known limitations
 
-- The demo fixture uses a controlled server-side selector change for reproducibility; application-specific recovery heuristics vary by DOM structure.
-- Local evidence matching depends on stable element attributes; weak or ambiguous evidence is refused rather than guessed.
-- The separate `npm run test:demo` suite has 2 pre-existing failing specs (stale search field, dropdown) unchanged from the base revision; not CI-gated.
+- One control and one kind of change are demonstrated; recovery depends on the control keeping an `id` and the page keeping its structure.
+- The journey in the demo is authored; Falcon captured only the selector.
+- The confidence (0.85) and margin (0.15) thresholds are provisional, uncalibrated defaults and were not changed.
+- Approval is a click in a local dashboard; there is no reviewer identity.
+- The separate `npm run test:demo` suite has 2 pre-existing failing specs (stale search field, dropdown), unchanged from the base revision and not CI-gated.
 
 ---
 
