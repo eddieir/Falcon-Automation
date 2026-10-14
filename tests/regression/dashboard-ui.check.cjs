@@ -63,6 +63,8 @@ function dashboardUI({ fetchImpl, search = "" } = {}) {
       return { on: (name, fn) => (handlers[name] = fn) };
     },
     setInterval() {},
+    setTimeout,
+    clearTimeout,
     URL,
     URLSearchParams,
     location: { search, href: `http://localhost${search}` },
@@ -806,4 +808,131 @@ test("Phase 9: dashboard handles flaky/quarantine events without crashing, even 
     handlers.event({ name: "scenarioQuarantined", payload: { key: "k", classification: "flaky", flakeRate: 0.5, sampleSize: 3, quarantined: true, history: [] }, timestamp: Date.now() });
     handlers.event({ name: "scenarioUnquarantined", payload: { key: "k", classification: "flaky", flakeRate: 0.5, sampleSize: 3, quarantined: false, history: [] }, timestamp: Date.now() });
   });
+});
+
+// ── Customer demo: recovery stage events, decisions, locator panel ──
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const send = (h, name, payload) => h.event({ name, payload, timestamp: Date.now() });
+
+test("healingEvent without a resolved selector adds one info row and does not count as healed", () => {
+  for (const status of ["refused", "no_candidate", "failed"]) {
+    const { handlers, nodes, rows } = dashboardUI();
+    handlers.connect();
+    send(handlers, "healingEvent", { original: "#old", resolved: null, tier: "LocatorMemory", status, reason: `why-${status}` });
+    assert.equal(Number(nodes.get("t-heal")?.textContent || 0), 0);
+    assert.equal(rows.length, 1);
+    assert.match(rows[0].innerHTML, /Recovery not applied/);
+    assert.match(rows[0].innerHTML, new RegExp(`why-${status}`));
+    assert.doesNotMatch(rows[0].innerHTML, /Healed:/);
+  }
+});
+
+test("healingEvent with a resolved selector still counts once and renders the healed row", () => {
+  const { handlers, nodes, rows } = dashboardUI();
+  handlers.connect();
+  send(handlers, "healingEvent", { original: "#old", resolved: "#new", tier: "Tier 2" });
+  assert.equal(Number(nodes.get("t-heal").textContent), 1);
+  assert.equal(rows.length, 1);
+  assert.match(rows[0].innerHTML, /Healed: #old/);
+  assert.match(rows[0].innerHTML, /→ #new \[Tier 2\]/);
+});
+
+test("each healingStage renders its own row text", () => {
+  const { handlers, rows } = dashboardUI();
+  handlers.connect();
+  const cases = [
+    [{ stage: "original_failed", original: "#old", attempts: 3, timeoutMs: 500 }, [/Original locator failed/, /#old — 3 attempts, 500 ms each/]],
+    [{ stage: "recovery_started" }, [/Local evidence match started/]],
+    [{ stage: "candidate_selected", resolved: "#new", score: 0.87, reasons: ["same role", "same text"] }, [/Local evidence match found/, /#new · match score 87% · same role, same text/]],
+    [{ stage: "action_completed", resolved: "#new", via: "approved" }, [/Action completed/, /#new/, /approved replacement reused/]],
+    [{ stage: "proposal_pending" }, [/Approval required before reuse/]],
+  ];
+  for (const [payload, patterns] of cases) {
+    send(handlers, "healingStage", payload);
+    assert.equal(rows.length, 1);
+    const html = rows.shift().innerHTML;
+    for (const p of patterns) assert.match(html, p, payload.stage);
+    assert.doesNotMatch(html, /\bAI\b|\bLLM\b/);
+  }
+});
+
+test("hostile strings in stage and decision payloads render inert", () => {
+  const evil = "<img src=x onerror=alert(1)>";
+  const { handlers, rows } = dashboardUI();
+  handlers.connect();
+  const payloads = [
+    ["healingStage", { stage: "original_failed", original: evil, attempts: 1, timeoutMs: 1 }],
+    ["healingStage", { stage: "candidate_selected", resolved: evil, score: 0.5, reasons: [evil] }],
+    ["healingStage", { stage: "action_completed", resolved: evil }],
+    ["locatorDecision", { kind: "approve", original: evil, resolved: evil }],
+    ["locatorDecision", { kind: "reject", original: evil, resolved: evil }],
+    ["locatorDecision", { kind: "rollback", original: evil, resolved: evil }],
+    ["healingEvent", { original: evil, resolved: null, status: evil }],
+  ];
+  for (const [name, payload] of payloads) {
+    send(handlers, name, payload);
+    const html = rows.shift().innerHTML;
+    assert.doesNotMatch(html, /<img/);
+    assert.match(html, /&lt;img/);
+  }
+});
+
+test("locatorDecision rows describe approve, reject and rollback", () => {
+  const { handlers, rows } = dashboardUI();
+  handlers.connect();
+  send(handlers, "locatorDecision", { kind: "approve", original: "#old", resolved: "#new", action: "click", pathname: "/", status: "ok" });
+  const approve = rows.shift().innerHTML;
+  assert.match(approve, /Approved for scoped reuse/);
+  assert.match(approve, /#old → #new \(approved through the dashboard\)/);
+  send(handlers, "locatorDecision", { kind: "reject", original: "#old", resolved: "#new" });
+  assert.match(rows.shift().innerHTML, /Rejected/);
+  send(handlers, "locatorDecision", { kind: "rollback", original: "#old", resolved: "#new" });
+  assert.match(rows.shift().innerHTML, /Rolled back/);
+});
+
+test("proposal_pending, locatorDecision and LocatorMemory heals refresh the locator panel, debounced", async () => {
+  const { handlers, fetchCalls } = dashboardUI();
+  handlers.connect();
+  await wait(20);
+  const count = () => fetchCalls.filter((c) => c.url === "/locator/entries").length;
+  const base = count();
+  send(handlers, "healingStage", { stage: "proposal_pending" });
+  send(handlers, "healingStage", { stage: "proposal_pending" });
+  assert.equal(count(), base, "refresh must wait for the debounce");
+  await wait(300);
+  assert.equal(count(), base + 1, "burst collapses into one refresh");
+  send(handlers, "locatorDecision", { kind: "approve", original: "a", resolved: "b" });
+  await wait(300);
+  assert.equal(count(), base + 2);
+  send(handlers, "healingEvent", { original: "a", resolved: "b", tier: "LocatorMemory" });
+  await wait(300);
+  assert.equal(count(), base + 3);
+  send(handlers, "healingEvent", { original: "a", resolved: "b", tier: "Tier 2" });
+  send(handlers, "healingStage", { stage: "recovery_started" });
+  await wait(300);
+  assert.equal(count(), base + 3, "unrelated events must not refresh");
+});
+
+test("locatorRow shows Pending review vs Approved for scoped reuse with scope line", async () => {
+  const identity = { origin: "https://app.test", pathname: "/login", action: "click", originalSelector: "#old" };
+  const entries = {
+    p: { key: "p", trust: "unproven", revision: 1, lastSeen: "now", identity,
+      pendingCandidate: { selector: "#pend", proposalId: "pr1", occurrences: 1, lastSeen: new Date().toISOString() } },
+    a: { key: "a", trust: "trusted", revision: 2, lastSeen: "now", identity, approvedAlternative: { selector: "#appr" } },
+  };
+  const { handlers, nodes } = dashboardUI({
+    fetchImpl: async (url) => ({ ok: true, json: async () => (url === "/locator/entries" ? entries : []) }),
+  });
+  handlers.connect();
+  await wait(50);
+  const [pRow, aRow] = nodes.get("locator-entries-list").children;
+  assert.match(pRow.innerHTML, /Pending review/);
+  assert.doesNotMatch(pRow.innerHTML, /Approved for scoped reuse/);
+  assert.match(pRow.innerHTML, /#old → #pend/);
+  assert.match(pRow.innerHTML, /Scope: https:\/\/app\.test · \/login · click/);
+  assert.match(pRow.innerHTML, /data-action="approve"/);
+  assert.match(aRow.innerHTML, /Approved for scoped reuse/);
+  assert.doesNotMatch(aRow.innerHTML, /Pending review/);
+  assert.match(aRow.innerHTML, /#old → #appr/);
 });

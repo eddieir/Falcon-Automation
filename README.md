@@ -39,6 +39,8 @@ Generated scenarios provide a starting point for interaction coverage. Your team
 
 [Watch the full recorded UI suite](docs/demo/axonradar-ui-test.mp4) · [Read the demo test](tests/demo/axonradar.ui.spec.js)
 
+**Customer demo:** See a guided recording of local locator recovery (no API keys, no LLM), from a failing test through human approval to scoped reuse. [View the customer demo documentation](docs/demo/CUSTOMER-DEMO.md) and run `npm run demo:customer` to generate the recording.
+
 <a id="architecture"></a>
 
 ## Architecture guide

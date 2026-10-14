@@ -6,6 +6,38 @@ See [README.md](README.md) for the current feature set, architecture, and usage.
 
 ---
 
+## Customer demo: local locator recovery and dashboard healing events
+
+Merged into `main` through pull request #52. No version tag or GitHub release has been created for this work yet; tagging remains a post-merge owner action.
+
+### Release-note copy
+
+Falcon now ships with a recorded customer demo showing local locator recovery without LLM API keys or external services: the original selector (Tier 1) fails, and local evidence matching (Tier 2.5) recovers it. The demo captures a test recovering from a button selector change in real time, with approval and reuse through the dashboard. Dashboard healing stages (`original_failed`, `recovery_started`, `candidate_selected`, `action_completed`, `proposal_pending`) are now streamed as events, and the Healed tile counts only resolved (approved or reused) recoveries.
+
+### Added
+
+- **Customer demo package**: `npm run demo:customer` and `npm run demo:customer:reset` commands; `node scripts/demo/customer-demo.js` entry point with `--layout`, `--record`, `--build-only`, and `--out` flags. See [`docs/demo/CUSTOMER-DEMO.md`](docs/demo/CUSTOMER-DEMO.md) for reproduction, story, and limitations.
+- **Healing stage events**: Dashboard reports discrete healer transitions (`original_failed`, `recovery_started`, `candidate_selected`, `action_completed`, `proposal_pending`) via `healingStage` field in event stream. The empty Tier 3 review panel is hidden only in the demo recording (injected CSS); it is not removed from the product.
+- **Tier 1 and pacing options**: New healer configuration options `tier1` (`maxAttempts`, `baseDelayMs`, `selectorTimeoutMs`) and `pacing` (`stageDelayMs`) with defaults unchanged. Flags and profiles take precedence over environment configuration.
+
+### Fixed
+
+- **Healed tile counter**: Now counts only resolved (approved or reused) recoveries, not pending proposals.
+
+### Intentionally excluded
+
+- Tier 3 (optional provider-assisted LLM): not exercised in the demo; removed from environment.
+- Third-party validation (AxonRadar): excluded from recording; tested separately in `npm run test:demo` (live suite, not CI-gated).
+- Authenticated reviewer identity: dashboard approval is channel-based.
+
+### Known Limitations
+
+- The demo fixture uses a controlled server-side selector change for reproducibility; application-specific recovery heuristics vary by DOM structure.
+- Local evidence matching depends on stable element attributes; weak or ambiguous evidence is refused rather than guessed.
+- The separate `npm run test:demo` suite has 2 pre-existing failing specs (stale search field, dropdown) unchanged from the base revision; not CI-gated.
+
+---
+
 ## Post-Phase-17 maintenance — Invocation-scoped BYOK providers
 
 Merged into `main` through pull request #50. No version tag or GitHub release has been created for this work yet; tagging remains a post-merge owner action.
