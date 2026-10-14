@@ -47,7 +47,7 @@ const FlakinessTracker = require("./FlakinessTracker");
 class TestRunner {
     constructor(page, testPlan, options = {}) {
         this.page = page;
-        this.healer = new AIHealer(page, { providerContext: options.providerContext });
+        this.healer = new AIHealer(page, { ...options.healerOptions, providerContext: options.providerContext });
         this.testPlan = testPlan || { url: "", test_scenarios: [] };
         this.results = [];
     }
