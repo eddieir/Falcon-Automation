@@ -43,6 +43,11 @@ class OutputLog {
   constructor(t0 = Date.now()) {
     this.t0 = t0;
     this.lines = [];
+    this.commands = [];
+  }
+  /** Record the command line a process was started with (for the demo's terminal pane). */
+  command(label, argv) {
+    this.commands.push({ t: Date.now() - this.t0, label, argv });
   }
   attach(label, child) {
     for (const stream of ["stdout", "stderr"]) {
@@ -150,7 +155,10 @@ async function startAgency(dir, { port = 5173, seed = true, log } = {}) {
     cwd: dir, env, detached: true, stdio: ["ignore", "pipe", "pipe"],
   });
   live.add(child);
-  if (log) log.attach("agency", child);
+  if (log) {
+    log.command("agency", ["npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"]);
+    log.attach("agency", child);
+  }
   let exited = null;
   child.on("exit", (code) => { exited = code; });
   const url = `http://127.0.0.1:${port}/news`;
@@ -235,7 +243,10 @@ function startFalcon(dir, args, { env = {}, log, label = "falcon" } = {}) {
     stdio: ["ignore", "pipe", "pipe"],
   });
   live.add(child);
-  if (log) log.attach(label, child);
+  if (log) {
+    log.command(label, ["node", "falcon.js", ...args]);
+    log.attach(label, child);
+  }
   const exit = new Promise((resolve) => child.on("exit", (code) => {
     signalGroup(child, "SIGTERM"); // reap a browser left behind by a finished run
     live.delete(child);

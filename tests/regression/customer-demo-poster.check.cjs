@@ -9,10 +9,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
 
-const LIB = path.join(__dirname, "..", "..", "scripts", "demo", "lib");
-const posterHtml = fs.readFileSync(path.join(LIB, "poster.html"), "utf8");
-const composeJs = fs.readFileSync(path.join(LIB, "compose.js"), "utf8");
-const stageHtml = fs.readFileSync(path.join(LIB, "stage", "stage.html"), "utf8");
+const MEDIA = path.join(__dirname, "..", "..", "scripts", "demo", "media");
+const posterHtml = fs.readFileSync(path.join(MEDIA, "poster.html"), "utf8");
+const posterJs = fs.readFileSync(path.join(MEDIA, "poster.js"), "utf8");
+const stageHtml = fs.readFileSync(path.join(MEDIA, "stage.html"), "utf8");
 
 // 1x1 transparent PNG
 const PIXEL = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
@@ -24,13 +24,13 @@ test("poster template runs no script and reads nothing from the URL", () => {
 });
 
 test("build script embeds the frame itself instead of passing it through the query string", () => {
-  assert.doesNotMatch(composeJs, /\?img=/, "no image location in the poster URL");
-  assert.match(composeJs, /data:image\/png;base64,/, "frame is embedded as a data URI");
-  assert.match(composeJs, /setContent\(/, "the page is rendered from content, not navigated with parameters");
+  assert.doesNotMatch(posterJs, /\?img=/, "no image location in the poster URL");
+  assert.match(posterJs, /data:image\/png;base64,/, "frame is embedded as a data URI");
+  assert.match(posterJs, /setContent\(/, "the page is rendered from content, not navigated with parameters");
 });
 
-test("the only URL-derived value in the stage page is reduced to a fixed layout name", () => {
-  assert.match(stageHtml, /q\.get\("layout"\)\s*===\s*"portrait"\s*\?\s*"portrait"\s*:\s*"wide"/);
+test("the stage page reads nothing from its URL and builds its DOM from text only", () => {
+  assert.doesNotMatch(stageHtml, /location|URLSearchParams|document\.write|innerHTML|insertAdjacentHTML|eval\(/, "no URL or HTML-string sinks in the stage page");
 });
 
 test("poster renders at 1200x627 with the embedded image loaded", async (t) => {

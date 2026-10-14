@@ -1,0 +1,79 @@
+{
+  "format": "portrait",
+  "size": {
+    "w": 1080,
+    "h": 1350
+  },
+  "totalSeconds": 50.55,
+  "posterSeconds": null,
+  "scenes": [
+    {
+      "id": "refactor",
+      "title": "A UI refactor renamed a test hook",
+      "startsAt": 0,
+      "seconds": 6,
+      "realWindowMs": null,
+      "speed": null
+    },
+    {
+      "id": "broke",
+      "title": "Same saved test, updated app",
+      "startsAt": 6,
+      "seconds": 6.23,
+      "realWindowMs": [
+        34221,
+        44817
+      ],
+      "speed": 1.7
+    },
+    {
+      "id": "refuse",
+      "title": "No identity evidence, no guess",
+      "startsAt": 12.23,
+      "seconds": 8,
+      "realWindowMs": null,
+      "speed": null
+    },
+    {
+      "id": "found",
+      "title": "With identity, Falcon looks again",
+      "startsAt": 20.23,
+      "seconds": 9.37,
+      "realWindowMs": [
+        43817,
+        50379
+      ],
+      "speed": 0.7
+    },
+    {
+      "id": "approval",
+      "title": "A person decides",
+      "startsAt": 29.6,
+      "seconds": 5.22,
+      "realWindowMs": [
+        50379,
+        57168
+      ],
+      "speed": 1.3
+    },
+    {
+      "id": "reuse",
+      "title": "A fresh Falcon process starts",
+      "startsAt": 34.82,
+      "seconds": 8.73,
+      "realWindowMs": [
+        65807,
+        85008
+      ],
+      "speed": 2.2
+    },
+    {
+      "id": "close",
+      "title": "Evidence, not guesses",
+      "startsAt": 43.55,
+      "seconds": 7,
+      "realWindowMs": null,
+      "speed": null
+    }
+  ]
+}
