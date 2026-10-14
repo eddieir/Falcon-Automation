@@ -51,6 +51,8 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 
 ## Demo
 
+> **Historical recordings.** The recordings in this section were made with earlier Falcon versions against the public AxonRadar site. They predate saved plans and the scoped approval workflow, and they are not evidence of current behavior. The current end-to-end demo (a local AI-agency app, human approval and fresh-process reuse) is in [docs/demo/CUSTOMER-DEMO.md](demo/CUSTOMER-DEMO.md).
+
 One command, no hand-written test code: Falcon loads a site, crawls it, turns what it finds into test scenarios, executes them with self-healing, and streams every step to a live dashboard as it happens. This is one demo, one site, start to finish.
 
 ### Watch it run: a recorded UI test against the live site
