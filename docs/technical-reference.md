@@ -51,6 +51,8 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 
 ## Demo
 
+> **Historical recordings.** The recordings in this section were made with earlier Falcon versions against the public AxonRadar site. They predate saved plans and the scoped approval workflow, and they are not evidence of current behavior. The current end-to-end demo (a local AI-agency app, human approval and fresh-process reuse) is in [docs/demo/CUSTOMER-DEMO.md](demo/CUSTOMER-DEMO.md).
+
 One command, no hand-written test code: Falcon loads a site, crawls it, turns what it finds into test scenarios, executes them with self-healing, and streams every step to a live dashboard as it happens. This is one demo, one site, start to finish.
 
 ### Watch it run: a recorded UI test against the live site
@@ -1127,6 +1129,15 @@ node falcon.js --url=https://your-app.example.com --budget-ms=120000
 node falcon.js --url=https://your-app.example.com --no-dedupe          # run shared nav on every page
 node falcon.js --url=https://your-app.example.com --allow-cross-origin # follow links off-origin
 node falcon.js --url=https://your-app.example.com --single-page        # entry page only
+
+# Saved plans. --save-plan (with --single-page) writes the plan Falcon generated as a
+# versioned JSON document ("falcon-test-plan", version 1); --plan replays one through
+# the normal TestRunner -> AIHealer -> dashboard -> report path, with no discovery.
+# A plan that does not validate exits 2 before any browser or dashboard starts; a
+# failed run exits 1. --plan cannot be combined with --save-plan, --single-page,
+# --workers or --shard, and --url (optional) must share the plan URL's origin.
+node falcon.js --url=https://your-app.example.com --single-page --save-plan=plan.json
+node falcon.js --plan=plan.json
 
 # Repetition for classification (Phase 12). A single run can now reach the
 # 3-sample minimum needed to classify a scenario without waiting for cached history.

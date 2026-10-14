@@ -51,6 +51,7 @@ function loadHealer() {
   const reports = [];
   const pending = [];
   const warnings = [];
+  const retryOpts = [];
   const AIHealer = load("src/core/AIHealer/AIHealer.js", {
     "../../../utils/Logger": {
       info() {}, error() {}, async flush() {},
@@ -59,11 +60,13 @@ function loadHealer() {
     "./LocatorStore": { getAlternatives: () => [] },
     "./HealingReport": { log: (row) => reports.push(row) },
     "./HealingTrust": { recordPending: (row) => pending.push(row), recordTier3Invocation() {} },
+    "../Middleware": { emit() {} },
     "./AdaptiveRetry": class {
+      constructor(opts) { retryOpts.push(opts); }
       async execute(fn) { return fn(); }
     },
   });
-  return { AIHealer, reports, pending, warnings };
+  return { AIHealer, reports, pending, warnings, retryOpts };
 }
 
 function makePage({ counts = {}, clicks = [] } = {}) {
@@ -196,3 +199,38 @@ test("Tier 3: an ambiguous match before the action still fails", () =>
     assert.equal(pendingCalls.length, 0);
     assert.equal(pending.length, 0);
   }));
+
+test("tier1 option: defaults stay 3/500/2000 and reach the retry and the selector wait", async () => {
+  const { AIHealer, retryOpts } = loadHealer();
+  const timeouts = [];
+  const page = makePage();
+  page.waitForSelector = async (_s, o) => { timeouts.push(o.timeout); };
+  const healer = new AIHealer(page, { locatorMemory: null });
+  assert.deepEqual(retryOpts[0], { maxAttempts: 3, baseDelayMs: 500 });
+  await healer.healAndClick("#ok", "OK");
+  assert.deepEqual(timeouts, [2000]);
+});
+
+test("tier1 option: custom values reach the retry and the selector wait", async () => {
+  const { AIHealer, retryOpts } = loadHealer();
+  const timeouts = [];
+  const page = makePage();
+  page.waitForSelector = async (_s, o) => { timeouts.push(o.timeout); };
+  const healer = new AIHealer(page, { locatorMemory: null, tier1: { maxAttempts: 1, baseDelayMs: 10, selectorTimeoutMs: 150 } });
+  assert.deepEqual(retryOpts[0], { maxAttempts: 1, baseDelayMs: 10 });
+  await healer.healAndClick("#ok", "OK");
+  assert.deepEqual(timeouts, [150]);
+});
+
+test("tier1 option: non-positive or non-finite values are rejected at construction", () => {
+  const { AIHealer } = loadHealer();
+  for (const key of ["maxAttempts", "baseDelayMs", "selectorTimeoutMs"]) {
+    for (const bad of [0, -1, NaN, Infinity, "3", null]) {
+      assert.throws(
+        () => new AIHealer(makePage(), { locatorMemory: null, tier1: { [key]: bad } }),
+        new RegExp(`tier1\\.${key}`),
+        `${key}=${String(bad)}`
+      );
+    }
+  }
+});

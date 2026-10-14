@@ -1,6 +1,7 @@
 const Logger = require("../../../utils/Logger");
 const HealingReport = require("./HealingReport");
 const HealingTrust = require("./HealingTrust");
+const Middleware = require("../Middleware");
 const AdaptiveRetry = require("./AdaptiveRetry");
 const ConfigManager = require("../ConfigManager");
 const LlmProviderRegistry = require("../llm/LlmProviderRegistry");
@@ -177,8 +178,49 @@ function _promptValue(v) {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+const TIER1_DEFAULTS = Object.freeze({ maxAttempts: 3, baseDelayMs: 500, selectorTimeoutMs: 2000 });
+
+function _resolveTier1(opts) {
+    const cfg = { ...TIER1_DEFAULTS, ...(opts || {}) };
+    for (const key of Object.keys(TIER1_DEFAULTS)) {
+        const v = cfg[key];
+        if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) {
+            throw new Error(`AIHealer: tier1.${key} must be a positive finite number (got ${String(v)})`);
+        }
+    }
+    return Object.freeze(cfg);
+}
+
+// Viewer-pacing for the healingStage timeline (e.g. a screen recording).
+// Absent/0 (the default) is production behaviour: no delay is ever awaited.
+// `stageDelayMs` must be a non-negative finite number when provided at all.
+const PACING_DEFAULTS = Object.freeze({ stageDelayMs: 0 });
+
+function _resolvePacing(opts) {
+    const cfg = { ...PACING_DEFAULTS, ...(opts || {}) };
+    const v = cfg.stageDelayMs;
+    if (typeof v !== "number" || !Number.isFinite(v) || v < 0) {
+        throw new Error(`AIHealer: pacing.stageDelayMs must be a non-negative finite number (got ${String(v)})`);
+    }
+    return Object.freeze(cfg);
+}
+
+const _sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Fixed, page-independent vocabulary for healingStage `reasons`.
+function _stageReasons(contributions) {
+    const c = contributions || {};
+    const out = [];
+    if (c.attribute > 0) out.push("Stable attributes match (test id, name, label, type)");
+    if (c.accessibleName > 0.2) out.push("Same visible label");
+    if (c.structural > 0) out.push("Same place in the page structure");
+    if (c.text > 0) out.push("Same text");
+    if (c.boundingBox > 0) out.push("Same position on the page");
+    return out;
+}
+
 class AIHealer {
-    constructor(page, { locatorMemory, elementFactsCollector, providerContext } = {}) {
+    constructor(page, { locatorMemory, elementFactsCollector, providerContext, tier1, pacing } = {}) {
         this.page = page;
         // ADR-0019: an explicitly injected, invocation-scoped ProviderContext
         // (see src/core/llm/ProviderContext.js) takes priority over the
@@ -199,7 +241,9 @@ class AIHealer {
         this._injectedClient = null;
         this._injectedProvider = null;
         this._openai = null; // lazy-init to avoid import cost when not needed
-        this._retry  = new AdaptiveRetry({ maxAttempts: 3, baseDelayMs: 500 });
+        this._tier1 = _resolveTier1(tier1);
+        this._pacing = _resolvePacing(pacing);
+        this._retry  = new AdaptiveRetry({ maxAttempts: this._tier1.maxAttempts, baseDelayMs: this._tier1.baseDelayMs });
         // Phase 14: injectable so tests never touch real data/locator_memory.json.
         // Every existing caller still constructs `new AIHealer(page)` with one
         // argument — the options object defaults to `{}` so that keeps working
@@ -212,6 +256,25 @@ class AIHealer {
         // both in). See `src/core/locator/sharedLocatorMemory.js`.
         this._locatorMemory = locatorMemory !== undefined ? locatorMemory : SharedLocatorMemory.shared();
         this._collector = elementFactsCollector || DefaultElementFactsCollector;
+    }
+
+    /**
+     * Emit a dashboard healingStage event; never allowed to break healing.
+     *
+     * When `pacing.stageDelayMs` is configured (e.g. for a screen recording),
+     * this awaits that many real milliseconds AFTER the event is emitted and
+     * BEFORE returning, so a caller that awaits `_emitStage()` only resumes
+     * (and only then performs the next real action, such as a click) once a
+     * viewer has had time to see the stage. Default/absent pacing is 0, so
+     * production healing never awaits anything extra here.
+     */
+    async _emitStage(payload) {
+        try {
+            Middleware.emit("healingStage", payload);
+        } catch (err) {
+            Logger.warning(`AIHealer: healingStage emit failed (${err && err.message}).`);
+        }
+        if (this._pacing.stageDelayMs > 0) await _sleep(this._pacing.stageDelayMs);
     }
 
     /**
@@ -260,11 +323,13 @@ class AIHealer {
      * same action.
      */
     async _healAndPerform(action, selector, description, value) {
+        let attemptsMade = 0;
         try {
             let captured = null;
             await this._retry.execute(async () => {
+                attemptsMade++;
                 Logger.info(`🔹 Tier 1: Trying ${description} (${selector})`);
-                await this.page.waitForSelector(selector, { timeout: 2000 });
+                await this.page.waitForSelector(selector, { timeout: this._tier1.selectorTimeoutMs });
                 // Read the element while it is still the one being acted on.
                 // Re-read on every retry attempt so the evidence always comes
                 // from the attempt that actually succeeds.
@@ -278,6 +343,12 @@ class AIHealer {
             return; // Tier 1 succeeded
         } catch (error) {
             Logger.error(`❌ Tier 1 exhausted for ${description}. Engaging Tier 2/3 healing.`);
+            await this._emitStage({
+                stage: "original_failed", original: selector, tier: "Tier1", action, description,
+                // Attempts actually made (the action, not only the wait, can
+                // fail); timeoutMs is the configured per-attempt wait.
+                attempts: attemptsMade || this._tier1.maxAttempts, timeoutMs: this._tier1.selectorTimeoutMs,
+            });
             await this.healSelector(selector, description, action, value);
         }
     }
@@ -454,6 +525,8 @@ class AIHealer {
             return false;
         }
 
+        await this._emitStage({ stage: "recovery_started", original: selector, tier: "LocatorMemory", action, description });
+
         const facts = await this._collector.collect(this.page, {
             action,
             expectedSelectValue: action === "select" ? value : undefined,
@@ -512,6 +585,7 @@ class AIHealer {
                 if (checked.status !== "accepted" && !(checked.reason === "below_threshold" && unchanged)) continue;
                 await this._performAction(action, alternative.selector, value);
                 HealingReport.log({ original: selector, resolved: alternative.selector, tier: "LocatorMemory", description, action, status: "approved_reuse" });
+                await this._emitStage({ stage: "action_completed", original: selector, resolved: alternative.selector, tier: "LocatorMemory", action, description, via: "approved" });
                 return true;
             } catch (_) { /* A reviewed selector must still pass current live guards. */ }
         }
@@ -568,6 +642,12 @@ class AIHealer {
             return false;
         }
 
+        await this._emitStage({
+            stage: "candidate_selected", original: selector, resolved: resolvedSelector, tier: "LocatorMemory",
+            action, description, score: matchResult.winner.total, margin: matchResult.margin,
+            reasons: _stageReasons(matchResult.winner.contributions),
+        });
+
         try {
             await this._performAction(action, resolvedSelector, value);
         } catch (err) {
@@ -582,7 +662,9 @@ class AIHealer {
         HealingReport.log({ original: selector, resolved: resolvedSelector, tier: "LocatorMemory", description, action, status: "accepted" });
 
         // Only a successful authored Tier 1 action creates ground-truth evidence.
-        this._recordPendingCandidateSafe(identity, {
+        await this._emitStage({ stage: "action_completed", original: selector, resolved: resolvedSelector, tier: "LocatorMemory", action, description });
+
+        const recorded = this._recordPendingCandidateSafe(identity, {
             selector: resolvedSelector,
             signature: winnerCandidate.signature,
             contributions: matchResult.winner.contributions,
@@ -593,6 +675,16 @@ class AIHealer {
             alternativesConsidered: matchResult.alternativesConsidered,
             evidence: matchResult.winner.evidence,
         });
+
+        const proposalStage = { stage: "proposal_pending", original: selector, resolved: resolvedSelector, tier: "LocatorMemory", action, description };
+        // Only a genuinely recorded pending proposal is announced: a throw,
+        // a ParallelMode divert (null) or an already-approved entry (no
+        // pendingCandidate) must not claim a proposal is awaiting review.
+        const proposalId = recorded && recorded.pendingCandidate && recorded.pendingCandidate.proposalId;
+        if (typeof proposalId === "string" && proposalId.length > 0) {
+            proposalStage.proposalId = proposalId;
+            await this._emitStage(proposalStage);
+        }
 
         return true;
     }
@@ -678,11 +770,12 @@ class AIHealer {
      * Not awaited: there is nothing to wait for.
      */
     _recordPendingCandidateSafe(identity, candidate) {
-        if (!this._locatorMemory) return;
+        if (!this._locatorMemory) return null;
         try {
-            this._locatorMemory.recordPendingCandidate(identity, candidate);
+            return this._locatorMemory.recordPendingCandidate(identity, candidate);
         } catch (err) {
             Logger.warning(`AIHealer: pending candidate not recorded (${err.message}).`);
+            return null;
         }
     }
 
