@@ -33,7 +33,10 @@ Generated scenarios provide a starting point for interaction coverage. Your team
 
 ## See Falcon in action
 
-[![Falcon recovers a renamed test hook on a local AI-agency app; a person approves it; a fresh process reuses it](docs/demo/falcon-customer-demo-poster.png)](docs/demo/falcon-customer-demo-full-16x9.mp4)
+
+https://github.com/user-attachments/assets/0640bba0-e755-42a5-9af7-c772f902be06
+
+
 
 **What the demo shows:** a saved customer journey on a local copy of AI-agency (the open-source code behind AxonRadar) passes. A UI refactor then renames one test hook. Falcon recovers because the control kept strong identity evidence, a person approves the repair in the dashboard, and a fresh Falcon process reuses it. Falcon also refuses a different change when the control had no stable identity. Recovery uses local evidence only: no API keys and no LLM. The journey's steps were written for the demo; Falcon captured the selector.
 
