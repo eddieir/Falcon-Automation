@@ -33,11 +33,11 @@ Generated scenarios provide a starting point for interaction coverage. Your team
 
 ## See Falcon in action
 
-![Recorded Falcon demo: recovering a stale search selector and filtering the feed](docs/demo/axonradar-ui-test.gif)
+[![Falcon recovers a renamed test hook on a local AI-agency app; a person approves it; a fresh process reuses it](docs/demo/falcon-customer-demo-poster.png)](docs/demo/falcon-customer-demo-full-16x9.mp4)
 
-**What this recording demonstrates:** a browser test starts with a stale search selector, recovers through a stored alternative, fills the real field, and verifies that the feed filters. This historical recording demonstrates locator recovery without an LLM call; it predates the current scoped approval workflow.
+**What the demo shows:** a saved customer journey on a local copy of AI-agency (the open-source code behind AxonRadar) passes. A UI refactor then renames one test hook. Falcon recovers because the control kept strong identity evidence, a person approves the repair in the dashboard, and a fresh Falcon process reuses it. Falcon also refuses a different change when the control had no stable identity. Recovery uses local evidence only: no API keys and no LLM. The journey's steps were written for the demo; Falcon captured the selector.
 
-[Watch the full recorded UI suite](docs/demo/axonradar-ui-test.mp4) · [Read the demo test](tests/demo/axonradar.ui.spec.js)
+[Watch the full demo (1 min 42 s, MP4)](docs/demo/falcon-customer-demo-full-16x9.mp4) · [LinkedIn cut (4:5)](docs/demo/falcon-customer-demo-linkedin-4x5.mp4) · [Reproduce it and see what it proves](docs/demo/CUSTOMER-DEMO.md)
 
 <a id="architecture"></a>
 
