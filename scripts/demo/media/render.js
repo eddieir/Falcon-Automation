@@ -39,7 +39,7 @@ function terminalFeed(cap, spec) {
   }
   for (const l of cap.lines(t.labels, spec.from - (t.lookbackMs || 0), spec.to)) {
     if (t.include && !t.include(l)) continue;
-    items.push({ t: l.t, kind: kindOf(l.line), src: `[${l.label.replace(/^falcon-.*/, "falcon").replace(/^agency$/, "agency")}]`, text: cap.clean(l.line) });
+    items.push({ t: l.t, kind: kindOf(l.line), src: `[${l.label.replace(/^falcon-.*/, "falcon")}]`, text: cap.clean(l.line) });
   }
   // Commands come before the first output of the same instant; otherwise recorded order.
   return items.sort((a, b) => a.t - b.t || (a.kind === "cmd" ? -1 : 1) - (b.kind === "cmd" ? -1 : 1));
