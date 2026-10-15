@@ -2,11 +2,21 @@
   "schemaVersion": 1,
   "phase": 18,
   "status": "DRAFT",
-  "designRevision": "99bd7c5",
+  "designRevision": "e589247 (architecture rev 2)",
   "baseline": "2572e73",
   "source": "docs/research/phase-18/proposed-scope-and-criteria.md",
   "ownerApproval": "Scope, 82 criteria and claims policy approved by the owner at 99bd7c5 subject to decisions OD-01..OD-19; see the production-cycle ledger",
   "openItems": [
+    {
+      "id": "OWNER-RISK",
+      "ref": "threat-model section 6 plus literal plan-value PII and same-uid ledger rollback",
+      "state": "awaiting owner acceptance"
+    },
+    {
+      "id": "SPIKE-R",
+      "ref": "architecture section 7",
+      "state": "redirect-hop behaviour unverified; fetch fallback mandated"
+    },
     {
       "id": "BLOCKER-1",
       "ref": "P18-AC-033/P18-AC-076",
@@ -19,6 +29,7 @@
     }
   ],
   "exitCodes": {
+    "internalError": 18,
     "manifest": 10,
     "authSetup": 11,
     "authLoss": 12,
@@ -41,7 +52,7 @@
       "priority": "Must",
       "pr": "18A",
       "requirement": "Exported storageState values appear only in the operator-chosen file; zero in stdout, stderr, logs, reports, run history",
-      "components": "AuthStateStore.exportState, EvidenceBoundary",
+      "components": "AuthStateStore.exportState, EvidenceBoundary, SecretRegistry encoded forms",
       "verification": "R + canary"
     },
     {
@@ -49,7 +60,7 @@
       "priority": "Must",
       "pr": "18A",
       "requirement": "Import records only role, cookie count, earliest expiry, SHA-256 fingerprint",
-      "components": "AuthStateStore.importState",
+      "components": "AuthStateStore.importState (strict cookie schema, readBoundedPrivateJson)",
       "verification": "U, R"
     },
     {
@@ -57,7 +68,7 @@
       "priority": "Must",
       "pr": "18A",
       "requirement": "Login-setup with env-referenced credentials succeeds on fixture; state file owner-readable only",
-      "components": "LoginSetup, AuthStateStore (0600)",
+      "components": "LoginSetup (exact selectors, top-frame password, origin check), AuthStateStore 0600",
       "verification": "R"
     },
     {
@@ -73,7 +84,7 @@
       "priority": "Must",
       "pr": "18A",
       "requirement": "Manifest literal in a credential-named field rejected `MANIFEST_SECRET_LITERAL` with zero target requests",
-      "components": "Manifest secret-literal screen (OD-15)",
+      "components": "Manifest secret-literal screen + 64 KiB pre-screen cap (OD-15)",
       "verification": "U, R"
     },
     {
@@ -129,7 +140,7 @@
       "priority": "Must",
       "pr": "18A",
       "requirement": "Failure-code enum identical in output, report, dashboard event and docs; no code outside the enum",
-      "components": "FailureCodes enum",
+      "components": "FailureCodes enum incl. the six new codes",
       "verification": "U, S, D"
     },
     {
@@ -137,7 +148,7 @@
       "priority": "Must",
       "pr": "18A",
       "requirement": "Auth-loss exit code differs from test-failure and config-error codes",
-      "components": "FailureCodes.exitCodeFor (12 vs 1/2)",
+      "components": "FailureCodes.exitCodeFor (12 vs 1/2; 18 vs 17)",
       "verification": "U, R"
     },
     {
@@ -185,7 +196,7 @@
       "priority": "Must",
       "pr": "18A",
       "requirement": "Zero per-run state copies remain after normal or failed exit",
-      "components": "PilotLifecycle cleanup (exit + signals)",
+      "components": "PilotLifecycle cleanup (exit call sites, signals, uncaught, unhandled)",
       "verification": "U, R"
     },
     {
@@ -201,7 +212,7 @@
       "priority": "Must",
       "pr": "18A",
       "requirement": "Worker mode: per-test role assignment honoured; coverage set equals sequential",
-      "components": "parallel/Runner role assignment; coverage equality",
+      "components": "parallel/Runner role assignment; coverage equality **under exclusive consume markers**",
       "verification": "R, I"
     },
     {
@@ -209,8 +220,8 @@
       "priority": "Must",
       "pr": "18A",
       "requirement": "Shard bundles contain zero storageState files and zero cookie/token values",
-      "components": "ShardBundle allow-list (OD-17)",
-      "verification": "U, R + canary"
+      "components": "ShardBundle allow-list + merger refusal of excluded types (OD-17)",
+      "verification": "U, R"
     },
     {
       "id": "P18-AC-023",
@@ -241,7 +252,7 @@
       "priority": "Must",
       "pr": "18B",
       "requirement": "Zero POST/PUT/PATCH/DELETE to any origin; GET only to allowed routes",
-      "components": "DryRunGuard interception",
+      "components": "NetworkGate dry-run mode incl. GET-to-denied-route abort",
       "verification": "R"
     },
     {
@@ -249,7 +260,7 @@
       "priority": "Must",
       "pr": "18B",
       "requirement": "Provider key configured: zero provider calls at the SDK boundary",
-      "components": "DryRun no-provider path + transport guard",
+      "components": "DryRun no-provider path + per-boundary transport guard",
       "verification": "R"
     },
     {
@@ -265,7 +276,7 @@
       "priority": "Must",
       "pr": "18B",
       "requirement": "Two identical dry-runs give byte-identical plans and equal digests",
-      "components": "PilotPlan deterministic serialisation",
+      "components": "PilotPlan deterministic serialisation via Digest.canonicalise, no `ordinal`",
       "verification": "R"
     },
     {
@@ -273,7 +284,7 @@
       "priority": "Must",
       "pr": "18B",
       "requirement": "Material field change alters the digest; non-material change (timestamps, run ID, host paths) does not",
-      "components": "PlanDigest material/excluded lists",
+      "components": "PlanDigest material/excluded lists + TM18-D01 golden vectors",
       "verification": "U"
     },
     {
@@ -281,7 +292,7 @@
       "priority": "Must",
       "pr": "18B",
       "requirement": "Digest mismatch: `PLAN_DIGEST_MISMATCH`, no click/fill/submit",
-      "components": "PolicyEngine step 8",
+      "components": "PolicyEngine step 8 (file digest)",
       "verification": "R"
     },
     {
@@ -289,7 +300,7 @@
       "priority": "Must",
       "pr": "18B",
       "requirement": "Material target change since dry-run: `PLAN_DRIFT`, new review required, no approval reused",
-      "components": "PlanDigest drift + ApprovalStore invalidation",
+      "components": "PlanDigest drift at step 11 + ApprovalStore invalidation",
       "verification": "R"
     },
     {
@@ -297,7 +308,7 @@
       "priority": "Must",
       "pr": "18B",
       "requirement": "Plan lacking schema version or digest (including current `--save-plan` output) refused `PLAN_INVALID` for execute",
-      "components": "PilotPlan v2 reader — **see BLOCKER-1**",
+      "components": "PilotPlan v2 reader — **BLOCKER-1 unchanged, owner input still required**",
       "verification": "U, R"
     },
     {
@@ -369,7 +380,7 @@
       "priority": "Must",
       "pr": "18C",
       "requirement": "Delete/Pay/Transfer/Publish/Send/Submit matrix varied by name, text, type, form action, URL: 100% protected or denied",
-      "components": "ActionClassifier matrix",
+      "components": "ActionClassifier matrix incl. NFKC/confusable/bidi cases, no `ordinal`",
       "verification": "U, R"
     },
     {
@@ -409,7 +420,7 @@
       "priority": "Must",
       "pr": "18C",
       "requirement": "Healing never clicks, and builds no provider prompt for, a protected/denied action",
-      "components": "AIHealer entry guard (`policyOutcome === \"permit\"`)",
+      "components": "PilotActionGate across all four healer tiers + explorer refusal",
       "verification": "U, R"
     },
     {
@@ -433,15 +444,15 @@
       "priority": "Should",
       "pr": "18C",
       "requirement": "Artifact policy \"none\": zero screenshots/traces/DOM snapshots; \"on-failure\": only failed steps on listed routes",
-      "components": "Manifest artifacts policy",
-      "verification": "R"
+      "components": "Manifest artifacts policy + playwright.config pilot project",
+      "verification": "R, S"
     },
     {
       "id": "P18-AC-051",
       "priority": "Must",
       "pr": "18D",
       "requirement": "CSRF-protected form: approved protected submit succeeds with in-run token, token absent from artifacts; unapproved: zero POSTs",
-      "components": "ApprovalStore + CSRF fixture + EvidenceBoundary",
+      "components": "ApprovalStore + run token + CSRF fixture + armed NetworkGate",
       "verification": "R"
     },
     {
@@ -457,7 +468,7 @@
       "priority": "Must",
       "pr": "18D",
       "requirement": "Approval bound to plan digest, manifest version, role, target origin, action ID; any mismatch `APPROVAL_MISMATCH`",
-      "components": "approval/Binding",
+      "components": "approval/Binding — eight fields",
       "verification": "U, R"
     },
     {
@@ -473,7 +484,7 @@
       "priority": "Must",
       "pr": "18D",
       "requirement": "Consumed approval reused after process restart: `APPROVAL_REPLAYED`",
-      "components": "ApprovalStore durable consumption across restart",
+      "components": "ApprovalStore durable exclusive consumption across restart and concurrency",
       "verification": "R"
     },
     {
@@ -497,7 +508,7 @@
       "priority": "Should",
       "pr": "18D",
       "requirement": "Edited approval/history file detected; zero clicks",
-      "components": "AuditLog hash chain + verify()",
+      "components": "AuditLog chain + anchors + verify() after a prune",
       "verification": "U, R"
     },
     {
@@ -513,7 +524,7 @@
       "priority": "Must",
       "pr": "18E",
       "requirement": "Canaries seeded in cookie, Authorization header, password field, URL token, localStorage, env credential occur zero times in every persisted artifact across execute, dry-run, failed login, expired session and shard runs",
-      "components": "EvidenceBoundary + CanaryRegistry, 5 run shapes",
+      "components": "EvidenceBoundary + CanaryRegistry, 5 run shapes, all encoded forms, rotation, DEBUG",
       "verification": "R"
     },
     {
@@ -577,7 +588,7 @@
       "priority": "Should",
       "pr": "18E",
       "requirement": "Documented cleanup removes artifacts older than the retention period",
-      "components": "Retention.js + docs",
+      "components": "Retention.js segment-aware, lstat-only, confined + docs",
       "verification": "U, D"
     },
     {
