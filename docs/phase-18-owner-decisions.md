@@ -72,7 +72,7 @@ None of these is accepted by the design. Accepting each means documenting it in 
 1. **Application-derived text.** Known-value redaction catches only values the registry knows; unknown secrets in page text can reach reports, the dashboard, prompts and screenshots.
 2. **Screenshots when enabled.** Masking is selector-based; secrets in unmasked regions, canvas or images are not detected.
 3. **Same-uid tamper.** The approval hash chain is tamper-evident only; a same-uid insider can rewrite it consistently. Same-uid rollback is bounded by the token TTL and wall-clock trust. The approver string is not authentication.
-4. **Destructive-action detection is heuristic.** Novel vocabulary not in the manifest may classify as permit; the control is manifest vocabulary plus deny-by-route. Destructive GETs on allowed routes depend on manifest authoring.
+4. **Destructive-action detection.** SUPERSEDED by owner decision OWNER-07 (see ADR-0043 as amended by the rev 9 patch): unknown state-changing actions are protected by default and the permitted set is positive and closed. The remaining residual is an application that violates its declared behaviour; destructive GETs on allowed routes still depend on manifest authoring.
 5. **Provider-side retention** of prompts (which may contain redacted application text) is outside Falcon's control.
 6. **Short secret values** (3 bytes or fewer) cannot be redacted without false positives.
 7. **Chromium only** (OD-19); other engines untested.

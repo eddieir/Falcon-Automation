@@ -1,6 +1,6 @@
 # Phase 18 decision traceability and rev 8 review notes
 
-Companion to the [rev 8 patch](architecture/phase-18-rev8-patch.md). Maps each recorded owner decision (OWNER-01..OWNER-07) and the Security gates m-15..m-19 to acceptance criteria, ADRs, implementing PR and required tests, and lists wording conflicts and issues the architect flagged. Status: DRAFT pending SEC-08. Nothing here authorizes implementation, merge or publication.
+Companion to the [rev 8 patch](architecture/phase-18-rev8-patch.md) and the [rev 9 patch](architecture/phase-18-rev9-patch.md), whose section 3d.E lists the row-level corrections (D2, D4, D5, D7, D11, m-20) that supersede the rows below where they differ. Maps each recorded owner decision (OWNER-01..OWNER-07; D1=OWNER-01, D2=OWNER-02, D3 and D4=OWNER-03, D5=OWNER-04, D6 and D7=OWNER-05, D8/D9/D10=OWNER-06, D11=OWNER-07; the D11 text is in the owner's message recorded as OWNER-07, not in the owner decision packet) and the Security gates m-15..m-19 to acceptance criteria, ADRs, implementing PR and required tests, and lists wording conflicts and issues the architect flagged. Status: DRAFT pending SEC-08. Nothing here authorizes implementation, merge or publication.
 
 ## Decision-to-AC-to-ADR-to-PR-to-test mapping
 
