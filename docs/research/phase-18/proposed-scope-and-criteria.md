@@ -99,7 +99,7 @@ Priority M/S/C = Must/Should/Could.
 |---|---|---|
 | P18-AC-051 | M | CSRF-protected form: approved protected submit succeeds with in-run token, token absent from artifacts; unapproved: zero POSTs |
 | P18-AC-052 | M | No approval: `APPROVAL_REQUIRED`, zero clicks |
-| P18-AC-053 | M | Approval bound to plan digest, manifest version, role, action ID; any mismatch `APPROVAL_MISMATCH` |
+| P18-AC-053 | M | Approval bound to plan digest, manifest version, role, target origin, action ID; any mismatch `APPROVAL_MISMATCH` |
 | P18-AC-054 | M | Expired or pre-change approval: `APPROVAL_STALE` |
 | P18-AC-055 | M | Consumed approval reused after process restart: `APPROVAL_REPLAYED` |
 | P18-AC-056 | M | Approval for an unknown plan digest: `APPROVAL_UNKNOWN_PLAN` |
@@ -145,7 +145,7 @@ Coordinator note: the recommended defaults are the Product Owner's or the coordi
 
 | ID | Decision | Proposed default |
 |---|---|---|
-| OD-01 | Approval binding fields | digest + manifest version + role + action ID (+ origin, per roadmap) |
+| OD-01 | Approval binding fields | digest + manifest version + role + target origin + action ID; whether to add the Falcon commit SHA is open |
 | OD-02 | Approval TTL and approver identity source | run-scoped; operator-supplied identity string; no SSO |
 | OD-03 | Digest algorithm and material/non-material fields | SHA-256 over canonical JSON; architect lists fields |
 | OD-04 | Numeric defaults for page, time and auth-timeout budgets | architect proposes |
