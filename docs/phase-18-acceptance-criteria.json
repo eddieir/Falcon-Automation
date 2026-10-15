@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "phase": 18,
   "status": "DRAFT",
-  "designRevision": "3741d42 (architecture rev 2 plus rev 3..rev 8 patches)",
+  "designRevision": "fbb1712 (architecture rev 2 plus rev 3..rev 9 patches)",
   "baseline": "2572e73",
   "source": "docs/research/phase-18/proposed-scope-and-criteria.md",
   "ownerApproval": "Scope, 82 criteria and claims policy approved by the owner at 99bd7c5 subject to decisions OD-01..OD-19; see the production-cycle ledger; owner decisions OWNER-01..OWNER-07 recorded at 3741d42 (BLOCKER-1, OD-17-Q1, OD-20..OD-24, residual disposition) approve policy direction only and authorise no implementation, merge, tag or publication",
@@ -24,8 +24,8 @@
     },
     {
       "id": "SPIKE-R",
-      "ref": "architecture section 7",
-      "state": "redirect-hop behaviour unverified; route.fetch({maxRedirects:0}) fallback mandated; 18C merge condition"
+      "ref": "architecture section 7 and rev 9 m-22",
+      "state": "redirect-hop behaviour unverified; route.fetch({maxRedirects:0}) fallback mandated; now also gates the four lease redirect-hop rules; 18C merge condition"
     },
     {
       "id": "SPIKE-W",
@@ -35,7 +35,7 @@
     {
       "id": "SPIKE-FS",
       "ref": "rev 8 section 2c.5",
-      "state": "numeric statfs ids plus O_EXCL/rename/fsync behaviour evidence required before tmpfs or zfs is admitted and before 18F merges"
+      "state": "numeric statfs ids plus O_EXCL/rename/fsync behaviour evidence required before tmpfs or zfs is admitted and before 18F merges; no numeric id may be asserted from a kernel header or from documentation, only observed and committed values; SPIKE-FS also records whether the observed tmpfs id is shared with ramfs"
     },
     {
       "id": "GATE-m15",
@@ -65,12 +65,17 @@
     {
       "id": "OD-24-Q1",
       "ref": "rev 8 section 2d",
-      "state": "owner must choose the narrow reading (hermetic in-process fixture approval permitted in CI) or amend AC-074; P18-AC-051 depends on it"
+      "state": "owner must choose: (a) narrow reading plus the rev 9 section 3b.2 code-enforced fixture-capability boundary (no Must amended; architect recommendation), or (b) strict reading, which makes P18-AC-051's approved half local-only and requires the owner to amend P18-AC-074 to exempt one named test"
     },
     {
       "id": "OD-20-Q1",
       "ref": "rev 8 section 2d",
-      "state": "tmpfs for approvalsRoot: fsync is not durable on tmpfs; recommend authRoot/plansRoot only unless the owner accepts loss of audit history on reboot"
+      "state": "tmpfs for approvalsRoot: fsync is not durable on tmpfs; recommend authRoot/plansRoot only unless the owner accepts loss of audit history on reboot; if accepted, admission becomes per root (tmpfs permitted for auth and plans, refused for approvals) and AC-085 states this"
+    },
+    {
+      "id": "H-1",
+      "ref": "rev 9 section 3a.4",
+      "state": "WebSocket frames and service-worker-originated requests are not reliably interceptable; preventive addInitScript ships regardless; documented residual, not a control"
     }
   ],
   "exitCodes": {
@@ -86,8 +91,8 @@
     "planInvalid": 2
   },
   "counts": {
-    "total": 88,
-    "must": 79,
+    "total": 91,
+    "must": 82,
     "should": 6,
     "could": 3
   },
@@ -425,7 +430,7 @@
       "priority": "Must",
       "pr": "18C",
       "requirement": "Delete/Pay/Transfer/Publish/Send/Submit matrix varied by name, text, type, form action, URL: 100% protected or denied; and a state-changing-capable control with an unfamiliar or unrecognised label is protected, never permitted",
-      "components": "ActionClassifier matrix incl. NFKC/confusable/bidi cases, no `ordinal` + rule 3 state-changing-capable predicate (ADR-0043)",
+      "components": "ActionClassifier matrix incl. NFKC/confusable/bidi cases, no `ordinal` + the closed positive permit set: only an exact manifest permit entry or a frozen read-only action is permitted, everything else is protected (ADR-0043 as amended by rev 9)",
       "verification": "U, R"
     },
     {
@@ -448,7 +453,7 @@
       "id": "P18-AC-045",
       "priority": "Must",
       "pr": "18C",
-      "requirement": "Provider \"safe\" never lowers a protected/denied outcome; it may only add caution",
+      "requirement": "Provider \"safe\" never lowers a protected/denied outcome; it may only add caution; and no classification is lowered indirectly, through a plan row, a healed or re-resolved element, or provider output — the effective class is the maximum of all three, recomputed at execution from the freshly loaded manifest",
       "components": "applyProviderAdvice monotonic",
       "verification": "U, R"
     },
@@ -497,7 +502,7 @@
       "priority": "Must",
       "pr": "18D",
       "requirement": "CSRF-protected form: approved protected submit succeeds with in-run token, token absent from artifacts; unapproved: zero POSTs",
-      "components": "ApprovalStore + run token + CSRF fixture + armed NetworkGate; in shard mode every protected step is refused APPROVAL_REQUIRED exit 14 so the zero-POST half holds by refusal (D3); in CI there is no approve step and a protected action is refused exit 14 (D4); the approved half is proven through the in-process ApprovalStore API against the loopback fixture, subject to OD-24-Q1",
+      "components": "ApprovalStore + run token + CSRF fixture + armed NetworkGate; in shard mode every protected step is refused APPROVAL_REQUIRED exit 14 so the zero-POST half holds by refusal (D3); in CI there is no approve step and a protected action is refused exit 14 (D4); the approved half is proven through a fixture-scoped, in-memory-only approval that mints only in a process running a registered loopback-literal fixture server with a per-run in-memory capability, is consumable only for that origin, creates no run/approvals path, and additionally requires the dedicated test-runner flag when CI=true (rev 9 section 3b.2); subject to OD-24-Q1",
       "verification": "R"
     },
     {
@@ -729,7 +734,7 @@
       "priority": "Must",
       "pr": "DOC",
       "requirement": "New `.env.example` keys are genuinely blank",
-      "components": "`.env.example` blank-value check",
+      "components": "`.env.example` blank-value check; FALCON_PILOT_TEST_RUNNER is also asserted absent from .env.example",
       "verification": "S"
     },
     {
@@ -760,7 +765,7 @@
       "id": "P18-AC-084",
       "priority": "Must",
       "pr": "18F",
-      "requirement": "No workflow contains an approve step, approve flag, run-token env key, token file or approvals path; a protected action reached in CI is refused APPROVAL_REQUIRED exit 14",
+      "requirement": "No workflow contains an approve step, approve flag, run-token env key, token file or approvals path; a protected action reached in CI is refused APPROVAL_REQUIRED exit 14; the static check resolves npm/yarn/npx script indirection and node/bash invocations transitively with cycle detection, walks static require graphs, fails on any reachable approve flag, token key, approvals path or approval-module import outside src/core/pilot/ and tests/, and fails closed on any command it cannot statically resolve",
       "components": "static ci.yml check over every job + CI pilot job expected-exit assertion (OD-24, ADR-0041)",
       "verification": "S, R"
     },
@@ -768,7 +773,7 @@
       "id": "P18-AC-085",
       "priority": "Must",
       "pr": "18E",
-      "requirement": "Filesystem admission is numeric and evidence-gated: tmpfs and zfs only with a recorded statfs id and passing O_EXCL, rename and fsync behaviour tests; overlayfs, virtiofs, drvfs and every unrecorded id are refused PILOT_INTERNAL_ERROR exit 18 with an actionable message naming the observed id and path, never a skip",
+      "requirement": "Filesystem admission is numeric and evidence-gated: tmpfs and zfs only with a recorded statfs id and passing O_EXCL, rename and fsync behaviour tests; overlayfs, virtiofs, drvfs and every unrecorded id are refused PILOT_INTERNAL_ERROR exit 18 with an actionable message naming the observed id and path, never a skip; admission is evaluated per root (auth, plans, approvals) against a per-root admitted-id set, and no id is admissible from a kernel header or documentation — only an observed, committed value",
       "components": "SafeFs.assertLocalFilesystem + SPIKE-FS evidence table + filesystem behaviour tests (OD-20, ADR-0030 amended)",
       "verification": "U, S, I"
     },
@@ -784,8 +789,8 @@
       "id": "P18-AC-087",
       "priority": "Must",
       "pr": "18C",
-      "requirement": "A state-changing-capable action not explicitly permitted by manifest policy is classified protected, never permitted; ambiguous state-changing actions fail closed; unfamiliar vocabulary never yields a permit; provider output cannot lower a classification; every permitted outcome is traceable to a named manifest policy entry or the run refuses exit 18",
-      "components": "ActionClassifier default-protected rule + PolicyEngine permit traceability (D11, ADR-0043); inversion required",
+      "requirement": "Classification is total by construction: only an exact manifest permit entry or a member of the frozen read-only action enum is permitted, and every other (element, action) pair is protected — no element-shape enumeration gates the decision; unresolvable or duplicate identities are CONTROL_AMBIGUOUS with zero clicks; unfamiliar vocabulary never yields a permit; every permitted outcome is traceable to a re-validated named manifest entry or the run refuses exit 18",
+      "components": "ActionClassifier closed positive permit set + frozen read enum + PolicyEngine permit re-validation (D11/OWNER-07, ADR-0043 amended by rev 9); inversion required",
       "verification": "U, R"
     },
     {
@@ -794,6 +799,30 @@
       "pr": "18A",
       "requirement": "A pilot run writes no healing or locator evidence anywhere — no reports/healing_logs.json, no data/healing_pending.json, healing_decisions.json, locator_store.json or locator_memory.json, no bundle record — and emits only a closed-key-set, closed-enum, per-run integer counter block through Logger, absent from timings.json, bundles, reports and dashboard events",
       "components": "pilot-mode HealingReport/HealingTrust switch + read-only locator path + counter schema (OD-17-Q1, m-19, ADR-0040)",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-089",
+      "priority": "Must",
+      "pr": "18B",
+      "requirement": "Classification is recomputed at gate.perform from the freshly loaded manifest against the element actually acted on; the effective class is the maximum of plan row, live recompute and provider advice over denied > protected > permitted; a plan row can never lower a class (it records PLAN_CLASSIFICATION_DRIFT when it tries) and a healed or re-resolved element whose identity differs from the approved one is refused APPROVAL_MISMATCH exit 14",
+      "components": "PilotActionGate.perform recompute + maximum rule + heal re-classification (rev 9 section 3a.3)",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-090",
+      "priority": "Must",
+      "pr": "18D",
+      "requirement": "A fixture-scoped approval mints only in a process holding a live registered loopback-literal fixture server with a matching per-run in-memory capability and a loopback-only manifest, additionally requires FALCON_PILOT_TEST_RUNNER=1 and a tests/ entry point when CI or GITHUB_ACTIONS is true, is held only in memory with no run/approvals path, file, audit chain or receipt created, and is refused at consumption for any non-loopback destination (APPROVAL_REQUIRED exit 14, reason fixture_approval_non_loopback); --approve-action and --emit-token-to refuse exit 1 in CI",
+      "components": "ApprovalStore.mintFixtureScoped + FixtureServer in-module registry + gate.perform scope re-check (rev 9 section 3b.2, ADR-0044)",
+      "verification": "U, R, S"
+    },
+    {
+      "id": "P18-AC-091",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "The execute-mode network gate decides from method, origin, canonical path, page, frame, resource type, body-size class and the live lease only, and never from a classification, plan row, action record or provider verdict; every unarmed non-GET and every GET to a non-allowed route is aborted regardless of originator, including fetch, XMLHttpRequest, sendBeacon, form.requestSubmit, implicit Enter submission and a dynamically injected form, proven with a deliberately wrong permitted classification on the triggering control",
+      "components": "NetworkGate independence (section 7a rule 3a) + neg-n1-script-dispatch; WebSocket and service-worker paths are documented residual H-1",
       "verification": "U, R"
     }
   ]
