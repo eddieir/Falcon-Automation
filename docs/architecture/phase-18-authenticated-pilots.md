@@ -1,6 +1,6 @@
 # Phase 18 — Authenticated Pilots
 
-Status: **DRAFT rev 2** pending SEC-03 re-review against [the threat model](../security/phase-18-threat-model.md) and [the SEC-02 design review](../security/phase-18-design-review.md), and the owner decisions on BLOCKER-1 and the OWNER-RISK items in [the plan](../phase-18-plan.md). Revision 1 was designed against `99bd7c5`; revision 2 against `e589247`.
+Status: **DRAFT rev 2 plus the normative [rev 3 patch](phase-18-rev3-patch.md)**, pending SEC-04 re-review and the owner decisions on BLOCKER-1 and OD-20..OD-22. Where the patch conflicts with the text below, the patch wins.
 
 ## 1. Context and constraints
 
