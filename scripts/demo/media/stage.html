@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Falcon demo stage</title>
+<style>
+  :root {
+    --ink: #eef2f8; --dim: #9aa7bd; --faint: #5d6a80; --panel: #0e131c; --panel2: #141b27; --line: #2a3447;
+    --accent: #5ab0ff; --good: #3ddc84; --bad: #ff6b6b; --warn: #ffc857; --mono: "SF Mono", Menlo, Consolas, monospace;
+  }
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  body { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--ink); position: relative; }
+  .abs { position: absolute; box-sizing: border-box; }
+  .title { font-weight: 750; letter-spacing: -0.01em; line-height: 1.08; }
+  .subtitle { color: var(--dim); font-weight: 500; line-height: 1.25; }
+  .chip { display: inline-block; padding: 3px 14px; border-radius: 999px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .frame { border: 2px solid var(--line); border-radius: 10px; }
+  .bar { color: var(--dim); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .panel { background: var(--panel); border: 2px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .panel > .head { padding: 10px 18px; background: var(--panel2); border-bottom: 2px solid var(--line); color: var(--dim); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; display: flex; justify-content: space-between; gap: 16px; }
+  .panel > .body { padding: 14px 20px; }
+  .mono { font-family: var(--mono); }
+  .term-line { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+  .t-cmd { color: var(--ink); font-weight: 700; } .t-out { color: #c4cddd; } .t-warn { color: var(--warn); } .t-err { color: var(--bad); } .t-ok { color: var(--good); }
+  .t-src { color: var(--faint); }
+  .caption { border-left: 8px solid var(--accent); padding: 6px 0 6px 26px; font-weight: 650; line-height: 1.22; }
+  .kv-row { display: flex; gap: 22px; padding: 6px 0; align-items: baseline; border-bottom: 1px solid #1c2433; }
+  .kv-row .k { color: var(--dim); min-width: 34%; } .kv-row .v { font-weight: 650; overflow-wrap: anywhere; }
+  .tone-good { color: var(--good); } .tone-bad { color: var(--bad); } .tone-warn { color: var(--warn); } .tone-accent { color: var(--accent); }
+  .code-line { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-radius: 4px; }
+  .c-del { background: rgba(255,107,107,.16); color: #ffb3b3; } .c-add { background: rgba(61,220,132,.15); color: #a6f0c4; } .c-hl { background: rgba(90,176,255,.16); color: #bfe0ff; }
+  .check { display: flex; gap: 16px; padding: 4px 0; align-items: baseline; }
+  .check .mark { width: 34px; font-weight: 800; } .check .detail { color: var(--dim); margin-left: auto; }
+  .bar-row { margin: 6px 0; } .bar-row .lbl { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .bar-track { position: relative; height: 18px; background: #1a2230; border-radius: 6px; }
+  .bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; }
+  .bar-mark { position: absolute; top: -6px; bottom: -6px; width: 4px; background: var(--ink); }
+  .img-row { display: flex; gap: 24px; align-items: flex-start; } .img-row figure { margin: 0; flex: 1; } .img-row img { width: 100%; border-radius: 8px; border: 2px solid var(--line); display: block; } .img-row figcaption { margin-top: 10px; color: var(--dim); font-weight: 600; }
+  .still { position: absolute; border-radius: 10px; overflow: hidden; border: 2px solid var(--line); background: #05070b; } .still img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+  .statement p { margin: 0 0 14px; font-weight: 700; line-height: 1.2; }
+</style>
+</head>
+<body>
+<script>
+  "use strict";
+  const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  const place = (e, r, extra) => { e.classList.add("abs"); e.style.left = r.x + "px"; e.style.top = r.y + "px"; e.style.width = r.w + "px"; if (r.h !== undefined) e.style.height = r.h + "px"; if (extra) Object.assign(e.style, extra); return e; };
+  window.assets = {};
+  window.setAssets = (a) => { window.assets = a; };
+
+  function panel(c) {
+    const p = place($("div", "panel"), c.rect);
+    if (c.title) { const h = $("div", "head"); h.style.fontSize = (c.headSize || 20) + "px"; h.append($("span", "", c.title)); if (c.chip) h.append($("span", c.chipTone ? "tone-" + c.chipTone : "", c.chip)); p.append(h); }
+    const b = $("div", "body"); b.style.fontSize = (c.size || 28) + "px"; p.append(b);
+    return [p, b];
+  }
+
+  const cards = {
+    statement(c) { const [p, b] = panel(c); b.classList.add("statement"); for (const l of c.lines) { const e = $("p", l.tone ? "tone-" + l.tone : "", l.text); if (l.size) e.style.fontSize = l.size + "px"; b.append(e); } return p; },
+    kv(c) { const [p, b] = panel(c); for (const r of c.rows) { const row = $("div", "kv-row"); row.append($("span", "k", r.k)); row.append($("span", "v" + (r.tone ? " tone-" + r.tone : "") + (r.mono ? " mono" : ""), r.v)); b.append(row); } return p; },
+    code(c) { const [p, b] = panel(c); b.classList.add("mono"); for (const l of c.lines) b.append($("div", "code-line" + (l.tone ? " c-" + l.tone : ""), l.text)); return p; },
+    checks(c) { const [p, b] = panel(c); for (const i of c.items) { const row = $("div", "check"); const tone = i.state === "pass" ? "good" : i.state === "fail" ? "bad" : "warn"; row.append($("span", "mark tone-" + tone, i.state === "pass" ? "✓" : i.state === "fail" ? "✗" : "…")); row.append($("span", "", i.text)); if (i.detail) row.append($("span", "detail" + (i.mono ? " mono" : ""), i.detail)); b.append(row); } return p; },
+    bars(c) { const [p, b] = panel(c); for (const r of c.bars) { const row = $("div", "bar-row"); const lbl = $("div", "lbl"); lbl.append($("span", r.mono ? "mono" : "", r.label)); lbl.append($("span", "tone-" + (r.tone || "accent"), r.value)); row.append(lbl); const tr = $("div", "bar-track"); const f = $("div", "bar-fill"); f.style.width = (100 * r.fraction) + "%"; f.style.background = r.tone === "good" ? "#2fa866" : r.tone === "bad" ? "#c75050" : "#3b7fd0"; tr.append(f); if (r.mark !== undefined) { const m = $("div", "bar-mark"); m.style.left = (100 * r.mark) + "%"; tr.append(m); } row.append(tr); if (r.note) { const n = $("div", "", r.note); n.style.color = "#9aa7bd"; n.style.fontSize = "0.72em"; n.style.marginTop = "6px"; row.append(n); } b.append(row); } return p; },
+    images(c) { const [p, b] = panel(c); const row = $("div", "img-row"); if (c.column) row.style.flexDirection = "column"; for (const i of c.items) { const fig = $("figure"); const img = $("img"); img.src = window.assets[i.asset]; fig.append(img); fig.append($("figcaption", "", i.caption)); row.append(fig); } b.append(row); return p; },
+  };
+
+  window.draw = (s) => {
+    document.body.replaceChildren();
+    document.body.style.width = s.size.w + "px"; document.body.style.height = s.size.h + "px";
+    const h = place($("div"), s.header.rect);
+    const t = $("div", "title", s.title); t.style.fontSize = s.header.titleSize + "px"; h.append(t);
+    if (s.subtitle) { const st = $("div", "subtitle", s.subtitle); st.style.fontSize = s.header.subSize + "px"; st.style.marginTop = "8px"; h.append(st); }
+    document.body.append(h);
+    if (s.sceneChip) { const ch = place($("div", "chip", s.sceneChip.text), s.sceneChip.rect); ch.style.fontSize = s.sceneChip.size + "px"; ch.style.background = "#1a2a40"; ch.style.color = "#bcd9ff"; ch.style.textAlign = "center"; document.body.append(ch); }
+    for (const f of s.frames || []) {
+      document.body.append(place($("div", "frame"), f.rect));
+      if (f.label) { const l = place($("div", "bar", f.label), { x: f.rect.x, y: f.rect.y - f.labelH, w: f.rect.w }); l.style.fontSize = f.labelSize + "px"; l.style.lineHeight = f.labelH + "px"; document.body.append(l); }
+    }
+    for (const st of s.stills || []) { const d = place($("div", "still"), st.rect); const img = $("img"); img.src = window.assets[st.asset]; d.append(img); document.body.append(d); }
+    for (const c of s.cards || []) document.body.append(cards[c.kind](c));
+    if (s.terminal) {
+      const t2 = s.terminal; const p = place($("div", "panel"), t2.rect);
+      const head = $("div", "head"); head.style.fontSize = t2.headSize + "px"; head.append($("span", "", t2.title)); head.append($("span", "tone-warn", t2.note || "")); p.append(head);
+      const body = $("div", "body mono"); body.style.fontSize = t2.size + "px"; body.style.lineHeight = t2.lineH + "px"; body.style.padding = "8px 18px";
+      for (const l of t2.lines) { const row = $("div", "term-line t-" + l.kind); if (l.src) row.append($("span", "t-src", l.src + " ")); row.append(document.createTextNode(l.text)); body.append(row); }
+      p.append(body); document.body.append(p);
+    }
+    if (s.caption) { const c = place($("div", "caption", s.caption.text), s.caption.rect); c.style.fontSize = s.caption.size + "px"; c.style.borderLeftColor = s.caption.tone === "good" ? "#3ddc84" : s.caption.tone === "bad" ? "#ff6b6b" : s.caption.tone === "warn" ? "#ffc857" : "#5ab0ff"; document.body.append(c); }
+    for (const b of s.badges || []) { const e = place($("div", "chip", b.text), b.rect); e.style.fontSize = b.size + "px"; e.style.background = b.bg; e.style.color = b.fg; e.style.textAlign = "center"; document.body.append(e); }
+  };
+</script>
+</body>
+</html>

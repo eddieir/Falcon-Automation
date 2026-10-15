@@ -47,7 +47,7 @@ const FlakinessTracker = require("./FlakinessTracker");
 class TestRunner {
     constructor(page, testPlan, options = {}) {
         this.page = page;
-        this.healer = new AIHealer(page, { providerContext: options.providerContext });
+        this.healer = new AIHealer(page, { ...options.healerOptions, providerContext: options.providerContext });
         this.testPlan = testPlan || { url: "", test_scenarios: [] };
         this.results = [];
     }
@@ -67,6 +67,30 @@ class TestRunner {
             // made inside runScenario() itself.
             await this.runScenario(scenario);
 
+            // Journey plans (--plan with "journey": true) are ordered steps of
+            // one user flow: later steps depend on the state earlier steps
+            // left behind, so the page is not reset between steps, the first
+            // step that does not pass ends the journey, and a step that
+            // carried the browser to another origin is never followed.
+            if (this.testPlan.journey) {
+                const last = this.results[this.results.length - 1];
+                if (!last || last.status !== "passed") {
+                    this._skipRemaining(scenario, "an earlier step did not pass");
+                    break;
+                }
+                if (this._leftPlanOrigin()) {
+                    this.results.push({
+                        name: "Stay on the application under test",
+                        status: "failed",
+                        error: "The journey navigated to a different origin than the plan's URL.",
+                        errorType: "unexpected_navigation",
+                    });
+                    this._skipRemaining(scenario, "the journey left the plan's origin");
+                    break;
+                }
+                continue;
+            }
+
             // Phase 11: a scenario that navigated the page (typically a
             // click on a link) must not leave every later scenario in this
             // plan running against the DOM it left behind.
@@ -74,6 +98,98 @@ class TestRunner {
         }
 
         return this.results;
+    }
+
+    _skipRemaining(current, reason) {
+        const list = this.testPlan.test_scenarios;
+        for (const rest of list.slice(list.indexOf(current) + 1)) {
+            this.results.push({ name: rest.description, status: "skipped", reason: `Not run: ${reason}` });
+        }
+    }
+
+    _leftPlanOrigin() {
+        if (typeof this.page.url !== "function") return false;
+        try {
+            return new URL(this.page.url()).origin !== new URL(this.testPlan.url).origin;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * `expect` — a read-only check. It never goes through AIHealer: a wrong
+     * expectation is a finding, not a broken locator, and must not be "healed".
+     * Two distinct failures: `unavailable` (the target never appeared within the
+     * timeout, or matched more than one element) and `failed` (the target was
+     * there but the condition did not hold). Both fail the run.
+     */
+    async runExpect(scenario) {
+        const startTime = Date.now();
+        const timeout = scenario.timeoutMs ?? 5000;
+        const evidence = {
+            check: scenario.check,
+            locator: scenario.locator,
+            ...(scenario.attribute ? { attribute: scenario.attribute } : {}),
+            ...(scenario.value !== undefined ? { expected: scenario.value } : {}),
+            timeoutMs: timeout,
+        };
+        const row = (status, extra) => {
+            const duration = Date.now() - startTime;
+            this.results.push({ name: scenario.description, status, duration, assertion: { ...evidence, ...extra } });
+        };
+        Logger.info(`▶ Asserting: ${scenario.description} (${scenario.check})`);
+        const locator = this.page.locator(scenario.locator);
+        let count = 0;
+        try {
+            await locator.first().waitFor({ state: "attached", timeout });
+            count = await locator.count();
+        } catch {
+            Logger.error(`❌ Assertion target unavailable: ${scenario.description}`);
+            row("unavailable", { outcome: "target_unavailable", matches: 0 });
+            this.results[this.results.length - 1].reason = "Assertion target was not found within the timeout";
+            return;
+        }
+        if (count !== 1) {
+            Logger.error(`❌ Assertion target ambiguous: ${scenario.description} (${count} matches)`);
+            row("unavailable", { outcome: "target_ambiguous", matches: count });
+            this.results[this.results.length - 1].reason = `Assertion target matched ${count} elements`;
+            return;
+        }
+        let ok = false;
+        let actual;
+        try {
+            if (scenario.check === "visible") {
+                await locator.waitFor({ state: "visible", timeout });
+                ok = true;
+            } else if (scenario.check === "containsText") {
+                const deadline = Date.now() + timeout;
+                do {
+                    actual = (await locator.textContent({ timeout: 1000 })) || "";
+                    ok = actual.includes(scenario.value);
+                    if (!ok) await this.page.waitForTimeout(100);
+                } while (!ok && Date.now() < deadline);
+                actual = actual.slice(0, 200);
+            } else {
+                const deadline = Date.now() + timeout;
+                do {
+                    actual = await locator.getAttribute(scenario.attribute, { timeout: 1000 });
+                    ok = scenario.check === "attributeExists" ? actual !== null : actual === scenario.value;
+                    if (!ok) await this.page.waitForTimeout(100);
+                } while (!ok && Date.now() < deadline);
+            }
+        } catch {
+            ok = false;
+        }
+        if (ok) {
+            Logger.info(`✅ Assertion passed: ${scenario.description}`);
+            row("passed", { outcome: "passed", matches: 1, ...(actual !== undefined && actual !== null ? { actual } : {}) });
+            return;
+        }
+        Logger.error(`❌ Assertion failed: ${scenario.description}`);
+        row("failed", { outcome: "assertion_failed", matches: 1, ...(actual !== undefined ? { actual } : {}) });
+        const failed = this.results[this.results.length - 1];
+        failed.error = `Assertion failed: ${scenario.check}`;
+        failed.errorType = "assertion";
     }
 
     /**
@@ -112,6 +228,11 @@ class TestRunner {
 
     async runScenario(scenario) {
         const startTime = Date.now();
+
+        if (scenario.action === "expect") {
+            await this.runExpect(scenario);
+            return;
+        }
 
         if (scenario.action !== "click" && scenario.action !== "type" && scenario.action !== "select") {
             Logger.warning(`⚠️ Unknown action "${scenario.action}" for ${scenario.description} — skipping.`);

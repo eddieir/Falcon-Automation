@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body { margin: 0; padding: 0; width: 1200px; height: 627px; overflow: hidden; }
+  body {
+    position: relative;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: linear-gradient(135deg, #0b1220 0%, #101b33 60%, #0b1220 100%);
+    color: #f5f7fa;
+  }
+  .frame {
+    position: absolute;
+    right: 44px;
+    top: 118px;
+    width: 660px;
+    height: 371px;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+    border: 1px solid rgba(255,255,255,0.12);
+    background: #050812;
+  }
+  .frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .copy {
+    position: absolute;
+    left: 56px;
+    top: 190px;
+    width: 440px;
+  }
+  .headline {
+    font-size: 46px;
+    font-weight: 700;
+    line-height: 1.18;
+    margin: 0 0 22px 0;
+    letter-spacing: -0.01em;
+  }
+  .byline {
+    font-size: 17px;
+    font-weight: 500;
+    color: #9fb3d9;
+    letter-spacing: 0.01em;
+  }
+  .dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #35d07f;
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+  <div class="copy">
+    <div class="headline">Self-healing tests<br/>with human control</div>
+    <div class="byline"><span class="dot"></span>Falcon Automation &middot; open-source technical preview</div>
+  </div>
+  <!-- The build script (poster.js) replaces the placeholder with a data URI of a real
+       frame from the recording before rendering; this page runs no script of its own. -->
+  <div class="frame"><img id="frame-img" alt="recovery moment" src="__FRAME_DATA_URI__" /></div>
+</body>
+</html>

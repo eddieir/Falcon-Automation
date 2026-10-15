@@ -1,0 +1,47 @@
+diff --git a/lib/news-data.ts b/lib/news-data.ts
+--- a/lib/news-data.ts
++++ b/lib/news-data.ts
+@@ -68,6 +68,7 @@
+ }
+ 
+ export async function getNewsData():Promise<NewsData>{
++  if(process.env.AXON_DEMO_SEED==="1"){const{demoNewsData}=await import("@/lib/demo-news-seed");return demoNewsData()}
+   const results=await Promise.all([...feeds.map(fetchRss),fetchHackerNews()]);
+   const health=results.map(result=>result.health);
+   const seen=new Set<string>();
+@@ -77,6 +78,7 @@
+ }
+ 
+ export async function getNewsItem(slug:string){
++  if(process.env.AXON_DEMO_SEED==="1"){const{demoNewsData}=await import("@/lib/demo-news-seed");return demoNewsData().items.find(item=>item.slug===slug)}
+   const data=await getNewsData();
+   return data.items.find(item=>item.slug===slug)??await getArchivedNewsItem(slug);
+ }
+diff --git a/lib/demo-news-seed.ts b/lib/demo-news-seed.ts
+new file mode 100644
+--- /dev/null
++++ b/lib/demo-news-seed.ts
+@@ -0,0 +1,23 @@
++// Deterministic News data for the Falcon customer demo. Only used when
++// AXON_DEMO_SEED=1 is set in the server environment; production never sets it.
++import type{NewsData,NewsItem}from"@/lib/news-data";
++
++const base=Date.parse("2026-01-15T09:00:00.000Z");
++const entry=(n:number,slug:string,title:string,summary:string,source:string,category:NewsItem["category"]):NewsItem=>({id:`demo-${n}`,slug,title,summary,source,url:`https://example.org/demo/${slug}`,publishedAt:new Date(base-n*3600_000).toISOString(),category});
++
++export const demoNewsItems:NewsItem[]=[
++  entry(1,"lighthouse-agent-protocol-briefing","Lighthouse Agent Protocol lets coding agents hand off long tasks safely","The Lighthouse Agent Protocol defines how autonomous coding agents pass work, context and approvals between each other without losing an audit trail.","Demo Wire","Agents"),
++  entry(2,"demo-agents-planner","Planner agents learn to ask before they act","A demo article about planning agents that request human approval before risky steps.","Demo Wire","Agents"),
++  entry(3,"demo-frontier-model","A new frontier model arrives with longer context","A demo article about a frontier language model release.","Demo Wire","Frontier"),
++  entry(4,"demo-open-source","Open source toolkit trims inference cost","A demo article about an open source inference toolkit.","Demo Wire","Open source"),
++  entry(5,"demo-research-paper","Researchers publish a study on evaluation drift","A demo article about evaluation drift in language model benchmarks.","Demo Wire","Research"),
++  entry(6,"demo-creative-tools","Creative suite adds generative layout tools","A demo article about creative technology.","Demo Wire","Creative"),
++  entry(7,"demo-business-adoption","Enterprises report steady AI adoption","A demo article about business adoption of AI.","Demo Wire","Business"),
++  entry(8,"demo-robotics-arm","Warehouse robot arm learns new grips","A demo article about robotics.","Demo Wire","Robotics"),
++  entry(9,"demo-policy-update","Regulators publish an AI policy update","A demo article about AI policy.","Demo Wire","Policy"),
++];
++
++export function demoNewsData():NewsData{
++  const health=[{name:"Demo Wire",ok:true,count:demoNewsItems.length}];
++  return{items:demoNewsItems,meta:{updatedAt:"2026-01-15T09:00:00.000Z",total:demoNewsItems.length,liveSources:1,totalSources:1,health,refreshSeconds:300}};
++}

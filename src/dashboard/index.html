@@ -444,6 +444,7 @@
   .locator-row.trust-trusted { border-left-color: var(--pass); }
   .locator-row.trust-unproven { border-left-color: var(--skip); }
   .locator-row.trust-revoked { border-left-color: var(--fail); }
+  .locator-row.trust-unknown { border-left-color: var(--muted); }
 
   .locator-body { flex: 1; min-width: 200px; }
 
@@ -451,6 +452,29 @@
     font-weight: 600;
     word-break: break-all;
   }
+
+  .locator-status-badge {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 4px;
+    margin-bottom: 6px;
+  }
+  .locator-status-badge.status-pending { color: var(--skip); border: 1px solid var(--skip); }
+  .locator-status-badge.status-approved { color: var(--pass); border: 1px solid var(--pass); }
+  .locator-change {
+    font-size: 17px;
+    font-weight: 700;
+    word-break: break-all;
+  }
+  .locator-scope {
+    font-size: 14px;
+    margin: 2px 0 8px;
+    word-break: break-all;
+  }
+  .locator-secondary { opacity: .7; }
+  .locator-secondary .locator-detail { font-size: 11px; }
 
   .locator-detail {
     color: var(--muted);
@@ -795,6 +819,61 @@
     $("feed").prepend(row);
   }
 
+  let locatorRefreshTimer = null;
+  function scheduleLocatorRefresh() {
+    if (locatorRefreshTimer) clearTimeout(locatorRefreshTimer);
+    locatorRefreshTimer = setTimeout(() => {
+      locatorRefreshTimer = null;
+      refreshLocator();
+    }, 200);
+  }
+
+  function addStageRow(p, ts) {
+    switch (p.stage) {
+      case "original_failed": {
+        const tries = [];
+        if (p.attempts != null) tries.push(`${p.attempts} attempts`);
+        if (p.timeoutMs != null) tries.push(`${p.timeoutMs} ms each`);
+        const detail = [p.original ? String(p.original) : "", tries.join(", ")].filter(Boolean).join(" — ");
+        addRow("info", "⚠", "Original locator failed", detail || null, ts);
+        return;
+      }
+      case "recovery_started":
+        addRow("info", "🔎", "Local evidence match started", null, ts);
+        return;
+      case "candidate_selected": {
+        const d = [];
+        if (p.resolved) d.push(String(p.resolved));
+        if (typeof p.score === "number") d.push(`match score ${Math.round(p.score * 100)}%`);
+        if (Array.isArray(p.reasons) && p.reasons.length) d.push(p.reasons.join(", "));
+        addRow("heal", "🎯", "Local evidence match found", d.join(" · ") || null, ts);
+        return;
+      }
+      case "action_completed": {
+        const d = [];
+        if (p.resolved) d.push(String(p.resolved));
+        if (p.via === "approved") d.push("approved replacement reused");
+        addRow("heal", "✔", "Action completed", d.join(" · ") || null, ts);
+        return;
+      }
+      case "proposal_pending":
+        addRow("info", "⏳", "Approval required before reuse", null, ts);
+        return;
+      default:
+        return;
+    }
+  }
+
+  function addDecisionRow(p, ts) {
+    if (p.kind === "approve") {
+      addRow("pass", "✅", "Approved for scoped reuse", `${p.original} → ${p.resolved} (approved through the dashboard)`, ts);
+    } else if (p.kind === "reject") {
+      addRow("fail", "🚫", "Rejected", p.original ? `${p.original} → ${p.resolved}` : null, ts);
+    } else if (p.kind === "rollback") {
+      addRow("info", "↩", "Rolled back", p.original ? `${p.original} → ${p.resolved}` : null, ts);
+    }
+  }
+
   function handleEvent({ name, payload, timestamp }) {
     switch (name) {
       case "testStart":
@@ -817,9 +896,22 @@
         addRow("skip", "⏭", payload.name, payload.reason, timestamp);
         break;
       case "healingEvent":
-        state.heal++;
-        updateTiles();
-        addRow("heal", "🤖", `Healed: ${payload.original}`, `→ ${payload.resolved} [${payload.tier}]`, timestamp);
+        if (payload.resolved) {
+          state.heal++;
+          updateTiles();
+          addRow("heal", "🤖", `Healed: ${payload.original}`, `→ ${payload.resolved} [${payload.tier}]`, timestamp);
+          if (payload.tier === "LocatorMemory") scheduleLocatorRefresh();
+        } else {
+          addRow("info", "ℹ", "Recovery not applied", payload.reason || payload.status || null, timestamp);
+        }
+        break;
+      case "healingStage":
+        addStageRow(payload, timestamp);
+        if (payload.stage === "proposal_pending") scheduleLocatorRefresh();
+        break;
+      case "locatorDecision":
+        addDecisionRow(payload, timestamp);
+        scheduleLocatorRefresh();
         break;
       case "explorerPage":
         addRow("info", "🌍", `Explored: ${payload.url}`, null, timestamp);
@@ -1140,8 +1232,17 @@
   // and the pending candidate's proposed selector + numeric dimension
   // scores, never from the trusted/candidate signature object itself.
 
+  // Server enum, but never trusted blindly: constrain to the known trust
+  // states before using it in either a class attribute or a label, so a
+  // hostile/unexpected value can never break out of the class attribute or
+  // be rendered verbatim.
+  function locatorTrustClass(trust) {
+    return trust === "trusted" || trust === "unproven" || trust === "revoked" ? trust : "unknown";
+  }
+
   function locatorTrustLabel(trust) {
-    return trust === "trusted" ? "Trusted" : trust === "revoked" ? "Revoked" : "Unproven";
+    const safe = locatorTrustClass(trust);
+    return safe === "trusted" ? "Trusted" : safe === "revoked" ? "Revoked" : safe === "unproven" ? "Unproven" : "Unknown";
   }
 
   function locatorIdentityLabel(identity) {
@@ -1165,7 +1266,8 @@
 
   function locatorRow(entry) {
     const row = document.createElement("div");
-    row.className = `locator-row trust-${entry.trust}`;
+    const trustClass = locatorTrustClass(entry.trust);
+    row.className = `locator-row trust-${trustClass}`;
     const pending = entry.pendingCandidate;
     const previouslyRejected = pending && pending.previouslyRejected;
     const rejectedWarning = previouslyRejected && previouslyRejected.count > 0
@@ -1183,13 +1285,28 @@
         ${rejectedWarning}
       `
       : `<div class="locator-detail">no pending candidate</div>`;
-    const canDecide = pending && entry.trust !== "revoked";
+    const canDecide = pending && trustClass !== "revoked";
+    const approved = entry.approvedAlternative;
+    const approvedSelector = approved && typeof approved === "object" ? approved.selector : approved;
+    const replacement = pending ? pending.selector : approvedSelector;
+    const statusText = pending ? "Pending review" : approved ? "Approved for scoped reuse" : "";
+    const id = entry.identity || {};
+    const statusBadge = statusText
+      ? `<span class="locator-status-badge ${pending ? "status-pending" : "status-approved"}">${escapeHtml(statusText)}</span>`
+      : "";
+    const keyFacts = `
+        <div class="locator-change">${escapeHtml(id.originalSelector ?? "(unknown)")} → ${escapeHtml(replacement ?? "(none)")}</div>
+        <div class="locator-scope">Scope: ${escapeHtml(id.origin ?? "unknown")} · ${escapeHtml(id.pathname ?? "unknown")} · ${escapeHtml(id.action ?? "unknown")}</div>`;
     row.innerHTML = `
       <div class="locator-body">
-        <span class="locator-trust-badge trust-${entry.trust}">${escapeHtml(locatorTrustLabel(entry.trust))}</span>
+        ${statusBadge}
+        ${keyFacts}
+        <div class="locator-secondary">
+        <span class="locator-trust-badge trust-${trustClass}">${escapeHtml(locatorTrustLabel(entry.trust))}</span>
         <span class="locator-identity">${escapeHtml(locatorIdentityLabel(entry.identity))}</span>
         <div class="locator-detail">last seen ${escapeHtml(entry.lastSeen)}</div>
         ${pendingBlock}
+        </div>
       </div>
       <div class="locator-actions">
         ${canDecide

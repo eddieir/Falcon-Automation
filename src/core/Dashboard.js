@@ -36,8 +36,43 @@ const EMIT_ALLOWED_EVENTS = new Set([
     "healingEvent", "healingPending", "healingApproved", "healingRejected",
     "explorerPage", "pageStart", "pageComplete", "sweepComplete",
     "flakyDetected", "scenarioQuarantined", "scenarioUnquarantined",
-    "runPlan", "workerState",
+    "runPlan", "workerState", "healingStage",
 ]);
+const HEALING_STAGES = new Set(["original_failed", "recovery_started", "candidate_selected", "action_completed", "proposal_pending"]);
+const STAGE_STRING_FIELDS = ["original", "description", "tier", "action", "resolved", "proposalId", "via"];
+const STAGE_NUMBER_FIELDS = ["score", "margin", "attempts", "timeoutMs"];
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
+const cleanText = (v) => v.replace(CONTROL_CHARS, "");
+
+/** Strict schema for healingStage (live-healing narration). Rebuilt field by field; null when invalid. */
+function validateHealingStage(payload) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+    if (typeof payload.stage !== "string" || !HEALING_STAGES.has(payload.stage)) return null;
+    const out = { stage: payload.stage };
+    for (const key of STAGE_STRING_FIELDS) {
+        const v = payload[key];
+        if (v === undefined) continue;
+        if (typeof v !== "string" || v.length > 300) return null;
+        out[key] = cleanText(v);
+    }
+    for (const key of STAGE_NUMBER_FIELDS) {
+        const v = payload[key];
+        if (v === undefined) continue;
+        if (typeof v !== "number" || !Number.isFinite(v)) return null;
+        out[key] = v;
+    }
+    if (payload.reasons !== undefined) {
+        const r = payload.reasons;
+        if (!Array.isArray(r) || r.length > 8) return null;
+        if (r.some((x) => typeof x !== "string" || x.length > 120)) return null;
+        out.reasons = r.map(cleanText);
+    }
+    return out;
+}
+
+const DECISION_STRING_MAX = 300;
+const decisionText = (v) => (typeof v === "string" ? cleanText(v).slice(0, DECISION_STRING_MAX) : "");
 const RUN_MODES = new Set(["sequential", "parallel", "sharded"]);
 const MAX_COUNT = 100000;
 const isCount = (v) => Number.isInteger(v) && v >= 0 && v <= MAX_COUNT;
@@ -630,7 +665,10 @@ class Dashboard {
                 return res.status(400).json({ error: "Unknown event name." });
             }
             let clean = payload || {};
-            if (name === "runPlan" || name === "workerState") {
+            if (name === "healingStage") {
+                clean = validateHealingStage(payload);
+                if (!clean) return res.status(400).json({ error: "Invalid event payload." });
+            } else if (name === "runPlan" || name === "workerState") {
                 clean = validateRunEvent(name, payload);
                 if (!clean) return res.status(400).json({ error: "Invalid event payload." });
             }
@@ -860,6 +898,22 @@ class Dashboard {
                         proposalId, expectedRevision, actor: "dashboard", note: typeof note === "string" ? note : undefined,
                     });
                     if (!decision.ok) return res.status(decision.status).json({ error: decision.error });
+                    try {
+                        const e = decision.entry || {};
+                        const id = e.identity || {};
+                        const last = Array.isArray(e.decisionHistory) ? e.decisionHistory[e.decisionHistory.length - 1] : null;
+                        const resolved = e.approvedAlternative?.selector || e.pendingCandidate?.selector || last?.proposal?.selector;
+                        this.emit("locatorDecision", {
+                            kind: decisionText(kind),
+                            original: decisionText(id.originalSelector),
+                            resolved: decisionText(resolved),
+                            action: decisionText(id.action),
+                            pathname: decisionText(id.pathname),
+                            status: decisionText(e.trust),
+                        });
+                    } catch (error) {
+                        Logger.error(`Dashboard: could not emit locatorDecision — ${error.message}`);
+                    }
                     return res.json(decision.entry);
                 } catch (_) {
                     return res.status(503).json({ error: "Locator decision could not be persisted." });
@@ -937,6 +991,14 @@ class Dashboard {
      * @param {Object} payload
      */
     emit(name, payload = {}) {
+        if (name === "healingStage") {
+            // In-process emitters (Middleware) get the same strict shape as HTTP.
+            payload = validateHealingStage(payload);
+            if (!payload) {
+                Logger.warning("Dashboard: dropped invalid healingStage event.");
+                return;
+            }
+        }
         // seq is additive and strictly increasing for the process lifetime,
         // independent of the replay cap, so clients can order and de-duplicate.
         this._seq = (this._seq || 0) + 1;
