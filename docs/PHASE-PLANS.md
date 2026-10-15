@@ -1,6 +1,6 @@
 # Falcon — Engineering Phase Plans (10 onward)
 
-> **Status:** Phases 1–17 are merged on `main`. The invocation-scoped BYOK maintenance work was merged through pull request #50. Plans below retain their original design context; each phase section records its delivered status and limits.
+> **Status:** Phases 1–17 are merged on `main`. The invocation-scoped BYOK maintenance work was merged through pull request #50, and saved-plan replay with the customer demo through pull request #54 (see "Delivered baseline after PR #54" below). Phases 18–26 are planned and unimplemented. Plans below retain their original design context; each phase section records its delivered status and limits.
 > **Purpose:** the durable, cross-machine engineering plan. `HANDOFF.md` is tracked and ships with
 > the repository, but this file remains the detailed plan of record so a future session or a
 > different machine can continue the work from versioned evidence,
@@ -855,6 +855,34 @@ every feature from every vendor. Its category position is narrower:
 > Every recovery should be scoped, explainable, locally validated, reversible and supported by
 > evidence, without silently turning a real failure green.
 
+### Delivered baseline after PR #54
+
+Pull request #54 (merged) added capabilities that the phases below build on rather than repeat.
+Each is a first step, not a finished phase:
+
+- **Saved-plan replay.** `--save-plan` writes a versioned plan document and `--plan` replays it
+  through the normal runner, healer, dashboard and report path. An invalid plan exits 2 before any
+  browser starts.
+- **Ordered journeys.** A plan with `"journey": true` runs steps in order, stops at the first step
+  that does not pass, and fails if a step leaves the plan's origin.
+- **Initial `expect` actions.** `visible`, `containsText`, `attributeExists` and `attributeEquals`.
+  These are element-level checks only; there is no versioned business-outcome contract, no
+  forbidden-side-effect check and no network, download, storage or API verification.
+- **Assertion failures are separate from healing.** An `expect` failure is reported as a failure
+  and is never healed.
+- **Human approval and persisted reuse.** A recovery stays pending until a person approves it in
+  the dashboard; a fresh process then reuses it (`approved_reuse`). Approval is a local click with
+  no reviewer identity.
+- **Safe refusal without identity evidence.** A control with no stable identity is refused
+  (`insufficient_identity_evidence`) before scoring; no proposal is created and nothing is clicked.
+- **Customer demo and evidence tooling.** A recorded run against a local copy of AI-agency, its
+  gate scripts and the media build, documented in `docs/demo/CUSTOMER-DEMO.md`. It shows one
+  control and one kind of change; it is not a benchmark and the confidence and margin thresholds
+  remain provisional.
+
+What remains open is listed per phase: Phase 18 (authentication, dry-run policy, secret safety),
+Phase 19 (a business-outcome contract that gates healing reuse), and Phase 20 (measured accuracy).
+
 The plan is informed by the dated competitor research under `docs/research/` and a broader public
 market review. Vendor documentation establishes documented capabilities, not comparative accuracy.
 Marketing claims are not benchmark results. `NOT_FOUND_IN_REVIEWED_DOCS` must never be interpreted
@@ -901,7 +929,8 @@ not a production-safety certification and does not add enterprise SSO or multi-t
 
 - Add a dry-run mode that discovers pages and generates proposed actions without clicking, filling,
   submitting, invoking a provider or changing target data.
-- Produce a stable, reviewable action plan and digest.
+- Produce a stable, reviewable action plan and digest. PR #54's `--save-plan` already writes a
+  versioned plan, but with no digest or approval binding.
 - Ensure the executed plan cannot silently differ from the approved plan; material drift requires a
   new review.
 
@@ -946,17 +975,24 @@ persisted or displayed artifact.
 
 ## Phase 19 — Assertion-aware healing
 
-**Status:** planned after Phase 18.
+**Status:** partially started by PR #54 (initial `expect` actions and journeys); the outcome contract and its link to healing reuse are planned after Phase 18.
 
 ### Outcome
 
 A recovered locator is not successful merely because an action did not throw. Falcon must prove the
 intended business outcome occurred and no forbidden side effect occurred.
 
-### Scope
+### Already delivered (PR #54)
 
-- Define a versioned journey contract with steps, expected outcomes and forbidden side effects.
-- Support outcome checks for URL transitions, element state, accessible text, field values, network
+Ordered journeys, `expect` steps (`visible`, `containsText`, `attributeExists`, `attributeEquals`)
+and the rule that an assertion failure is reported, never healed. This phase extends that base; it
+does not start from nothing.
+
+### Scope (remaining)
+
+- Extend the existing versioned plan and journey format into a contract with expected outcomes and
+  forbidden side effects per step.
+- Support outcome checks beyond today's four element checks: URL transitions, element state, accessible text, field values, network
   responses, downloads, bounded cookie/storage facts, visual checkpoints, controlled API/database
   verification and custom Playwright assertions.
 - Require important customer-pilot journeys to carry at least one business assertion.
@@ -1211,7 +1247,7 @@ uniqueness or superiority without matched public evidence.
 Phase 10 ── Phase 11 ──┬── Phase 12 ──┬── Phase 13 ── Phase 14 (delivered)
                        │              ├── Phase 15
                        │              └── Phase 16
-                       └── (Phase 17 is independent and can run in parallel)
+                       └── (Phase 17 was independent; merged)
 ```
 
 Phase 10 first: it is the largest gap between what Falcon promises and what it ships, and it
