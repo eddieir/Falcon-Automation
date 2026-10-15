@@ -1,6 +1,6 @@
 # Phase 18 Plan — Safe Authenticated Customer Pilots
 
-Status: **DRAFT.** Not accepted for implementation until the Security Engineer reviews the design (SEC-02) and the owner decides BLOCKER-1 (AC-033 versus AC-076, section 6). Designed against `99bd7c5`; baseline for compatibility claims is `2572e73`.
+Status: **DRAFT rev 2.** Not accepted for implementation until the Security Engineer re-reviews the revised design (SEC-03) and the owner decides BLOCKER-1 (AC-033 versus AC-076, section 6) and the residual risks listed in the architecture section 19 flag `OWNER-RISK`. Designed against `e589247`; baseline for compatibility claims is `2572e73`.
 
 ## 1. Scope
 
@@ -25,21 +25,26 @@ Sequence: **18E → 18A → 18C → 18B → 18D → 18F → DOC**. 18E leads bec
 
 | PR | Owns (create/edit) | Depends on | May run in parallel with |
 |---|---|---|---|
-| 18E | `src/core/pilot/evidence/EvidenceBoundary.js`, `.../CanaryRegistry.js`, `.../Retention.js`, `src/core/pilot/FailureCodes.js`; edits `utils/Logger.js`, `src/core/parallel/ShardBundle.js`, `src/core/parallel/Schemas.js`, `src/core/Dashboard.js`, `src/core/ReportManager.js`, `src/core/locator/ElementFactsCollector.js`, `src/core/AIHealer/HealingReport.js`; `tests/regression/pilot/evidence-*.test.js` | — | none (foundation) |
-| 18A | `src/core/pilot/auth/{AuthRole,AuthStateStore,LoginSetup,AuthEvidence,StateCopyPool}.js`; edits `src/core/BrowserManager.js`, `src/core/parallel/Runner.js`, `falcon.js` (auth flags only) | 18E | 18C |
-| 18C | `src/core/pilot/{Manifest,ManifestSchema,PolicyEngine,ActionClassifier,Vocabulary}.js`, `schemas/pilot-manifest.v1.json`; edits `falcon.js` (manifest flag only) | 18E | 18A |
-| 18B | `src/core/pilot/{PlanDigest,PilotPlan,DryRun,DryRunGuard}.js`; edits `src/core/PlanFile.js` (additive v2 reader), `falcon.js` (dry-run flag) | 18A, 18C | — |
-| 18D | `src/core/pilot/approval/{ApprovalStore,ApprovalRecord,AuditLog,Binding}.js`; edits `falcon.js` (approval flags), `src/core/Dashboard.js` (read-only view, Could) | 18B, 18C | — |
-| 18F | `tests/fixtures/pilot-app/**`, `tests/regression/pilot/**` (non-18E files), `package.json` scripts, `.github/workflows/ci.yml` | 18A–18E | DOC |
-| DOC | `docs/pilot/operator-guide.md`, `docs/pilot/manifest-reference.md`, `docs/pilot/retention.md`, `docs/ARCHITECTURE.md`, `README.md`, `.env.example` | 18A–18E | 18F |
+| 18E | `src/core/pilot/evidence/{EvidenceBoundary,SecretRegistry,CanaryRegistry,Retention}.js`, `src/core/pilot/{FailureCodes,Digest,JsonStrict,PilotRoots,BuildIdentity}.js`, `src/core/pilot/PilotActionGate.js` (interface + `passthrough()` only), `src/core/pilot/PilotLifecycle.js`; edits `src/core/parallel/SafeFs.js` (additive: `readBoundedPrivateJson`, `writeAtomicPrivateSynced`, `createExclusive`), `utils/Logger.js`, `src/core/parallel/ShardBundle.js`, `src/core/parallel/Schemas.js` (comment only — `canonicalJson` is frozen), `src/core/Dashboard.js`, `src/core/ReportManager.js`, `src/core/TestRunner.js` (error triple), `src/core/locator/ElementFactsCollector.js`, `src/core/AIHealer/HealingReport.js`; `tests/unit/pilot/{digest,jsonstrict,safefs-private}.test.js`, `tests/regression/pilot/evidence-*.test.js`, `neg-l01-*`, `neg-l02`, `neg-l04`, `neg-l05`, `neg-n5`, `neg-n6`, `neg-x01`, `neg-e01`, `neg-f01-loaders` (loader half), `neg-f02-planted`, `neg-f03-orphans` | — | none (foundation) |
+| 18A | `src/core/pilot/auth/{AuthRole,AuthStateStore,LoginSetup,AuthEvidence,StateCopyPool}.js`; edits `src/core/BrowserManager.js` (`newContext(options)`), `src/core/parallel/Runner.js`, `falcon.js` (auth flags only); `neg-n3-statefile`, `neg-n7-login`, `neg-l08-ignored`, auth half of `neg-f01-loaders` | 18E | 18C |
+| 18C | `src/core/pilot/{Manifest,ManifestSchema,PolicyEngine,ActionClassifier,Vocabulary,RouteMatch,NetworkGate}.js`, `schemas/pilot-manifest.v1.json`; edits `falcon.js` (manifest flag only); `neg-n01-network`, `neg-n1-fetch-post`, `neg-n4-routes`, `neg-b03-homoglyph`, `neg-b05-provider-index`, `neg-l07-userinfo`, `neg-l03-runner-artifacts` (manifest half), `neg-s01-caps` (policy half); **owns SPIKE-R** (redirect-hop behaviour) and must land either the verified handler path or the mandated `route.fetch({maxRedirects:0})` fallback — the fallback is the default | 18E | 18A |
+| 18B | `src/core/pilot/{PlanDigest,PilotPlan,DryRun,DryRunGuard}.js`, full `src/core/pilot/PilotActionGate.js` implementation; edits `src/core/PlanFile.js` (additive v2 reader, `stat`→privileged loader, credential-semantic value screen), `src/core/AIHealer/AIHealer.js` (all four `_performAction` call sites `:337,:419,:586,:652` route through the gate; `:419` refused in pilot mode), `src/core/ClickExplorer.js` (pilot-mode refusal at `clickElement`), `src/core/SiteSweep.js` and `src/core/parallel/ParallelDiscovery.js` (pilot-mode refusal), `falcon.js` (dry-run flag); `neg-p03-swap`, `neg-b01-gate`, `neg-b04-ordinal`, `neg-q-plan-values`, `neg-d01-vectors` (plan half), `neg-n2-review`, `neg-n8-mixed-process`, `neg-r01-userdatadir` | 18A, 18C | — |
+| 18D | `src/core/pilot/approval/{ApprovalStore,ApprovalRecord,AuditLog,Binding,RunToken}.js`; edits `falcon.js` (approval flags incl. `--approval-run-token=`), `src/core/Dashboard.js` (read-only view, Could); `neg-p01-chain`, `neg-p01-truncate`, `neg-p02-replay`, `neg-q-runscope`, `neg-q-prune`, `neg-q-roots`, `neg-p04-build`, `neg-q-retention`, approval half of `neg-f01-loaders` and `neg-s01-caps` | 18B, 18C | — |
+| 18F | `tests/fixtures/pilot-app/**`, `tests/regression/pilot/**` (non-18E/18B/18C/18D files), **`playwright.config.js` (new `pilot` project: `screenshot/video/trace` off, `recordVideo`/`recordHar` unset, `outputDir` under `run/pilot-test-results/`, `retries: 0`, `testMatch` for `tests/regression/pilot/**`)**, `package.json` scripts, `.github/workflows/ci.yml` | 18A–18E | DOC |
+| DOC | `docs/pilot/operator-guide.md` (two-command approval workflow and run token handling), `docs/pilot/manifest-reference.md`, `docs/pilot/retention.md` (segments and anchors), `docs/pilot/limitations.md` (**new**: audit log is attribution and tamper-evidence not authentication; same-uid rollback limit; no Windows pilot; bulk sweep refused in pilot mode; background non-GET requests aborted), `docs/ARCHITECTURE.md`, `README.md`, `.env.example` | 18A–18E | 18F |
 
-Parallelism rule: at most two concurrent PRs with disjoint file sets. 18A and 18C both touch `falcon.js`; each adds a separate, clearly delimited flag block and the second to land rebases. No other overlap exists.
+Parallelism rule unchanged (at most two concurrent PRs, disjoint file sets). Note the new overlap: 18B and 18C both touch `falcon.js`; so do 18A and 18D. Each PR adds a separate, clearly delimited flag block and the later one rebases. `src/core/pilot/PilotActionGate.js` is created by 18E (interface plus `passthrough()`) and implemented by 18B — the only intentional two-PR file, sequenced so the `AIHealer`/`ClickExplorer` edits land exactly once.
+
 
 ## 4. Per-PR gates
 
 Every PR: `npm run test:unit`, `npm run test:regression`, and its own new tests. 18A/18B/18C/18D/18F additionally run `npm run test:pilot`. 18E additionally runs the canary suite. 18F additionally proves the CI job green on Node 24 with zero skips. Final gate: `npm run test:pilot` plus `npm test` plus `npm run test:coverage` plus `npm run test:browser`, all recorded with command and result.
 
 No PR may weaken an existing test, and each bug fix inside Phase 18 carries a regression test that fails before the fix.
+
+### Revision 2 gate additions
+
+Every PR additionally runs its own `neg-*` tests from architecture section 19a and must show each one failing with the relevant control removed (the inversion is part of the evidence, not optional). 18C may not merge without SPIKE-R's recorded result or the fallback implementation. 18E's `neg-l01-*` suite must be shown failing with the secret registry disabled.
 
 ## 5. Rollback per PR
 
@@ -57,6 +62,15 @@ All Phase 18 behaviour is gated behind new flags (`--pilot-manifest=`, `--role=`
 
 Kill-switch for an operator mid-pilot: omit the pilot flags. There is no env var that re-enables pilot mode implicitly, deliberately (AC-014).
 
+### Revision 2 rollback additions
+
+| PR | Rollback addition |
+|---|---|
+| 18E | The three `SafeFs` exports are additive and independently revertable; `Schemas.canonicalJson` is unmodified, so Phase 16 digests cannot regress. |
+| 18B | Reverting restores `passthrough()` at every gate call site, i.e. the `2572e73` click path; `ClickExplorer`/`SiteSweep` refusals disappear with the pilot flag. |
+| 18D | Reverting leaves `run/approvals/` on disk; protected actions then refuse `APPROVAL_REQUIRED`. Run tokens become inert. |
+| 18F | Reverting the `pilot` Playwright project removes the pilot regression project; the repository defaults are then the only config, so pilot tests must not be run through the runner until it is restored. |
+
 ## 6. Migration
 
 **PR #54 `--save-plan` output has no schema digest.** `PlanFile` today writes `{format:"falcon-test-plan", version:1, url, journey, scenarios}` and `PlanFile.load` rejects unknown top-level keys, so a digest cannot be bolted onto v1 without breaking old readers. Migration:
@@ -70,3 +84,12 @@ Kill-switch for an operator mid-pilot: omit the pilot flags. There is no env var
 **BLOCKER-1 (needs owner input, do not let me reinterpret it).** AC-033 reads "Plan lacking schema version or digest (including current `--save-plan` output) refused `PLAN_INVALID` for execute". Taken literally for *every* `--plan` execute, it forbids replaying existing v1 plans and therefore contradicts AC-076 (behaviour identical to `2572e73` with no Phase 18 flags) and breaks PR #54's shipped feature. The design above scopes the refusal to pilot execute mode. That is the only reading under which both criteria hold. Owner must confirm the scoping or accept breaking AC-076; I will not silently choose.
 
 Other migrations: no DB schema change; no OpenAI configuration change; new `.env.example` keys (`PILOT_ROLE_*_USERNAME`, `PILOT_ROLE_*_PASSWORD`, `PILOT_APPROVER`) are added genuinely blank (AC-080). `.gitignore` gains `run/auth/` and `run/approvals/`.
+
+### Revision 2 migration additions
+
+
+- **No new configuration surface for roots.** `run/auth/`, `run/approvals/` and `run/plans/` are fixed by `PilotRoots` and are not configurable; `.gitignore` gains all three. An operator with an existing approvals directory elsewhere must move it.
+- **Audit log format.** The log is segmented from the start (`run/approvals/audit/<segmentId>.log` plus `anchors.log`); there is no legacy single-file form to migrate.
+- **Plan v2 values.** A credential-semantic literal in a v2 plan is refused `PLAN_VALUE_LITERAL_CREDENTIAL` (exit 15). v1 plans outside pilot mode keep today's `isKeyShapedValue` screen and exit 2, so AC-076 is unaffected.
+- **Platform.** Pilot mode requires POSIX uid/mode/`O_NOFOLLOW` support and a local filesystem for `run/approvals`; `win32` and network filesystems are refused `PILOT_INTERNAL_ERROR` (exit 18). This is a documented Phase 18 limitation, not a regression of any existing path.
+- **New env keys** (`.env.example`, genuinely blank): `PILOT_ROLE_*_USERNAME`, `PILOT_ROLE_*_PASSWORD`, `PILOT_APPROVER`, `PILOT_APPROVAL_RUN_TOKEN`.
