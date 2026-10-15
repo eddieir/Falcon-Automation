@@ -1,6 +1,6 @@
 # Phase 18 — Authenticated Pilots
 
-Status: **DRAFT rev 2 plus the normative [rev 3 patch](phase-18-rev3-patch.md)**, pending SEC-04 re-review and the owner decisions on BLOCKER-1 and OD-20..OD-22. Where the patch conflicts with the text below, the patch wins.
+Status: **DRAFT rev 2 plus the normative [rev 3 patch](phase-18-rev3-patch.md) and [rev 4 patch](phase-18-rev4-patch.md)** (the shard-refusal decision in rev 4 is rejected), pending SEC-05 re-review and the owner decisions on BLOCKER-1, OD-20, OD-21, OD-22 and OD-24. Where the patches conflict with the text below, the later patch wins.
 
 ## 1. Context and constraints
 
