@@ -2,7 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { load, temp } = require("./helpers.cjs");
+const { load, temp, drainAll } = require("./helpers.cjs");
 
 const ConfigValidation = load("src/core/util/ConfigValidation.js");
 
@@ -84,7 +84,6 @@ test("validateIntSetting: a negative integer string within a negative-inclusive 
 
 function bothAt(t) {
   const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const HealingTrust = load("src/core/AIHealer/HealingTrust.js", {
     "./LocatorStore": { addLocator: () => {} },
     "../Middleware": { emit: () => {} },
@@ -99,6 +98,15 @@ function bothAt(t) {
   FlakinessTracker.historyPath = path.join(dir, "scenario_history.json");
   FlakinessTracker.decisionsPath = path.join(dir, "quarantine_decisions.json");
   FlakinessTracker._reload();
+
+  // Both share `dir` for their persisted files, and both chain writes
+  // through the same `_queue = _queue.then(...)` pattern — drain each
+  // before cleanup removes the directory, or an in-flight write races the
+  // rmSync below.
+  t.after(async () => {
+    await drainAll([HealingTrust, FlakinessTracker], dir);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 
   return { HealingTrust, FlakinessTracker };
 }
