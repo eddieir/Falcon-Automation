@@ -10,7 +10,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { load, temp, root, silent } = require("./helpers.cjs");
+const { load, temp, root, silent, drainQueue } = require("./helpers.cjs");
 
 const LocatorMemory = require(path.join(root, "src", "core", "locator", "LocatorMemory.js"));
 const LocatorIdentity = require(path.join(root, "src", "core", "locator", "LocatorIdentity.js"));
@@ -66,7 +66,7 @@ async function withMemory(fn) {
     env: { FALCON_LOCATOR_SALT: "stage-events-test-salt" },
   });
   try { await fn(memory); } finally {
-    await memory._queue;
+    await drainQueue(memory, dir);
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
