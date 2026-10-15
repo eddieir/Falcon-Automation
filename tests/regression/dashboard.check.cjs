@@ -885,3 +885,72 @@ test("dashboard UI: a pending entry's previouslyRejected.lastRejectedBy renders 
   assert.match(html2, /&lt;img/);
   assert.match(html2, /previously rejected/);
 });
+
+test("healingStage: /emit accepts, sanitises and echoes only known fields; locatorDecision is not HTTP-emittable", async (t) => {
+  const d = setup(t);
+  await d.start();
+  const post = (payload, name = "healingStage") => new Promise((resolve, reject) => {
+    const body = JSON.stringify({ name, payload });
+    const r = http.request({ host: "127.0.0.1", port: d.port, path: "/emit", method: "POST", headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } }, (res) => { res.resume(); res.on("end", () => resolve(res.statusCode)); });
+    r.on("error", reject); r.end(body);
+  });
+  const xss = "<img src=x onerror=alert(1)>\u0000\u001b[31m";
+  assert.equal(await post({ stage: "candidate_selected", original: xss, resolved: "#b", score: 0.9, margin: 0.2, attempts: 2, timeoutMs: 500, reasons: ["a", "b"], evil: "x", __proto__x: 1 }), 204);
+  const ev = d._events.filter((e) => e.name === "healingStage").pop();
+  assert.equal(ev.payload.original, "<img src=x onerror=alert(1)>[31m");
+  assert.equal(typeof ev.payload.original, "string");
+  assert.equal(ev.payload.evil, undefined);
+  assert.deepEqual(ev.payload.reasons, ["a", "b"]);
+  const before = d._events.length;
+  assert.equal(await post({ stage: "bogus" }), 400);
+  assert.equal(await post({ original: "#a" }), 400);
+  assert.equal(await post({ stage: "original_failed", original: "x".repeat(301) }), 400);
+  assert.equal(await post({ stage: "original_failed", score: "1" }), 400);
+  assert.equal(await post({ stage: "original_failed", score: null }), 400);
+  assert.equal(await post({ stage: "original_failed", reasons: "nope" }), 400);
+  assert.equal(await post({ stage: "original_failed", reasons: new Array(9).fill("r") }), 400);
+  assert.equal(await post({ stage: "original_failed", reasons: ["x".repeat(121)] }), 400);
+  assert.equal(await post([]), 400);
+  assert.equal(await post({ kind: "approve" }, "locatorDecision"), 400);
+  assert.equal(d._events.length, before);
+  d.emit("healingStage", { stage: "nope" });
+  d.emit("healingStage", { stage: "proposal_pending", via: "a\u0007b", extra: 1 });
+  assert.equal(d._events.length, before + 1);
+  assert.deepEqual(d._events.at(-1).payload, { stage: "proposal_pending", via: "ab" });
+});
+
+test("locatorDecision is emitted in-process after a real /locator/approve", async (t) => {
+  const LocatorIdentity = require("../../src/core/locator/LocatorIdentity");
+  const ElementSignature = require("../../src/core/locator/ElementSignature");
+  const LocatorMemory = require("../../src/core/locator/LocatorMemory");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-dash-ld-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const locatorMemory = new LocatorMemory({ memoryPath: path.join(dir, "lm.json"), env: { FALCON_LOCATOR_SALT: "ld-salt" } });
+  const old = process.env.DASHBOARD_TOKEN;
+  delete process.env.DASHBOARD_TOKEN;
+  const d = new Dashboard({ port: 0, locatorMemory });
+  t.after(async () => { Middleware.setEmitter(null); await d.stop(); if (old !== undefined) process.env.DASHBOARD_TOKEN = old; });
+  await d.start();
+  const identity = LocatorIdentity.buildIdentity({ url: "https://example.com/checkout", action: "click", originalSelector: "#submit", env: {} });
+  assert.equal(identity.status, "built");
+  const identObj = identity.identity;
+  locatorMemory.recordPendingCandidate(identObj, {
+    selector: "[data-testid=submit-btn]",
+    signature: ElementSignature.capture({ tagName: "button", role: "button", accessibleName: "Submit", attributes: { id: "Submit", "data-testid": "Submit-btn" }, structuralPath: ["form", "div", "button"], ownText: "Submit", boundingBoxBucket: "bottom-right:small" }, { salt: "ld-salt" }),
+    contributions: { attribute: 0.4, accessibleName: 0.2, structural: 0.1, text: 0.05, boundingBox: 0.02, rawTotal: 0.77 },
+    total: 0.77,
+  });
+  await locatorMemory._queue;
+  const key = LocatorIdentity.serialiseIdentity(identObj);
+  const entry = locatorMemory.getEntry(key);
+  assert.ok(entry?.pendingCandidate, "fixture must seed a pending candidate");
+  const body = JSON.stringify({ key, proposalId: entry.pendingCandidate.proposalId });
+  const status = await new Promise((resolve, reject) => {
+    const r = http.request({ host: "127.0.0.1", port: d.port, path: "/locator/approve", method: "POST", headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } }, (res) => { res.resume(); res.on("end", () => resolve(res.statusCode)); });
+    r.on("error", reject); r.end(body);
+  });
+  assert.equal(status, 200);
+  const ev = d._events.filter((e) => e.name === "locatorDecision").pop();
+  assert.ok(ev, "locatorDecision must be emitted");
+  assert.deepEqual(ev.payload, { kind: "approve", original: "#submit", resolved: "[data-testid=submit-btn]", action: "click", pathname: "/checkout", status: "trusted" });
+});

@@ -1,0 +1,120 @@
+{
+  "format": "wide",
+  "size": {
+    "w": 1920,
+    "h": 1080
+  },
+  "totalSeconds": 102.22,
+  "posterSeconds": 68.22,
+  "scenes": [
+    {
+      "id": "public",
+      "title": "The customer's product: AxonRadar",
+      "startsAt": 0,
+      "seconds": 7,
+      "realWindowMs": null,
+      "speed": null
+    },
+    {
+      "id": "start-app",
+      "title": "Start the application",
+      "startsAt": 7,
+      "seconds": 6.69,
+      "realWindowMs": [
+        7177,
+        13868
+      ],
+      "speed": 1
+    },
+    {
+      "id": "start-falcon",
+      "title": "Start Falcon",
+      "startsAt": 13.69,
+      "seconds": 3.98,
+      "realWindowMs": [
+        12427,
+        17204
+      ],
+      "speed": 1.2
+    },
+    {
+      "id": "discover",
+      "title": "Discover the customer journey",
+      "startsAt": 17.67,
+      "seconds": 9,
+      "realWindowMs": null,
+      "speed": null
+    },
+    {
+      "id": "baseline",
+      "title": "Run the saved journey",
+      "startsAt": 26.67,
+      "seconds": 10.81,
+      "realWindowMs": [
+        17847,
+        26495
+      ],
+      "speed": 0.8
+    },
+    {
+      "id": "changed",
+      "title": "The interface changed",
+      "startsAt": 37.48,
+      "seconds": 12,
+      "realWindowMs": null,
+      "speed": null
+    },
+    {
+      "id": "broke",
+      "title": "Run the same saved journey on the updated app",
+      "startsAt": 49.48,
+      "seconds": 9.81,
+      "realWindowMs": [
+        34021,
+        44817
+      ],
+      "speed": 1.1
+    },
+    {
+      "id": "found",
+      "title": "Falcon looks for the same control",
+      "startsAt": 59.29,
+      "seconds": 12.6,
+      "realWindowMs": [
+        43817,
+        51379
+      ],
+      "speed": 0.6
+    },
+    {
+      "id": "approval",
+      "title": "Human approval required",
+      "startsAt": 71.89,
+      "seconds": 5.56,
+      "realWindowMs": [
+        51379,
+        57768
+      ],
+      "speed": 1.15
+    },
+    {
+      "id": "reuse",
+      "title": "Start a fresh Falcon process",
+      "startsAt": 77.45,
+      "seconds": 13.77,
+      "realWindowMs": [
+        65948,
+        86608
+      ],
+      "speed": 1.5
+    },
+    {
+      "id": "evidence",
+      "title": "Evidence ready for review",
+      "startsAt": 91.22,
+      "seconds": 11,
+      "realWindowMs": null,
+      "speed": null
+    }
+  ]
+}
