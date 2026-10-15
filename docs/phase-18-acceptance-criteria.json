@@ -2,30 +2,75 @@
   "schemaVersion": 1,
   "phase": 18,
   "status": "DRAFT",
-  "designRevision": "e589247 (architecture rev 2)",
+  "designRevision": "3741d42 (architecture rev 2 plus rev 3..rev 8 patches)",
   "baseline": "2572e73",
   "source": "docs/research/phase-18/proposed-scope-and-criteria.md",
-  "ownerApproval": "Scope, 82 criteria and claims policy approved by the owner at 99bd7c5 subject to decisions OD-01..OD-19; see the production-cycle ledger",
+  "ownerApproval": "Scope, 82 criteria and claims policy approved by the owner at 99bd7c5 subject to decisions OD-01..OD-19; see the production-cycle ledger; owner decisions OWNER-01..OWNER-07 recorded at 3741d42 (BLOCKER-1, OD-17-Q1, OD-20..OD-24, residual disposition) approve policy direction only and authorise no implementation, merge, tag or publication",
   "openItems": [
-    {
-      "id": "OWNER-RISK",
-      "ref": "threat-model section 6 plus literal plan-value PII and same-uid ledger rollback",
-      "state": "awaiting owner acceptance"
-    },
-    {
-      "id": "SPIKE-R",
-      "ref": "architecture section 7",
-      "state": "redirect-hop behaviour unverified; fetch fallback mandated"
-    },
     {
       "id": "BLOCKER-1",
       "ref": "P18-AC-033/P18-AC-076",
-      "state": "awaiting owner decision"
+      "state": "resolved by owner decision D1 (OWNER-01): PLAN_INVALID applies to pilot execute mode only; non-pilot --plan replay unchanged vs 2572e73"
+    },
+    {
+      "id": "OWNER-RISK",
+      "ref": "threat-model section 6 and architecture section 19a",
+      "state": "accepted with documentation for the items listed in rev 8 section 2c.10; four items NOT accepted and closable only by implementation evidence (build/approval-root mixing; filesystem identification and admitted-type behaviour; boot identity fallback; concurrent-writer exit-17 behaviour)"
     },
     {
       "id": "OPEN-1",
       "ref": "P18-AC-072",
-      "state": "budget number requires fixture measurement (OD-13)"
+      "state": "budget requires >=20 repeated hermetic-fixture runs with recorded distribution, recorded CI environment and a documented margin (D8); never a single run"
+    },
+    {
+      "id": "SPIKE-R",
+      "ref": "architecture section 7",
+      "state": "redirect-hop behaviour unverified; route.fetch({maxRedirects:0}) fallback mandated; 18C merge condition"
+    },
+    {
+      "id": "SPIKE-W",
+      "ref": "architecture section 7a",
+      "state": "preventive addInitScript ships regardless; interception behaviour recorded; 18C merge condition"
+    },
+    {
+      "id": "SPIKE-FS",
+      "ref": "rev 8 section 2c.5",
+      "state": "numeric statfs ids plus O_EXCL/rename/fsync behaviour evidence required before tmpfs or zfs is admitted and before 18F merges"
+    },
+    {
+      "id": "GATE-m15",
+      "ref": "rev 8 section 2c.9",
+      "state": "mandatory gate (18A): missing expect flag in pilot merge exits 2, before any filesystem read"
+    },
+    {
+      "id": "GATE-m16",
+      "ref": "rev 8 section 2c.9",
+      "state": "mandatory gate (18A/18F): --expect-config-fp is a mandatory pilot-mode merge flag, never taken from a bundle"
+    },
+    {
+      "id": "GATE-m17",
+      "ref": "rev 8 section 2c.9",
+      "state": "mandatory gate (18F): failed receipt write still returns 17; locator_store and locator_memory steps skipped in pilot mode"
+    },
+    {
+      "id": "GATE-m18",
+      "ref": "rev 8 section 2c.9",
+      "state": "mandatory gate (18F): receipt mode binding (pilot v:2 only, non-pilot v:1 only) and shardCodes cross-check against freshly loaded manifests"
+    },
+    {
+      "id": "GATE-m19",
+      "ref": "rev 8 section 2c.9",
+      "state": "mandatory gate (18A/18E): healing counters closed key set, closed enum histogram keys, per run, Logger only, never timings.json"
+    },
+    {
+      "id": "OD-24-Q1",
+      "ref": "rev 8 section 2d",
+      "state": "owner must choose the narrow reading (hermetic in-process fixture approval permitted in CI) or amend AC-074; P18-AC-051 depends on it"
+    },
+    {
+      "id": "OD-20-Q1",
+      "ref": "rev 8 section 2d",
+      "state": "tmpfs for approvalsRoot: fsync is not durable on tmpfs; recommend authRoot/plansRoot only unless the owner accepts loss of audit history on reboot"
     }
   ],
   "exitCodes": {
@@ -41,8 +86,8 @@
     "planInvalid": 2
   },
   "counts": {
-    "total": 82,
-    "must": 73,
+    "total": 88,
+    "must": 79,
     "should": 6,
     "could": 3
   },
@@ -228,7 +273,7 @@
       "priority": "Must",
       "pr": "18A",
       "requirement": "Shard with missing state exits `AUTH_STATE_MISSING`; merged report shows lost coverage, not pass",
-      "components": "parallel shard auth check + ShardMerge",
+      "components": "parallel shard auth check + ShardMerge; pilot merge requires --expect-run-id, --expect-commit and --expect-config-fp, each missing flag exit 2 before any filesystem read (m-15, m-16)",
       "verification": "R"
     },
     {
@@ -307,8 +352,8 @@
       "id": "P18-AC-033",
       "priority": "Must",
       "pr": "18B",
-      "requirement": "Plan lacking schema version or digest (including current `--save-plan` output) refused `PLAN_INVALID` for execute",
-      "components": "PilotPlan v2 reader — **BLOCKER-1 unchanged, owner input still required**",
+      "requirement": "In pilot execute mode (--pilot-manifest present, or the selected role declared authenticated), a plan lacking schema version 2, digest or digestAlgorithm — including current --save-plan v1 output — is refused PLAN_INVALID (reason PLAN_NO_DIGEST), exit 2, before any browser launch; non-pilot --plan replay of a v1 plan is unchanged from 2572e73",
+      "components": "PilotPlan v2 reader + PilotLifecycle.isPilotExecute computed before PlanFile.load — BLOCKER-1 resolved by owner decision D1; see ADR-0039",
       "verification": "U, R"
     },
     {
@@ -379,16 +424,16 @@
       "id": "P18-AC-042",
       "priority": "Must",
       "pr": "18C",
-      "requirement": "Delete/Pay/Transfer/Publish/Send/Submit matrix varied by name, text, type, form action, URL: 100% protected or denied",
-      "components": "ActionClassifier matrix incl. NFKC/confusable/bidi cases, no `ordinal`",
+      "requirement": "Delete/Pay/Transfer/Publish/Send/Submit matrix varied by name, text, type, form action, URL: 100% protected or denied; and a state-changing-capable control with an unfamiliar or unrecognised label is protected, never permitted",
+      "components": "ActionClassifier matrix incl. NFKC/confusable/bidi cases, no `ordinal` + rule 3 state-changing-capable predicate (ADR-0043)",
       "verification": "U, R"
     },
     {
       "id": "P18-AC-043",
       "priority": "Must",
       "pr": "18C",
-      "requirement": "A control labelled \"Cancel\"/\"View\" with destructive action or URL is protected (any destructive signal wins)",
-      "components": "ActionClassifier any-destructive-signal rule",
+      "requirement": "A control labelled \"Cancel\"/\"View\" with destructive action or URL is protected (any destructive signal wins); unfamiliar vocabulary never yields a permit and provider output cannot lower the outcome",
+      "components": "ActionClassifier any-destructive-signal rule + default-protected rule and non-overridable destructive signal (ADR-0043)",
       "verification": "U, R"
     },
     {
@@ -452,7 +497,7 @@
       "priority": "Must",
       "pr": "18D",
       "requirement": "CSRF-protected form: approved protected submit succeeds with in-run token, token absent from artifacts; unapproved: zero POSTs",
-      "components": "ApprovalStore + run token + CSRF fixture + armed NetworkGate",
+      "components": "ApprovalStore + run token + CSRF fixture + armed NetworkGate; in shard mode every protected step is refused APPROVAL_REQUIRED exit 14 so the zero-POST half holds by refusal (D3); in CI there is no approve step and a protected action is refused exit 14 (D4); the approved half is proven through the in-process ApprovalStore API against the loopback fixture, subject to OD-24-Q1",
       "verification": "R"
     },
     {
@@ -524,7 +569,7 @@
       "priority": "Must",
       "pr": "18E",
       "requirement": "Canaries seeded in cookie, Authorization header, password field, URL token, localStorage, env credential occur zero times in every persisted artifact across execute, dry-run, failed login, expired session and shard runs",
-      "components": "EvidenceBoundary + CanaryRegistry, 5 run shapes, all encoded forms, rotation, DEBUG",
+      "components": "EvidenceBoundary + CanaryRegistry, 5 run shapes, all encoded forms, rotation, DEBUG; plus the pilot healing counter closed key set, with zero selectors, URLs or locator-key digests in any artifact (m-19)",
       "verification": "R"
     },
     {
@@ -580,7 +625,7 @@
       "priority": "Must",
       "pr": "18E",
       "requirement": "Shard bundles hold only permitted artifacts (contents: OD-17)",
-      "components": "ShardBundle allow-list",
+      "components": "ShardBundle allow-list; five-shape allowlist, two admitted journal event types, and no healing or locator record of any shape (OD-17-Q1 accepted, ADR-0040)",
       "verification": "U, R"
     },
     {
@@ -619,16 +664,16 @@
       "id": "P18-AC-072",
       "priority": "Should",
       "pr": "cross",
-      "requirement": "Hermetic dry-run completes within the CI budget (OD-13)",
-      "components": "CI timing gate — **OPEN-1: number after measurement (OD-13)**",
+      "requirement": "Hermetic dry-run completes within a CI budget derived from at least 20 repeated hermetic-fixture runs, with the distribution and CI environment recorded and the margin documented (OD-13, D8)",
+      "components": "CI timing gate — OPEN-1: no number until measured; a single run is not evidence",
       "verification": "I"
     },
     {
       "id": "P18-AC-073",
       "priority": "Must",
       "pr": "18F",
-      "requirement": "Fixture suite makes zero non-loopback outbound requests",
-      "components": "fixture loopback-only assertion",
+      "requirement": "Fixture suite makes zero non-loopback outbound requests (hermetic fixture property only; not a claim about customer network egress, WebRTC data channels or TCP TURN)",
+      "components": "fixture loopback-only assertion; egress isolation is a documented residual, not a Falcon control (D6, ADR-0029 amended)",
       "verification": "R"
     },
     {
@@ -636,7 +681,7 @@
       "priority": "Must",
       "pr": "18F",
       "requirement": "Phase 18 matrix on Node 24 CI has zero skipped or expected-fail tests; a skip fails the job",
-      "components": "CI job: skip or expected-fail fails the job",
+      "components": "CI job: skip or expected-fail fails the job; a pilot job whose fixture plan contains a protected step asserts exit 14 as its expected outcome and is never skipped",
       "verification": "I, S"
     },
     {
@@ -668,7 +713,7 @@
       "priority": "Must",
       "pr": "DOC",
       "requirement": "Docs state not-certification, no compliance, no SSO/OIDC/SAML/RBAC, provider cannot weaken denial, residual application text; prohibited phrases absent",
-      "components": "docs prohibited-phrase check",
+      "components": "docs prohibited-phrase check; prohibited phrases additionally include egress/isolation claims, 'pilots improve locator recovery', distributed/CI approval claims, and any description of legacy v1 plan replay as a pilot capability",
       "verification": "S, D"
     },
     {
@@ -702,6 +747,54 @@
       "requirement": "Release candidate on Node 24 CI: every Must passes with direct evidence; no open P0/P1",
       "components": "release-candidate CI run, every Must green, no open P0/P1",
       "verification": "I"
+    },
+    {
+      "id": "P18-AC-083",
+      "priority": "Must",
+      "pr": "18D",
+      "requirement": "In shard mode every protected step is refused APPROVAL_REQUIRED (exit 14) — statically bound protected actions before any browser launch — a run token in env or file is refused without being opened, and run/approvals is never created",
+      "components": "plan projection pre-flight refusal + gate.perform refusal + token refusal (OD-23, ADR-0038 amended)",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-084",
+      "priority": "Must",
+      "pr": "18F",
+      "requirement": "No workflow contains an approve step, approve flag, run-token env key, token file or approvals path; a protected action reached in CI is refused APPROVAL_REQUIRED exit 14",
+      "components": "static ci.yml check over every job + CI pilot job expected-exit assertion (OD-24, ADR-0041)",
+      "verification": "S, R"
+    },
+    {
+      "id": "P18-AC-085",
+      "priority": "Must",
+      "pr": "18E",
+      "requirement": "Filesystem admission is numeric and evidence-gated: tmpfs and zfs only with a recorded statfs id and passing O_EXCL, rename and fsync behaviour tests; overlayfs, virtiofs, drvfs and every unrecorded id are refused PILOT_INTERNAL_ERROR exit 18 with an actionable message naming the observed id and path, never a skip",
+      "components": "SafeFs.assertLocalFilesystem + SPIKE-FS evidence table + filesystem behaviour tests (OD-20, ADR-0030 amended)",
+      "verification": "U, S, I"
+    },
+    {
+      "id": "P18-AC-086",
+      "priority": "Must",
+      "pr": "18D",
+      "requirement": "Arming window defaults to 2000 ms with a hard maximum of 10000 ms and a minimum of 250 ms; any out-of-range, non-integer or non-numeric value is a configuration error refused before browser launch; one lease authorises exactly one protected-action attempt, is never refreshed or extended, and expiry fails closed",
+      "components": "PilotActionGate.arm + window validation at manifest load and flag parse (OD-22, ADR-0042)",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-087",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "A state-changing-capable action not explicitly permitted by manifest policy is classified protected, never permitted; ambiguous state-changing actions fail closed; unfamiliar vocabulary never yields a permit; provider output cannot lower a classification; every permitted outcome is traceable to a named manifest policy entry or the run refuses exit 18",
+      "components": "ActionClassifier default-protected rule + PolicyEngine permit traceability (D11, ADR-0043); inversion required",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-088",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "A pilot run writes no healing or locator evidence anywhere — no reports/healing_logs.json, no data/healing_pending.json, healing_decisions.json, locator_store.json or locator_memory.json, no bundle record — and emits only a closed-key-set, closed-enum, per-run integer counter block through Logger, absent from timings.json, bundles, reports and dashboard events",
+      "components": "pilot-mode HealingReport/HealingTrust switch + read-only locator path + counter schema (OD-17-Q1, m-19, ADR-0040)",
+      "verification": "U, R"
     }
   ]
 }
