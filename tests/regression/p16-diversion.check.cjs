@@ -18,7 +18,32 @@ const LocatorIdentity = require(path.join(root, "src", "core", "locator", "Locat
 const ElementSignature = require(path.join(root, "src", "core", "locator", "ElementSignature.js"));
 
 const L = { "../../utils/Logger": silent, "../../../utils/Logger": silent };
-const settle = () => new Promise((r) => setTimeout(r, 60));
+const DRAIN_TIMEOUT_MS = 5000;
+
+/**
+ * Wait for an object's durable-persistence chain (`_queue`) to finish, following
+ * writes appended while waiting, then assert no atomic-write lock/temp files
+ * remain in `dir`. Bounded so a hung write fails the test instead of hanging it.
+ */
+async function drain(owner, dir) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("persistence queue did not drain within " + DRAIN_TIMEOUT_MS + "ms")), DRAIN_TIMEOUT_MS);
+  });
+  try {
+    let q;
+    do {
+      q = owner._queue;
+      await Promise.race([q, deadline]);
+    } while (owner._queue !== q);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (dir) {
+    const transient = fs.readdirSync(dir).filter((f) => /\.lock$|\.tmp-/.test(f));
+    assert.deepEqual(transient, [], "no lock or temp files remain once persistence completes");
+  }
+}
 
 /** Journal double that enforces the real payload schema, like StateJournal.record. */
 function fakeJournal() {
@@ -66,13 +91,13 @@ test("FlakinessTracker.record: mode off writes; diverted records one event and l
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const tr = flakiness(dir);
   tr.record(outcome);
-  await settle();
+  await drain(tr, dir);
   assert.ok(fs.existsSync(tr.historyPath), "mode off persists as before");
 
   const before = snapshot(dir);
   const stateBefore = JSON.stringify(tr.history ?? tr._history ?? null);
   const events = await inTask(async () => { tr.record({ ...outcome, locator: "#other" }); });
-  await settle();
+  await drain(tr, dir);
   assert.deepEqual(events, [{ type: "flakiness.outcome", p: { action: "click", locator: "#other", status: "failed", outcome: null, errorType: "timeout", durationMs: 12, description: "d" } }]);
   assert.deepEqual(snapshot(dir), before);
   assert.equal(JSON.stringify(tr.history ?? tr._history ?? null), stateBefore);
@@ -80,7 +105,7 @@ test("FlakinessTracker.record: mode off writes; diverted records one event and l
   // outside a task, mode on: behaves as today
   ParallelMode.setActive(true);
   tr.record({ ...outcome, locator: "#third" });
-  await settle();
+  await drain(tr, dir);
   assert.notDeepEqual(snapshot(dir), before);
 });
 
@@ -107,7 +132,7 @@ test("HealingTrust.recordPending / recordTier3Invocation divert; approve/reject 
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const h = healingTrust(dir);
   h.recordPending({ original: "#a", suggested: "#b", description: "x" });
-  await settle();
+  await drain(h, dir);
   assert.ok(fs.existsSync(h.pendingPath), "mode off persists");
 
   const before = snapshot(dir);
@@ -116,7 +141,7 @@ test("HealingTrust.recordPending / recordTier3Invocation divert; approve/reject 
     h.recordPending({ original: "#c", suggested: "#d", description: "y" });
     h.recordTier3Invocation("#a");
   });
-  await settle();
+  await drain(h, dir);
   assert.deepEqual(events, [
     { type: "healing.pending", p: { original: "#c", suggested: "#d", description: "y" } },
     { type: "healing.tier3", p: { original: "#a" } },
@@ -138,14 +163,14 @@ test("LocatorStore.getAlternatives diverts the lastUsed touch but still serves t
   s.storePath = path.join(dir, "store.json");
   s.data = { "#a": { alternatives: ["#b", "#c"], lastUsed: 1 } };
   assert.deepEqual(s.getAlternatives("#a"), ["#b", "#c"]);
-  await settle();
+  await drain(s, dir);
   assert.ok(fs.existsSync(s.storePath), "mode off persists the touch");
   s.data["#a"].lastUsed = 1;
 
   const before = snapshot(dir);
   let got;
   const events = await inTask(async () => { got = s.getAlternatives("#a"); });
-  await settle();
+  await drain(s, dir);
   assert.deepEqual(got, ["#b", "#c"]);
   assert.deepEqual(events, [{ type: "locatorStore.use", p: { original: "#a" } }]);
   assert.equal(s.data["#a"].lastUsed, 1);
@@ -162,7 +187,7 @@ test("HealingReport.log diverts with the exact payload and writes no file", asyn
   const rep = HealingReport._instance;
   rep.filePath = path.join(dir, "sub", "healing_logs.json");
   HealingReport.log({ original: "#a", resolved: "#b", tier: "LLM", description: "d" });
-  await rep._queue; await settle();
+  await drain(rep);
   assert.equal(rep.logs.length, 1);
   assert.ok(fs.existsSync(rep.filePath), "mode off writes");
   fs.rmSync(path.join(dir, "sub"), { recursive: true });
@@ -170,7 +195,7 @@ test("HealingReport.log diverts with the exact payload and writes no file", asyn
   const events = await inTask(async () => {
     HealingReport.log({ original: "#x", resolved: null, tier: "exhausted", description: "e", error: "boom", trust: "pending", action: "click", status: "failed", reason: "r" });
   });
-  await rep._queue; await settle();
+  await drain(rep);
   assert.deepEqual(events, [{ type: "healing.log", p: { original: "#x", resolved: null, tier: "exhausted", description: "e", error: "boom", trust: "pending", action: "click", status: "failed", reason: "r" } }]);
   assert.equal(rep.logs.length, 1);
   assert.equal(fs.existsSync(path.join(dir, "sub")), false);
@@ -192,7 +217,8 @@ test("LocatorMemory evidence/candidate divert and leave entries and file unchang
   const m = new LocatorMemory({ memoryPath: path.join(dir, "mem.json"), env: {} });
   const id = identityFor("#checkout");
   m.recordEvidence(id, sigFor("Checkout"));
-  await settle();
+  await drain(m, dir);
+  assert.ok(fs.existsSync(path.join(dir, "mem.json")), "mode off persists the evidence");
   const before = snapshot(dir);
   const entriesBefore = JSON.stringify([...m.entries]);
 
@@ -202,7 +228,7 @@ test("LocatorMemory evidence/candidate divert and leave entries and file unchang
     m.recordEvidence(id2, sigFor("Other"));
     m.recordPendingCandidate(id, cand);
   });
-  await settle();
+  await drain(m, dir);
   assert.deepEqual(events.map((e) => e.type), ["locatorMemory.evidence", "locatorMemory.candidate"]);
   assert.deepEqual(Object.keys(events[0].p).sort(), ["identity", "signature"]);
   assert.deepEqual(Object.keys(events[1].p).sort(), ["baseRevision", "candidate", "identity"]);
@@ -217,6 +243,8 @@ test("LocatorMemory evidence/candidate divert and leave entries and file unchang
   ParallelMode.setActive(true);
   m.recordPendingCandidate(id, cand);
   assert.ok(m.entries.get(LocatorIdentity.serialiseIdentity(id)).pendingCandidate);
+  await drain(m, dir);
+  assert.notDeepEqual(snapshot(dir), before, "mode on outside a task persists the candidate");
 });
 
 test("LocatorMemory decisions are never diverted", async (t) => {
