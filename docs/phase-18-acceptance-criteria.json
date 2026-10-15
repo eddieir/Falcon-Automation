@@ -1,0 +1,696 @@
+{
+  "schemaVersion": 1,
+  "phase": 18,
+  "status": "DRAFT",
+  "designRevision": "99bd7c5",
+  "baseline": "2572e73",
+  "source": "docs/research/phase-18/proposed-scope-and-criteria.md",
+  "ownerApproval": "Scope, 82 criteria and claims policy approved by the owner at 99bd7c5 subject to decisions OD-01..OD-19; see the production-cycle ledger",
+  "openItems": [
+    {
+      "id": "BLOCKER-1",
+      "ref": "P18-AC-033/P18-AC-076",
+      "state": "awaiting owner decision"
+    },
+    {
+      "id": "OPEN-1",
+      "ref": "P18-AC-072",
+      "state": "budget number requires fixture measurement (OD-13)"
+    }
+  ],
+  "exitCodes": {
+    "manifest": 10,
+    "authSetup": 11,
+    "authLoss": 12,
+    "policy": 13,
+    "approval": 14,
+    "planBinding": 15,
+    "identity": 16,
+    "safetyInvariant": 17,
+    "planInvalid": 2
+  },
+  "counts": {
+    "total": 82,
+    "must": 73,
+    "should": 6,
+    "could": 3
+  },
+  "criteria": [
+    {
+      "id": "P18-AC-001",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Exported storageState values appear only in the operator-chosen file; zero in stdout, stderr, logs, reports, run history",
+      "components": "AuthStateStore.exportState, EvidenceBoundary",
+      "verification": "R + canary"
+    },
+    {
+      "id": "P18-AC-002",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Import records only role, cookie count, earliest expiry, SHA-256 fingerprint",
+      "components": "AuthStateStore.importState",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-003",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Login-setup with env-referenced credentials succeeds on fixture; state file owner-readable only",
+      "components": "LoginSetup, AuthStateStore (0600)",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-004",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Bad credentials: `AUTH_LOGIN_FAILED`, no new state file, existing one unchanged, password absent from output",
+      "components": "LoginSetup, FailureCodes(AUTH_LOGIN_FAILED), EvidenceBoundary",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-005",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Manifest literal in a credential-named field rejected `MANIFEST_SECRET_LITERAL` with zero target requests",
+      "components": "Manifest secret-literal screen (OD-15)",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-006",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Authenticated role with no state exits `AUTH_STATE_MISSING` before any target request",
+      "components": "PolicyEngine step 4, AuthStateStore",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-007",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Landing on the login route: `AUTH_REDIRECT_TO_LOGIN`; later authenticated steps not counted; status not PASS",
+      "components": "AuthEvidence, ReportManager coverage",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-008",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Expired session: `AUTH_SESSION_EXPIRED`, same consequence",
+      "components": "AuthEvidence",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-009",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Page without authenticated marker and without login redirect: `AUTH_UNEXPECTED_ANONYMOUS`",
+      "components": "AuthEvidence",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-010",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Neither marker nor login route observed: `AUTH_STATE_UNDETERMINED`; never classified authenticated (fail closed)",
+      "components": "AuthEvidence (fail closed), fixture oracle",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-011",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Auth lost at step k of N: steps k..N marked not executed; authenticated coverage counts only steps before k",
+      "components": "AuthEvidence + ReportManager step marking",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-012",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Failure-code enum identical in output, report, dashboard event and docs; no code outside the enum",
+      "components": "FailureCodes enum",
+      "verification": "U, S, D"
+    },
+    {
+      "id": "P18-AC-013",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Auth-loss exit code differs from test-failure and config-error codes",
+      "components": "FailureCodes.exitCodeFor (12 vs 1/2)",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-014",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Anonymous execution is never implicit; a run without a role is refused unless the manifest declares an anonymous role",
+      "components": "PolicyEngine AUTH_ROLE_REQUIRED, Manifest anonymous role",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-015",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Valid state: zero login requests during the run",
+      "components": "AuthEvidence + fixture login-request counter",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-016",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Customer role plan contains zero administrator-only actions",
+      "components": "Manifest roles + PolicyEngine route/role",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-017",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Each (role, worker) uses a distinct state copy; source file hash unchanged",
+      "components": "StateCopyPool + source fingerprint",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-018",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "A cookie mutated by one worker is absent for another",
+      "components": "StateCopyPool per-context copies",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-019",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Zero per-run state copies remain after normal or failed exit",
+      "components": "PilotLifecycle cleanup (exit + signals)",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-020",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Sequential run: every request carries only its role's state",
+      "components": "StateCopyPool sequential path",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-021",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Worker mode: per-test role assignment honoured; coverage set equals sequential",
+      "components": "parallel/Runner role assignment; coverage equality",
+      "verification": "R, I"
+    },
+    {
+      "id": "P18-AC-022",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Shard bundles contain zero storageState files and zero cookie/token values",
+      "components": "ShardBundle allow-list (OD-17)",
+      "verification": "U, R + canary"
+    },
+    {
+      "id": "P18-AC-023",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Shard with missing state exits `AUTH_STATE_MISSING`; merged report shows lost coverage, not pass",
+      "components": "parallel shard auth check + ShardMerge",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-024",
+      "priority": "Must",
+      "pr": "18A",
+      "requirement": "Unknown role: `MANIFEST_ROLE_UNKNOWN` with zero target requests",
+      "components": "Manifest MANIFEST_ROLE_UNKNOWN",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-025",
+      "priority": "Must",
+      "pr": "18B",
+      "requirement": "Click, fill, type, submit, download counters all 0",
+      "components": "DryRunGuard counters",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-026",
+      "priority": "Must",
+      "pr": "18B",
+      "requirement": "Zero POST/PUT/PATCH/DELETE to any origin; GET only to allowed routes",
+      "components": "DryRunGuard interception",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-027",
+      "priority": "Must",
+      "pr": "18B",
+      "requirement": "Provider key configured: zero provider calls at the SDK boundary",
+      "components": "DryRun no-provider path + transport guard",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-028",
+      "priority": "Must",
+      "pr": "18B",
+      "requirement": "State file hash, storage and fixture data checksum unchanged",
+      "components": "DryRun fingerprint/checksum compare",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-029",
+      "priority": "Must",
+      "pr": "18B",
+      "requirement": "Two identical dry-runs give byte-identical plans and equal digests",
+      "components": "PilotPlan deterministic serialisation",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-030",
+      "priority": "Must",
+      "pr": "18B",
+      "requirement": "Material field change alters the digest; non-material change (timestamps, run ID, host paths) does not",
+      "components": "PlanDigest material/excluded lists",
+      "verification": "U"
+    },
+    {
+      "id": "P18-AC-031",
+      "priority": "Must",
+      "pr": "18B",
+      "requirement": "Digest mismatch: `PLAN_DIGEST_MISMATCH`, no click/fill/submit",
+      "components": "PolicyEngine step 8",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-032",
+      "priority": "Must",
+      "pr": "18B",
+      "requirement": "Material target change since dry-run: `PLAN_DRIFT`, new review required, no approval reused",
+      "components": "PlanDigest drift + ApprovalStore invalidation",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-033",
+      "priority": "Must",
+      "pr": "18B",
+      "requirement": "Plan lacking schema version or digest (including current `--save-plan` output) refused `PLAN_INVALID` for execute",
+      "components": "PilotPlan v2 reader — **see BLOCKER-1**",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-034",
+      "priority": "Must",
+      "pr": "18B",
+      "requirement": "Oracle fixture: 100% of oracle controls proposed, zero invented actions",
+      "components": "DryRun vs fixture oracle manifest",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-035",
+      "priority": "Should",
+      "pr": "18B",
+      "requirement": "Each plan action shows policy outcome and reason; summary counts match rows",
+      "components": "Plan row policy outcome + summary counts",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-036",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Unknown key or missing field: `MANIFEST_INVALID` naming the path, zero requests",
+      "components": "ManifestSchema strict",
+      "verification": "U"
+    },
+    {
+      "id": "P18-AC-037",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Unsupported version: `MANIFEST_VERSION_UNSUPPORTED`",
+      "components": "ManifestSchema version",
+      "verification": "U"
+    },
+    {
+      "id": "P18-AC-038",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Every schema field documented and vice versa (CI check)",
+      "components": "docs/pilot/manifest-reference.md sync check",
+      "verification": "S"
+    },
+    {
+      "id": "P18-AC-039",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Default manifest blocks cross-origin navigation/form submit: `POLICY_ORIGIN_DENIED`, zero requests (sub-resources: OD-08)",
+      "components": "PolicyEngine step 2 (incl. subresources, OD-08)",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-040",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Denied route blocked before interaction: `POLICY_ROUTE_DENIED`",
+      "components": "PolicyEngine step 3",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-041",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Page/time budget exceeded: `POLICY_BUDGET_EXCEEDED`, no further actions",
+      "components": "Budget enforcement",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-042",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Delete/Pay/Transfer/Publish/Send/Submit matrix varied by name, text, type, form action, URL: 100% protected or denied",
+      "components": "ActionClassifier matrix",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-043",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "A control labelled \"Cancel\"/\"View\" with destructive action or URL is protected (any destructive signal wins)",
+      "components": "ActionClassifier any-destructive-signal rule",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-044",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Manifest business vocabulary term makes a matching control protected",
+      "components": "Vocabulary from manifest",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-045",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Provider \"safe\" never lowers a protected/denied outcome; it may only add caution",
+      "components": "applyProviderAdvice monotonic",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-046",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Provider absent or erroring gives the same outcomes; no default permit",
+      "components": "PolicyEngine provider-absent path",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-047",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Healing never clicks, and builds no provider prompt for, a protected/denied action",
+      "components": "AIHealer entry guard (`policyOutcome === \"permit\"`)",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-048",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Approval cannot override denial",
+      "components": "PolicyEngine step 6 before step 7",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-049",
+      "priority": "Must",
+      "pr": "18C",
+      "requirement": "Ambiguous or changed-identity control: `CONTROL_AMBIGUOUS`/`PLAN_DRIFT`, zero clicks",
+      "components": "ActionClassifier ambiguity, CONTROL_AMBIGUOUS",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-050",
+      "priority": "Should",
+      "pr": "18C",
+      "requirement": "Artifact policy \"none\": zero screenshots/traces/DOM snapshots; \"on-failure\": only failed steps on listed routes",
+      "components": "Manifest artifacts policy",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-051",
+      "priority": "Must",
+      "pr": "18D",
+      "requirement": "CSRF-protected form: approved protected submit succeeds with in-run token, token absent from artifacts; unapproved: zero POSTs",
+      "components": "ApprovalStore + CSRF fixture + EvidenceBoundary",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-052",
+      "priority": "Must",
+      "pr": "18D",
+      "requirement": "No approval: `APPROVAL_REQUIRED`, zero clicks",
+      "components": "PolicyEngine step 7",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-053",
+      "priority": "Must",
+      "pr": "18D",
+      "requirement": "Approval bound to plan digest, manifest version, role, target origin, action ID; any mismatch `APPROVAL_MISMATCH`",
+      "components": "approval/Binding",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-054",
+      "priority": "Must",
+      "pr": "18D",
+      "requirement": "Expired or pre-change approval: `APPROVAL_STALE`",
+      "components": "ApprovalStore staleness",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-055",
+      "priority": "Must",
+      "pr": "18D",
+      "requirement": "Consumed approval reused after process restart: `APPROVAL_REPLAYED`",
+      "components": "ApprovalStore durable consumption across restart",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-056",
+      "priority": "Must",
+      "pr": "18D",
+      "requirement": "Approval for an unknown plan digest: `APPROVAL_UNKNOWN_PLAN`",
+      "components": "ApprovalStore lookup",
+      "verification": "U"
+    },
+    {
+      "id": "P18-AC-057",
+      "priority": "Must",
+      "pr": "18D",
+      "requirement": "Every grant/refusal/consumption has one audit entry with timestamp, approver, digest, action, role, decision, code; no secrets",
+      "components": "AuditLog entry shape",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-058",
+      "priority": "Should",
+      "pr": "18D",
+      "requirement": "Edited approval/history file detected; zero clicks",
+      "components": "AuditLog hash chain + verify()",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-059",
+      "priority": "Could",
+      "pr": "18D",
+      "requirement": "Read-only dashboard approval view",
+      "components": "Dashboard read-only approvals view",
+      "verification": "R — **OPEN-2: Could, descoped unless budget allows**"
+    },
+    {
+      "id": "P18-AC-060",
+      "priority": "Must",
+      "pr": "18E",
+      "requirement": "Canaries seeded in cookie, Authorization header, password field, URL token, localStorage, env credential occur zero times in every persisted artifact across execute, dry-run, failed login, expired session and shard runs",
+      "components": "EvidenceBoundary + CanaryRegistry, 5 run shapes",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-061",
+      "priority": "Must",
+      "pr": "18E",
+      "requirement": "Zero canaries in stdout/stderr of every Phase 18 command",
+      "components": "EvidenceBoundary on stdout/stderr",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-062",
+      "priority": "Must",
+      "pr": "18E",
+      "requirement": "Zero canaries in dashboard HTML and events JSON",
+      "components": "Dashboard events + HTML escaping",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-063",
+      "priority": "Must",
+      "pr": "18E",
+      "requirement": "Zero known credential values in provider prompt captures at the SDK boundary",
+      "components": "provider-prompt capture at SDK transport boundary",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-064",
+      "priority": "Must",
+      "pr": "18E",
+      "requirement": "Exception carrying an Authorization value is redacted",
+      "components": "error serialisation through boundary",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-065",
+      "priority": "Must",
+      "pr": "18E",
+      "requirement": "Locator memory and healing evidence store no input or cookie values",
+      "components": "ElementFactsCollector + HealingReport",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-066",
+      "priority": "Must",
+      "pr": "18E",
+      "requirement": "Malicious app text is inert in dashboard/reports; ANSI stripped from logs",
+      "components": "HTML escaping + ANSI/control stripping",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-067",
+      "priority": "Must",
+      "pr": "18E",
+      "requirement": "Shard bundles hold only permitted artifacts (contents: OD-17)",
+      "components": "ShardBundle allow-list",
+      "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-068",
+      "priority": "Should",
+      "pr": "18E",
+      "requirement": "Documented cleanup removes artifacts older than the retention period",
+      "components": "Retention.js + docs",
+      "verification": "U, D"
+    },
+    {
+      "id": "P18-AC-069",
+      "priority": "Must",
+      "pr": "DOC",
+      "requirement": "Docs list where application-derived text can appear, default retention, deletion steps",
+      "components": "docs/pilot/retention.md",
+      "verification": "D"
+    },
+    {
+      "id": "P18-AC-070",
+      "priority": "Could",
+      "pr": "18E",
+      "requirement": "Purge command removes all files for a run ID",
+      "components": "purge command — **deferred by OD-14; not a Must**",
+      "verification": "—"
+    },
+    {
+      "id": "P18-AC-071",
+      "priority": "Must",
+      "pr": "cross",
+      "requirement": "Every refusal shows a stable code in exit output, report and dashboard event, and goes through `Logger`",
+      "components": "FailureCodes + Logger on every refusal",
+      "verification": "U, R, S"
+    },
+    {
+      "id": "P18-AC-072",
+      "priority": "Should",
+      "pr": "cross",
+      "requirement": "Hermetic dry-run completes within the CI budget (OD-13)",
+      "components": "CI timing gate — **OPEN-1: number after measurement (OD-13)**",
+      "verification": "I"
+    },
+    {
+      "id": "P18-AC-073",
+      "priority": "Must",
+      "pr": "18F",
+      "requirement": "Fixture suite makes zero non-loopback outbound requests",
+      "components": "fixture loopback-only assertion",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-074",
+      "priority": "Must",
+      "pr": "18F",
+      "requirement": "Phase 18 matrix on Node 24 CI has zero skipped or expected-fail tests; a skip fails the job",
+      "components": "CI job: skip or expected-fail fails the job",
+      "verification": "I, S"
+    },
+    {
+      "id": "P18-AC-075",
+      "priority": "Must",
+      "pr": "18F",
+      "requirement": "No CI job invokes GoogleSearchTest",
+      "components": "CI grep asserting no GoogleSearchTest invocation",
+      "verification": "S"
+    },
+    {
+      "id": "P18-AC-076",
+      "priority": "Must",
+      "pr": "18F",
+      "requirement": "With no Phase 18 flags, exit codes and reports match the baseline at `2572e73`; existing tests pass unchanged",
+      "components": "baseline comparison vs `2572e73` exit codes and reports",
+      "verification": "R, I"
+    },
+    {
+      "id": "P18-AC-077",
+      "priority": "Must",
+      "pr": "18F",
+      "requirement": "Every Phase 18 test runs from an npm script that `ci.yml` calls",
+      "components": "`npm run test:pilot` called by ci.yml",
+      "verification": "S, I"
+    },
+    {
+      "id": "P18-AC-078",
+      "priority": "Must",
+      "pr": "DOC",
+      "requirement": "Docs state not-certification, no compliance, no SSO/OIDC/SAML/RBAC, provider cannot weaken denial, residual application text; prohibited phrases absent",
+      "components": "docs prohibited-phrase check",
+      "verification": "S, D"
+    },
+    {
+      "id": "P18-AC-079",
+      "priority": "Should",
+      "pr": "DOC",
+      "requirement": "Operator guide commands behave as documented on the fixture",
+      "components": "operator guide commands executed on fixture",
+      "verification": "R"
+    },
+    {
+      "id": "P18-AC-080",
+      "priority": "Must",
+      "pr": "DOC",
+      "requirement": "New `.env.example` keys are genuinely blank",
+      "components": "`.env.example` blank-value check",
+      "verification": "S"
+    },
+    {
+      "id": "P18-AC-081",
+      "priority": "Could",
+      "pr": "18C",
+      "requirement": "JSON schema export for editors",
+      "components": "ManifestSchema.exportJsonSchema + `schemas/pilot-manifest.v1.json`",
+      "verification": "U"
+    },
+    {
+      "id": "P18-AC-082",
+      "priority": "Must",
+      "pr": "cross",
+      "requirement": "Release candidate on Node 24 CI: every Must passes with direct evidence; no open P0/P1",
+      "components": "release-candidate CI run, every Must green, no open P0/P1",
+      "verification": "I"
+    }
+  ]
+}
