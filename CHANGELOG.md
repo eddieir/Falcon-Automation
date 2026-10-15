@@ -6,9 +6,19 @@ See [README.md](README.md) for the current feature set, architecture, and usage.
 
 ---
 
+## Dependency and GitHub Actions updates (pull requests #55 and #56)
+
+Consolidated into pull request #53 and validated against the post-#54 code.
+
+- **Actions** (pinned to full commit SHAs): `actions/setup-node` 7.0.0 to 7.1.0 and `actions/upload-artifact` 7.0.1 to 7.0.2.
+- **npm**: dotenv 18.0.7, express 5.3.0, express-rate-limit 8.7.1, openai 7.32.0, pixelmatch 8.0.0, playwright and @playwright/test 1.64.0 (Chromium 156.0.8078.4), allure 3.20.1.
+- **pixelmatch 8** is a major release. Falcon's import (`await import("pixelmatch")`, default export) and call signature are unchanged, but pixelmatch now measures colour difference in OKLab instead of YIQ, so `threshold` is not numerically identical to version 7. On the repository's own baseline images the changed-pixel counts matched exactly at the default `0.1` for real differences and differed by about 0.3% for a synthetic edge case at that threshold. Re-check committed visual baselines whose results sit close to a threshold.
+
+---
+
 ## Saved-plan replay and an end-to-end Falcon recovery demo
 
-Pull request #54, not yet merged. No version tag or GitHub release has been created for this work.
+Merged through pull request #54. No version tag or GitHub release has been created for this work.
 
 ### Release-note copy
 
