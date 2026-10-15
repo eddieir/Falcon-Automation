@@ -1,6 +1,6 @@
 # Phase 18 owner decision packet
 
-Status: **DECIDED (policy direction only).** The owner's decisions were recorded in the production-cycle ledger as OWNER-01..OWNER-07 and are integrated in the [rev 8 patch](architecture/phase-18-rev8-patch.md) and the [decision traceability](phase-18-decision-traceability.md). They authorise no implementation, merge, tag or publication. The text below is the packet as presented; where it differs from the recorded decisions, the rev 8 patch wins (notably OD-24: CI may not self-approve, and the destructive-action residual is replaced by a default-protected policy). Two follow-up questions raised by rev 8 remain open: OD-24-Q1 and OD-20-Q1, plus OD-22-Q1, OD-22-Q2 and OD-23-Q1 for confirmation. Design revision: architecture rev 2 plus patches rev 3 to rev 7 (head of `docs/phase-18-architecture` when this was written). Security status: SEC-07 (`docs/security/phase-18-design-review-6.md`) reports 0 blockers and 0 open majors; every item below is an owner question, not a security finding. Base for compatibility claims: `2572e73`.
+Status: **DECIDED (policy direction only), with five genuinely new sub-questions open (see the reconciliation at the end).** The owner's decisions were recorded in the production-cycle ledger as OWNER-01..OWNER-07 and are integrated in the [rev 8 patch](architecture/phase-18-rev8-patch.md) and the [decision traceability](phase-18-decision-traceability.md). They authorise no implementation, merge, tag or publication. The text below is the packet as presented; where it differs from the recorded decisions, the rev 8 patch wins (notably OD-24: CI may not self-approve, and the destructive-action residual is replaced by a default-protected policy). Two follow-up questions raised by rev 8 remain open: OD-24-Q1 and OD-20-Q1, plus OD-22-Q1, OD-22-Q2 and OD-23-Q1 for confirmation. Design revision: architecture rev 2 plus patches rev 3 to rev 7 (head of `docs/phase-18-architecture` when this was written). Security status: SEC-07 (`docs/security/phase-18-design-review-6.md`) reports 0 blockers and 0 open majors; every item below is an owner question, not a security finding. Base for compatibility claims: `2572e73`.
 
 Product implementation of Phase 18 stays blocked until you have answered the items marked **required before first PR**, the locator-cache test-reliability PR has merged, and post-merge `main` is green.
 
@@ -102,3 +102,32 @@ None of these is accepted by the design. Accepting each means documenting it in 
 ## Not decided here
 
 Merge of PR #58, merge of the architecture documents, any tag, publication, deployment or announcement. None is authorized.
+
+## Reconciliation of owner decisions (recorded after the ledger entries OWNER-01..OWNER-07)
+
+Sources: production-cycle ledger events OWNER-01..OWNER-07 (the owner's message), this packet, the rev 8 and rev 9 patches, and SEC-07 to SEC-09.
+
+### Accepted exactly as stated
+
+BLOCKER-1; OD-17-Q1; OD-23; OD-24 (CI may not self-approve, no CI approve step in Phase 18); OD-20(b); OPEN-1 (acknowledged, no budget chosen); m-15 to m-19 as mandatory gates; the 18 listed residual risks (accepted with documentation and bounded claims); residual 15 (exit 14 may outrank an ordinary failure), which also resolves the earlier OD-23-Q1.
+
+### Accepted with the owner's amendments
+
+OD-20(a) (tmpfs and ZFS only after SPIKE-FS numeric ids and O_EXCL, rename and fsync behaviour tests, never from a name or assumed magic); OD-21 (documented residual plus the operator egress-control condition; the WebSocket and service-worker paths of H-1 fall under the owner's wording "other browser-visible network paths may remain" and are recorded as the same residual); OD-22 (2000 ms default, 10000 ms hard maximum, out-of-range is a configuration error, one lease per attempt, no refresh, expiry fails closed, body not cryptographically bound); the destructive-action residual (replaced by the default-protected policy, OWNER-07).
+
+### Not accepted as residuals (close only by implementation evidence)
+
+Build and approval-root mixing; filesystem identification and admitted-type behaviour; boot identity fallback; concurrent-writer exit-17 behaviour.
+
+### Security conditions (implementation gates, not residual risks)
+
+SEC-09 m-24 to m-28, H-3 and the four-file test condition are mapped to first PRs and observable tests in the [decision traceability](phase-18-decision-traceability.md).
+
+### Genuinely new and unanswered (delta packet)
+
+OD-24-Q1, OD-20-Q1, OD-22-Q1, OD-22-Q2 and the m-25 boundary acceptance. Each is a sub-question created after the owner's answers; none was decided by them, and none is assumed accepted. They are presented in the delta packet delivered with this record.
+
+### Not owner decisions, disclosed
+
+D11's mechanism (inverting classification to a closed positive permit set) was chosen by the architect to make the rule total; it strengthens OWNER-07's intent and weakens nothing, but it is an architect mechanism and not owner text.
+
