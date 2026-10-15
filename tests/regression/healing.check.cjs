@@ -2,7 +2,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { load, silent, temp, root } = require("./helpers.cjs");
+const { load, silent, temp, root, drainQueue } = require("./helpers.cjs");
 const Retry = load("src/core/AIHealer/AdaptiveRetry.js", {
   "../../../utils/Logger": silent,
 });
@@ -77,9 +77,17 @@ for (const [kind, multiplier] of [
 }
 function storeAt(t, contents) {
   const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const store = load("src/core/AIHealer/LocatorStore.js");
   store.storePath = path.join(dir, "nested/store.json");
+  // `getAlternatives()`/`addLocator()` both re-chain `store._queue` on every
+  // call (including ones made by the test body after its own last `await
+  // store._queue`), so cleanup must drain whatever is actually outstanding
+  // at `t.after` time — not just whatever `_queue` happened to reference
+  // when the test last awaited it — before the directory is removed.
+  t.after(async () => {
+    await drainQueue(store, path.dirname(store.storePath));
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
   if (contents !== undefined) {
     fs.mkdirSync(path.dirname(store.storePath));
     fs.writeFileSync(store.storePath, contents);
@@ -156,6 +164,82 @@ test("locator cache tolerates write errors", async (t) => {
   store.addLocator("#old", "#new");
   await store._queue;
   assert.deepEqual(store.getAlternatives("#old"), ["#new"]);
+});
+// Regression for the intermittent ENOTEMPTY reported against "locator cache
+// tolerates write errors": getAlternatives()/addLocator() both re-chain
+// `_queue` on every call, including a trailing call made after a test's own
+// last `await store._queue` (every real storeAt() caller above does this —
+// e.g. "locator cache persists..." ends on an unawaited `getAlternatives`).
+// A `t.after` that calls `fs.rmSync(dir, ...)` without first draining that
+// freshly re-chained, still-pending save races AtomicJsonStore's
+// mkdir/writeFile/rename — the exact precondition for ENOTEMPTY. A real
+// `rmSync` vs. libuv-threadpool-write race is inherently non-deterministic
+// (this is why the coordinator's own 25 isolated attempts to force it all
+// passed), so this test proves the deterministic, controllable precondition
+// instead: a write that is still pending at cleanup time must never be
+// allowed to execute its real mkdir/writeFile/rename against a directory
+// cleanup has already removed. It demonstrates the old (unsafe) ordering
+// and the new (drained) ordering side by side, so both outcomes are visible
+// in one run without touching production code or storeAt/trustAt directly.
+test("locator-store write queue: a save still pending at cleanup time must never run after the directory is removed (regression for intermittent ENOTEMPTY)", async (t) => {
+  const dir = temp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const store = load("src/core/AIHealer/LocatorStore.js");
+  const nested = path.join(dir, "nested");
+  store.storePath = path.join(nested, "store.json");
+  store.data = store._loadSync();
+  const realSave = store._save.bind(store);
+
+  // --- Old ordering: cleanup removes the directory immediately, exactly
+  // the way every `t.after(() => fs.rmSync(dir, ...))` used to, while a
+  // write triggered by a trailing, unawaited call is still queued. ---
+  let gate, release;
+  gate = new Promise((resolve) => { release = resolve; });
+  // Only the first chained save's observation matters here: addLocator()
+  // and the trailing getAlternatives() each queue their own save, and the
+  // first save's real writeJsonAtomic() recreates `nested` via its own
+  // internal mkdir — recording every call would let that second write mask
+  // whether the *first* one ran after removal, which is the actual race
+  // window this test proves.
+  let dirPresentWhenOldSaveRan = null;
+  store._save = async () => {
+    await gate; // held open until the test explicitly releases it below
+    if (dirPresentWhenOldSaveRan === null) dirPresentWhenOldSaveRan = fs.existsSync(nested);
+    return realSave();
+  };
+  store.addLocator("#old", "#new");
+  store.getAlternatives("#old"); // the trailing, unawaited re-chain
+  const oldPendingQueue = store._queue;
+  fs.rmSync(dir, { recursive: true, force: true }); // old-style immediate cleanup
+  release();
+  await oldPendingQueue;
+  assert.equal(
+    dirPresentWhenOldSaveRan,
+    false,
+    "BUG reproduced: without draining, the queued save's real write ran after cleanup had already removed its directory",
+  );
+
+  // --- New ordering: cleanup drains the real queue first, the way
+  // storeAt()/trustAt() now do, so the same trailing call can never land
+  // after its directory is gone. ---
+  fs.mkdirSync(nested, { recursive: true });
+  let dirPresentWhenNewSaveRan = null;
+  gate = new Promise((resolve) => { release = resolve; });
+  store._save = async () => {
+    await gate;
+    if (dirPresentWhenNewSaveRan === null) dirPresentWhenNewSaveRan = fs.existsSync(nested);
+    return realSave();
+  };
+  store.addLocator("#old2", "#new2");
+  store.getAlternatives("#old2"); // the same trailing, unawaited re-chain
+  release();
+  await drainQueue(store, nested); // the fix: follow the chain until it settles
+  fs.rmSync(dir, { recursive: true, force: true });
+  assert.equal(
+    dirPresentWhenNewSaveRan,
+    true,
+    "with draining, the queued save's real write must run while its directory is still present",
+  );
 });
 function healer(page, alternatives = [], reviewed = []) {
   const events = [],
@@ -534,7 +618,6 @@ test("locator reads refresh recency for eviction and cannot mutate stored altern
 
 function trustAt(t) {
   const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const added = [];
   const emitted = [];
   const warnings = [];
@@ -546,6 +629,14 @@ function trustAt(t) {
   Trust.pendingPath = path.join(dir, "healing_pending.json");
   Trust.decisionsPath = path.join(dir, "healing_decisions.json");
   Trust._reload();
+  // Same drain-before-rmSync requirement as storeAt(): HealingTrust chains
+  // its own writes onto `Trust._queue`, so cleanup must follow whatever is
+  // outstanding at `t.after` time, not just what a test's last `await
+  // trust._queue` happened to capture.
+  t.after(async () => {
+    await drainQueue(Trust, dir);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
   return { trust: Trust, added, emitted, warnings };
 }
 
