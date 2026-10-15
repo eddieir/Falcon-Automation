@@ -1,0 +1,53 @@
+# Phase 18 decision traceability and rev 8 review notes
+
+Companion to the [rev 8 patch](architecture/phase-18-rev8-patch.md). Maps each recorded owner decision (OWNER-01..OWNER-07) and the Security gates m-15..m-19 to acceptance criteria, ADRs, implementing PR and required tests, and lists wording conflicts and issues the architect flagged. Status: DRAFT pending SEC-08. Nothing here authorizes implementation, merge or publication.
+
+## Decision-to-AC-to-ADR-to-PR-to-test mapping
+
+| Decision | AC(s) | ADR | PR owner | Required test(s) (inversion required on every `neg-*`) |
+|---|---|---|---|---|
+| D1 PLAN_INVALID pilot-only | AC-033 (reworded), AC-076 | ADR-0039 | 18B (DOC for the split) | `neg-plan-mode-scope` (U/R): v1 plan + pilot flags → exit 2 `PLAN_NO_DIGEST` with no browser launch; same v1 plan with no pilot flags → byte-identical to `2572e73`; plan cannot elect its own mode. AC-076 baseline (18E) |
+| D2 no pilot healing/locator evidence | AC-088 (new), AC-022, AC-060, AC-067 | ADR-0040 | 18A (+18E scan) | `pos-pilot-healing-sinks-silent`; `neg-healing-counter-schema` (U: closed key set, closed enum, integers, absent from `timings.json`/bundles); four-location scan (18F); m-17(b) open-write verification |
+| D3 protected refused in shards | AC-083 (new), AC-051, AC-023 | ADR-0038 (amended) | 18D (+18F) | `neg-shard-protected-action` (extended: static pre-flight exit 14 before launch); `neg-shard-token-file-refused`; `neg-shard-approve-argv`; `run/approvals` absent on disk |
+| D4 no CI approval | AC-084 (new), AC-051, AC-074 | ADR-0041 | 18F (+18D removals) | `neg-ci-no-approve-step` (S: no approve flag, token key, token file or approvals path in any job; inversion adds one and must fail); CI pilot job asserts exit 14 for a protected step |
+| D5 filesystem admission | AC-085 (new) | ADR-0030 (amended) | 18E (check), 18F (CI + SPIKE-FS), DOC (matrix) | `neg-n5-statfs` (extended); `neg-fs-behaviour` (U/I: `O_EXCL` under contention, `rename` atomicity, file and directory `fsync`); SPIKE-FS table assertion; actionable-message assertion |
+| D6 egress residual | AC-073 (reworded), AC-078 | ADR-0029 (amended) | 18C (launch flag), DOC, 18F (AC-073) | AC-073 loopback-only run; prohibited-phrase check (S) covering egress claims |
+| D7 arming lease | AC-086 (new), AC-051, AC-053 | ADR-0042 | 18D (config/binding), 18B (lease mechanics) | `neg-arming-window-config` (U: 0, 249, 10001, non-integer, non-numeric each refused pre-launch, no clamping); `neg-n2-arming` (f)-(j) plus expiry-fails-closed, no-refresh, one-attempt and redirect-hop cases |
+| D8 measured CI budget | AC-072 (reworded) | — | 18F | Recorded >=20-sample distribution with CI environment and documented margin; no threshold enforced until then |
+| D9 m-15..m-19 gates | AC-023, AC-060, AC-067, AC-076 | ADR-0038 (amended) | per gate below | see m-15..m-19 rows |
+| D10 residual disposition | AC-069, AC-078 + the four not-accepted items | — | DOC; 18D/18E/18F for the four | `neg-p04-build` (extended), `neg-q-roots`, `neg-fs-behaviour`, `neg-d1-boot-identity`, `neg-pilot-store-concurrent-writer` |
+| D11 default-protected | AC-087 (new), AC-042, AC-043, AC-045, AC-048 | ADR-0043 | 18C (+18B) | `neg-c01-default-protected` (U/R, inversion mandatory); `neg-b06-permit-traceability` (U); extended AC-042/043 matrices; `neg-b03-homoglyph` extended |
+| m-15 expect flag exits 2 | AC-023 | ADR-0038 (amended) | 18A | `neg-shard-refusal-bundle` (extended): missing `--expect-run-id`/`--expect-commit` → **exit 2**, fs spy proves no read |
+| m-16 `--expect-config-fp` | AC-023, AC-084 | ADR-0038 (amended) | 18A + 18F | Pilot merge with no `expectConfigFp` source → exit 2; foreign-`configFp` refusal; inversion reading `configFp` from shard 0 must fail the test; static check asserts the flag on every pilot merge in `ci.yml` |
+| m-17 receipt-write failure, skipped steps | AC-023, AC-067 | — | 18F | `neg-pilot-store-untouched` (extended): receipt-write failure still returns 17; clean pilot merge over absent and present stores yields no 17 and three matching digests |
+| m-18 receipt mode binding | AC-076 | — | 18F | `neg-receipt-replay-recompute` (extended): pilot merge rejects `v:1`; non-pilot merge rejects `v:2`; `shardCodes` differing from freshly loaded manifests → exit 2 |
+| m-19 healing counters | AC-088, AC-060 | ADR-0040 | 18A + 18E | `neg-healing-counter-schema`; `pos-pilot-healing-sinks-silent` asserts the key set; four-location scan finds no selector, URL or locator-key digest |
+
+---
+
+## Decision wording that conflicted with earlier design, and how I resolved it
+
+1. **D9 (m-15) versus rev 7 2b.2(3)(a).** Rev 7 made a missing expect flag an argv refusal with **exit 1**; SEC-07 rejected that and D9 makes m-15 mandatory. Resolved in favour of **exit 2**; rev 7's 18A test assertion and DOC bullet ("exits 1 without them") are corrected. The "before any filesystem read" property is kept.
+2. **D4 versus rev 4 section J (D-e) and the rev 4/rev 5 CI and DOC bullets.** Those describe a CI approve step with a `$RUNNER_TEMP` `0600` token file, `::add-mask::`, and an `always()` cleanup. All CI wiring is deleted; the file transport itself is retained **for interactive local use only**, because it is the non-stdout path and D4 says to keep what interactive runs need.
+3. **D4 versus AC-051 and AC-074.** Unresolvable without a reading; I took the narrow reading and raised **OD-24-Q1** rather than weaken either Must.
+4. **D11 versus rev 2 section 6 and threat-model section 6 item 4.** The classifier's permit fall-through and the "novel vocabulary may be classified permit" residual are deleted and replaced by the default-protected policy; the residual is re-scoped to applications that violate their declared behaviour.
+5. **D3 versus rev 5 section 2b rule 5.** Rev 5 refuses protected actions at plan projection but only after the run starts. I added the **static pre-flight** refusal before any browser launch so the operator is not charged a full shard for a structurally impossible plan. This is strictly more fail-closed and weakens nothing.
+6. **D2 versus rev 6 2b.1(a)(5) and rev 7 2b.5.** Rev 6's "process-local logs" wording was already corrected by rev 7; rev 8 further narrows it to "no sink in any shape" and adds the read-only/no-open-write rule, because an open-time write would raise a false exit 17 (m-17(b)).
+7. **D5 versus rev 3 and rev 4.** Rev 3 used filesystem **name strings** on darwin, which is not implementable; rev 4 corrected it to numeric ids. Rev 8 keeps numeric-only and adds the behaviour-test gate, which rev 4 had explicitly rejected as a *substitute* for durability evidence — it is now an **additional** condition, not a substitute, so the two statements are consistent.
+8. **D6 versus rev 3's WebRTC bullet.** Rev 3 already called the flag best-effort; rev 8 removes the implication that it is any part of an egress control and adds the operator-side allowlist documentation duty with an explicit non-certification statement.
+9. **D7 versus rev 4 N-2.** Rev 4 left `windowMs` as an open owner decision and did not define the lower bound, the measurement instant or redirect behaviour. Rev 8 fixes 2000/10000, adds a 250 ms floor (OD-22-Q1), defines "begins" as route-handler observation (OD-22-Q2), and keeps rev 4's page/frame/resource-type/size binding unchanged.
+10. **D10 versus section 19a.** The old list was uniformly "none accepted". It is now split into owner-accepted-with-documentation and the four not-accepted items, each with a named test. The owner packet's residual 23 ("pilot runs contribute nothing to locator memory") is now a design property with an AC, not only a residual.
+
+---
+
+## Technically unsound or underspecified in the decisions (flagged, not silently chosen)
+
+1. **D4 makes AC-051's approved half untestable in CI under a strict reading**, which collides with AC-074's zero-skip rule. Raised as OD-24-Q1 with both options costed; the narrow reading is implemented, the strict reading requires an owner amendment to AC-074.
+2. **D5 admits tmpfs on behaviour evidence, but tmpfs has no durability to evidence.** `fsync` succeeds and nothing survives a reboot. Behaviour tests can prove atomicity and ordering only. Raised as OD-20-Q1; recommendation is tmpfs for `authRoot`/`plansRoot` and refusal for `approvalsRoot`. Also: `tmpfs` and `ramfs` share magic `0x01021994`, so admitting tmpfs admits ramfs — a new residual of the same kind as ext2/3/4.
+3. **D7 has no lower bound and no definition of "begins".** Both are now specified (250 ms; route-handler observation) and flagged for confirmation. Redirect hops of an already-matched armed request were undefined; decided and flagged (OD-22-Q2).
+4. **D2's "Logger output only" does not say whether locator state may be read.** Reading mutates nothing and is useful, so reads are permitted — but only through a path proven not to write on open, because `LocatorMemory` may write a salt header with zero events (still unverified, m-17-Q1). Without that verification the decision as written could cause false exit 17 on legitimate pilot runs.
+5. **D3's exit 14 plus D10's accepted "exit 14 may outrank ordinary failure"** means a shard pilot containing a protected action is indistinguishable at the exit code from a real approval failure. Distinguishable only in the receipt. Flagged as OD-23-Q1; a distinct code would reopen OD-10.
+6. **D8 says "hard bound with documented margin" without naming a sample count or a margin rule.** I set >=20 samples and require the margin and its justification to be recorded; the number is a proposal, not an owner decision.
+7. **D11's "form submissions and non-GET/write-capable actions not explicitly permitted default to protected"** presupposes an explicit permit surface in the manifest. The current manifest schema documents `actions.denied` and `vocabulary`; an explicit **permit** surface (route/action permit entries with a stable key that the plan row can cite) must exist for rule 6's traceability to be implementable. 18C must add it to `schemas/pilot-manifest.v1.json` and to `docs/pilot/manifest-reference.md` (AC-038 keeps them in sync). Flagged because it is new manifest surface implied, not stated, by the decision.
+8. **D10 lists "boot identity fallback" as not accepted**, but the fallback is a one-minute-bucketed `os.uptime()` derivation that cannot be made sound on a host without procfs; it can only be made *fail-closed*. The test must therefore assert refusal rather than correct reboot detection on such hosts. If the owner expects sound reboot detection on macOS, that is not achievable with the current approach and needs a separate decision.
+

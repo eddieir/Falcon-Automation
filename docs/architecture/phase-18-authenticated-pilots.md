@@ -1,6 +1,6 @@
 # Phase 18 — Authenticated Pilots
 
-Status: **DRAFT rev 2 plus the normative [rev 3 patch](phase-18-rev3-patch.md) [rev 4 patch](phase-18-rev4-patch.md) and [rev 5 patch](phase-18-rev5-patch.md) and [rev 6 patch](phase-18-rev6-patch.md) and [rev 7 patch](phase-18-rev7-patch.md)** (the rev 4 shard-refusal decision is replaced by rev 5), pending SEC-05 re-review and the owner decisions on BLOCKER-1, OD-20, OD-21, OD-22 and OD-24. Where the patches conflict with the text below, the later patch wins.
+Status: **DRAFT rev 2 plus the normative [rev 3 patch](phase-18-rev3-patch.md) [rev 4 patch](phase-18-rev4-patch.md) and [rev 5 patch](phase-18-rev5-patch.md) and [rev 6 patch](phase-18-rev6-patch.md) and [rev 7 patch](phase-18-rev7-patch.md) and [rev 8 patch](phase-18-rev8-patch.md)** (rev 8 folds in the owner decisions OWNER-01..OWNER-07; see also [the decision traceability](../phase-18-decision-traceability.md)) (the rev 4 shard-refusal decision is replaced by rev 5), pending SEC-08 review of the rev 8 delta. The owner has decided BLOCKER-1, OD-17-Q1, OD-20 to OD-24 and the residual dispositions (policy direction only; no implementation, merge or publication is authorised); OD-24-Q1 and OD-20-Q1 remain open. Where the patches conflict with the text below, the later patch wins.
 
 ## 1. Context and constraints
 
