@@ -71,7 +71,8 @@
     {
       "id": "OD-20-Q1",
       "ref": "rev 8 section 2d",
-      "state": "RESOLVED by owner decision OWNER-11: filesystem admission is evaluated per root; tmpfs may be admitted for the ephemeral run/auth and run/plans roots after the required behavioural checks and is REFUSED for run/approvals (exit 18, approvals_root_not_durable); zfs stays conditional on SPIKE-FS evidence; unknown ids fail closed on every root; a missing approval history yields APPROVAL_REQUIRED and trust is never restored from another source, while a present-but-unverifiable history stays exit 18; the operator guide must explain why the approval root requires durable storage (rev 10 section 4c)."
+      "state": "RESOLVED by owner decision OWNER-11: filesystem admission is evaluated per root; tmpfs may be admitted for the ephemeral run/auth and run/plans roots after the required behavioural checks and is REFUSED for run/approvals (exit 18, approvals_root_not_durable); zfs stays conditional on SPIKE-FS evidence; unknown ids fail closed on every root; a missing approval history yields APPROVAL_REQUIRED and trust is never restored from another source, while a present-but-unverifiable history stays exit 18; the operator guide must explain why the approval root requires durable storage (rev 10 section 4c). Annotation (rev 18, OWNER-13): no approvals root, no approval history and no genesis entry exist in Phase 18, so the approval-root half of this resolution (approvals_root_not_durable, the missing-versus-unverifiable partition, the operator-guide rationale) is DEFERRED to 18P. The per-root numeric admission rule, the behaviour tests, the existsSync prohibition and the mandatory lstat remain live for run/auth and run/plans.",
+      "status": "MOOT for the approval root (OWNER-13); live for run/auth and run/plans"
     },
     {
       "id": "H-1",
@@ -81,7 +82,7 @@
     {
       "id": "OWNER-10-RESIDUAL",
       "ref": "rev 10 section 4b and threat-model section 6 item 20",
-      "state": "accepted by the owner as a documented repository-trust limitation: the fixture boundary confines production code and workflow accidents, not an author who can modify repository code, tests or workflows; the controls for that actor are code review, protected branches and repository write governance, which Falcon does not verify; a recommended CODEOWNERS is documented, not claimed as enforced; any path from the fixture authority to an arbitrary target or to persisted approval state within the unmodified repository is a BLOCKER; the AC-092 attack surface is bounded by rev 11 section 5c: argument values, own-property mutation, prototype pollution of the read keys, duck-typed substitutes, wrapper sources and serialisation are in scope, while intrinsic monkeypatching, require.cache, Module._load, process.binding, child_process or a pty from a new test file, and any edit to a repository file are the accepted class; rev 12 narrows the reliance on repository trust: production code no longer relies on server authenticity at all, because a PilotRuntime-built gate refuses every unbranded approval (exit 14, fixture_approval_in_production_runtime), and fixture server authenticity is reference identity in a module-private registry inside the fixture module, never shape; the interactive approval writer is an entry-only process whose in-process require exposes no callable writer; rev 13 section 7a.2 discloses, without widening the accepted class, that the one remaining class against the approval discriminator is code executing in the Falcon process before ApprovalStore's first statement, and that this is reachable with no repository change at all through node --require or NODE_OPTIONS, as well as through repository modification or a modified Node binary or node_modules. No detective control is specified, because a pre-load actor erases process.execArgv and NODE_OPTIONS and the result is indistinguishable from a clean process. Post-load replacement of Function.prototype.call, apply and bind, the global Reflect.apply, WeakSet.prototype.add and has, and prototype pollution are all ruled out by probe and require no owner ruling"
+      "state": "accepted by the owner as a documented repository-trust limitation: the fixture boundary confines production code and workflow accidents, not an author who can modify repository code, tests or workflows; the controls for that actor are code review, protected branches and repository write governance, which Falcon does not verify; a recommended CODEOWNERS is documented, not claimed as enforced; any path from the fixture authority to an arbitrary target or to persisted approval state within the unmodified repository is a BLOCKER; the AC-092 attack surface is bounded by rev 11 section 5c: argument values, own-property mutation, prototype pollution of the read keys, duck-typed substitutes, wrapper sources and serialisation are in scope, while intrinsic monkeypatching, require.cache, Module._load, process.binding, child_process or a pty from a new test file, and any edit to a repository file are the accepted class; rev 12 narrows the reliance on repository trust: production code no longer relies on server authenticity at all, because a PilotRuntime-built gate refuses every unbranded approval (exit 14, fixture_approval_in_production_runtime), and fixture server authenticity is reference identity in a module-private registry inside the fixture module, never shape; the interactive approval writer is an entry-only process whose in-process require exposes no callable writer; rev 13 section 7a.2 discloses, without widening the accepted class, that the one remaining class against the approval discriminator is code executing in the Falcon process before ApprovalStore's first statement, and that this is reachable with no repository change at all through node --require or NODE_OPTIONS, as well as through repository modification or a modified Node binary or node_modules. No detective control is specified, because a pre-load actor erases process.execArgv and NODE_OPTIONS and the result is indistinguishable from a clean process. Post-load replacement of Function.prototype.call, apply and bind, the global Reflect.apply, WeakSet.prototype.add and has, and prototype pollution are all ruled out by probe and require no owner ruling Annotation (rev 18, OWNER-13): the fixture approval authority, ApprovalStore and AC-092 are deferred to 18P, so the approval-discriminator half of this residual has no Phase 18 trigger. The repository-write trust limitation itself is unchanged and now applies to the gate, the hermetic fixture and the rev 18 section C dependency-reachability check. Nothing new is accepted."
     },
     {
       "id": "H-5",
@@ -96,7 +97,8 @@
     {
       "id": "R-9",
       "ref": "rev 12 section 6g.1",
-      "state": "escalated by SEC-12 m-42 from awareness to an owner confirmation: the positive half of AC-094 is automated but not CI-gated, so a regression in Falcon's production interactive approval path is caught only by a manual run. Whether that meets the owner's intent that this automate the production path rather than add a second mechanism is an owner confirmation. The architecture does not propose amending AC-084 and offers no alternative that would"
+      "state": "escalated by SEC-12 m-42 from awareness to an owner confirmation: the positive half of AC-094 is automated but not CI-gated, so a regression in Falcon's production interactive approval path is caught only by a manual run. Whether that meets the owner's intent that this automate the production path rather than add a second mechanism is an owner confirmation. The architecture does not propose amending AC-084 and offers no alternative that would MOOT under OWNER-13 (rev 18 section A1): AC-094 and Falcon's production interactive approval path are deferred to 18P-PROTECTED-NONGET, so there is no CI-gating question left to confirm. Text retained as unshipped design history; nothing is risk-accepted by this annotation.",
+      "status": "MOOT (OWNER-13)"
     },
     {
       "id": "H-7",
@@ -122,7 +124,7 @@
       "id": "18P-PROTECTED-NONGET",
       "ref": "rev 16 section 10b.3",
       "status": "deferred, not scheduled, not authorised",
-      "state": "Not a Phase 18 PR, not scheduled, not authorised. It carries forward, as explicit entry requirements: Falcon single-transmission transport; browser response-semantic mismatch (the 204-for-a-discarded-3xx and status pass-through of rev 15 9a.2); redirect handling across 301/302/303/307/308, same- and cross-origin; `Sec-Fetch-*` header differences (preserved under `route.continue`, dropped by `route.fetch`); PUT/PATCH/DELETE measurements (never measured, UNVERIFIED); multipart and large bodies; duplicate-send and socket-retry resend (H-7); service-worker behaviour; business-outcome verification; and Firefox/WebKit evidence. The rev 14 8a and rev 15 9a gate text, the A″/B″ option text, M1, R-7, R-10 and the SPIKE-R extension rows are its inputs and are preserved for that purpose. Under OWNER-13 it additionally carries the whole production approval path: the rev 12 section 6b/6c interactive writer, the rev 13 section 9 hardening, the --approve-action and --emit-token-to flags, RunToken, RunTokenEmitter, LedgerLock, the approvals root and its migration, the approval-ledger filesystem clauses of OD-20/OWNER-11, the closure-held ledger brand, token consumption and replay, AC-092, AC-093, m-51 and the fixture-identity assertions, and the approval state machine formerly carried by AC-098."
+      "state": "Not a Phase 18 PR, not scheduled, not authorised. It carries forward, as explicit entry requirements: Falcon single-transmission transport; browser response-semantic mismatch (the 204-for-a-discarded-3xx and status pass-through of rev 15 9a.2); redirect handling across 301/302/303/307/308, same- and cross-origin; `Sec-Fetch-*` header differences (preserved under `route.continue`, dropped by `route.fetch`); PUT/PATCH/DELETE measurements (never measured, UNVERIFIED); multipart and large bodies; duplicate-send and socket-retry resend (H-7); service-worker behaviour; business-outcome verification; and Firefox/WebKit evidence. The rev 14 8a and rev 15 9a gate text, the A″/B″ option text, M1, R-7, R-10 and the SPIKE-R extension rows are its inputs and are preserved for that purpose. Under OWNER-13 it additionally carries the whole production approval path: the rev 12 section 6b/6c interactive writer, the rev 13 section 9 hardening, the --approve-action and --emit-token-to flags, RunToken, RunTokenEmitter, LedgerLock, the approvals root and its migration, the approval-ledger filesystem clauses of OD-20/OWNER-11, the closure-held ledger brand, token consumption and replay, AC-092, AC-093, m-51 and the fixture-identity assertions, and the approval state machine formerly carried by AC-098. Rev 18 adds to this deferral, with every text preserved unweakened and unshipped: AC-052, AC-053, AC-054, AC-055, AC-056, AC-057 and AC-094 in whole; the AC-032 ApprovalStore-invalidation component; the AC-074 approved half and its tests-only executable for exit 0; the AC-083 env and file run-token transport refusals; the AC-085 approvals-root, ledger, genesis-entry, approval_history_unverifiable and approvals_root_symlink clauses together with the approval-root half of OD-20-Q1/OWNER-11; the AC-086 lease, redirect, one-transmission and chainDeadlineMs clauses; the AC-089 approved-identity comparison; the whole of the rev 17 AC-090 text except its structural-unavailability half, preserved verbatim at git revision 909d794 under P18-AC-090; the AC-095 ApprovalStore.js and PilotFixtureServer.cjs capture sets and cases L17 to L20; ApprovalStore, ApprovalRecord, Binding, AuditLog, the PilotApprovalResolver seam, the closure-held ledger registry, the gate-side capability WeakMap, the PilotRuntime unbranded-approval refusal, the Dashboard read-only approval view, neg-p01-chain, neg-p01-truncate, neg-p02-replay, neg-q-runscope, neg-q-prune, neg-q-roots, neg-q-retention, neg-shard-token-file-refused, neg-fixture-approval-scope, neg-fixture-no-arbitrary-target, neg-fixture-require-graph, the approval halves of neg-f01-loaders and neg-s01-caps, the pilot-manual Playwright project and its script, tests/regression/pilot/approval-interactive-path.test.js and tests/pilot/bin/pty-approve.cjs; the threat-model rows P01 to P06, D01 (approval digest), X01 (approval view), L17 to L20 and F14 to F25b; residual 25, residual 25a and the approval halves of residuals 24 and 26; and R-9. None of it is authorised, scheduled or accepted."
     },
     {
       "id": "OWNER-13",
@@ -134,7 +136,7 @@
       "id": "OWNER-13-Q1",
       "ref": "rev 17 section 11d.7",
       "status": "OPEN - owner confirmation requested; m-51 carried as DEFERRED PENDING CONFIRMATION in the meantime",
-      "state": "Owner confirmation requested (OWNER-13-Q1): m-51 and the rev 11 to rev 15 fixture-identity assertions are carried as DEFERRED WITH THE APPROVAL MACHINERY, pending owner confirmation, because the fixture approval boundary they protected is itself deferred. This reverses the earlier instruction that m-51 stays a mandatory 18D merge condition, only because the thing m-51 protected is deferred; if the owner prefers to keep it mandatory it returns as an 18D condition at no design cost (rev 17 section 11d.7). The genuine-recording-server obligation for the AC-051 zero-transmission cases is unaffected and stays live."
+      "state": "Owner confirmation requested (OWNER-13-Q1): m-51 and the rev 11 to rev 15 fixture-identity assertions are carried as DEFERRED WITH THE APPROVAL MACHINERY, pending owner confirmation, because the fixture approval boundary they protected is itself deferred. This reverses the earlier instruction that m-51 stays a mandatory 18D merge condition, only because the thing m-51 protected is deferred; if the owner prefers to keep it mandatory it returns as an 18D condition at no design cost (rev 17 section 11d.7). The genuine-recording-server obligation for the AC-051 zero-transmission cases is unaffected and stays live. Correction (rev 18 section E, closes SEC-17 m-64): AC-092 is the fixture no-arbitrary-target, server-identity, listener-identity and F-case criterion, and it carries the rev 15 sections 9b and 9c assertions, which are the substance of m-51; the PTY interactive-path test is AC-094, now deferred to 18P with the writer. Section 11d.6's label of AC-092 as the 'PTY production approval test' is wrong and is corrected. If the owner keeps m-51, AC-092 returns as an 18D Must with mergeCondition true at no design cost."
     }
   ],
   "exitCodes": {
@@ -149,22 +151,49 @@
     "safetyInvariant": 17,
     "planInvalid": 2,
     "policyRefusal": 18,
-    "policyRefusalNote": "18 covers two disjoint classes: PILOT_INTERNAL_ERROR and by-design policy refusal (POLICY_PROTECTED_ACTION_UNSUPPORTED and the deferred redirect and origin refusals); distinguished only by a mandatory reason code (rev 17 section 11f)."
+    "policyRefusalNote": "18 covers two disjoint classes: PILOT_INTERNAL_ERROR and by-design policy refusal (POLICY_PROTECTED_ACTION_UNSUPPORTED and the deferred redirect and origin refusals); distinguished only by a mandatory reason code (rev 17 section 11f).",
+    "approvalNote": "14 is RESERVED and unreachable in Phase 18 under OWNER-13 (rev 18 section D): every by-design protected-step refusal, in shards and in CI, is 18 with a mandatory reason code. 14 returns only with 18P-PROTECTED-NONGET."
   },
   "counts": {
     "total": 98,
     "must": 89,
     "should": 6,
     "could": 3,
-    "deferredToPhase18P": 5,
+    "deferredToPhase18P": 11,
     "deferredUnderOptionC": 5,
     "deferredIds": [
-      "P18-AC-086",
+      "P18-AC-052",
+      "P18-AC-053",
+      "P18-AC-054",
+      "P18-AC-055",
+      "P18-AC-056",
+      "P18-AC-057",
       "P18-AC-092",
       "P18-AC-093",
+      "P18-AC-094",
       "P18-AC-096",
       "P18-AC-097"
-    ]
+    ],
+    "deferredUnderOwner13": [
+      "P18-AC-052",
+      "P18-AC-053",
+      "P18-AC-054",
+      "P18-AC-055",
+      "P18-AC-056",
+      "P18-AC-057",
+      "P18-AC-094"
+    ],
+    "mixedPhase18PIds": [
+      "P18-AC-032",
+      "P18-AC-074",
+      "P18-AC-083",
+      "P18-AC-085",
+      "P18-AC-086",
+      "P18-AC-089",
+      "P18-AC-090",
+      "P18-AC-095"
+    ],
+    "countsNote": "rev 18 (ARCH-18): deferredToPhase18P counts criteria whose whole text is deferred (phase deferred-18P and mergeCondition false). mixedPhase18PIds lists criteria with phase mixed and at least one deferred clause; their live clauses remain Phase 18 merge conditions and are listed in phaseClauses.current with a clause-level mergeCondition. deferredUnderOptionC (5: 086, 092, 093, 096, 097) is retained unchanged as the OWNER-12 set. No criterion is deleted or renumbered; total/must/should/could are unchanged."
   },
   "criteria": [
     {
@@ -420,8 +449,22 @@
       "priority": "Must",
       "pr": "18B",
       "requirement": "Material target change since dry-run: `PLAN_DRIFT`, new review required, no approval reused",
-      "components": "PlanDigest drift at step 11 + ApprovalStore invalidation",
-      "verification": "R"
+      "components": "PlanDigest drift at step 11 (the ApprovalStore-invalidation component is DEFERRED to 18P under OWNER-13: no approval exists in Phase 18 to invalidate)",
+      "verification": "R",
+      "phase": "mixed",
+      "mergeCondition": {
+        "plan-drift": true,
+        "approval-invalidation": false
+      },
+      "phaseClauses": {
+        "current": [
+          "Material target change since dry-run is PLAN_DRIFT, a new review is required"
+        ],
+        "deferred-18P": [
+          "ApprovalStore invalidation",
+          "no approval reused (no approval exists in Phase 18)"
+        ]
+      }
     },
     {
       "id": "P18-AC-033",
@@ -571,7 +614,7 @@
       "id": "P18-AC-051",
       "priority": "Must",
       "pr": "18C",
-      "requirement": "Customer pilot: a CSRF-protected form whose submit is classified protected is refused before transmission with POLICY_PROTECTED_ACTION_UNSUPPORTED (exit 18); zero requests of any method are recorded at the application server; no approval is created or consumed; no provider call and no healing attempt occur; the report and dashboard show the step as refused with coverage lost and never as PASS. Inversion: remove the refusal and the case must record a request. Two inversions: (i) remove the step refusal and the case must record a NetworkGate abort and zero server hits; (ii) remove both layers in a tests-only harness and the case must record exactly one POST. The request-level rule also holds: every protected non-GET request is aborted regardless of any lease, with runtime cases for a page-load or timer-driven fetch POST, a form-submit navigation POST triggered as a side effect of a permitted click, and a POST during a permitted action's lease. The fixture server in these cases must be a real server that records what it receives, otherwise the zero-transmission proof is vacuous (rev 17 sections 11g, 11h, 11d.7).",
+      "requirement": "Customer pilot: a CSRF-protected form whose submit is classified protected is refused before transmission with POLICY_PROTECTED_ACTION_UNSUPPORTED (exit 18); zero requests of any method are recorded at the application server; no approval is created or consumed; no provider call and no healing attempt occur; the report and dashboard show the step as refused with coverage lost and never as PASS. Two inversions: (i) remove the step refusal and the case must record a NetworkGate abort and zero server hits; (ii) remove both layers in a tests-only harness and the case must record exactly one POST. The request-level rule also holds: every protected non-GET request is aborted regardless of any lease, with runtime cases for a page-load or timer-driven fetch POST, a form-submit navigation POST triggered as a side effect of a permitted click, and a POST during a permitted action's lease. The fixture server in these cases must be a real server that records what it receives, otherwise the zero-transmission proof is vacuous (rev 17 sections 11g, 11h, 11d.7).",
       "components": "the refusal rule of rev 16 section 10a (OWNER-12, Option C)",
       "verification": "R",
       "phase": "current"
@@ -579,50 +622,68 @@
     {
       "id": "P18-AC-052",
       "priority": "Must",
-      "pr": "18D",
+      "pr": "18P",
       "requirement": "No approval: `APPROVAL_REQUIRED`, zero clicks",
       "components": "PolicyEngine step 7",
-      "verification": "R"
+      "verification": "R",
+      "phase": "deferred-18P",
+      "mergeCondition": false,
+      "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
     },
     {
       "id": "P18-AC-053",
       "priority": "Must",
-      "pr": "18D",
+      "pr": "18P",
       "requirement": "Approval bound to plan digest, manifest version, role, target origin, action ID; any mismatch `APPROVAL_MISMATCH`",
       "components": "approval/Binding — eight fields",
-      "verification": "U, R"
+      "verification": "U, R",
+      "phase": "deferred-18P",
+      "mergeCondition": false,
+      "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
     },
     {
       "id": "P18-AC-054",
       "priority": "Must",
-      "pr": "18D",
+      "pr": "18P",
       "requirement": "Expired or pre-change approval: `APPROVAL_STALE`",
       "components": "ApprovalStore staleness",
-      "verification": "U, R"
+      "verification": "U, R",
+      "phase": "deferred-18P",
+      "mergeCondition": false,
+      "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
     },
     {
       "id": "P18-AC-055",
       "priority": "Must",
-      "pr": "18D",
+      "pr": "18P",
       "requirement": "Consumed approval reused after process restart: `APPROVAL_REPLAYED`",
       "components": "ApprovalStore durable exclusive consumption across restart and concurrency",
-      "verification": "R"
+      "verification": "R",
+      "phase": "deferred-18P",
+      "mergeCondition": false,
+      "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
     },
     {
       "id": "P18-AC-056",
       "priority": "Must",
-      "pr": "18D",
+      "pr": "18P",
       "requirement": "Approval for an unknown plan digest: `APPROVAL_UNKNOWN_PLAN`",
       "components": "ApprovalStore lookup",
-      "verification": "U"
+      "verification": "U",
+      "phase": "deferred-18P",
+      "mergeCondition": false,
+      "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
     },
     {
       "id": "P18-AC-057",
       "priority": "Must",
-      "pr": "18D",
+      "pr": "18P",
       "requirement": "Every grant/refusal/consumption has one audit entry with timestamp, approver, digest, action, role, decision, code; no secrets",
       "components": "AuditLog entry shape",
-      "verification": "U, R"
+      "verification": "U, R",
+      "phase": "deferred-18P",
+      "mergeCondition": false,
+      "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
     },
     {
       "id": "P18-AC-058",
@@ -757,8 +818,24 @@
       "priority": "Must",
       "pr": "18F",
       "requirement": "Phase 18 matrix on Node 24 CI has zero skipped or expected-fail tests; a skip fails the job",
-      "components": "CI job: skip or expected-fail fails the job; a pilot job whose fixture plan contains a protected step asserts exit 14 as its expected outcome and is never skipped; the AC-051 approved half (OWNER-12: the former AC-051 approved half is now the fixture-only internal evidence of AC-098, not a customer-facing capability claim) runs inside the normal regression gate on Node 24 — in-process plus a tests-only executable for the exit codes — and is neither skipped nor expected-fail, so OWNER-09 amends nothing here; OWNER-13: the former AC-051 approved half no longer exists as a Phase 18 test; the regression gate proves refusal and non-reachability instead (rev 17 section 11m)",
-      "verification": "I, S"
+      "components": "CI job: skip or expected-fail fails the job; a pilot job whose fixture plan contains a protected step asserts exit 18 with the mandatory reason code POLICY_PROTECTED_ACTION_UNSUPPORTED as its expected outcome and is never skipped (rev 18 section D; exit 14 is withdrawn for Phase 18 under OWNER-13); the AC-051 refusal case runs inside the normal regression gate on Node 24 — in-process only; the tests-only executable for exit 0 is withdrawn and DEFERRED to 18P (OWNER-13, rev 18 section A2) — and is neither skipped nor expected-fail, so OWNER-09 amends nothing here; OWNER-13: the former AC-051 approved half no longer exists as a Phase 18 test; the regression gate proves refusal and non-reachability instead (rev 17 section 11m)",
+      "verification": "I, S",
+      "phase": "mixed",
+      "mergeCondition": {
+        "zero-skip": true,
+        "approved-half": false
+      },
+      "phaseClauses": {
+        "current": [
+          "Phase 18 matrix on Node 24 CI has zero skipped or expected-fail tests; a skip fails the job",
+          "the CI pilot job asserts exit 18 with its mandatory reason code for a protected step"
+        ],
+        "deferred-18P": [
+          "the former AC-051 approved half",
+          "the tests-only executable for exit 0",
+          "exit 14 as an expected outcome"
+        ]
+      }
     },
     {
       "id": "P18-AC-075",
@@ -828,31 +905,66 @@
       "id": "P18-AC-083",
       "priority": "Must",
       "pr": "18D",
-      "requirement": "In shard mode every protected step is refused APPROVAL_REQUIRED (exit 14) — statically bound protected actions before any browser launch — a run token in env or file is refused without being opened, and run/approvals is never created",
+      "requirement": "In shard mode every protected step is refused POLICY_PROTECTED_ACTION_UNSUPPORTED (exit 18, mandatory reason code per rev 17 section 11f and rev 18 section D) — statically bound protected actions before any browser launch — no run-token transport exists in Phase 18, so there is nothing to refuse (the env and file run-token refusals are DEFERRED to 18P; rev 18 section B), and run/approvals is never created",
       "components": "plan projection pre-flight refusal + gate.perform refusal + token refusal (OD-23, ADR-0038 amended)",
-      "verification": "U, R"
+      "verification": "U, R",
+      "phase": "mixed",
+      "mergeCondition": {
+        "shard-refusal": true,
+        "run-token-transport": false
+      },
+      "phaseClauses": {
+        "current": [
+          "In shard mode every protected step is refused POLICY_PROTECTED_ACTION_UNSUPPORTED (exit 18) with its mandatory reason code, statically bound before any browser launch",
+          "run/approvals is never created"
+        ],
+        "deferred-18P": [
+          "the env and file run-token transport refusals",
+          "exit 14"
+        ]
+      }
     },
     {
       "id": "P18-AC-084",
       "priority": "Must",
       "pr": "18F",
-      "requirement": "No workflow contains an approve step, approve flag, run-token env key, token file or approvals path; a protected action reached in CI is refused APPROVAL_REQUIRED exit 14; the static check resolves npm/yarn/npx script indirection and node/bash invocations transitively with cycle detection, walks static require graphs, fails on any reachable approve flag, token key, approvals path or approval-module import outside src/core/pilot/ and tests/, and fails closed on any command it cannot statically resolve; it additionally fails on any require of a tests/ path from src/ or scripts/ and on any workflow invocation of a tests-only executable outside the test gate. This static check is defence in depth: the primary control is the structural fixture boundary of rev 10 section 4a (no production require path to the approval authority, no enabling environment variable, no production mint function) The walker additionally fails on any reachable customer-facing code path that could route, perform, continue, fulfil or emulate a protected non-GET request, including any dormant, flag-disabled or configuration-reachable M1 or route.fetch fallback, so that the absence of such a path is checked and not assumed. The walker finds action sites by scanning src/ for every Playwright action and request sink rather than from a fixed list, and any site not routed through the gate fails closed; it admits no exemption; and it fails on the existence of --approve-action or --emit-token-to anywhere under src/, falcon.js, scripts/, package.json or .github/ (rev 17 sections 11a, 11d.6, 11j).",
+      "requirement": "No workflow contains an approve step, approve flag, run-token env key, token file or approvals path; a protected action reached in CI is refused POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 with its mandatory reason code (rev 18 section D); the static check resolves npm/yarn/npx script indirection and node/bash invocations transitively with cycle detection, walks static require graphs, fails on any reachable approve flag, token key, approvals path or any approval-module import anywhere in production, the former src/core/pilot/ carve-out being removed because no approval module exists in Phase 18 (tests/ and tests/experimental/ are covered by the production dependency-reachability check of rev 18 section C), and fails closed on any command it cannot statically resolve; it additionally fails on any require of a tests/ path from src/ or scripts/ and on any workflow invocation of a tests-only executable outside the test gate. This static check is defence in depth: the primary control is the production dependency-reachability check of rev 18 section C together with AC-098 (ii) and (iii): no production root reaches tests/, tests/experimental/ or any approval module, because none exists, and every script and workflow run: step is classified production or test in a committed file with no exempt value (the rev 10 section 4a fixture boundary is DEFERRED to 18P under OWNER-13) The walker additionally fails on any reachable customer-facing code path that could route, perform, continue, fulfil or emulate a protected non-GET request, including any dormant, flag-disabled or configuration-reachable M1 or route.fetch fallback, so that the absence of such a path is checked and not assumed. The walker finds action sites by scanning src/ for every Playwright action and request sink rather than from a fixed list, and any site not routed through the gate fails closed; it admits no exemption; and it fails on the existence of --approve-action or --emit-token-to anywhere under src/, falcon.js, scripts/, package.json or .github/ (rev 17 sections 11a, 11d.6, 11j).",
       "components": "static ci.yml check over every job + CI pilot job expected-exit assertion (OD-24, ADR-0041); FALCON_PILOT_TEST_RUNNER is withdrawn and must not reappear",
-      "verification": "S, R"
+      "verification": "S, R",
+      "phase": "current",
+      "mergeCondition": true
     },
     {
       "id": "P18-AC-085",
       "priority": "Must",
       "pr": "18E",
       "requirement": "Filesystem admission is numeric and evidence-gated: tmpfs and zfs only with a recorded statfs id and passing O_EXCL, rename and fsync behaviour tests; overlayfs, virtiofs, drvfs and every unrecorded id are refused PILOT_INTERNAL_ERROR exit 18 with an actionable message naming the observed id and path, never a skip; admission is evaluated per root against a per-root admitted-id set: tmpfs may be admitted for run/auth and run/plans after the behaviour checks and is refused for run/approvals (exit 18, reason approvals_root_not_durable), zfs stays conditional on SPIKE-FS evidence, unknown ids fail closed on every root, and no id is admissible from a kernel header, documentation or reviewer knowledge — only an observed, committed value. A missing approval history — the resolved real path of the approvals root absent, which requires both realpath and lstat of the root path to give ENOENT, or the root present and an empty directory — yields APPROVAL_REQUIRED exit 14 and is never reconstructed from a receipt, bundle, report, cache, environment variable or second root, and a freshly initialised ledger writes a genesis audit entry recording that no prior history was found; anything present but not fully verifiable — zero-length or truncated ledger, segment or anchors file, missing or unparseable header, missing referenced segment, foreign build identity, broken chain, or any read failure other than ENOENT on the root — is PILOT_INTERNAL_ERROR exit 18, reason approval_history_unverifiable, and is never downgraded to exit 14; a dangling symlink at the root, where realpath gives ENOENT but lstat succeeds, is PILOT_INTERNAL_ERROR exit 18, reason approvals_root_symlink, and is never treated as missing; and a root that is present and non-empty but holds no verifiable chain, including one holding only a lock file, only a marker or only unknown files, is PILOT_INTERNAL_ERROR exit 18, reason approval_history_unverifiable; and when the approvals root is missing beneath a symlinked parent, where both realpath and lstat of the root give ENOENT but an ancestor of the root is a symlink, the parent no-symlink rule of ADR-0030 fails first and the state is PILOT_INTERNAL_ERROR exit 18, reason approvals_root_symlink, and is never counted as missing; existsSync is forbidden anywhere in this partition and lstat is mandatory",
-      "components": "SafeFs.assertLocalFilesystem + SPIKE-FS evidence table + filesystem behaviour tests (OD-20, ADR-0030 amended); rootKind column in the compatibility matrix; operator guide states why the approval root must be durable (OD-20-Q1 resolved by OWNER-11)",
-      "verification": "U, S, I"
+      "components": "SafeFs.assertLocalFilesystem + SPIKE-FS evidence table + filesystem behaviour tests (OD-20, ADR-0030 amended); rootKind column in the compatibility matrix; the operator guide states nothing about an approval root, because none exists in Phase 18 (the OD-20-Q1 approval-root clauses are DEFERRED to 18P under OWNER-13; 11n.G describes detection and refusal only)",
+      "verification": "U, S, I",
+      "phase": "mixed",
+      "mergeCondition": {
+        "filesystem-admission": true,
+        "approval-root-and-ledger": false
+      },
+      "phaseClauses": {
+        "current": [
+          "numeric, evidence-gated filesystem admission evaluated per root for run/auth and run/plans, with unknown ids failing closed, observed and committed statfs ids only, an actionable message naming the observed id and path, never a skip",
+          "existsSync is forbidden in this partition and lstat is mandatory"
+        ],
+        "deferred-18P": [
+          "the approvals-root admitted-id set and approvals_root_not_durable",
+          "the missing-approval-history and APPROVAL_REQUIRED exit 14 rows",
+          "the genesis audit entry",
+          "approval_history_unverifiable",
+          "approvals_root_symlink including the symlinked-parent row"
+        ]
+      }
     },
     {
       "id": "P18-AC-086",
       "priority": "Must",
       "pr": "18D",
-      "requirement": "Arming window defaults to 2000 ms with a hard maximum of 10000 ms and a minimum of 250 ms; any out-of-range, non-integer or non-numeric value is a configuration error refused before browser launch; one lease authorises exactly one protected-action attempt, is never refreshed or extended, and expiry fails closed; the first matching protected request consumes the lease and redirect continuation is part of that consumed attempt, minting and refreshing nothing: every hop is evaluated against the method actually observed on that hop and never inferred from the status code, a hop preserving a non-GET method must stay on the approved normalised origin, path and method (307/308 included), a hop observed to become GET is evaluated under ordinary GET route and origin policy and is never assumed side-effect-free, and expiry, ambiguity, an unobservable method, cross-origin movement, an unexpected path change or a method mismatch aborts the chain; every hop stays under the redirect cap and the chain under windowMs + 5000 ms with an absolute maximum of 30000 ms; at most one transmission of the approved non-GET body occurs per approval, enforced by a lease transmission counter and audited per transmission, so a same-target 307/308 continuation is aborted once a transmission has occurred (redirect_would_retransmit_approved_body); the chain deadline is min(windowMs + 5000, 30000) ms, computed by a pure total bounded function chainDeadlineMs(windowMs, graceMs, absoluteMaxMs) which first asserts, for each of its three arguments, that the value is a number, a safe integer and non-negative, and otherwise throws PILOT_INTERNAL_ERROR exit 18, invalid_chain_deadline_input, naming the offending parameter and never clamping, because unvalidated the function returns NaN for NaN and for undefined so that the deadline can never expire, 4999 for -1, 30000 for the string \"5\" and for Infinity and for 2 to the 53 plus 1, 5000 for the empty string and for null, 5001 for true, 5002.5 for 2.5, 5250 for an object with a valueOf, and a one-millisecond deadline when absoluteMaxMs is the string \"1\"; and which is unit-tested with synthetic inputs outside the configurable range, together with throw rows for NaN, -1, Infinity, -Infinity, the string \"5\", the empty string, null, undefined, true, 2.5, an array, an object with a valueOf, and 2 to the 53 plus 1, and throw rows for graceMs NaN and -1 and for absoluteMaxMs the string \"1\" (0, 250, 2000, 10000, 10001, 24999, 25000, 25001 and 1e9), so the 30000 ms cap is tested at the only place it is reachable while runtime configuration still refuses any windowMs outside 250..10000, non-integer or non-numeric before browser launch and never clamps; and the SPIKE-R outcome is applied per hop class from the filled table of rev 13 section 7g.1, in which no cell is enforceable: an observe-only class is detection and not prevention, so an observed hop on a protected attempt fails the step and the run and is audited as a post-send incident with the limitation stating that the hop had already been sent and that a 307 or 308 body had already reached the next hop, including a cross-origin one; an unobservable class alone is refused before arming (POLICY_REDIRECT_UNOBSERVABLE, exit 18); the only prevention claimed is that a protected non-GET is armed solely on a route the manifest declares non-redirecting, enforced before the request is issued from declared data and not from observation; serviceWorkers is set to block in every pilot context, because a controlling service worker follows a redirect internally while the route handler sees only the first request; Falcon never emulates, reconstructs, replays or continues a chain the browser did not expose; and a protected non-GET that is not redirected is unaffected A routed protected request is armed only when the serialized origin of the request URL at hop zero is equal to both the serialized origin of the page's top-level document and the origin recorded in the consumed approval, compared as scheme, host and port with the WHATWG URL parser, ASCII-lowercased, default port omitted, userinfo and a trailing host dot refused, by string equality and never by host suffix, eTLD-plus-one or same-site relaxation; any inequality, and any opaque or non-fetchable origin including about, blob, data, file and null, is refused before the route is armed and before any request is issued, with POLICY_PROTECTED_CROSS_ORIGIN_UNSUPPORTED exit 18 and the three origins named in the audit entry. This applies to every routed protected request under every scope option and not only to candidate mechanism M1, because plain route.continue already suppresses the CORS preflight. No cross-origin routed protected request exists in Phase 18: a manifest that declares one is refused at manifest load. The three origins are recomputed immediately before the hop-zero request as defence in depth, and a mismatch is POLICY_PROTECTED_ORIGIN_CHANGED exit 18, labelled detection and not prevention, because whether route.abort prevents transmission of hop zero itself is UNVERIFIED. If the hop-zero response is a 3xx whose Location resolves cross-origin, the response is discarded and no hop is performed. The origin comparison additionally covers the request's initiator: a routed protected request is armed only when the serialized origin of the initiating frame equals the page's top-level origin, the approved origin and the hop-zero target origin, and only when every ancestor frame of the initiator is same-origin with the top-level document, in the normative form that the initiating frame is reference-identical to the page's main frame. Every URL is screened scheme-first, refusing any protocol other than http and https before the serialized origin is read, because a blob URL exposes an inner origin rather than null; userinfo is refused by checking the username and password fields, since the serialized origin drops them, and a trailing host dot is refused by checking the hostname. Where an Origin request header is present it must parse and equal the top-level origin, while its absence is not by itself a refusal and no security property is claimed from it. The top-level origin is computed from Playwright's own main-frame URL and never from page-evaluated script. A request whose initiator cannot be established is refused before arming with POLICY_PROTECTED_INITIATOR_UNSUPPORTED exit 18: a service-worker-originated request, a frame accessor that throws or yields a falsy, detached or unparsable frame, and a request from a popup or an opener. The entire rule, including the initiator and Origin checks, is re-evaluated at the hop-zero re-check, which remains labelled detection and not prevention. deferred-18P",
+      "requirement": "Arming window defaults to 2000 ms with a hard maximum of 10000 ms and a minimum of 250 ms; any out-of-range, non-integer or non-numeric value is a configuration error refused before browser launch; one lease authorises exactly one protected-action attempt, is never refreshed or extended, and expiry fails closed; the first matching protected request consumes the lease and redirect continuation is part of that consumed attempt, minting and refreshing nothing: every hop is evaluated against the method actually observed on that hop and never inferred from the status code, a hop preserving a non-GET method must stay on the approved normalised origin, path and method (307/308 included), a hop observed to become GET is evaluated under ordinary GET route and origin policy and is never assumed side-effect-free, and expiry, ambiguity, an unobservable method, cross-origin movement, an unexpected path change or a method mismatch aborts the chain; every hop stays under the redirect cap and the chain under windowMs + 5000 ms with an absolute maximum of 30000 ms; at most one transmission of the approved non-GET body occurs per approval, enforced by a lease transmission counter and audited per transmission, so a same-target 307/308 continuation is aborted once a transmission has occurred (redirect_would_retransmit_approved_body); the chain deadline is min(windowMs + 5000, 30000) ms, computed by a pure total bounded function chainDeadlineMs(windowMs, graceMs, absoluteMaxMs) which first asserts, for each of its three arguments, that the value is a number, a safe integer and non-negative, and otherwise throws PILOT_INTERNAL_ERROR exit 18, invalid_chain_deadline_input, naming the offending parameter and never clamping, because unvalidated the function returns NaN for NaN and for undefined so that the deadline can never expire, 4999 for -1, 30000 for the string \"5\" and for Infinity and for 2 to the 53 plus 1, 5000 for the empty string and for null, 5001 for true, 5002.5 for 2.5, 5250 for an object with a valueOf, and a one-millisecond deadline when absoluteMaxMs is the string \"1\"; and which is unit-tested with synthetic inputs outside the configurable range, together with throw rows for NaN, -1, Infinity, -Infinity, the string \"5\", the empty string, null, undefined, true, 2.5, an array, an object with a valueOf, and 2 to the 53 plus 1, and throw rows for graceMs NaN and -1 and for absoluteMaxMs the string \"1\" (0, 250, 2000, 10000, 10001, 24999, 25000, 25001 and 1e9), so the 30000 ms cap is tested at the only place it is reachable while runtime configuration still refuses any windowMs outside 250..10000, non-integer or non-numeric before browser launch and never clamps; and the SPIKE-R outcome is applied per hop class from the filled table of rev 13 section 7g.1, in which no cell is enforceable: an observe-only class is detection and not prevention, so an observed hop on a protected attempt fails the step and the run and is audited as a post-send incident with the limitation stating that the hop had already been sent and that a 307 or 308 body had already reached the next hop, including a cross-origin one; an unobservable class alone is refused before arming (POLICY_REDIRECT_UNOBSERVABLE, exit 18); the only prevention claimed is that a protected non-GET is armed solely on a route the manifest declares non-redirecting, enforced before the request is issued from declared data and not from observation; serviceWorkers is set to block in every pilot context, because a controlling service worker follows a redirect internally while the route handler sees only the first request; Falcon never emulates, reconstructs, replays or continues a chain the browser did not expose; and a protected non-GET that is not redirected is unaffected A routed protected request is armed only when the serialized origin of the request URL at hop zero is equal to both the serialized origin of the page's top-level document and the origin recorded in the consumed approval, compared as scheme, host and port with the WHATWG URL parser, ASCII-lowercased, default port omitted, userinfo and a trailing host dot refused, by string equality and never by host suffix, eTLD-plus-one or same-site relaxation; any inequality, and any opaque or non-fetchable origin including about, blob, data, file and null, is refused before the route is armed and before any request is issued, with POLICY_PROTECTED_CROSS_ORIGIN_UNSUPPORTED exit 18 and the three origins named in the audit entry. This applies to every routed protected request under every scope option and not only to candidate mechanism M1, because plain route.continue already suppresses the CORS preflight. No cross-origin routed protected request exists in Phase 18: a manifest that declares one is refused at manifest load. The three origins are recomputed immediately before the hop-zero request as defence in depth, and a mismatch is POLICY_PROTECTED_ORIGIN_CHANGED exit 18, labelled detection and not prevention, because whether route.abort prevents transmission of hop zero itself is UNVERIFIED. If the hop-zero response is a 3xx whose Location resolves cross-origin, the response is discarded and no hop is performed. The origin comparison additionally covers the request's initiator: a routed protected request is armed only when the serialized origin of the initiating frame equals the page's top-level origin, the approved origin and the hop-zero target origin, and only when every ancestor frame of the initiator is same-origin with the top-level document, in the normative form that the initiating frame is reference-identical to the page's main frame. Every URL is screened scheme-first, refusing any protocol other than http and https before the serialized origin is read, because a blob URL exposes an inner origin rather than null; userinfo is refused by checking the username and password fields, since the serialized origin drops them, and a trailing host dot is refused by checking the hostname. Where an Origin request header is present it must parse and equal the top-level origin, while its absence is not by itself a refusal and no security property is claimed from it. The top-level origin is computed from Playwright's own main-frame URL and never from page-evaluated script. A request whose initiator cannot be established is refused before arming with POLICY_PROTECTED_INITIATOR_UNSUPPORTED exit 18: a service-worker-originated request, a frame accessor that throws or yields a falsy, detached or unparsable frame, and a request from a popup or an opener. The entire rule, including the initiator and Origin checks, is re-evaluated at the hop-zero re-check, which remains labelled detection and not prevention. DEFERRED under OWNER-12 (Option C) and OWNER-13: no protected non-GET request reaches arming in Phase 18, so the protected-action lease mint and consume, the redirect-continuation rules, the one-transmission counter and chainDeadlineMs have no Phase 18 trigger; they are retained unweakened as 18P-PROTECTED-NONGET entry requirements. Live in Phase 18: window validation only, in the form recorded in phaseClauses.current (250 ms minimum, 2000 ms default, 10000 ms maximum, out-of-range refused before browser launch, never clamped), in force only where a permitted-action (non-protected) lease exists. Under owner decision OWNER-12 (Option C) the protected-non-GET clauses of this criterion — lease mint and consume for a protected action, redirect continuation, the one-transmission counter and chainDeadlineMs — are DEFERRED to 18P-PROTECTED-NONGET and are not Phase 18 merge conditions. The window-validation clause remains in force wherever a lease exists for a permitted non-protected action: 250 ms minimum, 2000 ms default, 10000 ms maximum, out-of-range is a configuration error refused before browser launch and never clamped. (rev 16 section 10f A3 verbatim, applied by rev 18 section A5.)",
       "components": "PilotActionGate.arm + window validation at manifest load and flag parse (OD-22, ADR-0042); redirect continuation rules (rev 10 section 4d.2, ADR-0042 amended, OD-22-Q1 and OD-22-Q2 resolved by OWNER-11); rules 2-6 receive no GO before SPIKE-R reports Chromium behaviour for 301, 302, 303, 307 and 308; rev 14 section 8a origin-equality gate and rewritten 6j.1(7) narrowing (closes SEC-13 M-17); rev 15 section 9a initiator and ancestor gate, scheme-first parsing and rewritten 6j.1(7) (closes SEC-14 M-18)",
       "verification": "U, R",
       "phase": "mixed",
@@ -866,6 +978,10 @@
         "current": [
           "window validation: 250 ms minimum, 2000 ms default, 10000 ms maximum, out-of-range refused before browser launch, never clamped; in force only where a permitted-action (non-protected) lease exists"
         ]
+      },
+      "mergeCondition": {
+        "window-validation": true,
+        "lease-redirect-transmission-deadline": false
       }
     },
     {
@@ -888,17 +1004,52 @@
       "id": "P18-AC-089",
       "priority": "Must",
       "pr": "18B",
-      "requirement": "Classification is recomputed at gate.perform from the freshly loaded manifest against the element actually acted on; the effective class is the maximum of plan row, live recompute and provider advice over denied > protected > permitted; a plan row can never lower a class (it records PLAN_CLASSIFICATION_DRIFT when it tries) and a healed or re-resolved element whose identity differs from the approved one is refused APPROVAL_MISMATCH exit 14",
+      "requirement": "Classification is recomputed at gate.perform from the freshly loaded manifest against the element actually acted on; the effective class is the maximum of plan row, live recompute and provider advice over denied > protected > permitted; a plan row can never lower a class (it records PLAN_CLASSIFICATION_DRIFT when it tries) and a healed or re-resolved element that reclassifies to protected, or whose identity differs from the recorded plan-row identity, is refused POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 with its mandatory reason code (rev 17 section 11i, rev 18 section D); the comparison against an approved identity is DEFERRED to 18P, because no approval exists in Phase 18",
       "components": "PilotActionGate.perform recompute + maximum rule + heal re-classification (rev 9 section 3a.3)",
-      "verification": "U, R"
+      "verification": "U, R",
+      "phase": "mixed",
+      "mergeCondition": {
+        "recompute-and-maximum": true,
+        "approved-identity": false
+      },
+      "phaseClauses": {
+        "current": [
+          "classification recomputed at gate.perform from the freshly loaded manifest against the element actually acted on",
+          "the maximum rule over denied, protected, permitted",
+          "PLAN_CLASSIFICATION_DRIFT when a plan row tries to lower a class",
+          "a heal or re-resolution that reclassifies to protected is refused POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 per rev 17 section 11i"
+        ],
+        "deferred-18P": [
+          "the comparison against the approved element identity",
+          "APPROVAL_MISMATCH exit 14"
+        ]
+      }
     },
     {
       "id": "P18-AC-090",
       "priority": "Must",
       "pr": "18D",
-      "requirement": "The fixture approval authority is structurally unavailable to production: it lives under tests/, no file under src/, scripts/, falcon.js, package.json or any workflow requires it, the ApprovalStore constructor accepts no authority, source, mint callback or test hook, PilotRuntime constructs exactly one frozen ledger source, admits a resolver only when every source is that singleton instance by reference identity, validates its options against a closed key allowlist that contains no sources, resolver, authority, gate or store key (unknown key → PILOT_INTERNAL_ERROR exit 18, unknown_runtime_option), and exposes no injection API, so no environment variable, CLI option, config key, manifest field or argv path adds a source and nothing can be passed through falcon.js. The authority is constructible only from a live net.Server object created by the tests-only pilot fixture server in this process plus that server's per-run 32-byte in-memory capability (timing-safe compared, never serialised, logged or exported); it accepts no host, port, origin or URL and derives the origin from server.address(), requiring an IPv4 127.0.0.1 or IPv6 ::1 literal and a listening server at construction and on every resolve; it requires a manifest all of whose route origins are that same loopback origin; it serves only the fixed fixture app with no handler, upstream or proxy option, and a pilot context resolving a fixture approval refuses any browser proxy setting (exit 18); it resolves at most once per binding and a serialised copy is refused (exit 14, fixture_approval_not_live). Consumption is re-checked in production code at gate.perform and any non-loopback destination is refused APPROVAL_REQUIRED exit 14, reason fixture_approval_non_loopback. ApprovalStore.mintFixtureScoped and FALCON_PILOT_TEST_RUNNER are withdrawn; --approve-action and --emit-token-to still refuse exit 1 in CI and --approve-action requires a TTY, both as accident guards only.No approval object carries a scope field and no production code reads one as a trust input; the ledger/fixture distinction is membership in a module-private WeakSet registered only by ApprovalStore's private verified-consumption path, with no class, constructor or prototype in the discriminator path, which also deep-freezes the approval and its binding, and ApprovalStore exposes no writer or mint surface of any kind — the ledger writer is reachable only through falcon.js's interactive --approve-action path, which requires tty.isatty on fds 0 and 1 and a typed random challenge with no programmatic supply path.; a PilotRuntime-built gate additionally refuses every unbranded approval (APPROVAL_REQUIRED exit 14, fixture_approval_in_production_runtime), so production never evaluates the fixture branch Under OWNER-13 this is the structural-unavailability half of AC-098: it applies to tests/ and to any retained experimental approval prototype, and still runs as a check if no prototype is retained (rev 17 section 11d.6).",
-      "components": "PilotApprovalResolver injection seam + tests/pilot/approval/FixtureApprovalAuthority + tests/pilot/fixtures/PilotFixtureServer + tests/pilot/bin/approved-fixture-case.cjs + PilotActionGate consumption re-check (rev 10 section 4a, ADR-0044 accepted-with-owner-decision, OWNER-09); ApprovalStore closure-held ledger registry + isLedgerApproval predicate + ApprovalCliWriter + PilotFixtureServer.isFixtureServer (rev 11 section 5a) (rev 12 section 6a, 6c.3)",
-      "verification": "U, R, S"
+      "requirement": "Structural unavailability (the live half of AC-098 under OWNER-13): no production path reaches any approval creation, persistence, consumption or protected-action execution code, because none exists. Any retained approval or protected-action prototype lives at exactly one permitted location, tests/experimental/, and no file under src/, scripts/, falcon.js, package.json or any workflow reaches it by a require, require.resolve, literal import(), createRequire, child-process node <literal>, worker, Playwright config or workflow run: edge; every non-literal such edge in src/, scripts/ and falcon.js fails closed. The check admits no exemption, runs even when no prototype is retained, and is verified by the roots, resolution rules and five inversion fixtures of rev 18 section C. The remainder of the rev 17 AC-090 text (the fixture approval authority, the ApprovalStore constructor, the PilotRuntime ledger source and resolver, consumption at gate.perform, the approve flags, the TTY writer and the ledger discriminator) is DEFERRED to 18P-PROTECTED-NONGET under OWNER-13, retained unweakened as unshipped design history and preserved verbatim at git revision 909d794 in this file under P18-AC-090 (rev 18 section A4).",
+      "components": "the production dependency-reachability check of rev 18 section C with its committed script and workflow classification file and five inversion fixtures + the AC-098 export-surface check. DEFERRED to 18P: the PilotApprovalResolver injection seam, tests/pilot/approval/FixtureApprovalAuthority, tests/pilot/fixtures/PilotFixtureServer, tests/pilot/bin/approved-fixture-case.cjs, the PilotActionGate consumption re-check, the ApprovalStore closure-held ledger registry, isLedgerApproval, ApprovalCliWriter and PilotFixtureServer.isFixtureServer (rev 10 section 4a, rev 11 section 5a, rev 12 sections 6a and 6c.3; ADR-0044 deferred with them).",
+      "verification": "U, R, S",
+      "phase": "mixed",
+      "mergeCondition": {
+        "structural-unavailability": true,
+        "fixture-authority-and-consumption": false
+      },
+      "phaseClauses": {
+        "current": [
+          "No production path reaches any approval or protected-action prototype: it lives only under tests/ or tests/experimental/, and no file under src/, scripts/, falcon.js, package.json or any workflow requires it, verified by the production dependency-reachability check of rev 18 section C with no exemptions",
+          "the check runs and passes vacuously if no prototype is retained"
+        ],
+        "deferred-18P": [
+          "the fixture approval authority and its loopback capability",
+          "the ApprovalStore constructor and PilotRuntime frozen ledger source and resolver",
+          "consumption re-checked at gate.perform",
+          "the approve flags, the TTY writer and the ledger/fixture WeakSet discriminator",
+          "every APPROVAL_REQUIRED exit 14 refusal of this criterion"
+        ]
+      }
     },
     {
       "id": "P18-AC-091",
@@ -931,18 +1082,38 @@
     {
       "id": "P18-AC-094",
       "priority": "Must",
-      "pr": "18D",
+      "pr": "18P",
       "requirement": "The production interactive approval path is exercised by one automated test of the human interface, which creates no second approval mechanism and adds no code to src/: it spawns node falcon.js --approve-action under a pty against a hermetic loopback fixture, with fresh approvals and audit roots under os.tmpdir() passed as command arguments and never through an environment variable or flag, an environment stripped to an explicit allowlist with no key matching *_KEY, *_TOKEN, *_SECRET, *_PASSWORD, CI, GITHUB_*, proxy variables or NODE_OPTIONS and with HOME replaced, and a network gate asserting zero non-loopback requests. It parses the real prompt and asserts all eight bound values — plan digest, role, origin, HTTP method, canonical path, manifest digest, falconBuild id and approvals root real path — types the generated challenge exactly once through the pty, asserts exit 0 and exactly one verifying ledger entry, then asserts that replay yields APPROVAL_REQUIRED exit 14 and that each of the eight single-field binding substitutions yields exit 14, removes all approval state in teardown, and asserts the real run/ and data/ digest sets are byte-identical. A source scan asserts that no CLI flag, environment key, config key or file supplies the challenge or bypasses the interaction, consistent with OWNER-09. The test is local and manual only, because AC-084 fails on any approve flag reachable from a workflow; CI runs only the deterministic negative half — piped stdio, CI set, a wrong challenge and the in-process require refusal — and the AC-084 walker. Documentation states that it proves the production interaction path and does not authorise CI to approve real customer actions. Each assertion has a named inversion: removing the isatty gate, accepting a challenge from argv or environment, generating the challenge before rendering the prompt, omitting any bound prompt line, dropping the consumption marker, relaxing one binding field or dropping the environment allowlist must each make the test fail.. The pty helper cannot run in CI by structure, and environment detection is defence in depth only and never the primary control, consistent with OWNER-09. The helper and its test exist at exactly one path under tests/pilot/manual/, which no testMatch, testDir, npm script or workflow line reachable from .github/workflows/ci.yml resolves and which is excluded from the published package; the AC-084 walker fails the CI build on any transitive require, dynamic require, import, spawn or exec argument, npm, yarn or npx script or workflow run line from any workflow that reaches that directory or the string pty-approve; the helper refuses any approvals root or audit root whose real path is not under a directory it created itself in this process beneath the real path of os.tmpdir(), and refuses any path inside the repository, run/ or data/; and as defence in depth its first executable statement, before it builds the child environment allowlist and therefore before CI and GITHUB_ variables are stripped, throws pty_helper_refused_in_ci if its own environment has any of CI, GITHUB_ACTIONS, GITHUB_RUN_ID, GITHUB_WORKFLOW, CONTINUOUS_INTEGRATION, BUILD_ID or TF_BUILD set. A deterministic CI case asserts that requiring the helper with CI set throws, and that case is explicitly not the justification for the environment check being sufficient. Inversions: moving the helper to a CI-reachable path, or naming it in a workflow run line, must each fail the AC-084 walker; pointing it at the repository approvals root must be refused; removing the first-statement check must fail the CI case.",
       "components": "tests/regression/pilot/approval-interactive-path.test.js + tests/pilot/bin/pty-approve.cjs + the 18F pilot-manual project and test:pilot-manual script excluded from .github/workflows/ci.yml + the bound prompt and audited prompts of rev 12 section 6b.2 (rev 12 section 6g); the tests/pilot/manual/ location, the extended AC-084 walker reachability rule and the tmpdir-root restriction of rev 13 section 7e (closes SEC-12 m-42)",
-      "verification": "R, S"
+      "verification": "R, S",
+      "phase": "deferred-18P",
+      "mergeCondition": false,
+      "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
     },
     {
       "id": "P18-AC-095",
       "priority": "Must",
       "pr": "18D",
-      "requirement": "Every JavaScript intrinsic and built-in method on which a pilot approval, gate, fixture or filesystem decision depends is captured once at module load in uncurried form, bound through a Function.prototype.call reference taken before any other code in the module runs, and is thereafter invoked only by direct call, never through a live .call, .apply or .bind property lookup and never through the global Reflect.apply. The captured set is at least WeakSet.prototype.add and has, WeakMap.prototype.get, set and has, the net.Server.prototype address method and listening getter, EventEmitter.prototype.listeners and listenerCount, Object.prototype.hasOwnProperty, crypto.timingSafeEqual and every fs.promises method used on a pilot hot path. A load-time assertion that each captured value is typeof function fails closed with PILOT_INTERNAL_ERROR exit 18, intrinsic_capture_failed. A runtime case, labelled in the suite as a smoke check for misconfiguration and careless tampering and never as an integrity control, asserts for each capture that uncurry(Function.prototype.toString) applied to it reports native code, that its own property names are exactly length and name, and that inspecting it with hidden properties at depth four does not reveal the bound receiver. A runtime case replaces Function.prototype.call, Function.prototype.apply, Function.prototype.bind, the global Reflect.apply, WeakSet.prototype.add and WeakSet.prototype.has after module load, each alone and all together, and pollutes Object.prototype, Array.prototype and Function.prototype, and asserts that the ledger predicate's verdict is unchanged, that no value passed to any replacement is a WeakSet or a registry, that no forged object can be registered, and that the replacements record zero invocations; the inversion is that reverting any one capture to the dotted call form must make this case fail. A further case, marked in the suite as a documented limitation and never as a passing control, replaces WeakSet.prototype.add and has before the module loads and asserts the documented outcome that a forged approval is then accepted, so that the pre-load scope statement cannot silently drift. A static check asserts that no file under src/core/pilot/approval/ or src/core/pilot/PilotActionGate.js contains the substrings .call(, .apply(, .bind( or Reflect.apply( other than the single uncurry definition line, and that the capture block is the first executable statement group after \"use strict\". The architecture claims no integrity property for this check: a genuine uncurried capture is itself a bound function, so it stringifies as native code and has own property names exactly length and name, and a behaviour-preserving bound wrapper planted before module load is indistinguishable from it on every one of those signals, the only observed difference being the own name property, which is configurable on a bound function and therefore attacker-settable. The load-time assertion fails loudly only for a careless pre-load tamper that leaves a captured value non-callable; a behaviour-preserving pre-load tamper does not fail at all and a forged approval is then accepted, and the documented-limitation case covers both the WeakSet-replacement variant and the pre-load Function.prototype.bind bound-wrapper variant.",
-      "components": "the uncurried capture block of rev 13 section 7a.1 in ApprovalStore.js, PilotActionGate.js and PilotFixtureServer.cjs + cases L17, L18, L19 and L20 of rev 13 section 7a.3 + the 18F dotted-invocation and capture-order static checks (rev 13 section 7a; closes SEC-12 m-39); rev 14 section 8b smoke-check relabelling and the L20 bind-wrapper variant (closes SEC-13 m-46)",
-      "verification": "U, R, S"
+      "requirement": "Every JavaScript intrinsic and built-in method on which a pilot gate or filesystem decision depends (the approval and fixture-authority capture sets, and the ledger-predicate cases L17 to L20, are DEFERRED to 18P under OWNER-13) is captured once at module load in uncurried form, bound through a Function.prototype.call reference taken before any other code in the module runs, and is thereafter invoked only by direct call, never through a live .call, .apply or .bind property lookup and never through the global Reflect.apply. The captured set is at least WeakSet.prototype.add and has, WeakMap.prototype.get, set and has, the net.Server.prototype address method and listening getter, EventEmitter.prototype.listeners and listenerCount, Object.prototype.hasOwnProperty, crypto.timingSafeEqual and every fs.promises method used on a pilot hot path. A load-time assertion that each captured value is typeof function fails closed with PILOT_INTERNAL_ERROR exit 18, intrinsic_capture_failed. A runtime case, labelled in the suite as a smoke check for misconfiguration and careless tampering and never as an integrity control, asserts for each capture that uncurry(Function.prototype.toString) applied to it reports native code, that its own property names are exactly length and name, and that inspecting it with hidden properties at depth four does not reveal the bound receiver. A runtime case replaces Function.prototype.call, Function.prototype.apply, Function.prototype.bind, the global Reflect.apply, WeakSet.prototype.add and WeakSet.prototype.has after module load, each alone and all together, and pollutes Object.prototype, Array.prototype and Function.prototype, and asserts that the ledger predicate's verdict is unchanged, that no value passed to any replacement is a WeakSet or a registry, that no forged object can be registered, and that the replacements record zero invocations; the inversion is that reverting any one capture to the dotted call form must make this case fail. A further case, marked in the suite as a documented limitation and never as a passing control, replaces WeakSet.prototype.add and has before the module loads and asserts the documented outcome that a forged approval is then accepted, so that the pre-load scope statement cannot silently drift. A static check asserts that no file under src/core/pilot/ (there is no src/core/pilot/approval/ directory in Phase 18) contains the substrings .call(, .apply(, .bind( or Reflect.apply( other than the single uncurry definition line, and that the capture block is the first executable statement group after \"use strict\". The architecture claims no integrity property for this check: a genuine uncurried capture is itself a bound function, so it stringifies as native code and has own property names exactly length and name, and a behaviour-preserving bound wrapper planted before module load is indistinguishable from it on every one of those signals, the only observed difference being the own name property, which is configurable on a bound function and therefore attacker-settable. The load-time assertion fails loudly only for a careless pre-load tamper that leaves a captured value non-callable; a behaviour-preserving pre-load tamper does not fail at all and a forged approval is then accepted, and the documented-limitation case covers both the WeakSet-replacement variant and the pre-load Function.prototype.bind bound-wrapper variant.",
+      "components": "the uncurried capture block of rev 13 section 7a.1 in PilotActionGate.js only (the ApprovalStore.js and PilotFixtureServer.cjs capture sets are DEFERRED to 18P under OWNER-13) + cases L17, L18, L19 and L20 of rev 13 section 7a.3 + the 18F dotted-invocation and capture-order static checks (rev 13 section 7a; closes SEC-12 m-39); rev 14 section 8b smoke-check relabelling and the L20 bind-wrapper variant (closes SEC-13 m-46)",
+      "verification": "U, R, S",
+      "phase": "mixed",
+      "mergeCondition": {
+        "gate-capture-set": true,
+        "approval-and-fixture-capture-sets": false
+      },
+      "phaseClauses": {
+        "current": [
+          "uncurried load-time capture, with the load-time typeof-function assertion failing closed PILOT_INTERNAL_ERROR exit 18 intrinsic_capture_failed, for the intrinsics on which a pilot gate or filesystem decision depends in PilotActionGate.js",
+          "the 18F dotted-invocation and capture-order static checks over src/core/pilot/"
+        ],
+        "deferred-18P": [
+          "the ApprovalStore.js and PilotFixtureServer.cjs capture sets",
+          "WeakSet.prototype.add and has and the ledger-predicate runtime cases L17 to L20",
+          "crypto.timingSafeEqual for the fixture capability",
+          "the net.Server and EventEmitter fixture captures"
+        ]
+      }
     },
     {
       "id": "P18-AC-096",

@@ -1,0 +1,2769 @@
+{
+ "schema": "phase-18-rev18-edits/1",
+ "revision": "909d794 on docs/phase-18-architecture",
+ "producedBy": "ARCH-18 rev 18 patch; apply with a script; prose is normative",
+ "notes": [
+  "Every 'old' string was asserted to occur exactly once in its target field or file at the stated revision.",
+  "mergeCondition may be a boolean or an object keyed by phaseClauses clause label.",
+  "Nothing in this file authorises implementation, merge or publication. Node 24 is UNVERIFIED."
+ ],
+ "ac": [
+  {
+   "id": "P18-AC-052",
+   "set": {
+    "phase": "deferred-18P",
+    "mergeCondition": false,
+    "pr": "18P",
+    "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
+   }
+  },
+  {
+   "id": "P18-AC-053",
+   "set": {
+    "phase": "deferred-18P",
+    "mergeCondition": false,
+    "pr": "18P",
+    "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
+   }
+  },
+  {
+   "id": "P18-AC-054",
+   "set": {
+    "phase": "deferred-18P",
+    "mergeCondition": false,
+    "pr": "18P",
+    "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
+   }
+  },
+  {
+   "id": "P18-AC-055",
+   "set": {
+    "phase": "deferred-18P",
+    "mergeCondition": false,
+    "pr": "18P",
+    "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
+   }
+  },
+  {
+   "id": "P18-AC-056",
+   "set": {
+    "phase": "deferred-18P",
+    "mergeCondition": false,
+    "pr": "18P",
+    "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
+   }
+  },
+  {
+   "id": "P18-AC-057",
+   "set": {
+    "phase": "deferred-18P",
+    "mergeCondition": false,
+    "pr": "18P",
+    "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
+   }
+  },
+  {
+   "id": "P18-AC-094",
+   "set": {
+    "phase": "deferred-18P",
+    "mergeCondition": false,
+    "pr": "18P",
+    "deferralNote": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A1): the approval state machine, its consumer and the interactive-path test do not ship in Phase 18. Text retained unweakened as an 18P entry requirement."
+   }
+  },
+  {
+   "id": "P18-AC-032",
+   "set": {
+    "phase": "mixed",
+    "mergeCondition": {
+     "plan-drift": true,
+     "approval-invalidation": false
+    },
+    "phaseClauses": {
+     "current": [
+      "Material target change since dry-run is PLAN_DRIFT, a new review is required"
+     ],
+     "deferred-18P": [
+      "ApprovalStore invalidation",
+      "no approval reused (no approval exists in Phase 18)"
+     ]
+    }
+   },
+   "replaceText": [
+    {
+     "field": "components",
+     "old": "PlanDigest drift at step 11 + ApprovalStore invalidation",
+     "new": "PlanDigest drift at step 11 (the ApprovalStore-invalidation component is DEFERRED to 18P under OWNER-13: no approval exists in Phase 18 to invalidate)"
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-074",
+   "set": {
+    "phase": "mixed",
+    "mergeCondition": {
+     "zero-skip": true,
+     "approved-half": false
+    },
+    "phaseClauses": {
+     "current": [
+      "Phase 18 matrix on Node 24 CI has zero skipped or expected-fail tests; a skip fails the job",
+      "the CI pilot job asserts exit 18 with its mandatory reason code for a protected step"
+     ],
+     "deferred-18P": [
+      "the former AC-051 approved half",
+      "the tests-only executable for exit 0",
+      "exit 14 as an expected outcome"
+     ]
+    }
+   },
+   "replaceText": [
+    {
+     "field": "components",
+     "old": "asserts exit 14 as its expected outcome and is never skipped",
+     "new": "asserts exit 18 with the mandatory reason code POLICY_PROTECTED_ACTION_UNSUPPORTED as its expected outcome and is never skipped (rev 18 section D; exit 14 is withdrawn for Phase 18 under OWNER-13)"
+    },
+    {
+     "field": "components",
+     "old": "the AC-051 approved half (OWNER-12: the former AC-051 approved half is now the fixture-only internal evidence of AC-098, not a customer-facing capability claim) runs inside the normal regression gate on Node 24",
+     "new": "the AC-051 refusal case runs inside the normal regression gate on Node 24"
+    },
+    {
+     "field": "components",
+     "old": "in-process plus a tests-only executable for the exit codes",
+     "new": "in-process only; the tests-only executable for exit 0 is withdrawn and DEFERRED to 18P (OWNER-13, rev 18 section A2)"
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-083",
+   "set": {
+    "phase": "mixed",
+    "mergeCondition": {
+     "shard-refusal": true,
+     "run-token-transport": false
+    },
+    "phaseClauses": {
+     "current": [
+      "In shard mode every protected step is refused POLICY_PROTECTED_ACTION_UNSUPPORTED (exit 18) with its mandatory reason code, statically bound before any browser launch",
+      "run/approvals is never created"
+     ],
+     "deferred-18P": [
+      "the env and file run-token transport refusals",
+      "exit 14"
+     ]
+    }
+   },
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "In shard mode every protected step is refused APPROVAL_REQUIRED (exit 14)",
+     "new": "In shard mode every protected step is refused POLICY_PROTECTED_ACTION_UNSUPPORTED (exit 18, mandatory reason code per rev 17 section 11f and rev 18 section D)"
+    },
+    {
+     "field": "requirement",
+     "old": "a run token in env or file is refused without being opened, and run/approvals is never created",
+     "new": "no run-token transport exists in Phase 18, so there is nothing to refuse (the env and file run-token refusals are DEFERRED to 18P; rev 18 section B), and run/approvals is never created"
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-085",
+   "set": {
+    "phase": "mixed",
+    "mergeCondition": {
+     "filesystem-admission": true,
+     "approval-root-and-ledger": false
+    },
+    "phaseClauses": {
+     "current": [
+      "numeric, evidence-gated filesystem admission evaluated per root for run/auth and run/plans, with unknown ids failing closed, observed and committed statfs ids only, an actionable message naming the observed id and path, never a skip",
+      "existsSync is forbidden in this partition and lstat is mandatory"
+     ],
+     "deferred-18P": [
+      "the approvals-root admitted-id set and approvals_root_not_durable",
+      "the missing-approval-history and APPROVAL_REQUIRED exit 14 rows",
+      "the genesis audit entry",
+      "approval_history_unverifiable",
+      "approvals_root_symlink including the symlinked-parent row"
+     ]
+    }
+   },
+   "replaceText": [
+    {
+     "field": "components",
+     "old": "operator guide states why the approval root must be durable (OD-20-Q1 resolved by OWNER-11)",
+     "new": "the operator guide states nothing about an approval root, because none exists in Phase 18 (the OD-20-Q1 approval-root clauses are DEFERRED to 18P under OWNER-13; 11n.G describes detection and refusal only)"
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-086",
+   "set": {
+    "mergeCondition": {
+     "window-validation": true,
+     "lease-redirect-transmission-deadline": false
+    }
+   },
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "detection and not prevention. deferred-18P",
+     "new": "detection and not prevention."
+    }
+   ],
+   "appendText": [
+    {
+     "field": "requirement",
+     "text": " DEFERRED under OWNER-12 (Option C) and OWNER-13: no protected non-GET request reaches arming in Phase 18, so the protected-action lease mint and consume, the redirect-continuation rules, the one-transmission counter and chainDeadlineMs have no Phase 18 trigger; they are retained unweakened as 18P-PROTECTED-NONGET entry requirements. Live in Phase 18: window validation only, in the form recorded in phaseClauses.current (250 ms minimum, 2000 ms default, 10000 ms maximum, out-of-range refused before browser launch, never clamped), in force only where a permitted-action (non-protected) lease exists. (rev 18 section A5; this restates AC-086's own phaseClauses and must be diffed against rev 17 section 11e.1 A3, which the architect did not read.)"
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-089",
+   "set": {
+    "phase": "mixed",
+    "mergeCondition": {
+     "recompute-and-maximum": true,
+     "approved-identity": false
+    },
+    "phaseClauses": {
+     "current": [
+      "classification recomputed at gate.perform from the freshly loaded manifest against the element actually acted on",
+      "the maximum rule over denied, protected, permitted",
+      "PLAN_CLASSIFICATION_DRIFT when a plan row tries to lower a class",
+      "a heal or re-resolution that reclassifies to protected is refused POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 per rev 17 section 11i"
+     ],
+     "deferred-18P": [
+      "the comparison against the approved element identity",
+      "APPROVAL_MISMATCH exit 14"
+     ]
+    }
+   },
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "a healed or re-resolved element whose identity differs from the approved one is refused APPROVAL_MISMATCH exit 14",
+     "new": "a healed or re-resolved element that reclassifies to protected, or whose identity differs from the recorded plan-row identity, is refused POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 with its mandatory reason code (rev 17 section 11i, rev 18 section D); the comparison against an approved identity is DEFERRED to 18P, because no approval exists in Phase 18"
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-090",
+   "set": {
+    "phase": "mixed",
+    "mergeCondition": {
+     "structural-unavailability": true,
+     "fixture-authority-and-consumption": false
+    },
+    "phaseClauses": {
+     "current": [
+      "No production path reaches any approval or protected-action prototype: it lives only under tests/ or tests/experimental/, and no file under src/, scripts/, falcon.js, package.json or any workflow requires it, verified by the production dependency-reachability check of rev 18 section C with no exemptions",
+      "the check runs and passes vacuously if no prototype is retained"
+     ],
+     "deferred-18P": [
+      "the fixture approval authority and its loopback capability",
+      "the ApprovalStore constructor and PilotRuntime frozen ledger source and resolver",
+      "consumption re-checked at gate.perform",
+      "the approve flags, the TTY writer and the ledger/fixture WeakSet discriminator",
+      "every APPROVAL_REQUIRED exit 14 refusal of this criterion"
+     ]
+    },
+    "requirement": "Structural unavailability (the live half of AC-098 under OWNER-13): no production path reaches any approval creation, persistence, consumption or protected-action execution code, because none exists. Any retained approval or protected-action prototype lives at exactly one permitted location, tests/experimental/, and no file under src/, scripts/, falcon.js, package.json or any workflow reaches it by a require, require.resolve, literal import(), createRequire, child-process node <literal>, worker, Playwright config or workflow run: edge; every non-literal such edge in src/, scripts/ and falcon.js fails closed. The check admits no exemption, runs even when no prototype is retained, and is verified by the roots, resolution rules and five inversion fixtures of rev 18 section C. The remainder of the rev 17 AC-090 text (the fixture approval authority, the ApprovalStore constructor, the PilotRuntime ledger source and resolver, consumption at gate.perform, the approve flags, the TTY writer and the ledger discriminator) is DEFERRED to 18P-PROTECTED-NONGET under OWNER-13, retained unweakened as unshipped design history and preserved verbatim at git revision 909d794 in this file under P18-AC-090 (rev 18 section A4).",
+    "components": "the production dependency-reachability check of rev 18 section C with its committed script and workflow classification file and five inversion fixtures + the AC-098 export-surface check. DEFERRED to 18P: the PilotApprovalResolver injection seam, tests/pilot/approval/FixtureApprovalAuthority, tests/pilot/fixtures/PilotFixtureServer, tests/pilot/bin/approved-fixture-case.cjs, the PilotActionGate consumption re-check, the ApprovalStore closure-held ledger registry, isLedgerApproval, ApprovalCliWriter and PilotFixtureServer.isFixtureServer (rev 10 section 4a, rev 11 section 5a, rev 12 sections 6a and 6c.3; ADR-0044 deferred with them)."
+   }
+  },
+  {
+   "id": "P18-AC-095",
+   "set": {
+    "phase": "mixed",
+    "mergeCondition": {
+     "gate-capture-set": true,
+     "approval-and-fixture-capture-sets": false
+    },
+    "phaseClauses": {
+     "current": [
+      "uncurried load-time capture, with the load-time typeof-function assertion failing closed PILOT_INTERNAL_ERROR exit 18 intrinsic_capture_failed, for the intrinsics on which a pilot gate or filesystem decision depends in PilotActionGate.js",
+      "the 18F dotted-invocation and capture-order static checks over src/core/pilot/"
+     ],
+     "deferred-18P": [
+      "the ApprovalStore.js and PilotFixtureServer.cjs capture sets",
+      "WeakSet.prototype.add and has and the ledger-predicate runtime cases L17 to L20",
+      "crypto.timingSafeEqual for the fixture capability",
+      "the net.Server and EventEmitter fixture captures"
+     ]
+    }
+   },
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "Every JavaScript intrinsic and built-in method on which a pilot approval, gate, fixture or filesystem decision depends",
+     "new": "Every JavaScript intrinsic and built-in method on which a pilot gate or filesystem decision depends (the approval and fixture-authority capture sets, and the ledger-predicate cases L17 to L20, are DEFERRED to 18P under OWNER-13)"
+    },
+    {
+     "field": "requirement",
+     "old": "A static check asserts that no file under src/core/pilot/approval/ or src/core/pilot/PilotActionGate.js contains the substrings",
+     "new": "A static check asserts that no file under src/core/pilot/ (there is no src/core/pilot/approval/ directory in Phase 18) contains the substrings"
+    },
+    {
+     "field": "components",
+     "old": "the uncurried capture block of rev 13 section 7a.1 in ApprovalStore.js, PilotActionGate.js and PilotFixtureServer.cjs",
+     "new": "the uncurried capture block of rev 13 section 7a.1 in PilotActionGate.js only (the ApprovalStore.js and PilotFixtureServer.cjs capture sets are DEFERRED to 18P under OWNER-13)"
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-084",
+   "set": {
+    "phase": "current",
+    "mergeCondition": true
+   },
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "a protected action reached in CI is refused APPROVAL_REQUIRED exit 14",
+     "new": "a protected action reached in CI is refused POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 with its mandatory reason code (rev 18 section D)"
+    },
+    {
+     "field": "requirement",
+     "old": "approval-module import outside src/core/pilot/ and tests/",
+     "new": "any approval-module import anywhere in production, the former src/core/pilot/ carve-out being removed because no approval module exists in Phase 18 (tests/ and tests/experimental/ are covered by the production dependency-reachability check of rev 18 section C)"
+    },
+    {
+     "field": "requirement",
+     "old": "the primary control is the structural fixture boundary of rev 10 section 4a (no production require path to the approval authority, no enabling environment variable, no production mint function)",
+     "new": "the primary control is the production dependency-reachability check of rev 18 section C together with AC-098 (ii) and (iii): no production root reaches tests/, tests/experimental/ or any approval module, because none exists, and every script and workflow run: step is classified production or test in a committed file with no exempt value (the rev 10 section 4a fixture boundary is DEFERRED to 18P under OWNER-13)"
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-051",
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": " Inversion: remove the refusal and the case must record a request.",
+     "new": ""
+    }
+   ]
+  }
+ ],
+ "openItems": [
+  {
+   "id": "R-9",
+   "set": {
+    "status": "MOOT (OWNER-13)"
+   },
+   "appendState": " MOOT under OWNER-13 (rev 18 section A1): AC-094 and Falcon's production interactive approval path are deferred to 18P-PROTECTED-NONGET, so there is no CI-gating question left to confirm. Text retained as unshipped design history; nothing is risk-accepted by this annotation."
+  },
+  {
+   "id": "OD-20-Q1",
+   "set": {
+    "status": "MOOT for the approval root (OWNER-13); live for run/auth and run/plans"
+   },
+   "appendState": " Annotation (rev 18, OWNER-13): no approvals root, no approval history and no genesis entry exist in Phase 18, so the approval-root half of this resolution (approvals_root_not_durable, the missing-versus-unverifiable partition, the operator-guide rationale) is DEFERRED to 18P. The per-root numeric admission rule, the behaviour tests, the existsSync prohibition and the mandatory lstat remain live for run/auth and run/plans."
+  },
+  {
+   "id": "OWNER-10-RESIDUAL",
+   "appendState": " Annotation (rev 18, OWNER-13): the fixture approval authority, ApprovalStore and AC-092 are deferred to 18P, so the approval-discriminator half of this residual has no Phase 18 trigger. The repository-write trust limitation itself is unchanged and now applies to the gate, the hermetic fixture and the rev 18 section C dependency-reachability check. Nothing new is accepted."
+  },
+  {
+   "id": "OWNER-13-Q1",
+   "appendState": " Correction (rev 18 section E, closes SEC-17 m-64): AC-092 is the fixture no-arbitrary-target, server-identity, listener-identity and F-case criterion, and it carries the rev 15 sections 9b and 9c assertions, which are the substance of m-51; the PTY interactive-path test is AC-094, now deferred to 18P with the writer. Section 11d.6's label of AC-092 as the 'PTY production approval test' is wrong and is corrected. If the owner keeps m-51, AC-092 returns as an 18D Must with mergeCondition true at no design cost."
+  },
+  {
+   "id": "18P-PROTECTED-NONGET",
+   "appendState": " Rev 18 adds to this deferral, with every text preserved unweakened and unshipped: AC-052, AC-053, AC-054, AC-055, AC-056, AC-057 and AC-094 in whole; the AC-032 ApprovalStore-invalidation component; the AC-074 approved half and its tests-only executable for exit 0; the AC-083 env and file run-token transport refusals; the AC-085 approvals-root, ledger, genesis-entry, approval_history_unverifiable and approvals_root_symlink clauses together with the approval-root half of OD-20-Q1/OWNER-11; the AC-086 lease, redirect, one-transmission and chainDeadlineMs clauses; the AC-089 approved-identity comparison; the whole of the rev 17 AC-090 text except its structural-unavailability half, preserved verbatim at git revision 909d794 under P18-AC-090; the AC-095 ApprovalStore.js and PilotFixtureServer.cjs capture sets and cases L17 to L20; ApprovalStore, ApprovalRecord, Binding, AuditLog, the PilotApprovalResolver seam, the closure-held ledger registry, the gate-side capability WeakMap, the PilotRuntime unbranded-approval refusal, the Dashboard read-only approval view, neg-p01-chain, neg-p01-truncate, neg-p02-replay, neg-q-runscope, neg-q-prune, neg-q-roots, neg-q-retention, neg-shard-token-file-refused, neg-fixture-approval-scope, neg-fixture-no-arbitrary-target, neg-fixture-require-graph, the approval halves of neg-f01-loaders and neg-s01-caps, the pilot-manual Playwright project and its script, tests/regression/pilot/approval-interactive-path.test.js and tests/pilot/bin/pty-approve.cjs; the threat-model rows P01 to P06, D01 (approval digest), X01 (approval view), L17 to L20 and F14 to F25b; residual 25, residual 25a and the approval halves of residuals 24 and 26; and R-9. None of it is authorised, scheduled or accepted."
+  }
+ ],
+ "counts": {
+  "set": {
+   "total": 98,
+   "must": 89,
+   "should": 6,
+   "could": 3,
+   "deferredToPhase18P": 11,
+   "deferredIds": [
+    "P18-AC-052",
+    "P18-AC-053",
+    "P18-AC-054",
+    "P18-AC-055",
+    "P18-AC-056",
+    "P18-AC-057",
+    "P18-AC-092",
+    "P18-AC-093",
+    "P18-AC-094",
+    "P18-AC-096",
+    "P18-AC-097"
+   ],
+   "deferredUnderOptionC": 5,
+   "deferredUnderOwner13": [
+    "P18-AC-052",
+    "P18-AC-053",
+    "P18-AC-054",
+    "P18-AC-055",
+    "P18-AC-056",
+    "P18-AC-057",
+    "P18-AC-094"
+   ],
+   "mixedPhase18PIds": [
+    "P18-AC-032",
+    "P18-AC-074",
+    "P18-AC-083",
+    "P18-AC-085",
+    "P18-AC-086",
+    "P18-AC-089",
+    "P18-AC-090",
+    "P18-AC-095"
+   ],
+   "countsNote": "rev 18 (ARCH-18): deferredToPhase18P counts criteria whose whole text is deferred (phase deferred-18P and mergeCondition false). mixedPhase18PIds lists criteria with phase mixed and at least one deferred clause; their live clauses remain Phase 18 merge conditions and are listed in phaseClauses.current with a clause-level mergeCondition. deferredUnderOptionC (5: 086, 092, 093, 096, 097) is retained unchanged as the OWNER-12 set. No criterion is deleted or renumbered; total/must/should/could are unchanged."
+  }
+ },
+ "exitCodes": {
+  "set": {
+   "approvalNote": "14 is RESERVED and unreachable in Phase 18 under OWNER-13 (rev 18 section D): every by-design protected-step refusal, in shards and in CI, is 18 with a mandatory reason code. 14 returns only with 18P-PROTECTED-NONGET."
+  }
+ },
+ "docEdits": [
+  {
+   "file": "docs/phase-18-plan.md",
+   "replace": [
+    {
+     "old": "4. Revision-bound, run-scoped, replay-protected approval for protected actions (18D).",
+     "new": "4. Detection and refusal of protected actions, with no approval created, persisted or consumed anywhere in production (18D, OWNER-13). Revision-bound, run-scoped, replay-protected approval is DEFERRED to 18P-PROTECTED-NONGET and is not a Phase 18 capability."
+    },
+    {
+     "old": "`src/core/pilot/approval/{ApprovalStore,ApprovalRecord,AuditLog,Binding,RunToken}.js`; edits `falcon.js` (approval flags (`--approve-action`, `--emit-token-to`; `--approval-run-token=` never ships)), `src/core/Dashboard.js` (read-only view, Could);",
+     "new": "`src/core/pilot/PilotRuntime.js` plus the AC-098 non-reachability checks only. Under OWNER-13 no `src/core/pilot/approval/` directory, no ApprovalStore, ApprovalRecord, AuditLog, Binding or RunToken module, no approval flag on `falcon.js` and no `src/core/Dashboard.js` approval view ship in Phase 18: all are DEFERRED to 18P-PROTECTED-NONGET (rev 18 section A);"
+    },
+    {
+     "old": "`neg-p01-chain`, `neg-p01-truncate`, `neg-p02-replay`, `neg-q-runscope`, `neg-q-prune`, `neg-q-roots`, `neg-p04-build` (extended), `neg-q-retention`, `neg-arming-window-config`, approval half of `neg-f01-loaders` and `neg-s01-caps`",
+     "new": "`neg-p04-build` (extended), `neg-arming-window-config` (window validation only), `neg-dep-reachability` (rev 18 section C, with the committed root classification file and six inversion fixtures); DEFERRED to 18P: `neg-p01-chain`, `neg-p01-truncate`, `neg-p02-replay`, `neg-q-runscope`, `neg-q-prune`, `neg-q-roots`, `neg-q-retention` and the approval halves of `neg-f01-loaders` and `neg-s01-caps`"
+    },
+    {
+     "old": "rev 10 adds: the `PilotApprovalResolver` injection seam, `tests/pilot/approval/FixtureApprovalAuthority`, `tests/pilot/fixtures/PilotFixtureServer`, `tests/pilot/bin/approved-fixture-case.cjs`; `neg-fixture-approval-scope`, `neg-fixture-no-arbitrary-target` (blocker gate), `neg-fixture-require-graph`;",
+     "new": "rev 18 (OWNER-13): the `PilotApprovalResolver` seam, `tests/pilot/approval/FixtureApprovalAuthority`, `tests/pilot/fixtures/PilotFixtureServer`, `tests/pilot/bin/approved-fixture-case.cjs`, `neg-fixture-approval-scope`, `neg-fixture-no-arbitrary-target` and `neg-fixture-require-graph` (all added by rev 10) are DEFERRED to 18P; what 18F retains instead is `neg-dep-reachability`;"
+    },
+    {
+     "old": "AC-092, AC-093; m-51 DEFERRED PENDING OWNER CONFIRMATION.**",
+     "new": "AC-092, AC-093, and additionally under rev 18: ApprovalStore, ApprovalRecord, Binding, AuditLog, the PilotApprovalResolver seam, the closure-held ledger registry, the gate-side capability WeakMap, the PilotRuntime unbranded-approval refusal, the Dashboard approval view, neg-p01-chain, neg-p01-truncate, neg-p02-replay, neg-q-runscope, neg-q-prune, neg-q-roots, neg-q-retention, AC-052, AC-053, AC-054, AC-055, AC-056, AC-057, AC-094 and tests/regression/pilot/approval-interactive-path.test.js with tests/pilot/bin/pty-approve.cjs; m-51 DEFERRED PENDING OWNER CONFIRMATION (see OWNER-13-Q1 as corrected by rev 18 section E).**"
+    },
+    {
+     "old": "per-root filesystem admission (approvals root refuses tmpfs, exit 18 approvals_root_not_durable)",
+     "new": "per-root filesystem admission for `run/auth` and `run/plans` (the approvals-root clauses, including exit 18 approvals_root_not_durable, are DEFERRED to 18P under OWNER-13: Phase 18 creates no approvals root)"
+    },
+    {
+     "old": "rev 12 adds: the empty-root, dangling-symlink and non-empty-without-chain rows of the AC-085 matrix (approvals_root_symlink, approval_history_unverifiable); rev 13 adds: the symlinked-parent missing-root row (approvals_root_symlink) and the prohibition on existsSync in that partition",
+     "new": "rev 12 and rev 13 added the empty-root, dangling-symlink, non-empty-without-chain and symlinked-parent rows of the AC-085 matrix (approvals_root_symlink, approval_history_unverifiable): all four are DEFERRED to 18P with the approval root under OWNER-13, while the prohibition on existsSync and the mandatory lstat are retained for every live root"
+    },
+    {
+     "old": "rev 12 adds: the pilot-manual project and test:pilot-manual script for AC-094, excluded from ci.yml;",
+     "new": "rev 18 (OWNER-13): the pilot-manual Playwright project, the test:pilot-manual script and AC-094 are DEFERRED to 18P; Phase 18 adds neither the project nor the script to package.json or playwright.config.js;"
+    },
+    {
+     "old": "the AC-084 reachability rule covering tests/pilot/manual/ and the string pty-approve",
+     "new": "the AC-084 reachability rule covering tests/pilot/manual/ and the string pty-approve, retained as a prohibition only (both must be absent in Phase 18), plus the rev 18 section C dependency-reachability check with its committed script and workflow classification file"
+    },
+    {
+     "old": "the repository-wide claims grep is a standing DOC merge condition",
+     "new": "the repository-wide claims grep is a standing DOC merge condition, extended by rev 18 section F to the tokens ApprovalStore, ApprovalRecord, ApprovalCliWriter, PilotApprovalResolver, approve-action, emit-token-to, RunToken, RunTokenEmitter, LedgerLock, ledger approval, approvals root, approval root, APPROVAL_MISMATCH, APPROVAL_REQUIRED, APPROVAL_STALE, APPROVAL_REPLAYED, approved half, tests-only executable, PILOT_APPROVER, PILOT_APPROVAL_RUN_TOKEN, replay-protected approval, pty-approve and approver, with every live hit required to sit in a deferral annotation, a prohibition context or text explicitly marked unshipped design history"
+    },
+    {
+     "old": "Revert; without the approval store, protected actions refuse with `APPROVAL_REQUIRED`",
+     "new": "Revert; Phase 18 has no approval store at all, so protected actions refuse with `POLICY_PROTECTED_ACTION_UNSUPPORTED` (exit 18)"
+    },
+    {
+     "old": "Reverting leaves `run/approvals/` on disk; protected actions then refuse `APPROVAL_REQUIRED`. Run tokens become inert.",
+     "new": "Phase 18 creates no `run/approvals/` and no run token, so a revert leaves nothing on disk; protected actions are refused `POLICY_PROTECTED_ACTION_UNSUPPORTED` (exit 18) with or without it (OWNER-13)."
+    },
+    {
+     "old": "new `.env.example` keys (`PILOT_ROLE_*_USERNAME`, `PILOT_ROLE_*_PASSWORD`, `PILOT_APPROVER`) are added genuinely blank (AC-080)",
+     "new": "new `.env.example` keys (`PILOT_ROLE_*_USERNAME`, `PILOT_ROLE_*_PASSWORD`) are added genuinely blank (AC-080); no approval environment key is added, because nothing reads one (OWNER-13, rev 18 section B)"
+    },
+    {
+     "old": "`.gitignore` gains `run/auth/`, `run/approvals/` and `run/plans/`.",
+     "new": "`.gitignore` gains `run/auth/` and `run/plans/`; `run/approvals/` is never created in Phase 18 and its entry is deferred with the approval root."
+    },
+    {
+     "old": "`run/auth/`, `run/approvals/` and `run/plans/` are fixed by `PilotRoots` and are not configurable; `.gitignore` gains all three. An operator with an existing approvals directory elsewhere must move it.",
+     "new": "`run/auth/` and `run/plans/` are fixed by `PilotRoots` and are not configurable; `.gitignore` gains both. `run/approvals/` is DEFERRED to 18P with the approval path and is never created in Phase 18, so there is no approvals directory to move (OWNER-13)."
+    },
+    {
+     "old": "**Audit log format.** The log is segmented from the start (`run/approvals/audit/<segmentId>.log` plus `anchors.log`); there is no legacy single-file form to migrate.",
+     "new": "**Audit log format.** DEFERRED to 18P with the approval ledger (OWNER-13): Phase 18 writes no approval audit log, so there is no segment or anchor format to migrate. Unshipped design history: the log was to be segmented from the start with a never-pruned anchor chain."
+    },
+    {
+     "old": "a local filesystem for `run/approvals`",
+     "new": "a local filesystem for every live pilot root (`run/auth` and `run/plans`; `run/approvals` is deferred to 18P and never created)"
+    },
+    {
+     "old": "The fixture approval seam has no revert path that is safe:",
+     "new": "DEFERRED to 18P under OWNER-13, retained as unshipped design history: The fixture approval seam has no revert path that is safe:"
+    },
+    {
+     "old": "The approval discriminator has no safe revert path:",
+     "new": "DEFERRED to 18P under OWNER-13, retained as unshipped design history: The approval discriminator has no safe revert path:"
+    }
+   ],
+   "append": "\n\n## Rev 18 (ARCH-18) normative annotation, OWNER-13\n\nEvery occurrence in this file of ApprovalStore, ApprovalRecord, ApprovalCliWriter, PilotApprovalResolver, approve-action, emit-token-to, RunToken, RunTokenEmitter, LedgerLock, a ledger approval, an approvals or approval root, APPROVAL_REQUIRED, APPROVAL_MISMATCH, APPROVAL_STALE, APPROVAL_REPLAYED, an approved half, a tests-only executable for exit 0, PILOT_APPROVER, PILOT_APPROVAL_RUN_TOKEN, replay-protected approval, an approver string, a pty approval helper or exit 14 for a protected step is, unless it is explicitly marked live above, **unshipped design history deferred to 18P-PROTECTED-NONGET under OWNER-13**, or a **prohibition** that Phase 18 enforces. It is not a Phase 18 capability, obligation or claim. Phase 18 behaviour is detection and refusal only: a protected step is refused POLICY_PROTECTED_ACTION_UNSUPPORTED with exit 18 and a mandatory reason code, no approval object, ledger entry, token or audit-approval record is created anywhere, and no approvals root is created. This annotation is normative for this file and is enforced by the standing claims grep of rev 18 section F. Nothing here authorises implementation; Node 24 is UNVERIFIED (H-8).\n"
+  },
+  {
+   "file": "docs/security/phase-18-threat-model.md",
+   "replace": [
+    {
+     "old": "retained: AC-098 as rewritten (non-reachability), AC-090 and the production dependency-reachability check",
+     "new": "rev 18 enumerates the deferred approval-machinery rows exactly, closing SEC-17 E12: P01, P02, P03, P04 (approval half), P05, P06, D01 (approval digest), X01 (approval view), neg-shard-token-file-refused, neg-shard-approve-argv (retained only as a prohibition), neg-q-roots, neg-fixture-approval-scope, neg-fixture-no-arbitrary-target, neg-p01-chain, neg-p01-truncate, neg-p02-replay, neg-q-runscope, neg-q-prune, neg-q-retention, cases L17 to L20 and F14 to F25b, AC-052 to AC-057, AC-092, AC-093, AC-094, and the ApprovalStore and PilotFixtureServer capture sets of AC-095; retained in 18D: neg-shard-protected-action at exit 18, the build-identity half of neg-p04-build, neg-arming-window-config (window validation only), AC-098 as rewritten (non-reachability), the structural-unavailability half of AC-090, the PilotActionGate capture set of AC-095, and the rev 18 section C production dependency-reachability check with its committed classification file and six inversion fixtures"
+    },
+    {
+     "old": "per-root filesystem admission (approvals root refuses tmpfs); rev 13 adds: the symlinked-parent missing-root row of rev 13 section 7h A3 AC-085",
+     "new": "per-root filesystem admission for run/auth and run/plans; rev 18 (OWNER-13) DEFERS to 18P the approvals-root rows, enumerated: approvals_root_not_durable, approvals_root_symlink (including the rev 13 section 7h A3 symlinked-parent missing-root row), approval_history_unverifiable, the missing-history APPROVAL_REQUIRED row and the genesis-entry row; retained: the numeric statfs admission, the O_EXCL, rename and fsync behaviour tests, the existsSync prohibition and the mandatory lstat for every live root"
+    },
+    {
+     "old": "Section 6 residual risks stated; approver-string limitation;",
+     "new": "Section 6 residual risks stated; rev 18 (OWNER-13) DEFERS to 18P the approver-string limitation and the durable-approval-root rationale, because Phase 18 has no approver string and no approval root; the operator guide documents detection and refusal only (11n.G), and the standing claims grep of rev 18 section F is a DOC merge condition;"
+    },
+    {
+     "old": "the durable-approval-root rationale;",
+     "new": "(the durable-approval-root rationale is deferred, see above);"
+    },
+    {
+     "old": "neg-fixture-require-graph, the tests-only-executable workflow-invocation case",
+     "new": "the rev 18 section C production dependency-reachability check, with its committed script and workflow classification file and its six inversion fixtures (neg-fixture-require-graph and the tests-only-executable workflow-invocation case are DEFERRED to 18P with the fixture approval authority)"
+    },
+    {
+     "old": "and the AC-084 reachability rule for tests/pilot/manual/",
+     "new": "and the AC-084 reachability rule for tests/pilot/manual/ and the string pty-approve, retained as a prohibition only, both being absent in Phase 18"
+    }
+   ],
+   "append": "\n\n## Rev 18 (ARCH-18) normative annotation, OWNER-13\n\nEvery occurrence in this file of ApprovalStore, ApprovalRecord, ApprovalCliWriter, PilotApprovalResolver, approve-action, emit-token-to, RunToken, RunTokenEmitter, LedgerLock, a ledger approval, an approvals or approval root, APPROVAL_REQUIRED, APPROVAL_MISMATCH, APPROVAL_STALE, APPROVAL_REPLAYED, an approved half, a tests-only executable for exit 0, PILOT_APPROVER, PILOT_APPROVAL_RUN_TOKEN, replay-protected approval, an approver string, a pty approval helper or exit 14 for a protected step is, unless it is explicitly marked live above, **unshipped design history deferred to 18P-PROTECTED-NONGET under OWNER-13**, or a **prohibition** that Phase 18 enforces. It is not a Phase 18 capability, obligation or claim. Phase 18 behaviour is detection and refusal only: a protected step is refused POLICY_PROTECTED_ACTION_UNSUPPORTED with exit 18 and a mandatory reason code, no approval object, ledger entry, token or audit-approval record is created anywhere, and no approvals root is created. This annotation is normative for this file and is enforced by the standing claims grep of rev 18 section F. Nothing here authorises implementation; Node 24 is UNVERIFIED (H-8).\n"
+  },
+  {
+   "file": "docs/phase-18-decision-traceability.md",
+   "replace": [
+    {
+     "old": "`neg-shard-protected-action` (extended: static pre-flight exit 14 before launch); `neg-shard-token-file-refused`; `neg-shard-approve-argv`; `run/approvals` absent on disk",
+     "new": "`neg-shard-protected-action` (extended: static pre-flight refusal before launch, POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 with its mandatory reason code; exit 14 withdrawn for Phase 18 per rev 17 section 11f.4 and rev 18 section D); `neg-shard-approve-argv` (retained as a prohibition: no approve argv exists); `run/approvals` absent on disk; `neg-shard-token-file-refused` DEFERRED to 18P with the run-token transport (rev 18 section B)"
+    },
+    {
+     "old": "and `AC-051 approved half (OWNER-12: the former AC-051 approved half is now the fixture-only internal evidence of AC-098, not a customer-facing capability claim) in the regression gate: in-process injection plus the tests-only executable for exit 0 and exit 14`",
+     "new": "and `the AC-051 refusal case in the regression gate: in-process only, asserting POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 with zero transmissions at a real recording server; the former approved half and its tests-only executable for exit 0 are withdrawn for Phase 18 and DEFERRED to 18P (OWNER-13, rev 18 sections A2 and D)`"
+    },
+    {
+     "old": "AC-094 (new);",
+     "new": "AC-094 DEFERRED to 18P with the interactive writer (OWNER-13, rev 18 section A1);"
+    },
+    {
+     "old": "the AC-094 interactive-path pty test with its seven inversions",
+     "new": "the AC-094 interactive-path pty test with its seven inversions (DEFERRED to 18P; unshipped design history)"
+    },
+    {
+     "old": "`neg-fixture-approval-scope (U/R/S:",
+     "new": "`neg-fixture-approval-scope (DEFERRED to 18P with the fixture approval authority, OWNER-13; U/R/S:"
+    },
+    {
+     "old": "APPROVAL_REQUIRED exit 14 with no reconstruction from any source",
+     "new": "a refusal with no reconstruction from any source (DEFERRED to 18P: Phase 18 has no approval history, so this row has no Phase 18 trigger; the deferred text read APPROVAL_REQUIRED exit 14)"
+    },
+    {
+     "old": "1. **D4 makes AC-051's approved half untestable in CI under a strict reading**",
+     "new": "1. **MOOT under OWNER-13 (rev 18 section A2): AC-051 has no approved half and no tests-only executable, so AC-074's zero-skip rule is satisfied by the refusal case alone. Historical: D4 made AC-051's approved half untestable in CI under a strict reading**"
+    },
+    {
+     "old": "5. **D3's exit 14 plus D10's accepted \"exit 14 may outrank ordinary failure\"**",
+     "new": "5. **MOOT for D3 under rev 17 section 11f.4 and rev 18 section D: a protected step in a shard is exit 18 with a mandatory reason code, which is distinguishable from an approval failure because no approval failure exists in Phase 18. Historical: D3's exit 14 plus D10's accepted \"exit 14 may outrank ordinary failure\"**"
+    },
+    {
+     "old": "| OWNER-13-Q1 (OPEN) | m-51 carried as DEFERRED WITH THE APPROVAL MACHINERY, pending owner confirmation (section 11d.7) |",
+     "new": "| OWNER-13-Q1 (OPEN) | m-51 carried as DEFERRED WITH THE APPROVAL MACHINERY, pending owner confirmation (section 11d.7). Correction (rev 18 section E, closes SEC-17 m-64): AC-092 is the fixture no-arbitrary-target, server-identity, listener-identity and F-case criterion carrying rev 15 sections 9b and 9c, which is the substance of m-51; the PTY interactive-path test is AC-094. If the owner keeps m-51, AC-092 returns as an 18D Must with mergeCondition true at no design cost. |"
+    }
+   ],
+   "after": [
+    {
+     "anchor": "40. rev 16 kept a production approval mint",
+     "text": "41. rev 17 left about ten live Must criteria specifying a production approval writer and consumer while the banners said OWNER-13 had removed them (SEC-17 M-21); corrected by rev 18 section A, with AC-052, AC-053 and AC-057 found by the rev 18 scan and not named in M-21.\n42. the 11d.5 dependency-reachability check could not be implemented as written and did not fail closed on import(), createRequire, child processes, workers, Playwright config loading or workflow steps, and its roots contradicted the six test-rooted package.json scripts (SEC-17 M-22); corrected by rev 18 section C, which replaces script roots with a committed production/test classification with no exempt value.\n43. the 11f.4 exit-14 run-token transport refusals required the PILOT_APPROVAL_RUN_TOKEN literal in src/ that 11d.5 must fail on; rev 18 section B drops them for Phase 18 because nothing reads the variable, and routes the residual to owner and Security rather than deciding it as an architect acceptance.\n44. section 11d.6 misidentified AC-092 as the PTY production approval test; the PTY test is AC-094 (SEC-17 m-64); corrected by rev 18 section E.\n45. the 11j sink counts included an Array.prototype.fill and comment-only hits, and the gate-at-caller versus sink-in-callee question was unspecified (SEC-17 m-63); corrected by rev 18 section H, which specifies an AST-level receiver-aware scan, a discharge rule with an explicit no-other-caller proof obligation for AIHealer._performAction, and false-positive fixtures for EndpointPolicy.js:117, PageAnalyser.js:101 and TestRunner.js:33,204."
+    }
+   ],
+   "append": "\n\n## Rev 18 (ARCH-18) normative annotation, OWNER-13\n\nEvery occurrence in this file of ApprovalStore, ApprovalRecord, ApprovalCliWriter, PilotApprovalResolver, approve-action, emit-token-to, RunToken, RunTokenEmitter, LedgerLock, a ledger approval, an approvals or approval root, APPROVAL_REQUIRED, APPROVAL_MISMATCH, APPROVAL_STALE, APPROVAL_REPLAYED, an approved half, a tests-only executable for exit 0, PILOT_APPROVER, PILOT_APPROVAL_RUN_TOKEN, replay-protected approval, an approver string, a pty approval helper or exit 14 for a protected step is, unless it is explicitly marked live above, **unshipped design history deferred to 18P-PROTECTED-NONGET under OWNER-13**, or a **prohibition** that Phase 18 enforces. It is not a Phase 18 capability, obligation or claim. Phase 18 behaviour is detection and refusal only: a protected step is refused POLICY_PROTECTED_ACTION_UNSUPPORTED with exit 18 and a mandatory reason code, no approval object, ledger entry, token or audit-approval record is created anywhere, and no approvals root is created. This annotation is normative for this file and is enforced by the standing claims grep of rev 18 section F. Nothing here authorises implementation; Node 24 is UNVERIFIED (H-8).\n"
+  },
+  {
+   "file": "docs/phase-18-owner-decisions.md",
+   "replace": [
+    {
+     "old": "The remaining residual is an application that violates its declared behaviour; destructive GETs on allowed routes still depend on manifest authoring. Annotation (rev 16, OWNER-12): the protected-non-GET execution residual has no Phase 18 trigger under Option C; nothing is newly accepted and nothing is deleted. Annotation (rev 17): residual 21 now also covers exit 18 masking exits 17 and 1; the lostCoverage summary is written on those paths (11f.3). Nothing newly accepted.",
+     "new": "The remaining residual is an application that violates its declared behaviour; destructive GETs on allowed routes still depend on manifest authoring, which Falcon does not verify. Annotation (rev 18, correcting the misapplied annotation found as SEC-17 m-61, per rev 17 section 11l(3)): residual 4 REMAINS OPEN and DOES have a Phase 18 trigger, because a state-changing GET on a permitted route executes in Phase 18; the rev 17 text pasted here belonged to residual 21 and is removed from residual 4, where it now stands only at residual 21. Nothing newly accepted."
+    },
+    {
+     "old": "15. **Unbound request body inside an open arming lease** for UI-dispatched actions. Annotation (rev 16, OWNER-12): the protected-non-GET execution residual has no Phase 18 trigger under Option C; nothing is newly accepted and nothing is deleted.",
+     "new": "15. **Unbound request body inside an open arming lease** for UI-dispatched actions. Annotation (rev 18, superseding the rev 16 annotation per rev 17 section 11h.4 and SEC-16 m-55, closing SEC-17 m-61): the arming lease survives for permitted, non-protected actions, so the request body inside an open permitted-action lease is still unbound and residual 15 DOES have a Phase 18 trigger; only its protected-action half is moot under Option C. Nothing newly accepted."
+    },
+    {
+     "old": "The owner is asked to note this disclosure; OWNER-10 itself is unchanged and nothing new is accepted.",
+     "new": "Annotation (rev 18, OWNER-13): the fixture approval boundary, ApprovalStore, the approval discriminator and AC-092 are DEFERRED to 18P, so this residual has no Phase 18 trigger for the approval discriminator; the repository-write trust limitation itself is unchanged and now applies to the gate, the hermetic fixture and the rev 18 section C dependency-reachability check. The owner is asked to note this disclosure; OWNER-10 itself is unchanged and nothing new is accepted."
+    },
+    {
+     "old": "No in-process caller can create one.` and `26. **Forwarding fixture server (R-8).**",
+     "new": "No in-process caller can create one. Annotation (rev 18, OWNER-13, closing the duplicate-26 fragment found as SEC-17 m-61): the interactive ledger writer does not ship in Phase 18, so residual 25 is DEFERRED to 18P and has no Phase 18 trigger; its text is retained as unshipped design history.\n\n25a. **Forwarding fixture server (R-8).**"
+    },
+    {
+     "old": "The rev 12 sentence \"no in-process caller can prompt at all\" is withdrawn",
+     "new": "Annotation (rev 18, OWNER-13): residual 25a is DEFERRED to 18P with the fixture approval authority and has no Phase 18 trigger; it is renumbered 25a rather than 26 so that no existing residual number moves. The rev 12 sentence \"no in-process caller can prompt at all\" is withdrawn"
+    },
+    {
+     "old": "and a wrap of the server handle's onconnection, which preserves the owner linkage and changes no listener array. Annotation (rev 16, OWNER-12):",
+     "new": "and a wrap of the server handle's onconnection, which preserves the owner linkage and changes no listener array. Annotation (rev 18, OWNER-13): the fixture approval authority, its server-authenticity assertions and AC-092 are DEFERRED to 18P, so residual 26 has no Phase 18 trigger and its text is unshipped design history. Annotation (rev 16, OWNER-12):"
+    },
+    {
+     "old": "### R-9 (owner confirmation requested; escalated by SEC-12 m-42)",
+     "new": "### R-9 (MOOT under OWNER-13; rev 18 section A1)"
+    },
+    {
+     "old": "Owner confirmation requested (escalated by SEC-12 m-42 from awareness). The positive half of AC-094",
+     "new": "MOOT: AC-094 and Falcon's production interactive approval path are DEFERRED to 18P under OWNER-13, so no CI-gating confirmation is owed; no owner decision is requested and nothing is accepted. Historical text follows. Owner confirmation requested (escalated by SEC-12 m-42 from awareness). The positive half of AC-094"
+    }
+   ],
+   "append": "\n\n## Rev 18 (ARCH-18) normative annotation, OWNER-13\n\nEvery occurrence in this file of ApprovalStore, ApprovalRecord, ApprovalCliWriter, PilotApprovalResolver, approve-action, emit-token-to, RunToken, RunTokenEmitter, LedgerLock, a ledger approval, an approvals or approval root, APPROVAL_REQUIRED, APPROVAL_MISMATCH, APPROVAL_STALE, APPROVAL_REPLAYED, an approved half, a tests-only executable for exit 0, PILOT_APPROVER, PILOT_APPROVAL_RUN_TOKEN, replay-protected approval, an approver string, a pty approval helper or exit 14 for a protected step is, unless it is explicitly marked live above, **unshipped design history deferred to 18P-PROTECTED-NONGET under OWNER-13**, or a **prohibition** that Phase 18 enforces. It is not a Phase 18 capability, obligation or claim. Phase 18 behaviour is detection and refusal only: a protected step is refused POLICY_PROTECTED_ACTION_UNSUPPORTED with exit 18 and a mandatory reason code, no approval object, ledger entry, token or audit-approval record is created anywhere, and no approvals root is created. This annotation is normative for this file and is enforced by the standing claims grep of rev 18 section F. Nothing here authorises implementation; Node 24 is UNVERIFIED (H-8).\n"
+  },
+  {
+   "file": "docs/architecture/phase-18-authenticated-pilots.md",
+   "replace": [
+    {
+     "old": "approval/ApprovalStore.js",
+     "new": "approval/ApprovalStore.js  [DEFERRED to 18P under OWNER-13: no approval/ module ships in Phase 18; the five entries here are unshipped design history]"
+    },
+    {
+     "old": "approval/RunToken.js",
+     "new": "approval/RunToken.js  [DEFERRED to 18P under OWNER-13: unshipped]"
+    },
+    {
+     "old": "// ctx: { manifest, role, page, boundary, policy, approvalArm, planRow, runToken }",
+     "new": "// ctx: { manifest, role, page, boundary, policy, planRow }   (approvalArm and runToken: DEFERRED to 18P under OWNER-13)"
+    },
+    {
+     "old": "// ApprovalStore.js",
+     "new": "// ApprovalStore.js  [DEFERRED to 18P under OWNER-13: this module and every function below it are unshipped design history]"
+    },
+    {
+     "old": "async function mintRunToken(store, approvalId)",
+     "new": "// DEFERRED to 18P under OWNER-13: async function mintRunToken(store, approvalId)"
+    },
+    {
+     "old": "async function consume(store, approvalId, { runToken })",
+     "new": "// DEFERRED to 18P under OWNER-13: async function consume(store, approvalId, { runToken })"
+    },
+    {
+     "old": "// RunToken.js",
+     "new": "// RunToken.js  [DEFERRED to 18P under OWNER-13: unshipped design history]"
+    },
+    {
+     "old": "async function claim(store, runId)",
+     "new": "// DEFERRED to 18P under OWNER-13: async function claim(store, runId)"
+    },
+    {
+     "old": "1. `falcon.js --approve-action=<actionId>",
+     "new": "1. DEFERRED to 18P under OWNER-13 (the flag does not exist in Phase 18 and AC-084 fails on its existence): `falcon.js --approve-action=<actionId>"
+    },
+    {
+     "old": "2. The execute run is started with",
+     "new": "2. DEFERRED to 18P under OWNER-13: neither the flag nor the run-token environment key exists in Phase 18, and nothing reads one, so no transport refusal ships either (rev 18 section B). The execute run would be started with"
+    },
+    {
+     "old": "3. At first use, `RunToken.claim` creates",
+     "new": "3. DEFERRED to 18P under OWNER-13. At first use, `RunToken.claim` creates"
+    },
+    {
+     "old": "**Concurrency. Decision: exclusive consume markers, not a sequential-mode restriction.**",
+     "new": "**Concurrency. Decision: exclusive consume markers, not a sequential-mode restriction.** DEFERRED to 18P under OWNER-13: no approval consumption ships in Phase 18, so this decision has no Phase 18 trigger."
+    },
+    {
+     "old": "Consequences: the approvals root must be on a local POSIX filesystem",
+     "new": "Consequences (DEFERRED to 18P under OWNER-13; unshipped design history): the approvals root must be on a local POSIX filesystem"
+    },
+    {
+     "old": "Context: OD-02 requires run-scoped approval, but a run that hits `APPROVAL_REQUIRED` exits 14",
+     "new": "DEFERRED to 18P under OWNER-13: this ADR is unshipped design history; in Phase 18 a protected action is refused POLICY_PROTECTED_ACTION_UNSUPPORTED at exit 18 and no run token exists. Context: OD-02 requires run-scoped approval, but a run that hits `APPROVAL_REQUIRED` exits 14"
+    },
+    {
+     "old": "`BuildIdentity`, `RunToken`, `SecretRegistry`, audit anchors,",
+     "new": "`BuildIdentity`, `SecretRegistry` (`RunToken` and the audit anchors are DEFERRED to 18P under OWNER-13),"
+    }
+   ],
+   "append": "\n\n## Rev 18 (ARCH-18) normative annotation, OWNER-13\n\nEvery occurrence in this file of ApprovalStore, ApprovalRecord, ApprovalCliWriter, PilotApprovalResolver, approve-action, emit-token-to, RunToken, RunTokenEmitter, LedgerLock, a ledger approval, an approvals or approval root, APPROVAL_REQUIRED, APPROVAL_MISMATCH, APPROVAL_STALE, APPROVAL_REPLAYED, an approved half, a tests-only executable for exit 0, PILOT_APPROVER, PILOT_APPROVAL_RUN_TOKEN, replay-protected approval, an approver string, a pty approval helper or exit 14 for a protected step is, unless it is explicitly marked live above, **unshipped design history deferred to 18P-PROTECTED-NONGET under OWNER-13**, or a **prohibition** that Phase 18 enforces. It is not a Phase 18 capability, obligation or claim. Phase 18 behaviour is detection and refusal only: a protected step is refused POLICY_PROTECTED_ACTION_UNSUPPORTED with exit 18 and a mandatory reason code, no approval object, ledger entry, token or audit-approval record is created anywhere, and no approvals root is created. This annotation is normative for this file and is enforced by the standing claims grep of rev 18 section F. Nothing here authorises implementation; Node 24 is UNVERIFIED (H-8).\n"
+  }
+ ],
+ "coverage": [
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[11].state",
+   "token": "ApprovalStore",
+   "editId": "oi-OD-24-Q1",
+   "disposition": "moot",
+   "context": "or production mint function enables it; ApprovalStore.mintFixtureScoped is withdrawn. AC-051 "
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[11].state",
+   "token": "PilotApprovalResolver",
+   "editId": "oi-OD-24-Q1",
+   "disposition": "moot",
+   "context": "pproval authority that is injected into PilotApprovalResolver by the test harness, lives under tests/"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[12].state",
+   "token": "approval root",
+   "editId": "oi-OD-20-Q1",
+   "disposition": "deferred-18P",
+   "context": "the operator guide must explain why the approval root requires durable storage (rev 10 sectio"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[12].state",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "oi-OD-20-Q1",
+   "disposition": "deferred-18P",
+   "context": "root; a missing approval history yields APPROVAL_REQUIRED and trust is never restored from anothe"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[14].state",
+   "token": "ApprovalStore",
+   "editId": "oi-OWNER-10-RESIDUAL",
+   "disposition": "annotated",
+   "context": " executing in the Falcon process before ApprovalStore's first statement, and that this is rea"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[14].state",
+   "token": "exit 14",
+   "editId": "oi-OWNER-10-RESIDUAL",
+   "disposition": "annotated",
+   "context": " gate refuses every unbranded approval (exit 14, fixture_approval_in_production_runtime"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[14].state",
+   "token": "pty",
+   "editId": "oi-OWNER-10-RESIDUAL",
+   "disposition": "annotated",
+   "context": "ad, process.binding, child_process or a pty from a new test file, and any edit to a"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[17].state",
+   "token": "AC-094",
+   "editId": "oi-R-9",
+   "disposition": "moot",
+   "context": "wner confirmation: the positive half of AC-094 is automated but not CI-gated, so a reg"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[22].state",
+   "token": "approve-action",
+   "editId": "oi-18P-PROTECTED-NONGET",
+   "disposition": "deferred-18P",
+   "context": ", the rev 13 section 9 hardening, the --approve-action and --emit-token-to flags, RunToken, Ru"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[22].state",
+   "token": "emit-token-to",
+   "editId": "oi-18P-PROTECTED-NONGET",
+   "disposition": "deferred-18P",
+   "context": "9 hardening, the --approve-action and --emit-token-to flags, RunToken, RunTokenEmitter, Ledge"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[22].state",
+   "token": "RunToken",
+   "editId": "oi-18P-PROTECTED-NONGET",
+   "disposition": "deferred-18P",
+   "context": "prove-action and --emit-token-to flags, RunToken, RunTokenEmitter, LedgerLock, the appro"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[22].state",
+   "token": "RunToken",
+   "editId": "oi-18P-PROTECTED-NONGET",
+   "disposition": "deferred-18P",
+   "context": "on and --emit-token-to flags, RunToken, RunTokenEmitter, LedgerLock, the approvals root "
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[22].state",
+   "token": "LedgerLock",
+   "editId": "oi-18P-PROTECTED-NONGET",
+   "disposition": "deferred-18P",
+   "context": "en-to flags, RunToken, RunTokenEmitter, LedgerLock, the approvals root and its migration, "
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".openItems[22].state",
+   "token": "approvals root",
+   "editId": "oi-18P-PROTECTED-NONGET",
+   "disposition": "deferred-18P",
+   "context": "Token, RunTokenEmitter, LedgerLock, the approvals root and its migration, the approval-ledger "
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[31].components",
+   "token": "ApprovalStore",
+   "editId": "ac-032",
+   "disposition": "deferred-18P",
+   "context": "PlanDigest drift at step 11 + ApprovalStore invalidation"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[51].requirement",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "ac-052",
+   "disposition": "deferred-18P",
+   "context": "No approval: `APPROVAL_REQUIRED`, zero clicks"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[52].requirement",
+   "token": "APPROVAL_MISMATCH",
+   "editId": "ac-053",
+   "disposition": "deferred-18P",
+   "context": "target origin, action ID; any mismatch `APPROVAL_MISMATCH`"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[53].components",
+   "token": "ApprovalStore",
+   "editId": "ac-054",
+   "disposition": "deferred-18P",
+   "context": "ApprovalStore staleness"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[54].components",
+   "token": "ApprovalStore",
+   "editId": "ac-055",
+   "disposition": "deferred-18P",
+   "context": "ApprovalStore durable exclusive consumption across re"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[55].components",
+   "token": "ApprovalStore",
+   "editId": "ac-056",
+   "disposition": "deferred-18P",
+   "context": "ApprovalStore lookup"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[56].requirement",
+   "token": "approver",
+   "editId": "ac-057",
+   "disposition": "deferred-18P",
+   "context": "ion has one audit entry with timestamp, approver, digest, action, role, decision, code; "
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[73].components",
+   "token": "approved half",
+   "editId": "ac-074",
+   "disposition": "rewritten-exit-18",
+   "context": "utcome and is never skipped; the AC-051 approved half (OWNER-12: the former AC-051 approved h"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[73].components",
+   "token": "approved half",
+   "editId": "ac-074",
+   "disposition": "rewritten-exit-18",
+   "context": "roved half (OWNER-12: the former AC-051 approved half is now the fixture-only internal eviden"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[73].components",
+   "token": "approved half",
+   "editId": "ac-074",
+   "disposition": "rewritten-exit-18",
+   "context": "thing here; OWNER-13: the former AC-051 approved half no longer exists as a Phase 18 test; th"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[73].components",
+   "token": "tests-only executable",
+   "editId": "ac-074",
+   "disposition": "rewritten-exit-18",
+   "context": "ion gate on Node 24 \u2014 in-process plus a tests-only executable for the exit codes \u2014 and is neither ski"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[73].components",
+   "token": "exit 14",
+   "editId": "ac-074",
+   "disposition": "rewritten-exit-18",
+   "context": " plan contains a protected step asserts exit 14 as its expected outcome and is never sk"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[82].requirement",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "ac-083",
+   "disposition": "rewritten-exit-18",
+   "context": "rd mode every protected step is refused APPROVAL_REQUIRED (exit 14) \u2014 statically bound protected "
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[82].requirement",
+   "token": "exit 14",
+   "editId": "ac-083",
+   "disposition": "rewritten-exit-18",
+   "context": "cted step is refused APPROVAL_REQUIRED (exit 14) \u2014 statically bound protected actions b"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[83].requirement",
+   "token": "approve-action",
+   "editId": "ac-084",
+   "disposition": "rewritten-exit-18",
+   "context": "ion; and it fails on the existence of --approve-action or --emit-token-to anywhere under src/,"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[83].requirement",
+   "token": "emit-token-to",
+   "editId": "ac-084",
+   "disposition": "rewritten-exit-18",
+   "context": " the existence of --approve-action or --emit-token-to anywhere under src/, falcon.js, scripts"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[83].requirement",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "ac-084",
+   "disposition": "rewritten-exit-18",
+   "context": "otected action reached in CI is refused APPROVAL_REQUIRED exit 14; the static check resolves npm/"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[83].requirement",
+   "token": "tests-only executable",
+   "editId": "ac-084",
+   "disposition": "rewritten-exit-18",
+   "context": "ts/ and on any workflow invocation of a tests-only executable outside the test gate. This static chec"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[83].requirement",
+   "token": "exit 14",
+   "editId": "ac-084",
+   "disposition": "rewritten-exit-18",
+   "context": "ched in CI is refused APPROVAL_REQUIRED exit 14; the static check resolves npm/yarn/npx"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[84].requirement",
+   "token": "approvals root",
+   "editId": "ac-085",
+   "disposition": "deferred-18P",
+   "context": "history \u2014 the resolved real path of the approvals root absent, which requires both realpath an"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[84].requirement",
+   "token": "approvals root",
+   "editId": "ac-085",
+   "disposition": "deferred-18P",
+   "context": "oval_history_unverifiable; and when the approvals root is missing beneath a symlinked parent, "
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[84].requirement",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "ac-085",
+   "disposition": "deferred-18P",
+   "context": "present and an empty directory \u2014 yields APPROVAL_REQUIRED exit 14 and is never reconstructed from"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[84].requirement",
+   "token": "exit 14",
+   "editId": "ac-085",
+   "disposition": "deferred-18P",
+   "context": "ty directory \u2014 yields APPROVAL_REQUIRED exit 14 and is never reconstructed from a recei"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[84].requirement",
+   "token": "exit 14",
+   "editId": "ac-085",
+   "disposition": "deferred-18P",
+   "context": "nverifiable, and is never downgraded to exit 14; a dangling symlink at the root, where "
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[84].requirement",
+   "token": "pty",
+   "editId": "ac-085",
+   "disposition": "deferred-18P",
+   "context": "ve ENOENT, or the root present and an empty directory \u2014 yields APPROVAL_REQUIRED ex"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[84].requirement",
+   "token": "pty",
+   "editId": "ac-085",
+   "disposition": "deferred-18P",
+   "context": "g; and a root that is present and non-empty but holds no verifiable chain, includin"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[84].components",
+   "token": "approval root",
+   "editId": "ac-085",
+   "disposition": "deferred-18P",
+   "context": "y matrix; operator guide states why the approval root must be durable (OD-20-Q1 resolved by O"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[85].requirement",
+   "token": "pty",
+   "editId": "ac-086",
+   "disposition": "deferred-18P",
+   "context": " for 2 to the 53 plus 1, 5000 for the empty string and for null, 5001 for true, 500"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[85].requirement",
+   "token": "pty",
+   "editId": "ac-086",
+   "disposition": "deferred-18P",
+   "context": "inity, -Infinity, the string \"5\", the empty string, null, undefined, true, 2.5, an "
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[88].requirement",
+   "token": "APPROVAL_MISMATCH",
+   "editId": "ac-089",
+   "disposition": "rewritten-exit-18",
+   "context": "iffers from the approved one is refused APPROVAL_MISMATCH exit 14"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[88].requirement",
+   "token": "exit 14",
+   "editId": "ac-089",
+   "disposition": "rewritten-exit-18",
+   "context": "proved one is refused APPROVAL_MISMATCH exit 14"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "ApprovalStore",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "e.json or any workflow requires it, the ApprovalStore constructor accepts no authority, sourc"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "ApprovalStore",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": ", reason fixture_approval_non_loopback. ApprovalStore.mintFixtureScoped and FALCON_PILOT_TEST"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "ApprovalStore",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "dule-private WeakSet registered only by ApprovalStore's private verified-consumption path, wi"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "ApprovalStore",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "eezes the approval and its binding, and ApprovalStore exposes no writer or mint surface of an"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "approve-action",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "LCON_PILOT_TEST_RUNNER are withdrawn; --approve-action and --emit-token-to still refuse exit 1"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "approve-action",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "oken-to still refuse exit 1 in CI and --approve-action requires a TTY, both as accident guards"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "approve-action",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": " only through falcon.js's interactive --approve-action path, which requires tty.isatty on fds "
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "emit-token-to",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "R are withdrawn; --approve-action and --emit-token-to still refuse exit 1 in CI and --approve"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "any non-loopback destination is refused APPROVAL_REQUIRED exit 14, reason fixture_approval_non_lo"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "nally refuses every unbranded approval (APPROVAL_REQUIRED exit 14, fixture_approval_in_production"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "exit 14",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "nding and a serialised copy is refused (exit 14, fixture_approval_not_live). Consumptio"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "exit 14",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "estination is refused APPROVAL_REQUIRED exit 14, reason fixture_approval_non_loopback. "
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].requirement",
+   "token": "exit 14",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "y unbranded approval (APPROVAL_REQUIRED exit 14, fixture_approval_in_production_runtime"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].components",
+   "token": "ApprovalStore",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "ccepted-with-owner-decision, OWNER-09); ApprovalStore closure-held ledger registry + isLedger"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].components",
+   "token": "PilotApprovalResolver",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "PilotApprovalResolver injection seam + tests/pilot/approval/F"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[89].components",
+   "token": "ApprovalCliWriter",
+   "editId": "ac-090",
+   "disposition": "deferred-18P",
+   "context": "registry + isLedgerApproval predicate + ApprovalCliWriter + PilotFixtureServer.isFixtureServer (r"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[91].requirement",
+   "token": "ApprovalStore",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "ph contains no fs, fs/promises, SafeFs, ApprovalStore, AuditLog, RunToken or child_process mo"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[91].requirement",
+   "token": "RunToken",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "mises, SafeFs, ApprovalStore, AuditLog, RunToken or child_process module, no src/ or scr"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[91].requirement",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "e listener array intact. Any failure is APPROVAL_REQUIRED exit 14, fixture_server_repurposed. A h"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[91].requirement",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "lure rather than a pass. Any failure is APPROVAL_REQUIRED exit 14, fixture_server_repurposed. Fur"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[91].requirement",
+   "token": "exit 14",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "ntact. Any failure is APPROVAL_REQUIRED exit 14, fixture_server_repurposed. A handler w"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[91].requirement",
+   "token": "exit 14",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": " pass. Any failure is APPROVAL_REQUIRED exit 14, fixture_server_repurposed. Further run"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[91].requirement",
+   "token": "exit 14",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": " and never as fixture_server_repurposed exit 14. It further captures an enumerated set "
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[91].requirement",
+   "token": "pty",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "ing, child_process, worker_threads or a pty from a new or edited test file, and any"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[91].requirement",
+   "token": "pty",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "er refusal under both piped stdio and a pty, the runtime mint scan that calls every"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[92].requirement",
+   "token": "ApprovalStore",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "hip in a module-private WeakSet held in ApprovalStore's closure, whose add and has are captur"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[92].requirement",
+   "token": "ApprovalStore",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "d, and registration happens only inside ApprovalStore's private verified-consumption path aft"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[92].requirement",
+   "token": "ApprovalStore",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "NAL_ERROR exit 18, approval_not_sealed. ApprovalStore exposes no writer; the interactive ledg"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[92].requirement",
+   "token": "approve-action",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "not_entry), reached only by falcon.js --approve-action after falcon.js asserts it is itself th"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[92].requirement",
+   "token": "ledger approval",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "No production code distinguishes a ledger approval from any other object by a scope string"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[92].requirement",
+   "token": "approvals root",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "cal path, manifest digest, build id and approvals root real path is rendered before the challe"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[92].requirement",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "time-built gate it is refused outright (APPROVAL_REQUIRED exit 14, fixture_approval_in_production"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[92].requirement",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": " never present on the object; otherwise APPROVAL_REQUIRED exit 14. Captured net intrinsics authen"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[92].requirement",
+   "token": "exit 14",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": " is refused outright (APPROVAL_REQUIRED exit 14, fixture_approval_in_production_runtime"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[92].requirement",
+   "token": "exit 14",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "the object; otherwise APPROVAL_REQUIRED exit 14. Captured net intrinsics authenticate n"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[92].components",
+   "token": "ApprovalStore",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "ApprovalStore closure-held ledger WeakSet with captur"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[92].components",
+   "token": "approve-action",
+   "editId": "pre-existing-deferred",
+   "disposition": "moot",
+   "context": "freeze + gate-side capability WeakMap + approve-action.js entry-only interactive writer with b"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].id",
+   "token": "AC-094",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": "P18-AC-094"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].requirement",
+   "token": "approve-action",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": "ode to src/: it spawns node falcon.js --approve-action under a pty against a hermetic loopback"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].requirement",
+   "token": "approvals root",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": "th, manifest digest, falconBuild id and approvals root real path \u2014 types the generated challen"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].requirement",
+   "token": "approvals root",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": "ing pty-approve; the helper refuses any approvals root or audit root whose real path is not un"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].requirement",
+   "token": "approvals root",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": "4 walker; pointing it at the repository approvals root must be refused; removing the first-sta"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].requirement",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": " entry, then asserts that replay yields APPROVAL_REQUIRED exit 14 and that each of the eight sing"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].requirement",
+   "token": "exit 14",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": "ts that replay yields APPROVAL_REQUIRED exit 14 and that each of the eight single-field"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].requirement",
+   "token": "exit 14",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": "ngle-field binding substitutions yields exit 14, removes all approval state in teardown"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].requirement",
+   "token": "pty",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": "node falcon.js --approve-action under a pty against a hermetic loopback fixture, wi"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].requirement",
+   "token": "pty",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": "ated challenge exactly once through the pty, asserts exit 0 and exactly one verifyi"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].requirement",
+   "token": "pty",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": "list must each make the test fail.. The pty helper cannot run in CI by structure, a"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].requirement",
+   "token": "pty",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": "at reaches that directory or the string pty-approve; the helper refuses any approva"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].requirement",
+   "token": "pty",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": " GITHUB_ variables are stripped, throws pty_helper_refused_in_ci if its own environ"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[93].components",
+   "token": "pty",
+   "editId": "ac-094",
+   "disposition": "deferred-18P",
+   "context": "eractive-path.test.js + tests/pilot/bin/pty-approve.cjs + the 18F pilot-manual proj"
+  },
+  {
+   "source": "docs/phase-18-acceptance-criteria.json",
+   "locator": ".criteria[94].components",
+   "token": "ApprovalStore",
+   "editId": "ac-095",
+   "disposition": "deferred-18P",
+   "context": "capture block of rev 13 section 7a.1 in ApprovalStore.js, PilotActionGate.js and PilotFixture"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L3",
+   "token": "RunToken",
+   "editId": "plan-status-banner",
+   "disposition": "moot",
+   "context": "he approval writer, the approval flags, RunToken, RunTokenEmitter, LedgerLock, AC-092, A"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L3",
+   "token": "RunToken",
+   "editId": "plan-status-banner",
+   "disposition": "moot",
+   "context": "l writer, the approval flags, RunToken, RunTokenEmitter, LedgerLock, AC-092, AC-093 and "
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L3",
+   "token": "LedgerLock",
+   "editId": "plan-status-banner",
+   "disposition": "moot",
+   "context": "roval flags, RunToken, RunTokenEmitter, LedgerLock, AC-092, AC-093 and (pending owner conf"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L12",
+   "token": "replay-protected",
+   "editId": "plan-sec1-item4",
+   "disposition": "deferred-18P",
+   "context": "4. Revision-bound, run-scoped, replay-protected approval for protected actions (18D). "
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L28",
+   "token": "approvals root",
+   "editId": "plan-18E-row",
+   "disposition": "deferred-18P",
+   "context": "10 adds: per-root filesystem admission (approvals root refuses tmpfs, exit 18 approvals_root_n"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L28",
+   "token": "pty",
+   "editId": "plan-18E-row",
+   "disposition": "deferred-18P",
+   "context": "s_root_not_durable); rev 12 adds: the empty-root, dangling-symlink and non-empty-wi"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L28",
+   "token": "pty",
+   "editId": "plan-18E-row",
+   "disposition": "deferred-18P",
+   "context": " empty-root, dangling-symlink and non-empty-without-chain rows of the AC-085 matrix"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "ApprovalStore",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "| 18D | `src/core/pilot/approval/{ApprovalStore,ApprovalRecord,AuditLog,Binding,RunToke"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "ApprovalStore",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "lock and its load-time assertion across ApprovalStore.js, PilotActionGate.js and PilotFixture"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "ApprovalRecord",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "`src/core/pilot/approval/{ApprovalStore,ApprovalRecord,AuditLog,Binding,RunToken}.js`; edits `"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "approve-action",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "; edits `falcon.js` (approval flags (`--approve-action`, `--emit-token-to`; `--approval-run-to"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "approve-action",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "0; rev 12 adds: src/core/pilot/approval/approve-action.js (entry-only interactive writer), the"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "approve-action",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": " rev 17 (OWNER-13): **DEFERRED to 18P - approve-action.js, the falcon.js --approve-action and "
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "approve-action",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "8P - approve-action.js, the falcon.js --approve-action and --emit-token-to flags, RunToken, Ru"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "emit-token-to",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "(approval flags (`--approve-action`, `--emit-token-to`; `--approval-run-token=` never ships))"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "emit-token-to",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "s, the falcon.js --approve-action and --emit-token-to flags, RunToken, RunTokenEmitter, Ledge"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "RunToken",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "alStore,ApprovalRecord,AuditLog,Binding,RunToken}.js`; edits `falcon.js` (approval flags"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "RunToken",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "prove-action and --emit-token-to flags, RunToken, RunTokenEmitter, LedgerLock, the appro"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "RunToken",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "on and --emit-token-to flags, RunToken, RunTokenEmitter, LedgerLock, the approvals root "
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "LedgerLock",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "en-to flags, RunToken, RunTokenEmitter, LedgerLock, the approvals root and its migration, "
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "approvals root",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "Token, RunTokenEmitter, LedgerLock, the approvals root and its migration, AC-092, AC-093; m-51"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "AC-094",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "js and tests/pilot/bin/pty-approve.cjs (AC-094, local/manual), tests/unit/pilot/pilot-"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "pty",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "active-path.test.js and tests/pilot/bin/pty-approve.cjs (AC-094, local/manual), tes"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L32",
+   "token": "PilotApprovalResolver",
+   "editId": "plan-18D-row",
+   "disposition": "deferred-18P",
+   "context": "caps` | 18B, 18C | \u2014; rev 10 adds: the `PilotApprovalResolver` injection seam, `tests/pilot/approval/"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L33",
+   "token": "AC-094",
+   "editId": "plan-18F-row",
+   "disposition": "deferred-18P",
+   "context": "roject and test:pilot-manual script for AC-094, excluded from ci.yml; the \"use strict\""
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L33",
+   "token": "pty",
+   "editId": "plan-18F-row",
+   "disposition": "deferred-18P",
+   "context": "ring tests/pilot/manual/ and the string pty-approve | "
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L63",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "plan-rollback-18D",
+   "disposition": "rewritten-exit-18",
+   "context": "l store, protected actions refuse with `APPROVAL_REQUIRED` \u2014 fail closed, never permit. | "
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L76",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "plan-rollback-rev2-18D",
+   "disposition": "rewritten-exit-18",
+   "context": "on disk; protected actions then refuse `APPROVAL_REQUIRED`. Run tokens become inert. | "
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L100",
+   "token": "PILOT_APPROVAL",
+   "editId": "plan-migration-envkeys",
+   "disposition": "deferred-18P",
+   "context": "OT_ROLE_*_PASSWORD`, `PILOT_APPROVER`, `PILOT_APPROVAL_RUN_TOKEN`. "
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L110",
+   "token": "RunToken",
+   "editId": "plan-18P-section",
+   "disposition": "moot",
+   "context": "interactive writer, the approval flags, RunToken, RunTokenEmitter, LedgerLock, the appro"
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L110",
+   "token": "RunToken",
+   "editId": "plan-18P-section",
+   "disposition": "moot",
+   "context": "e writer, the approval flags, RunToken, RunTokenEmitter, LedgerLock, the approvals root "
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L110",
+   "token": "LedgerLock",
+   "editId": "plan-18P-section",
+   "disposition": "moot",
+   "context": "roval flags, RunToken, RunTokenEmitter, LedgerLock, the approvals root and its migration, "
+  },
+  {
+   "source": "docs/phase-18-plan.md",
+   "locator": "L110",
+   "token": "approvals root",
+   "editId": "plan-18P-section",
+   "disposition": "moot",
+   "context": "Token, RunTokenEmitter, LedgerLock, the approvals root and its migration, the approval-ledger "
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L5",
+   "token": "approver",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": "evision. Approval is run-scoped and the approver is an operator-supplied string; there i"
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L44",
+   "token": "approver",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": "istory files, replays approvals, forges approver strings, broadens the manifest | "
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L106",
+   "token": "approver",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": "llow, owner uid checked, mode 0600. The approver is an operator-supplied string; docs mu"
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L107",
+   "token": "APPROVAL_MISMATCH",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": "` versus `http://localhost:PORT` gives `APPROVAL_MISMATCH`. "
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L227",
+   "token": "approver",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": "rite the whole ledger consistently. The approver string is not authentication. "
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L233",
+   "token": "exit 14",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": "ns are refused in shard mode and in CI, exit 14 (D3, D4). The approver label is audit m"
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L233",
+   "token": "approver",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": "d mode and in CI, exit 14 (D3, D4). The approver label is audit metadata, not identity. "
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L238",
+   "token": "approver",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": "oval history is tamper-evident with the approver as metadata, not authentication; same-u"
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L244",
+   "token": "ApprovalStore",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": " private-field brand minted only inside ApprovalStore's verified consumption path, not a decl"
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L244",
+   "token": "exit 14",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": " gate refuses every unbranded approval (exit 14); PilotRuntime admits one source by ref"
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L246",
+   "token": "approvals root",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": "onical path, manifest digest, build id, approvals root) rendered before the challenge is gener"
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L246",
+   "token": "approver",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": "reads it and types the challenge is the approver. The controls are the bound prompt (pla"
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L248",
+   "token": "ApprovalStore",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": " executing in the Falcon process before ApprovalStore's first statement can replace WeakSet.p"
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L248",
+   "token": "ledger approval",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": "d and has and thereby register a forged ledger approval. Delivery routes: repository modificati"
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L277",
+   "token": "approvals root",
+   "editId": "tm-18E-row",
+   "disposition": "deferred-18P",
+   "context": "dentity, per-root filesystem admission (approvals root refuses tmpfs); rev 13 adds: the symlin"
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L279",
+   "token": "approver",
+   "editId": "tm-DOC-row",
+   "disposition": "deferred-18P",
+   "context": " DOC | Section 6 residual risks stated; approver-string limitation; retention and deleti"
+  },
+  {
+   "source": "docs/security/phase-18-threat-model.md",
+   "locator": "L295",
+   "token": "AC-094",
+   "editId": "phase-18-threat-model-append",
+   "disposition": "annotated",
+   "context": " owner requirements are integrated: the AC-094 interactive-path test, the named runtim"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L11",
+   "token": "exit 14",
+   "editId": "trace-D3",
+   "disposition": "rewritten-exit-18",
+   "context": "ed-action` (extended: static pre-flight exit 14 before launch); `neg-shard-token-file-r"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L12",
+   "token": "approved half",
+   "editId": "trace-D4",
+   "disposition": "rewritten-exit-18",
+   "context": " non-frozen --case value)`, and `AC-051 approved half (OWNER-12: the former AC-051 approved h"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L12",
+   "token": "approved half",
+   "editId": "trace-D4",
+   "disposition": "rewritten-exit-18",
+   "context": "roved half (OWNER-12: the former AC-051 approved half is now the fixture-only internal eviden"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L12",
+   "token": "approved half",
+   "editId": "trace-D4",
+   "disposition": "rewritten-exit-18",
+   "context": "stated under R-8. OWNER-13: the former \"approved half\" test is deferred with the approval mac"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L12",
+   "token": "tests-only executable",
+   "editId": "trace-D4",
+   "disposition": "rewritten-exit-18",
+   "context": "lus a direct workflow invocation of the tests-only executable and a non-frozen --case value)`, and `A"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L12",
+   "token": "tests-only executable",
+   "editId": "trace-D4",
+   "disposition": "rewritten-exit-18",
+   "context": "ion gate: in-process injection plus the tests-only executable for exit 0 and exit 14`. OD-24-Q1 resol"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L12",
+   "token": "exit 14",
+   "editId": "trace-D4",
+   "disposition": "rewritten-exit-18",
+   "context": "umption against a non-loopback origin \u2192 exit 14 fixture_approval_non_loopback; proxy pr"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L12",
+   "token": "exit 14",
+   "editId": "trace-D4",
+   "disposition": "rewritten-exit-18",
+   "context": "resent \u2192 exit 18; serialised approval \u2192 exit 14 fixture_approval_not_live; second resol"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L12",
+   "token": "exit 14",
+   "editId": "trace-D4",
+   "disposition": "rewritten-exit-18",
+   "context": "he tests-only executable for exit 0 and exit 14`. OD-24-Q1 resolved by OWNER-09; mintFi"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L12",
+   "token": "AC-094",
+   "editId": "trace-D4",
+   "disposition": "rewritten-exit-18",
+   "context": "t 1 with the run/ digest set unchanged; AC-094 (new); the named runtime cases L1-L16 ("
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L12",
+   "token": "AC-094",
+   "editId": "trace-D4",
+   "disposition": "rewritten-exit-18",
+   "context": " under piped stdio and under a pty; the AC-094 interactive-path pty test with its seve"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L12",
+   "token": "pty",
+   "editId": "trace-D4",
+   "disposition": "rewritten-exit-18",
+   "context": "a-9c each under piped stdio and under a pty; the AC-094 interactive-path pty test w"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L12",
+   "token": "pty",
+   "editId": "trace-D4",
+   "disposition": "rewritten-exit-18",
+   "context": "nder a pty; the AC-094 interactive-path pty test with its seven inversions`. Note a"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L13",
+   "token": "approvals root",
+   "editId": "trace-D5",
+   "disposition": "deferred-18P",
+   "context": "run per root, plus a case asserting the approvals root refuses a tmpfs id that the auth root a"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L13",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "trace-D5",
+   "disposition": "deferred-18P",
+   "context": "ed per root; missing approval history \u2192 APPROVAL_REQUIRED exit 14 with no reconstruction from any"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L13",
+   "token": "exit 14",
+   "editId": "trace-D5",
+   "disposition": "deferred-18P",
+   "context": "ng approval history \u2192 APPROVAL_REQUIRED exit 14 with no reconstruction from any source,"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L13",
+   "token": "exit 14",
+   "editId": "trace-D5",
+   "disposition": "deferred-18P",
+   "context": "m 3): root ENOENT or no ledger object \u2192 exit 14 with a genesis entry on fresh initialis"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L13",
+   "token": "pty",
+   "editId": "trace-D5",
+   "disposition": "deferred-18P",
+   "context": "realpath and lstat both ENOENT, or an empty root; a dangling symlink is exit 18 app"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L13",
+   "token": "pty",
+   "editId": "trace-D5",
+   "disposition": "deferred-18P",
+   "context": "exit 18 approvals_root_symlink; a non-empty root with no verifiable chain, includin"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L46",
+   "token": "approved half",
+   "editId": "trace-flag-1",
+   "disposition": "moot",
+   "context": "1. **D4 makes AC-051's approved half untestable in CI under a strict reading"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L50",
+   "token": "exit 14",
+   "editId": "trace-flag-5",
+   "disposition": "moot",
+   "context": "5. **D3's exit 14 plus D10's accepted \"exit 14 may outran"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L50",
+   "token": "exit 14",
+   "editId": "trace-flag-5",
+   "disposition": "moot",
+   "context": "5. **D3's exit 14 plus D10's accepted \"exit 14 may outrank ordinary failure\"** means a"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L62",
+   "token": "approve-action",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "ture approval refuses a launch proxy; --approve-action also requires a TTY. The environment-va"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L64",
+   "token": "APPROVAL_MISMATCH",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "y atomically before dispatch, refusing `APPROVAL_MISMATCH` (`heal_changed_classified_element`, ex"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L64",
+   "token": "exit 14",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "CH` (`heal_changed_classified_element`, exit 14) | 18B | `neg-c02-no-lowering` addition"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L64",
+   "token": "exit 14",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": " the actionability wait is refused with exit 14 and zero requests; inversion removes th"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L72",
+   "token": "approvals root",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "r-root admission; tmpfs refused for the approvals root). "
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L75",
+   "token": "tests-only executable",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "- Flagged item 11: The tests-only executable is not named by any package script, but"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L89",
+   "token": "ApprovalStore",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "use a test may legitimately open a real ApprovalStore at a temporary root. The closure depend"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L89",
+   "token": "ApprovalStore",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "ry root. The closure depends equally on ApprovalStore having no writer and on the ledger writ"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L98",
+   "token": "pty",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": " must run under piped stdio and under a pty | 18D | cases 9a, 9b, 9c of rev 12 sect"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L101",
+   "token": "pty",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "quire realpath and lstat ENOENT or an empty root; a dangling symlink is exit 18; an"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L124",
+   "token": "exit 14",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": ", build, run token), one per sub-case | exit 14 each | relax one compare \u2192 that sub-cas"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L126",
+   "token": "exit 14",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": " gate presented an unbranded approval | exit 14 `fixture_approval_in_production_runtime"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L127",
+   "token": "pty",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "9c **each under piped stdio and under a pty** | refusals as named; no ledger entry;"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L134",
+   "token": "exit 14",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "| F1 | plain duck-typed server | exit 14 `fixture_approval_server_untrusted` | "
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L139",
+   "token": "exit 14",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": " of the approval | no `WeakMap` entry \u2192 exit 14 `fixture_approval_not_live` | "
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L141",
+   "token": "exit 14",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": ".0.0.0` bind; `::ffff:127.0.0.1` bind | exit 14 `fixture_approval_non_loopback` | "
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L142",
+   "token": "exit 14",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "ng to `127.0.0.1`) admitted; all others exit 14 | "
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L144",
+   "token": "exit 14",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "ing and lease triple | value unchanged; exit 14 | "
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L145",
+   "token": "exit 14",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "(closes SEC-11's UNVERIFIED (a) item) | exit 14 each | "
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L150",
+   "token": "approve-action",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "o workflow reaches an approve flag, the approve-action module, a token key, a token file or an"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L151",
+   "token": "AC-094",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "strict\".` **New item 18**: `Running the AC-094 pty test in CI would make an approve fl"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L151",
+   "token": "pty",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": ".` **New item 18**: `Running the AC-094 pty test in CI would make an approve flag w"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L164",
+   "token": "pty",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "h shows POST converted to GET with an empty body). Corrected in rev 13 section 7g.0"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L174",
+   "token": "approve-action",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": " 6b.2(1) as \"not reachable by require\"; approve-action.js must itself run the literal-argv all"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L174",
+   "token": "approve-action",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": " 18F walker must treat any reference to approve-action.js, any vm or Module.wrap use on it, or"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L176",
+   "token": "approvals root",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "I or GITHUB_ACTIONS set; it refuses any approvals root not under the os.tmpdir() root the test"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L176",
+   "token": "AC-094",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "elper with CI=true throws | 18D / 18F | AC-094 as amended: the AC-084 walker reachabil"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L176",
+   "token": "pty",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "ils if any CI-reachable module requires pty-approve.cjs; add a CI case that requiri"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L176",
+   "token": "pty",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "`tests/pilot/manual/**` and the string `pty-approve`; the tmpdir-root refusal; the "
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L230",
+   "token": "exit 14",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "PILOT_INTERNAL_ERROR exit 18 and not as exit 14 | "
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L244",
+   "token": "exit 14",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": " `ServerResponse.prototype` and expects exit 14; F25 on `OutgoingMessage.prototype.end`"
+  },
+  {
+   "source": "docs/phase-18-decision-traceability.md",
+   "locator": "L268",
+   "token": "tests-only executable",
+   "editId": "phase-18-decision-traceability-append",
+   "disposition": "annotated",
+   "context": "ng a protected action and D4 required a tests-only executable reaching exit 0, together implying a pr"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L3",
+   "token": "AC-094",
+   "editId": "phase-18-owner-decisions-append",
+   "disposition": "annotated",
+   "context": "integrates four owner requirements (the AC-094 interactive-path test, the named runtim"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L3",
+   "token": "pty",
+   "editId": "phase-18-owner-decisions-append",
+   "disposition": "annotated",
+   "context": "without requesting a decision: R-9 (the pty test is local/manual because CI would f"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L30",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "phase-18-owner-decisions-append",
+   "disposition": "annotated",
+   "context": "e or approval-bearing) step is refused `APPROVAL_REQUIRED` (exit 14) in a shard, and a run token "
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L30",
+   "token": "exit 14",
+   "editId": "phase-18-owner-decisions-append",
+   "disposition": "annotated",
+   "context": "g) step is refused `APPROVAL_REQUIRED` (exit 14) in a shard, and a run token present in"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L40",
+   "token": "approver",
+   "editId": "phase-18-owner-decisions-append",
+   "disposition": "annotated",
+   "context": " not an authentication of a person (the approver string is a non-secret run-scoped label"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L41",
+   "token": "approver",
+   "editId": "phase-18-owner-decisions-append",
+   "disposition": "annotated",
+   "context": "hey run only interactively with a human approver. "
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L74",
+   "token": "approver",
+   "editId": "phase-18-owner-decisions-append",
+   "disposition": "annotated",
+   "context": "the token TTL and wall-clock trust. The approver string is not authentication. "
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L82",
+   "token": "approvals root",
+   "editId": "phase-18-owner-decisions-append",
+   "disposition": "annotated",
+   "context": "11. **Mixing builds against one approvals root.** "
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L96",
+   "token": "ApprovalStore",
+   "editId": "od-residual-24",
+   "disposition": "annotated",
+   "context": " executing in the Falcon process before ApprovalStore's first statement, and that it is reach"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L98",
+   "token": "ledger approval",
+   "editId": "od-residual-25-and-25a",
+   "disposition": "deferred-18P",
+   "context": "2 item 4).** The only path to a branded ledger approval is an interactive approval at a real te"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L98",
+   "token": "pty",
+   "editId": "od-residual-25-and-25a",
+   "disposition": "deferred-18P",
+   "context": "o types it, or an actor who allocates a pty in a child process, is an approver by d"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L98",
+   "token": "approver",
+   "editId": "od-residual-25-and-25a",
+   "disposition": "deferred-18P",
+   "context": "locates a pty in a child process, is an approver by definition \u2014 the same residual alrea"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L100",
+   "token": "exit 14",
+   "editId": "od-residual-26",
+   "disposition": "deferred-18P",
+   "context": " gate refuses every unbranded approval (exit 14), so the fixture branch is never evalua"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L118",
+   "token": "exit 14",
+   "editId": "phase-18-owner-decisions-append",
+   "disposition": "annotated",
+   "context": "ation and bounded claims); residual 15 (exit 14 may outrank an ordinary failure), which"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L124",
+   "token": "ApprovalStore",
+   "editId": "phase-18-owner-decisions-append",
+   "disposition": "annotated",
+   "context": "CLI option or production mint function; ApprovalStore.mintFixtureScoped and FALCON_PILOT_TEST"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L124",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "phase-18-owner-decisions-append",
+   "disposition": "annotated",
+   "context": "closed, missing approval history yields APPROVAL_REQUIRED and restores trust from nothing, operat"
+  },
+  {
+   "source": "docs/phase-18-owner-decisions.md",
+   "locator": "L175",
+   "token": "AC-094",
+   "editId": "od-R-9-body",
+   "disposition": "moot",
+   "context": "2 from awareness). The positive half of AC-094 is automated but not CI-gated, so a reg"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L52",
+   "token": "ApprovalStore",
+   "editId": "arch-tree-approval-dir",
+   "disposition": "deferred-18P",
+   "context": "  approval/ApprovalStore.js  durable store, exclusive consume ma"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L53",
+   "token": "ApprovalRecord",
+   "editId": "arch-tree-approval-dir",
+   "disposition": "deferred-18P",
+   "context": "  approval/ApprovalRecord.js record shape and binding "
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L55",
+   "token": "RunToken",
+   "editId": "arch-tree-runtoken",
+   "disposition": "deferred-18P",
+   "context": "  approval/RunToken.js       minted runId+nonce, used-runId"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L141",
+   "token": "ApprovalStore",
+   "editId": "arch-approvalstore-api",
+   "disposition": "deferred-18P",
+   "context": "// ApprovalStore.js "
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L143",
+   "token": "approver",
+   "editId": "arch-approvalstore-api",
+   "disposition": "deferred-18P",
+   "context": "sync function propose(store, binding, { approver })   // -> { approvalId, state: \"propos"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L144",
+   "token": "approver",
+   "editId": "arch-approvalstore-api",
+   "disposition": "deferred-18P",
+   "context": "n decide(store, approvalId, decision, { approver }) "
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L145",
+   "token": "RunToken",
+   "editId": "arch-mintruntoken",
+   "disposition": "deferred-18P",
+   "context": "async function mintRunToken(store, approvalId)    // -> { runId, no"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L150",
+   "token": "RunToken",
+   "editId": "arch-runtoken-api",
+   "disposition": "deferred-18P",
+   "context": "// RunToken.js "
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L183",
+   "token": "pty",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "\"on-failure\"` screenshots require non-empty `maskSelectors` **and** non-empty `scre"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L183",
+   "token": "pty",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "non-empty `maskSelectors` **and** non-empty `screenshotRoutes`, else `MANIFEST_INVA"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L184",
+   "token": "pty",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "e named env var must exist and be non-empty at manifest load, else `AUTH_LOGIN_FAIL"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L202",
+   "token": "APPROVAL_MISMATCH",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "d the TTL. Fail: `APPROVAL_REQUIRED` / `APPROVAL_MISMATCH` / `APPROVAL_STALE` / `APPROVAL_REPLAYE"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L202",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "n token (section 9) and the TTL. Fail: `APPROVAL_REQUIRED` / `APPROVAL_MISMATCH` / `APPROVAL_STAL"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L207",
+   "token": "ApprovalStore",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "d dispatch** \u2014 for a protected action, `ApprovalStore.consume` succeeds durably first (sectio"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L307",
+   "token": "approve-action",
+   "editId": "arch-307-approve-cli",
+   "disposition": "deferred-18P",
+   "context": "1. `falcon.js --approve-action=<actionId> --plan=<file> --pilot-manife"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L307",
+   "token": "RunToken",
+   "editId": "arch-307-approve-cli",
+   "disposition": "deferred-18P",
+   "context": " in one CLI invocation, then calls `mintRunToken`, which generates `runId` (128-bit) and"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L307",
+   "token": "approver",
+   "editId": "arch-307-approve-cli",
+   "disposition": "deferred-18P",
+   "context": "--plan=<file> --pilot-manifest=<file> --approver=<name>` proposes and decides in one CLI"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L308",
+   "token": "PILOT_APPROVAL",
+   "editId": "arch-308-token-transport",
+   "disposition": "deferred-18P",
+   "context": "pproval-run-token=<runId>.<nonce>` (or `PILOT_APPROVAL_RUN_TOKEN`). The run adopts `runId` as "
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L309",
+   "token": "RunToken",
+   "editId": "arch-309-claim",
+   "disposition": "deferred-18P",
+   "context": "3. At first use, `RunToken.claim` creates `run/approvals/runtokens"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L320",
+   "token": "approver",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "it entry shape.** `{ seq, timestampIso, approver, approvalId, bindingId, planDigest, act"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L322",
+   "token": "approvals root",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "AMPERED` with zero clicks (AC-058). The approvals root is fixed by `PilotRoots` and is **not**"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L324",
+   "token": "approver",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "ind the existing token gate, returning `approver`, `decision`, `approvalId`, `bindingId`"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L371",
+   "token": "approver",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "puted first, and the review record is `{approver, planDigest, reviewedAt}` with no path "
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L392",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": " protected action with no record | \u2014 | `APPROVAL_REQUIRED` (AC-052) | "
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L395",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": " proposed | decide reject | rejected | `APPROVAL_REQUIRED` at use | "
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L397",
+   "token": "APPROVAL_MISMATCH",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "smatch (any of the eight fields) | \u2014 | `APPROVAL_MISMATCH` | "
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L418",
+   "token": "APPROVAL_MISMATCH",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "| `APPROVAL_REQUIRED`, `APPROVAL_MISMATCH`, `APPROVAL_STALE`, `APPROVAL_REPLAYED`"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L418",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "| `APPROVAL_REQUIRED`, `APPROVAL_MISMATCH`, `APPROVAL_STALE`"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L443",
+   "token": "ApprovalStore",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "| ApprovalStore | unreadable, tampered, non-local FS, o"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L464",
+   "token": "pty",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "h), directories are removed only when empty, and nothing outside `PilotRoots` is ev"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L492",
+   "token": "approvals root",
+   "editId": "arch-adr-0031",
+   "disposition": "deferred-18P",
+   "context": "teria hold unchanged. Consequences: the approvals root must be on a local POSIX filesystem (ch"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L495",
+   "token": "APPROVAL_REQUIRED",
+   "editId": "arch-adr-0032",
+   "disposition": "deferred-18P",
+   "context": "n-scoped approval, but a run that hits `APPROVAL_REQUIRED` exits 14 and a later run has a differe"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L542",
+   "token": "ApprovalStore",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "| 032 | PlanDigest drift at step 11 + ApprovalStore invalidation | R | "
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L561",
+   "token": "ApprovalStore",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "| 051 | ApprovalStore + run token + CSRF fixture + armed Netw"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L564",
+   "token": "ApprovalStore",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "| 054 | ApprovalStore staleness | U, R | "
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L565",
+   "token": "ApprovalStore",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "| 055 | ApprovalStore durable exclusive consumption across re"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L566",
+   "token": "ApprovalStore",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "| 056 | ApprovalStore lookup | U | "
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L594",
+   "token": "RunToken",
+   "editId": "arch-594-components",
+   "disposition": "deferred-18P",
+   "context": "kGate`, `RouteMatch`, `BuildIdentity`, `RunToken`, `SecretRegistry`, audit anchors, `pla"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L615",
+   "token": "ApprovalStore",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "`Manifest.load`, v2 `PlanFile` reader, `ApprovalStore.open`): symlink, symlinked parent compo"
+  },
+  {
+   "source": "docs/architecture/phase-18-authenticated-pilots.md",
+   "locator": "L635",
+   "token": "approvals root",
+   "editId": "phase-18-authenticated-pilots-append",
+   "disposition": "annotated",
+   "context": "-dir`/env/manifest attempts to move the approvals root are rejected (the flag does not exist; "
+  }
+ ],
+ "coverageSummary": {
+  "totalHits": 258,
+  "byDisposition": {
+   "annotated": 86,
+   "deferred-18P": 108,
+   "moot": 35,
+   "rewritten-exit-18": 29
+  },
+  "unclassified": 0,
+  "note": "Any editId of UNCLASSIFIED-flagged is a criterion the rev 18 edit set does not cover and the coordinator must route back to the architect or Security before applying."
+ }
+}
