@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "phase": 18,
   "status": "DRAFT",
-  "designRevision": "fbb1712 (architecture rev 2 plus rev 3..rev 9 patches)",
+  "designRevision": "8d63628 (architecture rev 2 plus rev 3..rev 10 patches)",
   "baseline": "2572e73",
   "source": "docs/research/phase-18/proposed-scope-and-criteria.md",
   "ownerApproval": "Scope, 82 criteria and claims policy approved by the owner at 99bd7c5 subject to decisions OD-01..OD-19; see the production-cycle ledger; owner decisions OWNER-01..OWNER-07 recorded at 3741d42 (BLOCKER-1, OD-17-Q1, OD-20..OD-24, residual disposition) approve policy direction only and authorise no implementation, merge, tag or publication",
@@ -25,7 +25,7 @@
     {
       "id": "SPIKE-R",
       "ref": "architecture section 7 and rev 9 m-22",
-      "state": "redirect-hop behaviour unverified; route.fetch({maxRedirects:0}) fallback mandated; now also gates the four lease redirect-hop rules; 18C merge condition"
+      "state": "redirect-hop behaviour unverified; must verify real Chromium behaviour for 301, 302, 303, 307 and 308 — whether the route handler observes each hop, what method each hop actually carries, whether the body survives, and whether route.fetch({maxRedirects:0}) is required; gates the method-based redirect continuation rules of rev 10 section 4d.2; 18B and 18C merge condition and a GO gate for those rules"
     },
     {
       "id": "SPIKE-W",
@@ -65,17 +65,22 @@
     {
       "id": "OD-24-Q1",
       "ref": "rev 8 section 2d",
-      "state": "owner must choose: (a) narrow reading plus the rev 9 section 3b.2 code-enforced fixture-capability boundary (no Must amended; architect recommendation), or (b) strict reading, which makes P18-AC-051's approved half local-only and requires the owner to amend P18-AC-074 to exempt one named test"
+      "state": "RESOLVED by owner decision OWNER-09: accepted as a strictly fixture-scoped test approval. CI tests the approved path only through a per-process, per-run, in-memory fixture approval authority that is injected into PilotApprovalResolver by the test harness, lives under tests/, is absent from every production require graph, derives a loopback-literal origin from a server it created itself, and has no filesystem module in its require graph. No environment variable, CLI option or production mint function enables it; ApprovalStore.mintFixtureScoped is withdrawn. AC-051 stays fully tested in CI and AC-074 is unchanged (rev 10 section 4a)."
     },
     {
       "id": "OD-20-Q1",
       "ref": "rev 8 section 2d",
-      "state": "tmpfs for approvalsRoot: fsync is not durable on tmpfs; recommend authRoot/plansRoot only unless the owner accepts loss of audit history on reboot; if accepted, admission becomes per root (tmpfs permitted for auth and plans, refused for approvals) and AC-085 states this"
+      "state": "RESOLVED by owner decision OWNER-11: filesystem admission is evaluated per root; tmpfs may be admitted for the ephemeral run/auth and run/plans roots after the required behavioural checks and is REFUSED for run/approvals (exit 18, approvals_root_not_durable); zfs stays conditional on SPIKE-FS evidence; unknown ids fail closed on every root; a missing approval history yields APPROVAL_REQUIRED and trust is never restored from another source, while a present-but-unverifiable history stays exit 18; the operator guide must explain why the approval root requires durable storage (rev 10 section 4c)."
     },
     {
       "id": "H-1",
       "ref": "rev 9 section 3a.4",
       "state": "WebSocket frames and service-worker-originated requests are not reliably interceptable; preventive addInitScript ships regardless; documented residual, not a control"
+    },
+    {
+      "id": "OWNER-10-RESIDUAL",
+      "ref": "rev 10 section 4b and threat-model section 6 item 20",
+      "state": "accepted by the owner as a documented repository-trust limitation: the fixture boundary confines production code and workflow accidents, not an author who can modify repository code, tests or workflows; the controls for that actor are code review, protected branches and repository write governance, which Falcon does not verify; a recommended CODEOWNERS is documented, not claimed as enforced; any path from the fixture authority to an arbitrary target or to persisted approval state within the unmodified repository is a BLOCKER"
     }
   ],
   "exitCodes": {
@@ -91,8 +96,8 @@
     "planInvalid": 2
   },
   "counts": {
-    "total": 91,
-    "must": 82,
+    "total": 92,
+    "must": 83,
     "should": 6,
     "could": 3
   },
@@ -502,7 +507,7 @@
       "priority": "Must",
       "pr": "18D",
       "requirement": "CSRF-protected form: approved protected submit succeeds with in-run token, token absent from artifacts; unapproved: zero POSTs",
-      "components": "ApprovalStore + run token + CSRF fixture + armed NetworkGate; in shard mode every protected step is refused APPROVAL_REQUIRED exit 14 so the zero-POST half holds by refusal (D3); in CI there is no approve step and a protected action is refused exit 14 (D4); the approved half is proven through a fixture-scoped, in-memory-only approval that mints only in a process running a registered loopback-literal fixture server with a per-run in-memory capability, is consumable only for that origin, creates no run/approvals path, and additionally requires the dedicated test-runner flag when CI=true (rev 9 section 3b.2); subject to OD-24-Q1",
+      "components": "ApprovalStore + run token + CSRF fixture + armed NetworkGate; in shard mode every protected step is refused APPROVAL_REQUIRED exit 14 so the zero-POST half holds by refusal (D3); in CI there is no approve step and a protected action is refused exit 14 (D4); the approved half is proven in CI twice: in-process, by injecting a tests-only FixtureApprovalAuthority into PilotApprovalResolver (the authority is constructible only from a live loopback-literal server object it created in this process plus that server's per-run in-memory capability, derives its origin rather than accepting one, has no filesystem module in its require graph, and is absent from every production require graph), and through a tests-only executable that accepts only a frozen case id for the exit-code path; no run/approvals path, file, audit entry, run-token file or receipt is created, and no environment variable or CLI option enables any of it (rev 10 section 4a; OD-24-Q1 resolved by OWNER-09)",
       "verification": "R"
     },
     {
@@ -686,7 +691,7 @@
       "priority": "Must",
       "pr": "18F",
       "requirement": "Phase 18 matrix on Node 24 CI has zero skipped or expected-fail tests; a skip fails the job",
-      "components": "CI job: skip or expected-fail fails the job; a pilot job whose fixture plan contains a protected step asserts exit 14 as its expected outcome and is never skipped",
+      "components": "CI job: skip or expected-fail fails the job; a pilot job whose fixture plan contains a protected step asserts exit 14 as its expected outcome and is never skipped; the AC-051 approved half runs inside the normal regression gate on Node 24 — in-process plus a tests-only executable for the exit codes — and is neither skipped nor expected-fail, so OWNER-09 amends nothing here",
       "verification": "I, S"
     },
     {
@@ -734,7 +739,7 @@
       "priority": "Must",
       "pr": "DOC",
       "requirement": "New `.env.example` keys are genuinely blank",
-      "components": "`.env.example` blank-value check; FALCON_PILOT_TEST_RUNNER is also asserted absent from .env.example",
+      "components": "`.env.example` blank-value check; no approval-enabling key exists to document — the check asserts that no FALCON_PILOT_*APPROV* or test-approval key appears in .env.example, in any workflow env block or in any package.json script (FALCON_PILOT_TEST_RUNNER is withdrawn, rev 10 section 4a)",
       "verification": "S"
     },
     {
@@ -765,24 +770,24 @@
       "id": "P18-AC-084",
       "priority": "Must",
       "pr": "18F",
-      "requirement": "No workflow contains an approve step, approve flag, run-token env key, token file or approvals path; a protected action reached in CI is refused APPROVAL_REQUIRED exit 14; the static check resolves npm/yarn/npx script indirection and node/bash invocations transitively with cycle detection, walks static require graphs, fails on any reachable approve flag, token key, approvals path or approval-module import outside src/core/pilot/ and tests/, and fails closed on any command it cannot statically resolve",
-      "components": "static ci.yml check over every job + CI pilot job expected-exit assertion (OD-24, ADR-0041)",
+      "requirement": "No workflow contains an approve step, approve flag, run-token env key, token file or approvals path; a protected action reached in CI is refused APPROVAL_REQUIRED exit 14; the static check resolves npm/yarn/npx script indirection and node/bash invocations transitively with cycle detection, walks static require graphs, fails on any reachable approve flag, token key, approvals path or approval-module import outside src/core/pilot/ and tests/, and fails closed on any command it cannot statically resolve; it additionally fails on any require of a tests/ path from src/ or scripts/ and on any workflow invocation of a tests-only executable outside the test gate. This static check is defence in depth: the primary control is the structural fixture boundary of rev 10 section 4a (no production require path to the approval authority, no enabling environment variable, no production mint function)",
+      "components": "static ci.yml check over every job + CI pilot job expected-exit assertion (OD-24, ADR-0041); FALCON_PILOT_TEST_RUNNER is withdrawn and must not reappear",
       "verification": "S, R"
     },
     {
       "id": "P18-AC-085",
       "priority": "Must",
       "pr": "18E",
-      "requirement": "Filesystem admission is numeric and evidence-gated: tmpfs and zfs only with a recorded statfs id and passing O_EXCL, rename and fsync behaviour tests; overlayfs, virtiofs, drvfs and every unrecorded id are refused PILOT_INTERNAL_ERROR exit 18 with an actionable message naming the observed id and path, never a skip; admission is evaluated per root (auth, plans, approvals) against a per-root admitted-id set, and no id is admissible from a kernel header or documentation — only an observed, committed value",
-      "components": "SafeFs.assertLocalFilesystem + SPIKE-FS evidence table + filesystem behaviour tests (OD-20, ADR-0030 amended)",
+      "requirement": "Filesystem admission is numeric and evidence-gated: tmpfs and zfs only with a recorded statfs id and passing O_EXCL, rename and fsync behaviour tests; overlayfs, virtiofs, drvfs and every unrecorded id are refused PILOT_INTERNAL_ERROR exit 18 with an actionable message naming the observed id and path, never a skip; admission is evaluated per root against a per-root admitted-id set: tmpfs may be admitted for run/auth and run/plans after the behaviour checks and is refused for run/approvals (exit 18, reason approvals_root_not_durable), zfs stays conditional on SPIKE-FS evidence, unknown ids fail closed on every root, and no id is admissible from a kernel header, documentation or reviewer knowledge — only an observed, committed value. A missing approval history yields APPROVAL_REQUIRED exit 14 and is never reconstructed from a receipt, bundle, report, cache, environment variable or second root; a present but unverifiable history stays PILOT_INTERNAL_ERROR exit 18",
+      "components": "SafeFs.assertLocalFilesystem + SPIKE-FS evidence table + filesystem behaviour tests (OD-20, ADR-0030 amended); rootKind column in the compatibility matrix; operator guide states why the approval root must be durable (OD-20-Q1 resolved by OWNER-11)",
       "verification": "U, S, I"
     },
     {
       "id": "P18-AC-086",
       "priority": "Must",
       "pr": "18D",
-      "requirement": "Arming window defaults to 2000 ms with a hard maximum of 10000 ms and a minimum of 250 ms; any out-of-range, non-integer or non-numeric value is a configuration error refused before browser launch; one lease authorises exactly one protected-action attempt, is never refreshed or extended, and expiry fails closed",
-      "components": "PilotActionGate.arm + window validation at manifest load and flag parse (OD-22, ADR-0042)",
+      "requirement": "Arming window defaults to 2000 ms with a hard maximum of 10000 ms and a minimum of 250 ms; any out-of-range, non-integer or non-numeric value is a configuration error refused before browser launch; one lease authorises exactly one protected-action attempt, is never refreshed or extended, and expiry fails closed; the first matching protected request consumes the lease and redirect continuation is part of that consumed attempt, minting and refreshing nothing: every hop is evaluated against the method actually observed on that hop and never inferred from the status code, a hop preserving a non-GET method must stay on the approved normalised origin, path and method (307/308 included), a hop observed to become GET is evaluated under ordinary GET route and origin policy and is never assumed side-effect-free, and expiry, ambiguity, an unobservable method, cross-origin movement, an unexpected path change or a method mismatch aborts the chain; every hop stays under the redirect cap and the chain under windowMs + 5000 ms with an absolute maximum of 30000 ms",
+      "components": "PilotActionGate.arm + window validation at manifest load and flag parse (OD-22, ADR-0042); redirect continuation rules (rev 10 section 4d.2, ADR-0042 amended, OD-22-Q1 and OD-22-Q2 resolved by OWNER-11); rules 2-6 receive no GO before SPIKE-R reports Chromium behaviour for 301, 302, 303, 307 and 308",
       "verification": "U, R"
     },
     {
@@ -813,8 +818,8 @@
       "id": "P18-AC-090",
       "priority": "Must",
       "pr": "18D",
-      "requirement": "A fixture-scoped approval mints only in a process holding a live registered loopback-literal fixture server with a matching per-run in-memory capability and a loopback-only manifest, additionally requires FALCON_PILOT_TEST_RUNNER=1 and a tests/ entry point when CI or GITHUB_ACTIONS is true, is held only in memory with no run/approvals path, file, audit chain or receipt created, and is refused at consumption for any non-loopback destination (APPROVAL_REQUIRED exit 14, reason fixture_approval_non_loopback); --approve-action and --emit-token-to refuse exit 1 in CI",
-      "components": "ApprovalStore.mintFixtureScoped + FixtureServer in-module registry + gate.perform scope re-check (rev 9 section 3b.2, ADR-0044)",
+      "requirement": "The fixture approval authority is structurally unavailable to production: it lives under tests/, no file under src/, scripts/, falcon.js, package.json or any workflow requires it, the ApprovalStore constructor accepts no authority, source, mint callback or test hook, PilotRuntime constructs exactly one frozen ledger source and refuses any non-ledger source (PILOT_INTERNAL_ERROR exit 18), and no environment variable, CLI option, config key, manifest field or argv path adds a source. The authority is constructible only from a live net.Server object created by the tests-only pilot fixture server in this process plus that server's per-run 32-byte in-memory capability (timing-safe compared, never serialised, logged or exported); it accepts no host, port, origin or URL and derives the origin from server.address(), requiring an IPv4 127.0.0.1 or IPv6 ::1 literal and a listening server at construction and on every resolve; it requires a manifest all of whose route origins are that same loopback origin; it serves only the fixed fixture app with no handler, upstream or proxy option, and a pilot context resolving a fixture approval refuses any browser proxy setting (exit 18); it resolves at most once per binding and a serialised copy is refused (exit 14, fixture_approval_not_live). Consumption is re-checked in production code at gate.perform and any non-loopback destination is refused APPROVAL_REQUIRED exit 14, reason fixture_approval_non_loopback. ApprovalStore.mintFixtureScoped and FALCON_PILOT_TEST_RUNNER are withdrawn; --approve-action and --emit-token-to still refuse exit 1 in CI and --approve-action requires a TTY, both as accident guards only.",
+      "components": "PilotApprovalResolver injection seam + tests/pilot/approval/FixtureApprovalAuthority + tests/pilot/fixtures/PilotFixtureServer + tests/pilot/bin/approved-fixture-case.cjs + PilotActionGate consumption re-check (rev 10 section 4a, ADR-0044 accepted-with-owner-decision, OWNER-09)",
       "verification": "U, R, S"
     },
     {
@@ -824,6 +829,14 @@
       "requirement": "The execute-mode network gate decides from method, origin, canonical path, page, frame, resource type, body-size class and the live lease only, and never from a classification, plan row, action record or provider verdict; every unarmed non-GET and every GET to a non-allowed route is aborted regardless of originator, including fetch, XMLHttpRequest, sendBeacon, form.requestSubmit, implicit Enter submission and a dynamically injected form, proven with a deliberately wrong permitted classification on the triggering control",
       "components": "NetworkGate independence (section 7a rule 3a) + neg-n1-script-dispatch; WebSocket and service-worker paths are documented residual H-1",
       "verification": "U, R"
+    },
+    {
+      "id": "P18-AC-092",
+      "priority": "Must",
+      "pr": "18D",
+      "requirement": "With the repository source unmodified and using only the public surface, the fixture approval authority cannot be made to target any non-loopback origin, cannot be pointed at a loopback server it did not create, cannot yield its per-run capability, and cannot cause any write under run/, data/ or the repository: the filesystem is byte-identical after the attempt suite, and the authority's transitive literal require graph contains no fs, fs/promises, SafeFs, ApprovalStore, AuditLog, RunToken or child_process module while no src/ or scripts/ file requires any tests/ path. Any demonstrated path to an arbitrary target or to persisted approval state is a blocker that stops 18D.",
+      "components": "neg-fixture-no-arbitrary-target + neg-fixture-require-graph (rev 10 sections 4a.3, 4a.6, 4b; OWNER-10)",
+      "verification": "U, R, S"
     }
   ]
 }
