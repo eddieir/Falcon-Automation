@@ -210,6 +210,8 @@ Legend — browser-followed redirects only, Chromium 1.64.0 / Playwright 1.64.0 
 
 ### 7g.3 Candidate mechanism **M1** (NEW; CANDIDATE, not a decision)
 
+> **Superseded and deferred by owner decision OWNER-12 (Option C):** no protected non-GET request reaches this mechanism in Phase 18; the text below is preserved unchanged as an input to the deferred item 18P-PROTECTED-NONGET and is not a Phase 18 requirement. See rev 16 sections 10a and 10b.
+
 **Statement of the mechanism as measured.** *Falcon performs the single approved request itself, with no redirect following, and returns a sanitized non-redirect response to the page.* Concretely, in the route handler at **hop 0** of a protected attempt: perform the request with redirects disabled; if the response status is 3xx, **discard it** and fulfil the page's request with `204 No Content` and no `Location`; otherwise fulfil with the response as received. No hop after 0 is ever performed, replayed, reconstructed or followed.
 
 **Measured result.** 16 of 16 sanitized cells: **exactly one server transmission** of the protected request and **no landing request**; the page observed 204; `Cookie`, `Origin`, `Referer`, a custom CSRF-style header, `content-type` and the form/JSON body were present on that single transmission only (Q25).
@@ -236,6 +238,8 @@ Legend — browser-followed redirects only, Chromium 1.64.0 / Playwright 1.64.0 
    - **Service-worker message-port fetches** and `route` re-registration races (part 2 "not covered").
 
 ### 7g.4 R-7 — smallest safe scope options, presented and **NOT chosen** (NEW; input to the owner item)
+
+> **Superseded and deferred by owner decision OWNER-12 (Option C):** no protected non-GET request reaches this mechanism in Phase 18; the text below is preserved unchanged as an input to the deferred item 18P-PROTECTED-NONGET and is not a Phase 18 requirement. See rev 16 sections 10a and 10b.
 
 R-7 is an OWNER item. Rev 13 presents three bounded options with their consequences and selects none.
 

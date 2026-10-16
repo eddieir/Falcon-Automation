@@ -24,6 +24,8 @@ Section numbering continues from rev 14: this patch is section **9**.
 
 ## 9a. M-18 — the origin gate keys on the request's initiator, its whole ancestor chain, and the top-level document (REPLACES rev 14 8a.1, 8a.2 and 8a.3 rows 1 to 4; AMENDS AC-086 and AC-096; NEW AC-097)
 
+> **Superseded and deferred by owner decision OWNER-12 (Option C):** no protected non-GET request reaches this mechanism in Phase 18; the text below is preserved unchanged as an input to the deferred item 18P-PROTECTED-NONGET and is not a Phase 18 requirement. See rev 16 sections 10a and 10b.
+
 SEC-14's finding is adopted in full and without qualification: **rev 14 8a.1's claims (1), (2), (4) and (5), the 8a.2 restatement, and the "No" verdicts on 8a.3 rows 1, 2 and 4 are false for a request initiated by a cross-origin frame** (U3). CORS and SameSite are computed from the initiator's origin and its ancestor chain, not from the top-level document's origin. Rev 14's gate was therefore a partial control written as an absolute. The architect defect is recorded in traceability (9f D, item 31) and the overstated sentences are WITHDRAWN at their sites under the m-25 prohibited-phrase mechanism, not softened.
 
 ### 9a.1 The rule, restated (normative; REPLACES rev 14 8a.1 in its entirety)
@@ -143,6 +145,8 @@ Both rows are also appended to the SPIKE-R `openItems` text (9f A2).
 ---
 
 ## 9e. R-7 — the three options re-presented with M-18 applied, and **NOT chosen**
+
+> **Superseded and deferred by owner decision OWNER-12 (Option C):** no protected non-GET request reaches this mechanism in Phase 18; the text below is preserved unchanged as an input to the deferred item 18P-PROTECTED-NONGET and is not a Phase 18 requirement. See rev 16 sections 10a and 10b.
 
 R-7 remains an **owner** item. SEC-14 blocks 18B and 18C while A' or B' is on the table **because M-18 was open**; rev 15 closes M-18 in the design, and whether that lifts the block is SEC-15's call, not the architecture's. Nothing below is a recommendation.
 
