@@ -38,7 +38,7 @@ Each of the four routes is caught by **exactly one** of the four new assertions 
 
 ## 8a. M-17 — origin equality is asserted before arming, for every routed protected request (REPLACES rev 13 7g.3's proposed 6j.1(7) amendment and its residual-difference list; AMENDS rev 13 7g.2 and 7g.4; AMENDS AC-086; NEW AC-096)
 
-> **Superseded and deferred by owner decision OWNER-12 (Option C):** no protected non-GET request reaches this mechanism in Phase 18; the text below is preserved unchanged as an input to the deferred item 18P-PROTECTED-NONGET and is not a Phase 18 requirement. See rev 16 sections 10a and 10b.
+> **Superseded and deferred by owner decision OWNER-12 (Option C):** no protected non-GET request reaches this mechanism in Phase 18; the text in the stated extent is preserved unchanged as an input to the deferred item 18P-PROTECTED-NONGET, is not a Phase 18 requirement, and nothing is deleted. **Extent: section 8a only. Sections 8b and 8c remain NORMATIVE (F18 to F23) except as re-scoped by rev 17 section 11d.7.** See rev 16 sections 10a and 10b and rev 17 section 11k.
 
 SEC-13's ruling is adopted in full: **M1 as specified in rev 13 7g.3 is not accepted, and the rev 13 narrowing of rev 12 6j.1(7) is not accepted as written.** The design-only closure SEC-13 described (remediation 1) is specified below. SEC-13's remediation 2 ("Option C") is an owner scope choice and is re-presented, not taken.
 

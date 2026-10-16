@@ -210,7 +210,7 @@ Legend — browser-followed redirects only, Chromium 1.64.0 / Playwright 1.64.0 
 
 ### 7g.3 Candidate mechanism **M1** (NEW; CANDIDATE, not a decision)
 
-> **Superseded and deferred by owner decision OWNER-12 (Option C):** no protected non-GET request reaches this mechanism in Phase 18; the text below is preserved unchanged as an input to the deferred item 18P-PROTECTED-NONGET and is not a Phase 18 requirement. See rev 16 sections 10a and 10b.
+> **Superseded and deferred by owner decision OWNER-12 (Option C):** no protected non-GET request reaches this mechanism in Phase 18; the text in the stated extent is preserved unchanged as an input to the deferred item 18P-PROTECTED-NONGET, is not a Phase 18 requirement, and nothing is deleted. **Extent: section 7g.3 only. Adjacent sections remain as marked.** See rev 16 sections 10a and 10b and rev 17 section 11k.
 
 **Statement of the mechanism as measured.** *Falcon performs the single approved request itself, with no redirect following, and returns a sanitized non-redirect response to the page.* Concretely, in the route handler at **hop 0** of a protected attempt: perform the request with redirects disabled; if the response status is 3xx, **discard it** and fulfil the page's request with `204 No Content` and no `Location`; otherwise fulfil with the response as received. No hop after 0 is ever performed, replayed, reconstructed or followed.
 
@@ -239,7 +239,7 @@ Legend — browser-followed redirects only, Chromium 1.64.0 / Playwright 1.64.0 
 
 ### 7g.4 R-7 — smallest safe scope options, presented and **NOT chosen** (NEW; input to the owner item)
 
-> **Superseded and deferred by owner decision OWNER-12 (Option C):** no protected non-GET request reaches this mechanism in Phase 18; the text below is preserved unchanged as an input to the deferred item 18P-PROTECTED-NONGET and is not a Phase 18 requirement. See rev 16 sections 10a and 10b.
+> **Superseded and deferred by owner decision OWNER-12 (Option C):** no protected non-GET request reaches this mechanism in Phase 18; the text in the stated extent is preserved unchanged as an input to the deferred item 18P-PROTECTED-NONGET, is not a Phase 18 requirement, and nothing is deleted. **Extent: section 7g.4 only. Adjacent sections remain as marked.** See rev 16 sections 10a and 10b and rev 17 section 11k.
 
 R-7 is an OWNER item. Rev 13 presents three bounded options with their consequences and selects none.
 
