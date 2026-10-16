@@ -233,3 +233,12 @@ Mandatory implementation conditions, not accepted residuals; no GO for an affect
 ### Named-test map extension
 
 Extends the rev 14 map: 18C-M17-5 to 18C-M17-9 (rev 15 section 9a.4), F24, F25 and F25b (section 9c), the F18 control (section 9b) and the amended F19 (section 9c.3), each with the inversion stated there.
+
+### SEC-15 conditions carried into the implementing PRs (design-review-14)
+
+Mandatory implementation conditions, not accepted residuals. SEC-15 reports zero blockers and zero majors on rev 15; these two minors are merge conditions, not further design revisions.
+
+| ID | Condition (SEC-15 wording preserved in design-review-14) | First PR | Observable test |
+|---|---|---|---|
+| m-51 | Rev 15 9c.2 requires "own data property of the named prototype" for ten methods but nine are inherited, so a genuine server would fail. Record each method's owning prototype and chain links at load; assert the owner's descriptor, no shadowing own property on intermediate prototypes, and unchanged chain links; add `_send`, `_writeRaw`, `_implicitHeader`; repoint F25b at a method outside the set; correct the R-8 residual text | 18D | genuine-server control passes; F25c plants a shadowing own `end` on `ServerResponse.prototype` and expects exit 14; F25 on `OutgoingMessage.prototype.end`; F25b outside the set |
+| m-52 | Chromium attributes a dedicated worker's requests to its owner main frame, so 18C-M17-7 as written fails. Restate: service worker refused, worker owned by a cross-origin iframe refused (add case, UNVERIFIED), same-origin main-frame worker arms; make Origin presence mandatory for non-GET/HEAD protected requests, read from `request.allHeaders()`; correct 6j.1(7) and 9a.3 wording so the URL-derived origin is a proxy and opaque origins are refused through `Origin: null` | 18C | 18C-M17-7 as restated; new 18C-M17-10 (CSP-sandboxed top document and data: worker each POSTing to the approved origin: refused, zero transmissions; inversion: drop the Origin rule and both must arm) |
