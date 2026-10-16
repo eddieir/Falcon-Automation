@@ -168,3 +168,6 @@ Coordinator note: the recommended defaults are the Product Owner's or the coordi
 ## Residual risks
 
 Application-derived text (an app displaying a token) cannot be guaranteed absent; it is handled by known-value redaction and documentation (AC-069). Screenshots can show secrets unless OD-05 is applied. Auth detection depends on manifest-declared markers; a poor declaration produces `AUTH_STATE_UNDETERMINED`, which is intended fail-closed behaviour. Criteria 010, 034, 042 and 049 depend on fixture oracles. PR #54's `--save-plan` has no digest, so 18B needs a migration note.
+
+
+> **Preserved design history (rev 17, OWNER-12/OWNER-13).** This research document describes an approved-protected-submit capability that Phase 18 does not ship. Protected state-changing actions are refused before transmission and the production approval path is deferred to 18P-PROTECTED-NONGET. Unshipped, non-normative for Phase 18.

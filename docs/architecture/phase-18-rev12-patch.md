@@ -64,6 +64,8 @@ Frozen writes are a **silent no-op** in sloppy CommonJS (P16). Every frozen-writ
 
 ## 6b. m-34 — the in-process writer REFUSES; it never prompts (REPLACES rev 11 5a.2 item 4 and 5a.5 case 9)
 
+> **DEFERRED by OWNER-13 (rev 17 section 11k): no production approval path ships in Phase 18.** Extent: this section only (rev 12 sections 6b and 6c). The ApprovalStore ledger-brand requirements of rev 11 section 5 and rev 12 section 7 are likewise deferred with the machinery (rev 17 section 11d.6). The text is preserved design history: unshipped, non-normative for Phase 18, retained unweakened as 18P-PROTECTED-NONGET input. Nothing is deleted and no history is rewritten.
+
 ### 6b.1 SEC-11's remediation is unsound as written
 
 "`write()` also refuses unless `require.main` is the `falcon.js` module (real path captured)" is forgeable in-process: `process.mainModule = {filename: "<…>/falcon.js"}` makes every subsequently loaded module see that object as `require.main` (P13), and the real main module's `filename` is writable. A path compare — captured or not — is not a control.
@@ -88,6 +90,8 @@ Frozen writes are a **silent no-op** in sloppy CommonJS (P16). Every frozen-writ
 ---
 
 ## 6c. m-35 — server identity is reference identity, never shape (REPLACES rev 11 5a.3(b)(c)(d) rationale and 5a.4 item 4; AMENDS ADR-0044, threat-model item 20)
+
+> **DEFERRED by OWNER-13 (rev 17 section 11k): no production approval path ships in Phase 18.** Extent: this section only (rev 12 sections 6b and 6c). The ApprovalStore ledger-brand requirements of rev 11 section 5 and rev 12 section 7 are likewise deferred with the machinery (rev 17 section 11d.6). The text is preserved design history: unshipped, non-normative for Phase 18, retained unweakened as 18P-PROTECTED-NONGET input. Nothing is deleted and no history is rewritten.
 
 1. **Correction of the false claim.** The sentence "a duck-typed server cannot lie" is **withdrawn**. `Object.create(net.Server.prototype)` with an own `_handle.getsockname` satisfies `instanceof net.Server`, the captured `net.Server.prototype.address` and the captured prototype `listening` getter (P9). Captured intrinsics defeat only a **plain** duck-typed object. Every document carrying the claim is corrected (6k).
 2. **What the captured intrinsics are retained for.** They remain mandatory as the *only* read path for address and liveness (they stop the own-`address()` and own-`listening` substitutions, which are the common case) and the module-load fail-closed on a missing descriptor (exit 18 `net_intrinsic_unavailable`) stands. They are **no longer claimed** to authenticate a server.
