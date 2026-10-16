@@ -2,7 +2,7 @@
 
 Normative addendum to the [rev 8 patch](phase-18-rev8-patch.md). It closes SEC-08 majors M-14 and M-13 and minors m-20..m-23. Base for compatibility claims is `2572e73`. No Must criterion, no OD-01..OD-19 and no recorded owner decision (OWNER-01..OWNER-07) is weakened; two controls are strengthened. Nothing here authorises implementation, merge, tag or publication. One owner choice (OD-24-Q1) is restated, costed and recommended, not decided.
 
-Status: DRAFT rev 9, pending SEC-09 on the rev 9 delta only.
+Status: DRAFT rev 9. **Sections 3b.1 and 3b.2 (the fixture approval mint function and its environment-variable gates) and the redirect rules 1 and 2 of m-22 are superseded by the [rev 10 patch](phase-18-rev10-patch.md)** following owner decisions OWNER-09 to OWNER-11.
 
 ## 3a. M-14 — classification is total by inversion (REPLACES rev 8 2c.11 rule 3 and rule 4)
 
