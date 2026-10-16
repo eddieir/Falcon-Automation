@@ -11,7 +11,7 @@ Matrix: statuses 301, 302, 303, 307, 308; same-origin and cross-origin target; G
 | `context.route` handler invocations | Only for the first request. Redirect hops never reach the handler (0 of all measured hops). |
 | `route.abort` on the first request | Does not stop a later hop that the browser then follows; the landing request still arrived at the server. |
 | `request` / `response` events | Expose each hop through `redirectedFrom()` ancestry, but only after the hop is sent. No pre-send evidence. |
-| Method actually carried | Matched Playwright's report in every cell: 303 rewrote POST to GET; 307 and 308 preserved POST and body. |
+| Method actually carried | Matched Playwright's report in every cell: 301, 302 and 303 converted POST to GET and dropped the body (landing request `GET /landing`, body length 0); 307 and 308 preserved POST and body. **Corrected (rev 13 section 7g.0):** an earlier summary said Chromium preserves the method for 301/302; the server-side ground truth does not support that. |
 | Classification | Every class is OBSERVE_ONLY. Two cells are UNOBSERVABLE (307/308 cross-origin POST via `fetch`: the browser's CORS check blocked the follow, so no landing hop was issued). Zero cells are ENFORCEABLE per hop. |
 
 ## Part 2: service workers and alternative approaches
@@ -20,7 +20,7 @@ Matrix: statuses 301, 302, 303, 307, 308; same-origin and cross-origin target; G
 |---|---|
 | Service workers | `serviceWorkers: 'block'` reliably prevented registration and service-worker fetches. With workers allowed, a worker follows redirects internally and the handler sees only the first request. |
 | Fulfil the 3xx and let the browser continue | Does not help: the next hop is still browser-followed and the handler never saw it (0 of 20 cells). |
-| Falcon performs the single approved request and replaces any 3xx with a non-redirect response | 24 of 24 measured cells showed exactly one server transmission and no landing request; the page saw a 204; cookies, Origin, Referer, a custom CSRF-style header and form/JSON bodies were sent on the single transmission only. The request carries the first-hop credentials to the redirect source, as the browser would. |
+| Falcon performs the single approved request and replaces any 3xx with a non-redirect response | 16 of 16 sanitized cells (301, 303, 307, 308; same and cross origin; GET and POST; `fetch` trigger only; 302 was not in this set) showed exactly one server transmission and no landing request; the page saw a 204; cookies, Origin, Referer, a custom CSRF-style header and form/JSON bodies were sent on the single transmission only. The request carries the first-hop credentials to the redirect source, as the browser would. |
 | Events as a gate | Event timestamps are at or after server receipt; there is no pre-send gate. |
 | Launch arguments that disable redirects | None found (baseline and five candidates all followed the redirect). |
 
