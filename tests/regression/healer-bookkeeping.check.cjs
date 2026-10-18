@@ -17,7 +17,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { load, temp, root } = require("./helpers.cjs");
+const { load, temp, root, drainQueue } = require("./helpers.cjs");
 
 const LocatorMemory = require(path.join(root, "src", "core", "locator", "LocatorMemory.js"));
 const LocatorIdentity = require(path.join(root, "src", "core", "locator", "LocatorIdentity.js"));
@@ -89,7 +89,7 @@ function withMemory(fn) {
   return Promise.resolve()
     .then(() => fn(memory))
     .finally(async () => {
-      await memory._queue;
+      await drainQueue(memory, dir);
       fs.rmSync(dir, { recursive: true, force: true });
     });
 }

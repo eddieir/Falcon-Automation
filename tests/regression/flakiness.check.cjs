@@ -2,11 +2,10 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { load, temp, root } = require("./helpers.cjs");
+const { load, temp, root, drainQueue } = require("./helpers.cjs");
 
 function trackerAt(t) {
   const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const emitted = [];
   const warnings = [];
   const Tracker = load("src/core/FlakinessTracker.js", {
@@ -16,6 +15,16 @@ function trackerAt(t) {
   Tracker.historyPath = path.join(dir, "scenario_history.json");
   Tracker.decisionsPath = path.join(dir, "quarantine_decisions.json");
   Tracker._reload();
+  // Same drain-before-rmSync requirement as healing.check.cjs's storeAt():
+  // FlakinessTracker chains writes through the same `_queue =
+  // _queue.then(...)` pattern, and most tests here call record()/
+  // quarantine()/unquarantine() without awaiting that queue before the test
+  // function returns — a bare rmSync at that point races the in-flight
+  // write.
+  t.after(async () => {
+    await drainQueue(Tracker, dir);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
   return { tracker: Tracker, emitted, warnings };
 }
 
@@ -454,9 +463,8 @@ test("recovers from corrupt JSON in scenario_history.json / quarantine_decisions
   assert.deepEqual(Tracker.list(), []);
   assert.deepEqual(Tracker.decisions, []);
 });
-test("recovers when the files hold the wrong JSON shape (array where an object is expected, and vice versa)", (t) => {
+test("recovers when the files hold the wrong JSON shape (array where an object is expected, and vice versa)", async (t) => {
   const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const Tracker = load("src/core/FlakinessTracker.js", { "./Middleware": { emit() {} } });
   Tracker.historyPath = path.join(dir, "history.json");
   Tracker.decisionsPath = path.join(dir, "decisions.json");
@@ -466,6 +474,12 @@ test("recovers when the files hold the wrong JSON shape (array where an object i
   assert.deepEqual(Tracker.list(), []);
   assert.deepEqual(Tracker.decisions, []);
   assert.doesNotThrow(() => Tracker.record({ ...fixture(), status: "passed" }));
+  // record() above chains an unawaited write onto Tracker._queue — drain it
+  // before cleanup removes `dir`, or the write can race the rmSync below.
+  t.after(async () => {
+    await drainQueue(Tracker, dir);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
 test("survives null and non-object JSON at the top level", (t) => {
   const dir = temp();
@@ -739,9 +753,8 @@ test("D4/Q10: reconciliation is in-memory only — it is not written back to dis
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
 });
 
-test("P13-16 (Case B): a quarantine row truncated away by the ledger cap is still seen by reconciliation, and the key stays protected through an explicit eviction", (t) => {
+test("P13-16 (Case B): a quarantine row truncated away by the ledger cap is still seen by reconciliation, and the key stays protected through an explicit eviction", async (t) => {
   const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const Tracker = load("src/core/FlakinessTracker.js", {
     "./Middleware": { emit() {} },
     "../../utils/Logger": { info() {}, warning() {}, error() {}, async flush() {} },
@@ -803,6 +816,13 @@ test("P13-16 (Case B): a quarantine row truncated away by the ledger cap is stil
   // this only holds if isProtected()'s direct entry.quarantined check saves it.
   Tracker._evictLeastRecentlyUsed();
   assert.equal(Tracker._hasScenario(targetKey), true, "must survive eviction despite its ledger row being capped away");
+
+  // _reload() above queued an unawaited decisions-trim write (the ledger was
+  // over cap) — drain it before cleanup removes `dir`.
+  t.after(async () => {
+    await drainQueue(Tracker, dir);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 // ── Phase 13: decisions can't rot ──
