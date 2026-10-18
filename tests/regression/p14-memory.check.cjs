@@ -16,7 +16,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { load, silent, temp, root } = require("./helpers.cjs");
+const { load, silent, temp, root, drainAll } = require("./helpers.cjs");
 
 const AtomicJsonStore = require(path.join(root, "src", "core", "util", "AtomicJsonStore.js"));
 const LocatorIdentity = require(path.join(root, "src", "core", "locator", "LocatorIdentity.js"));
@@ -31,6 +31,29 @@ function loadLocatorMemory(mocks = {}) {
     "../../../utils/Logger": silent,
     ...mocks,
   });
+}
+
+function tempWithDrain(t) {
+  const dir = temp();
+  const instances = [];
+  t.after(async () => {
+    let firstError;
+    try {
+      await drainAll(instances, dir);
+    } catch (err) {
+      firstError = err;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    if (firstError) throw firstError;
+  });
+  return {
+    dir,
+    track(instance) {
+      instances.push(instance);
+      return instance;
+    },
+  };
 }
 
 const TEST_SALT = "p14-memory-test-salt-v1";
@@ -75,11 +98,10 @@ function candidateFor(selector, label) {
 // ---------------------------------------------------------------------------
 
 test("constructs against a temp directory and creates no file until a write is queued", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
   const memoryPath = makeMemoryPath(dir);
-  const memory = new LocatorMemory({ memoryPath, env: {} });
+  const memory = track(new LocatorMemory({ memoryPath, env: {} }));
   assert.equal(memory.memoryPath, memoryPath);
   assert.equal(memory.saltSource, "file", "no env salt and no existing file -> a fresh one is generated and persisted");
   assert.equal(typeof memory.salt, "string");
@@ -87,55 +109,51 @@ test("constructs against a temp directory and creates no file until a write is q
 });
 
 test("salt precedence: FALCON_LOCATOR_SALT from env wins even when the file already has a different salt", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const memoryPath = makeMemoryPath(dir);
   fs.writeFileSync(memoryPath, JSON.stringify({ schemaVersion: 1, salt: "file-salt", entries: {}, legacy: {} }));
 
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath, env: { FALCON_LOCATOR_SALT: "env-salt" } });
+  const memory = track(new LocatorMemory({ memoryPath, env: { FALCON_LOCATOR_SALT: "env-salt" } }));
   assert.equal(memory.salt, "env-salt");
   assert.equal(memory.saltSource, "env");
 });
 
 test("salt precedence: an existing file salt is reused (not regenerated) when no env salt is set", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const memoryPath = makeMemoryPath(dir);
   fs.writeFileSync(memoryPath, JSON.stringify({ schemaVersion: 1, salt: "persisted-salt", entries: {}, legacy: {} }));
 
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath, env: {} });
+  const memory = track(new LocatorMemory({ memoryPath, env: {} }));
   assert.equal(memory.salt, "persisted-salt");
   assert.equal(memory.saltSource, "file");
 });
 
 test("a generated salt is persisted so a second instance pointed at the same file reuses it", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const memoryPath = makeMemoryPath(dir);
   const LocatorMemory = loadLocatorMemory();
 
-  const first = new LocatorMemory({ memoryPath, env: {} });
+  const first = track(new LocatorMemory({ memoryPath, env: {} }));
   return first._queue.then(() => {
     const onDisk = JSON.parse(fs.readFileSync(memoryPath, "utf8"));
     assert.equal(onDisk.salt, first.salt);
 
-    const second = new LocatorMemory({ memoryPath, env: {} });
+    const second = track(new LocatorMemory({ memoryPath, env: {} }));
     assert.equal(second.salt, first.salt);
     assert.equal(second.saltSource, "file");
   });
 });
 
 test("generating a fresh salt emits exactly one warning", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const memoryPath = makeMemoryPath(dir);
   let warnings = 0;
   const LocatorMemory = loadLocatorMemory({
     "../../../utils/Logger": { ...silent, warning: () => { warnings += 1; } },
   });
-  const memory = new LocatorMemory({ memoryPath, env: {} });
+  const memory = track(new LocatorMemory({ memoryPath, env: {} }));
   memory._reload();
   memory._reload();
   assert.equal(warnings, 1, "the salt-generation warning must fire exactly once, not once per reload");
@@ -146,10 +164,9 @@ test("generating a fresh salt emits exactly one warning", async (t) => {
 // ---------------------------------------------------------------------------
 
 test("recordEvidence grants trusted evidence directly, with no approval step", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#checkout-button");
   const signature = signatureFor("Checkout");
@@ -163,10 +180,9 @@ test("recordEvidence grants trusted evidence directly, with no approval step", a
 });
 
 test("recordPendingCandidate never touches trust or signature on an existing trusted entry", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#checkout-button");
   const groundTruthSignature = signatureFor("Checkout");
@@ -192,10 +208,9 @@ test("recordPendingCandidate never touches trust or signature on an existing tru
 });
 
 test("recordPendingCandidate on a never-before-seen identity creates an entry with no usable trusted evidence", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#never-seen");
   const candidate = candidateFor("#guess", "Guess");
@@ -209,10 +224,9 @@ test("recordPendingCandidate on a never-before-seen identity creates an entry wi
 // ---------------------------------------------------------------------------
 
 test("approve() promotes pendingCandidate into signature + trusted, and clears pendingCandidate", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#checkout-button");
   memory.recordEvidence(identity, signatureFor("Checkout"));
@@ -235,10 +249,9 @@ test("approve() promotes pendingCandidate into signature + trusted, and clears p
 // ---------------------------------------------------------------------------
 
 test("getTrusted() returns usable evidence for \"trusted\" only, and null for both \"unproven\" and \"revoked\"", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   // "unproven": a first-time candidate with no prior ground truth.
   const unprovenIdentity = identityFor("#never-seen");
@@ -262,10 +275,9 @@ test("getTrusted() returns usable evidence for \"trusted\" only, and null for bo
 });
 
 test("approve() SUCCEEDS on an \"unproven\" entry — this is the ordinary first-time Tier 2.5 promotion path", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#never-seen");
   const candidate = candidateFor("#guess", "Guess");
@@ -282,10 +294,9 @@ test("approve() SUCCEEDS on an \"unproven\" entry — this is the ordinary first
 });
 
 test("approve() still REFUSES a genuinely revoked entry, leaving it untouched (both directions proven explicitly)", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#checkout-button");
   const originalSignature = signatureFor("Checkout");
@@ -303,10 +314,9 @@ test("approve() still REFUSES a genuinely revoked entry, leaving it untouched (b
 });
 
 test("rollback() on an \"unproven\" entry transitions it to \"revoked\" with an attributed revocationHistory row, never silently", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#never-seen");
   memory.recordPendingCandidate(identity, candidateFor("#guess", "Guess"));
@@ -328,8 +338,7 @@ test("rollback() on an \"unproven\" entry transitions it to \"revoked\" with an 
 });
 
 test("an unrecognised trust value on load is quarantined into legacy, never silently treated as trusted", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const memoryPath = makeMemoryPath(dir);
   const identity = identityFor("#weird");
   const key = LocatorIdentity.serialiseIdentity(identity);
@@ -352,7 +361,7 @@ test("an unrecognised trust value on load is quarantined into legacy, never sile
   }));
 
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath, env: {} });
+  const memory = track(new LocatorMemory({ memoryPath, env: {} }));
   assert.equal(memory.entries.size, 0, "an unrecognised trust value must never be loaded into entries");
   assert.equal(memory.getTrusted(identity), null);
   assert.equal(memory.legacy.size, 1);
@@ -361,10 +370,9 @@ test("an unrecognised trust value on load is quarantined into legacy, never sile
 });
 
 test("reject() clears pendingCandidate without ever writing it to signature, and records the rejection", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#checkout-button");
   const groundTruth = signatureFor("Checkout");
@@ -389,10 +397,9 @@ test("reject() clears pendingCandidate without ever writing it to signature, and
 });
 
 test("previouslyRejected is always recomputed from the rejection index, never trusted from a stored field", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#x");
   memory.recordEvidence(identity, signatureFor("X"));
@@ -415,10 +422,9 @@ test("previouslyRejected is always recomputed from the rejection index, never tr
 // entry's pendingCandidate — a consumer must see it from list() ALONE, with
 // no second call to previouslyRejected() required.
 test("list() exposes the previously-rejected signal for a re-proposed candidate through list() alone, and carries each entry's own key", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#checkout-button");
   memory.recordEvidence(identity, signatureFor("Checkout"));
@@ -463,10 +469,9 @@ test("list() exposes the previously-rejected signal for a re-proposed candidate 
 // ---------------------------------------------------------------------------
 
 test("rollback() revokes trust, preserves revocationHistory and the prior signature, and getTrusted returns nothing", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#checkout-button");
   const signature = signatureFor("Checkout");
@@ -490,10 +495,9 @@ test("rollback() revokes trust, preserves revocationHistory and the prior signat
 });
 
 test("a revoked entry cannot be re-promoted via approve() — only recordEvidence() can re-trust it", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#checkout-button");
   const originalSignature = signatureFor("Checkout");
@@ -528,10 +532,9 @@ test("a revoked entry cannot be re-promoted via approve() — only recordEvidenc
 // ---------------------------------------------------------------------------
 
 test("MAX_TRACKED_IDENTITIES is enforced on mutation, evicting least-recently-seen first, ties broken by ascending key", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const cap = LocatorMemory.MAX_TRACKED_IDENTITIES;
   const keys = [];
@@ -553,8 +556,7 @@ test("MAX_TRACKED_IDENTITIES is enforced on mutation, evicting least-recently-se
 });
 
 test("MAX_TRACKED_IDENTITIES is enforced on load too, not only on mutation, and eviction is deterministic across repeated loads", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const memoryPath = makeMemoryPath(dir);
   const LocatorMemory = loadLocatorMemory();
 
@@ -578,12 +580,12 @@ test("MAX_TRACKED_IDENTITIES is enforced on load too, not only on mutation, and 
   }
   fs.writeFileSync(memoryPath, JSON.stringify(oversized));
 
-  const first = new LocatorMemory({ memoryPath, env: {} });
+  const first = track(new LocatorMemory({ memoryPath, env: {} }));
   assert.equal(first.entries.size, LocatorMemory.MAX_TRACKED_IDENTITIES);
   const survivorsFirst = new Set(first.entries.keys());
 
   return first._queue.then(() => {
-    const second = new LocatorMemory({ memoryPath, env: {} });
+    const second = track(new LocatorMemory({ memoryPath, env: {} }));
     assert.equal(second.entries.size, LocatorMemory.MAX_TRACKED_IDENTITIES);
     const survivorsSecond = new Set(second.entries.keys());
     assert.deepEqual(survivorsFirst, survivorsSecond, "the same oversized input must evict the same entries every time");
@@ -597,8 +599,7 @@ test("MAX_TRACKED_IDENTITIES is enforced on load too, not only on mutation, and 
 });
 
 test("REJECTIONS_MAX_ROWS is enforced on load, trimming oldest rows and rebuilding the rejection index from only what survives", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const memoryPath = makeMemoryPath(dir);
   const LocatorMemory = loadLocatorMemory();
 
@@ -617,7 +618,7 @@ test("REJECTIONS_MAX_ROWS is enforced on load, trimming oldest rows and rebuildi
     schemaVersion: 1, salt: TEST_SALT, entries: {}, legacy: {}, rejections,
   }));
 
-  const memory = new LocatorMemory({ memoryPath, env: {} });
+  const memory = track(new LocatorMemory({ memoryPath, env: {} }));
   assert.equal(memory.rejections.length, LocatorMemory.REJECTIONS_MAX_ROWS, "the rejections ledger must be trimmed on load, not only on the next reject() call");
   // The oldest 10 rows (guess-0..guess-9) must have been dropped.
   assert.equal(memory.previouslyRejected(key, "#guess-0").count, 0);
@@ -632,8 +633,7 @@ test("REJECTIONS_MAX_ROWS is enforced on load, trimming oldest rows and rebuildi
 // ---------------------------------------------------------------------------
 
 test("a row missing required identity fields is quarantined into legacy, never into entries, and never auto-promoted", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const memoryPath = makeMemoryPath(dir);
   const malformed = {
     schemaVersion: 1,
@@ -647,7 +647,7 @@ test("a row missing required identity fields is quarantined into legacy, never i
   fs.writeFileSync(memoryPath, JSON.stringify(malformed));
 
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath, env: {} });
+  const memory = track(new LocatorMemory({ memoryPath, env: {} }));
 
   assert.equal(memory.entries.size, 0, "a malformed row must never be loaded into entries");
   assert.equal(memory.legacy.size, 1, "it must be quarantined into legacy instead");
@@ -657,15 +657,14 @@ test("a row missing required identity fields is quarantined into legacy, never i
   assert.equal(typeof legacyRow.digest, "string");
 
   return memory._queue.then(() => {
-    const second = new LocatorMemory({ memoryPath, env: {} });
+    const second = track(new LocatorMemory({ memoryPath, env: {} }));
     assert.equal(second.entries.size, 0, "legacy rows must never be auto-promoted on a later load");
     assert.equal(second.legacy.size, 1);
   });
 });
 
 test("a row below the current identity schemaVersion is quarantined", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const memoryPath = makeMemoryPath(dir);
   const identity = identityFor("#old");
   const key = LocatorIdentity.serialiseIdentity({ ...identity, schemaVersion: 0 });
@@ -689,7 +688,7 @@ test("a row below the current identity schemaVersion is quarantined", async (t) 
   fs.writeFileSync(memoryPath, JSON.stringify(stale));
 
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath, env: {} });
+  const memory = track(new LocatorMemory({ memoryPath, env: {} }));
   assert.equal(memory.entries.size, 0);
   assert.equal(memory.legacy.size, 1);
   const [legacyRow] = [...memory.legacy.values()];
@@ -697,8 +696,7 @@ test("a row below the current identity schemaVersion is quarantined", async (t) 
 });
 
 test("deleteLegacy permanently removes a quarantined row and only that row", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const memoryPath = makeMemoryPath(dir);
   fs.writeFileSync(memoryPath, JSON.stringify({
     schemaVersion: 1,
@@ -712,7 +710,7 @@ test("deleteLegacy permanently removes a quarantined row and only that row", asy
   }));
 
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath, env: {} });
+  const memory = track(new LocatorMemory({ memoryPath, env: {} }));
   assert.equal(memory.legacy.size, 2);
   const [firstId] = [...memory.legacy.keys()];
 
@@ -727,10 +725,9 @@ test("deleteLegacy permanently removes a quarantined row and only that row", asy
 // ---------------------------------------------------------------------------
 
 test('a "__proto__" identity key is inert: never touches Object.prototype, never leaks via for...in on a fresh object', async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   // Force the canonical key to literally be "__proto__" by stubbing
   // serialiseIdentity for this one call via a crafted identity object whose
@@ -767,7 +764,7 @@ test('a "__proto__" identity key is inert: never touches Object.prototype, never
   // safely too, since _toPersistable()/_reload() both go through Map <->
   // plain-object conversion.
   return memory._queue.then(() => {
-    const reloaded = new LocatorMemory({ memoryPath: memory.memoryPath, env: {} });
+    const reloaded = track(new LocatorMemory({ memoryPath: memory.memoryPath, env: {} }));
     assert.equal(reloaded.entries.has("__proto__"), false, "noncanonical identity keys cannot reload as trusted");
     assert.ok(Object.values(reloaded.listLegacy()).some(row => row.reason === "test"));
     assert.equal(Object.getPrototypeOf({}), Object.prototype);
@@ -775,10 +772,9 @@ test('a "__proto__" identity key is inert: never touches Object.prototype, never
 });
 
 test('"constructor" and "prototype" identity keys behave like any other key', async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   for (const dangerousKey of ["constructor", "prototype"]) {
     memory.entries.set(dangerousKey, {
@@ -800,14 +796,13 @@ test('"constructor" and "prototype" identity keys behave like any other key', as
 // ---------------------------------------------------------------------------
 
 test("a blocked write directory is reported through hasUnpersistedWriteFailure()/lastWriteError(), not just swallowed", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const notADirectory = path.join(dir, "not-a-directory");
   fs.writeFileSync(notADirectory, "i am a file");
   const memoryPath = path.join(notADirectory, "locator_memory.json");
 
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath, env: {} });
+  const memory = track(new LocatorMemory({ memoryPath, env: {} }));
 
   return memory._queue.then(() => {
     assert.equal(memory.hasUnpersistedWriteFailure(), true);
@@ -822,14 +817,13 @@ test("a blocked write directory is reported through hasUnpersistedWriteFailure()
 });
 
 test("a successful write to the SAME path after a failure clears hasUnpersistedWriteFailure()", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const notADirectory = path.join(dir, "not-a-directory");
   fs.writeFileSync(notADirectory, "i am a file");
   const memoryPath = path.join(notADirectory, "locator_memory.json");
 
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath, env: {} });
+  const memory = track(new LocatorMemory({ memoryPath, env: {} }));
 
   return memory._queue.then(() => {
     assert.equal(memory.hasUnpersistedWriteFailure(), true);
@@ -853,10 +847,9 @@ test("a successful write to the SAME path after a failure clears hasUnpersistedW
 // test proves the composed tracker would still protect correctly the
 // instant that changes.
 test("S-Q7: the composed WriteFailureTracker reports a failed FIRST write even after a SECOND write to a different path succeeds", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const pathA = path.join(dir, "a.json");
   const pathB = path.join(dir, "b.json");
@@ -874,10 +867,9 @@ test("S-Q7: the composed WriteFailureTracker reports a failed FIRST write even a
 // ---------------------------------------------------------------------------
 
 test("AC-10: mutating the object returned by recordEvidence does not corrupt the store's internal state", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#checkout-button");
   const entry = memory.recordEvidence(identity, signatureFor("Checkout"));
@@ -896,10 +888,9 @@ test("AC-10: mutating the object returned by recordEvidence does not corrupt the
 });
 
 test("AC-10: mutating the object returned by list() does not corrupt the store's internal state", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#checkout-button");
   memory.recordEvidence(identity, signatureFor("Checkout"));
@@ -917,10 +908,9 @@ test("AC-10: mutating the object returned by list() does not corrupt the store's
 });
 
 test("AC-10: mutating the object returned by getEntry()/getTrusted() across TWO separate calls never lets one call's mutation leak into the next", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const LocatorMemory = loadLocatorMemory();
-  const memory = new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} });
+  const memory = track(new LocatorMemory({ memoryPath: makeMemoryPath(dir), env: {} }));
 
   const identity = identityFor("#checkout-button");
   memory.recordEvidence(identity, signatureFor("Checkout"));
@@ -948,8 +938,7 @@ test("AC-10: mutating the object returned by getEntry()/getTrusted() across TWO 
 // ---------------------------------------------------------------------------
 
 test("AC-14/AC-15: unscoped legacy rows are quarantined, never silently trusted, and that classification is deterministic across independent LocatorMemory instances", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const memoryPath = makeMemoryPath(dir);
   const LocatorMemory = loadLocatorMemory();
 
@@ -996,7 +985,7 @@ test("AC-14/AC-15: unscoped legacy rows are quarantined, never silently trusted,
   fs.writeFileSync(memoryPath, JSON.stringify(onDisk));
 
   function classify() {
-    const memory = new LocatorMemory({ memoryPath, env: {} });
+    const memory = track(new LocatorMemory({ memoryPath, env: {} }));
     const legacyReasons = [...memory.legacy.values()].map((row) => row.reason).sort();
     return {
       entryKeys: [...memory.entries.keys()].sort(),
@@ -1020,7 +1009,7 @@ test("AC-14/AC-15: unscoped legacy rows are quarantined, never silently trusted,
   // an unscoped/malformed legacy row must never be reachable as usable
   // trust through the store's own trust-reading API, even though its raw
   // row claimed `trust: "trusted"`.
-  const liveMemory = new LocatorMemory({ memoryPath, env: {} });
+  const liveMemory = track(new LocatorMemory({ memoryPath, env: {} }));
   assert.equal(
     liveMemory.getTrusted(claimsTrustedIdentity),
     null,
@@ -1029,8 +1018,7 @@ test("AC-14/AC-15: unscoped legacy rows are quarantined, never silently trusted,
 });
 
 test("AC-15: reloading the SAME already-open instance via _reload() reproduces the identical classification as a fresh instance", async (t) => {
-  const dir = temp();
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { dir, track } = tempWithDrain(t);
   const memoryPath = makeMemoryPath(dir);
   const LocatorMemory = loadLocatorMemory();
 
@@ -1055,8 +1043,8 @@ test("AC-15: reloading the SAME already-open instance via _reload() reproduces t
     rejections: [],
   }));
 
-  const memory = new LocatorMemory({ memoryPath, env: {} });
-  const freshInstance = new LocatorMemory({ memoryPath, env: {} });
+  const memory = track(new LocatorMemory({ memoryPath, env: {} }));
+  const freshInstance = track(new LocatorMemory({ memoryPath, env: {} }));
 
   memory._reload();
 

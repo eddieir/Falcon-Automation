@@ -7,7 +7,20 @@ const os=require("node:os");
 const Memory=require("../../src/core/locator/LocatorMemory");
 const Identity=require("../../src/core/locator/LocatorIdentity");
 const Signature=require("../../src/core/locator/ElementSignature");
-function fixture(t) {const dir=fs.mkdtempSync(path.join(os.tmpdir(),"falcon-memory-fix-"));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const memoryPath=path.join(dir,"memory.json");const memory=new Memory({memoryPath,env:{FALCON_LOCATOR_SALT:"correction-test-key"}});const identity=Identity.buildIdentity({url:"https://example.com/a",action:"click",originalSelector:"#old",env:{}}).identity;const signature=Signature.capture({tagName:"button",role:"button",attributes:{id:"new"},ownText:"Save",structuralPath:["body"]},{salt:memory.salt});return {memoryPath,memory,identity,signature,key:Identity.serialiseIdentity(identity)};}
+const {drainQueue}=require("./helpers.cjs");
+// `recordEvidence`/`recordPendingCandidate` chain their write onto
+// `memory._queue` (see LocatorMemory._persist()) without the caller awaiting
+// it; a test whose last meaningful call is one of those two — rather than an
+// already-awaited `decide()`/`approve()`/`rollback()`, which await the full
+// write internally — can return while that write is still in flight. A plain
+// `t.after(() => fs.rmSync(dir, ...))` registered up front then races that
+// write, the same ENOTEMPTY-causing pattern documented in helpers.cjs. Drain
+// before removing the directory instead of assuming every test ends awaited.
+// NOTE: deliberately not passing `dir` to drainQueue()'s transient-artifact
+// check — the "second writer and occupied lock fail..." test below
+// intentionally leaves a `.lock` file in `dir` as part of its own
+// assertions, which is not a leaked write artifact.
+function fixture(t) {const dir=fs.mkdtempSync(path.join(os.tmpdir(),"falcon-memory-fix-"));const memoryPath=path.join(dir,"memory.json");const memory=new Memory({memoryPath,env:{FALCON_LOCATOR_SALT:"correction-test-key"}});t.after(async()=>{await drainQueue(memory);fs.rmSync(dir,{recursive:true,force:true});});const identity=Identity.buildIdentity({url:"https://example.com/a",action:"click",originalSelector:"#old",env:{}}).identity;const signature=Signature.capture({tagName:"button",role:"button",attributes:{id:"new"},ownText:"Save",structuralPath:["body"]},{salt:memory.salt});return {memoryPath,memory,identity,signature,key:Identity.serialiseIdentity(identity)};}
 test("approved alternatives survive reload, remain scoped and rollback revokes reuse",async t=>{const f=fixture(t);const p=f.memory.recordPendingCandidate(f.identity,{selector:"#new",signature:f.signature,total:.95,margin:.3,runnerUp:{total:.4},changedFields:["id"]}).pendingCandidate;await f.memory._queue;const r=await f.memory.decide("approve",f.key,{proposalId:p.proposalId,actor:"alice"});assert.equal(r.status,200);assert.equal(r.entry.approvedAlternative.selector,"#new");assert.equal(r.entry.decisionHistory[0].actor,"alice");assert.equal(r.entry.decisionHistory[0].proposal.margin,.3);const reloaded=new Memory({memoryPath:f.memoryPath,env:{FALCON_LOCATOR_SALT:"correction-test-key"}});assert.equal(reloaded.getApprovedAlternatives(f.identity)[0].selector,"#new");assert.deepEqual(reloaded.getApprovedAlternatives({...f.identity,pathname:"/b"}),[]);assert.equal(f.memory.recordPendingCandidate(f.identity,{selector:"#new",signature:f.signature,total:.95,margin:.3,runnerUp:{total:.4},changedFields:["id"]}).pendingCandidate,null);await f.memory.decide("rollback",f.key,{expectedRevision:f.memory.getEntry(f.key).revision,actor:"bob"});assert.deepEqual(f.memory.getApprovedAlternatives(f.identity),[]);});
 // A rejected envelope used to load in complete silence. Nothing was parsed
 // into a row, so quarantine held nothing and list()/listLegacy() were both
