@@ -51,7 +51,7 @@ Rev 21's C6-T declared twenty-five inversion fixtures but enumerated only twenty
 | P2 | positive control | the same with a module-level `const` argv array | rev 20 | pass |
 | P3 | positive control | the real two-hop `GitInfo` shape (`:34` default param -> `:39`/`:44` forward -> `:21` call, literal argv) | rev 21 | pass |
 
-**Totals: 25 inversion fixtures (X1..X25, contiguous, no duplicate id) and 3 positive controls (P1..P3).** Mapping check: the nineteen rev 20 fixtures are `X1..X10` plus `X17..X25`; the rev 19 fourteen inside them are `X3..X7` plus `X17..X25`; rev 21 added `X11..X16`. Verification obligation (unchanged, still owed): all 25 fail and all 3 pass, on the real shapes, before 18D or 18F can claim the gate.
+**Totals: 25 inversion fixtures (X1..X25, contiguous, no duplicate id) and 3 positive controls (P1..P3).** **SUPERSEDED BY REV 23 SECTION D.4: the totals are now 27 inversion fixtures (X1..X27) and 5 positive controls (P1..P5), adding X26, X27, P4 and P5 for rule C3.10 (DEP0190). The rev 23 section D.4 printing is the single source of fixture ids and counts; this table is retained as history.** Mapping check: the nineteen rev 20 fixtures are `X1..X10` plus `X17..X25`; the rev 19 fourteen inside them are `X3..X7` plus `X17..X25`; rev 21 added `X11..X16`. Verification obligation (unchanged, still owed): all 25 fail and all 3 pass, on the real shapes, before 18D or 18F can claim the gate.
 
 ## Section C — m-77: one consistent citation
 
@@ -80,7 +80,7 @@ No new ADR. M-24 and m-78 are arithmetic corrections inside rev 21's own control
 ## Section G — handoff constraints
 
 - **Developer:** stderr via a direct `process.stderr.write`, then exit 2; never `Logger.error` in the refusal path; exactly one key literal, in the frozen array, read by both stages; `.env` load path unchanged.
-- **QA:** build fixtures from table C6-T only (X1..X25, P1..P3); the checker must self-assert count and id set; strengthen `neg-token-refusal-order` per D.3; do not weaken any inversion fixture to pass.
+- **QA:** build fixtures from table C6-T only (rev 23 section D.4 printing: **X1..X27, P1..P5**; the rev 22 range X1..X25, P1..P3 is superseded); the checker must self-assert count and id set; strengthen `neg-token-refusal-order` per D.3; do not weaken any inversion fixture to pass.
 - **Security:** rev 22 claims no execution; every gate listed in the status paragraph stays owed. SEC-21's own prototype limits still apply.
 - **DevOps:** Node 24 CI, Chromium-only pilot scope; the fixture suite and the token-refusal suite must run in CI with a clean `reports/` tree.
 
