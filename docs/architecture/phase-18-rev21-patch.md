@@ -27,13 +27,13 @@ Machine-applicable edits: `docs/architecture/phase-18-rev21-edits.json`. That fi
 2. **Load `.env`** through the existing configuration path (`dotenv` at `falcon.js:50`, unchanged). This single read is the only application filesystem access permitted before a refusal.
 3. **Stage 2 — post-`.env`.** Inspect again. Present => refuse immediately, because `.env` introduced it.
 
-**B.2 Refusal properties (both stages identical).** Exit 2, reason code `PILOT_CONFIG_REJECTED_ENV_KEY`; message states that *protected-action approval is not supported in Phase 18*. The value is never printed, logged, hashed, digested, length-measured, compared, persisted, receipted, reported or forwarded; only the key name appears. No browser or context launch; no dashboard start; no pilot manifest read; no run artefact created, opened for writing, or modified; no target, provider or network contact; no other application filesystem access before refusal (the stage-2 `.env` read is the single accepted exception).
+**B.2 Refusal properties (both stages identical).** Exit 2, reason code `PILOT_CONFIG_REJECTED_ENV_KEY`; message states that *protected-action approval is not supported in Phase 18*. The message is written synchronously to **stderr** by a direct `process.stderr.write` call and the process then exits with code 2; **`Logger.error` is forbidden** here, because `utils/Logger.js:107` points `logFilePath` at `reports/execution.log` and the write path calls `fs.promises.mkdir` at `:142` and `fs.promises.appendFile` at `:145`, which would be a filesystem write before the refusal (rev 22 section D). The value is never printed, logged, hashed, digested, length-measured, compared, persisted, receipted, reported or forwarded; only the key name appears. No browser or context launch; no dashboard start; no pilot manifest read; no run artefact created, opened for writing, or modified; no target, provider or network contact; no other application filesystem access before refusal (the stage-2 `.env` read is the single accepted exception).
 
 **B.3 Presence semantics.** Presence is an own-property test on the environment object, never a truthiness or value test, so a **set-but-empty** value refuses identically. No value is read into a variable.
 
-**B.4 Code shape and AC-084 carve-out.** The carve-out becomes **two occurrences in one file**, `src/core/pilot/PilotLifecycle.js`: one frozen array literal `REJECTED_ENV_KEYS` (sole member: the key string) and **one refusal site per stage**, both reading the same frozen array. The walker fails on any third occurrence, on any occurrence in another file, on any occurrence outside that pattern, and on any read of the variable's value. Exact scoping and inversion tests are enumerated in the carve-out's `inversionTests`.
+**B.4 Code shape and AC-084 carve-out.** The carve-out is **exactly one occurrence in one file** (corrected by rev 22 section E; the rev 21 count of two was wrong), `src/core/pilot/PilotLifecycle.js`: one frozen array literal `REJECTED_ENV_KEYS` at module scope (sole member: the key string), plus **one refusal site per stage**, both of which *read* that array and therefore contain no literal. The walker fails on any second occurrence, on any occurrence in another file, on any occurrence outside that pattern, and on any read of the variable's value. Exact scoping and inversion tests are enumerated in the carve-out's `inversionTests`.
 
-**B.5 Tests (18C/18E owned).** `neg-token-refusal-stage1-inherited`, `neg-token-refusal-stage2-dotenv`, `neg-token-refusal-empty` (both stages), `neg-token-refusal-nonpilot-run` (plain `node falcon.js --no-dashboard`), `neg-token-refusal-order` (refusal precedes browser launch, any `run/` write, any manifest read and any target request, asserted on the ordered event log), `neg-token-refusal-silence` (the value string appears in no log line, report, receipt, dashboard payload or artefact), `neg-token-refusal-no-measure` (no hash or length of the value anywhere), `neg-token-refusal-carveout` (a third literal occurrence fails AC-084).
+**B.5 Tests (18C/18E owned).** `neg-token-refusal-stage1-inherited`, `neg-token-refusal-stage2-dotenv`, `neg-token-refusal-empty` (both stages), `neg-token-refusal-nonpilot-run` (plain `node falcon.js --no-dashboard`), `neg-token-refusal-order` (refusal precedes browser launch, any `run/` write, any manifest read and any target request, asserted on the ordered event log; **and**, per rev 22 D.3, exit code is exactly 2, no file write occurs before exit - `reports/execution.log` neither created nor appended, nothing created or modified under `run/` - and the text appears on stderr, not stdout, with the case run against a clean `reports/` directory), `neg-token-refusal-silence` (the value string appears in no log line, report, receipt, dashboard payload or artefact), `neg-token-refusal-no-measure` (no hash or length of the value anywhere), `neg-token-refusal-carveout` (a third literal occurrence fails AC-084).
 
 **B.6 Exit-2 overlap.** Exit 2 now covers four disjoint classes distinguished only by the mandatory reason code: `PLAN_INVALID`/`PLAN_NO_DIGEST` at `PlanFile.load`, shard-merge input rejection, and `PILOT_CONFIG_REJECTED_ENV_KEY` from stage 1 and stage 2 (one code, two sites). Recorded in `exitCodes.planInvalidNote`.
 
@@ -47,11 +47,19 @@ Machine-applicable edits: `docs/architecture/phase-18-rev21-edits.json`. That fi
 
 **C3.4b.2 Real `GitInfo` flow (verified in `src/core/history/GitInfo.js` at `3763891`).** `exec = childProcess.execFileSync` is the **default value of a destructured parameter** of `getGitInfo` at `:34` (an `AssignmentPattern`, not an argument). It is forwarded as an argument to the local function `runGit` at `:39` and `:44`, and invoked inside `runGit` at `:21` as `execFile("git", argv, {...})`. The checker must resolve **both hops** and then validate at `:21`: literal executable `"git"` on the closed `externalExecutables` list, and argv resolving to literal arrays at **both** call sites (`["rev-parse","HEAD"]`, `["rev-parse","--abbrev-ref","HEAD"]`). The rev 20 patch text describing `:34` as an argument to `runGit` is corrected here.
 
-**C6 fixture table C6-T — the single source of truth for fixture counts.** Rev 21 adds six fixtures and keeps the rev 20 set, giving **twenty-five inversion fixtures and three positive controls**. Prose must not restate counts; AC text and the threat model point at this table, and the checker asserts its own fixture inventory against this table (count and ids) where the table is machine-readable.
+**C6 fixture table C6-T — the single source of truth for fixture counts.** Rev 21 adds six fixtures and keeps the rev 20 set, giving **twenty-five inversion fixtures and three positive controls**. Prose must not restate counts; AC text and the threat model point at this table, and the checker asserts its own fixture directory against this table - both the count and the id set - and fails on any extra, missing or duplicate id (rev 22 section B completes the enumeration: X1..X25 contiguous plus P1..P3, with the nineteen rev 20 fixtures at X1..X10 and X17..X25 and the rev 19 fourteen at X3..X7 and X17..X25).
 
 | Id | Kind | Shape | Expected |
 |---|---|---|---|
-| X1..X9 | inversion | rev 20 set (edges, classification, builtins, env injection) | fail |
+| X1 | inversion | inline `NODE_OPTIONS="--require ./tests/x.js" node falcon.js` in a production step and its `env:`-block twin (C3.9) | fail |
+| X2 | inversion | a production entry committed as `test` (step 226 and `start`), rejected by C4.1 recomputation | fail |
+| X3 | inversion | `require(path.join("..","tests","x"))` in `scripts/` from a production root | fail |
+| X4 | inversion | `import("../../tests/x")` in `src/` | fail |
+| X5 | inversion | `spawn(process.execPath,["tests/x.js"])` from a production root | fail |
+| X6 | inversion | a `production` step running `node tests/experimental/x.js` | fail |
+| X7 | inversion | `createRequire(__filename)("../../tests/x")` in `src/` | fail |
+| X8 | inversion | `|| true` relied on as an unknown executable (removing C3.6a must fail the current tree) | fail |
+| X9 | inversion | `set -o pipefail` relied on as an unknown executable (same sense as X8) | fail |
 | X10 | inversion | `GitInfo`-shaped default-parameter capability with a non-literal argv | fail |
 | X11 | inversion | forwarding escape: capability passed to a **non-local** function | fail |
 | X12 | inversion | capability **returned** from the module | fail |
@@ -59,7 +67,15 @@ Machine-applicable edits: `docs/architecture/phase-18-rev21-edits.json`. That fi
 | X14 | inversion | capability **assigned** to an alias then called with variable argv | fail |
 | X15 | inversion | capability as a **default parameter** that is never invoked | fail |
 | X16 | inversion | X11-shaped escape via a worker/`createRequire` edge (unanalysable) | fail |
-| X17..X22 | inversion | rev 20 remaining set, renumbered by the table, not by prose | fail |
+| X17 | inversion | `new Worker("./tests/x.js")` in `scripts/` from a production root | fail |
+| X18 | inversion | a production step `bash -c "node tests/x.js"` | fail |
+| X19 | inversion | a production step `nohup node tests/x.js &` | fail |
+| X20 | inversion | a production step `npx playwright test` | fail |
+| X21 | inversion | a new unclassified `package.json` script | fail |
+| X22 | inversion | a new unclassified `ci.yml` `run:` step | fail |
+| X23 | inversion | a classification value other than `production`/`test` | fail |
+| X24 | inversion | an unclassified `pre`/`post` lifecycle script | fail |
+| X25 | inversion | `falcon.js` requiring `scripts/fixture/server.js` | fail |
 | P1, P2 | positive control | rev 20 controls | pass |
 | P3 | positive control | **the real two-hop `GitInfo` shape** (`:34` default param -> `:39`/`:44` forward -> `:21` call, literal argv) | pass |
 
