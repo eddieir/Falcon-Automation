@@ -1,0 +1,144 @@
+{
+ "schema": "phase-18-rev22-edits/1",
+ "revision": "74768d8 on docs/phase-18-architecture",
+ "producedBy": "ARCH-22 rev 22 patch; apply with a script; docs/architecture/phase-18-rev22-patch.md is normative",
+ "notes": [
+  "Same schema as phase-18-rev21-edits.json: ac[] with set/replaceText/appendText {field,text}, openItems/openItemsAdd, counts, exitCodes, docEdits[{file,replace[{old,new}],append,after}], coverage.",
+  "Every 'old' anchor in this file was verified by exact string count to occur exactly once in its target field or file at 74768d8.",
+  "No 40-character SHA appears anywhere; short SHAs only. No production source file, package.json script or workflow step is edited by rev 22.",
+  "Rev 22 fixes SEC-21 M-24, m-76, m-77 and m-78 only. M-23 is not reopened, nothing is weakened, and no unexecuted check becomes evidence."
+ ],
+ "ac": [
+  {
+   "id": "P18-AC-084",
+   "replaceText": [
+    {
+     "field": "prohibitedLiteralsNote",
+     "old": "widened by rev 21 section B to two occurrences in one file (the frozen rejected-key array plus one refusal site per refusal stage)",
+     "new": "pinned by rev 22 section E to exactly one occurrence in one file - the frozen rejected-key array - which both refusal stages read (a refusal site that reads the array adds no literal occurrence)"
+    }
+   ],
+   "set": {
+    "prohibitedLiteralsCarveOut": {
+     "literal": "PILOT_APPROVAL_RUN_TOKEN",
+     "file": "src/core/pilot/PilotLifecycle.js",
+     "occurrences": 1,
+     "pattern": "exactly one frozen array literal at module scope, REJECTED_ENV_KEYS = Object.freeze([\"PILOT_APPROVAL_RUN_TOKEN\"]), whose only member is the key string; the stage-1 check (before the .env load) and the stage-2 check (after it) both READ that same frozen array and the refusal message takes the key NAME from it, so neither refusal site contains the literal. Rev 22 section E corrects the rev 21 count of two: a refusal site that reads the array contributes no literal occurrence.",
+     "rule": "The walker permits exactly this one occurrence, in exactly this file, inside exactly this pattern, and fails on a SECOND occurrence anywhere (this file or any other), on the occurrence appearing outside the Object.freeze array-literal initialiser at module scope, on more or fewer than one refusal site per stage, and on any read of the variable's value. Presence is an own-property test on the environment object, never a truthiness or value test, so a set-but-empty value refuses identically. The value is never printed, logged, hashed, digested, length-measured, compared, persisted, receipted, reported, written to any dashboard payload or artefact, or forwarded; only the key name may appear.",
+     "emission": "The refusal message is written synchronously to stderr by a direct process.stderr.write call in the refusal path, then the process exits with code 2. Logger.error MUST NOT be used, nor any other logger, reporter, receipt or dashboard path: utils/Logger.js:107 points logFilePath at reports/execution.log and the write path calls fs.promises.mkdir at :142 and fs.promises.appendFile at :145, so a Logger.error call would create or append reports/execution.log and break the no-other-filesystem-access rule before refusal (rev 22 section D).",
+     "refusal": "PILOT_CONFIG_REJECTED_ENV_KEY, exit 2, in EVERY falcon.js invocation (pilot and non-pilot), raised from stage 1 if the key is inherited from the process environment and from stage 2 if the .env load introduced it, before any browser or context launch, any dashboard start, any pilot manifest read, any run artefact creation or modification, and any target or provider contact; the stage-2 .env read through the existing configuration path is the only accepted application filesystem access before refusal (rev 21 section B, channel pinned by rev 22 section D).",
+     "scopeNote": "Rev 21 section B replaces the rev 20 B1..B7 scope; rev 22 sections D and E pin the emission channel and the one-literal budget. This intentionally converts a previously ignored environment variable into an explicit configuration error in every invocation; the reason code stays PILOT_CONFIG_REJECTED_ENV_KEY for both stages.",
+     "inversionTests": [
+      "neg-token-refusal-stage1-inherited: the key inherited in the process environment is rejected with exit 2 and reason PILOT_CONFIG_REJECTED_ENV_KEY before the .env load",
+      "neg-token-refusal-stage2-dotenv: the key absent from the inherited environment but present in .env is rejected identically immediately after the configuration load",
+      "neg-token-refusal-empty: the key set to the empty string is rejected identically in both stages",
+      "neg-token-refusal-nonpilot-run: a plain non-pilot run (node falcon.js --no-dashboard) with the key present is rejected with exit 2, proving the refusal is not scoped to pilot mode",
+      "neg-token-refusal-order: for both stages, the process exit code is exactly 2; NO file write occurs before exit - reports/execution.log is neither created nor appended (assert its absence, or unchanged size and mtime when it pre-exists) and no file under run/ is created or modified; the refusal text appears on stderr and not on stdout; and the rev 21 ordering assertions (refusal precedes browser launch, dashboard start, any pilot manifest read, any run/ write and any target request) still hold on the ordered event log. The case runs with a clean reports/ directory so the no-write assertion is decisive.",
+      "neg-token-refusal-silence: the value string appears in no log line, report, receipt, dashboard payload or artefact",
+      "neg-token-refusal-no-measure: no hash, digest, length or comparison of the value exists anywhere in the refusal path",
+      "neg-token-refusal-carveout: a SECOND occurrence of the literal anywhere - the clearest case being the key string hard-coded into the stage-2 refusal message instead of read from the frozen array - fails AC-084, as does moving the one permitted occurrence out of the frozen array literal or into another file"
+     ]
+    }
+   }
+  },
+  {
+   "id": "P18-AC-090",
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "which supersedes rev 18, rev 19 and rev 20 section C and is the same section AC-098 (ii) cites",
+     "new": "which supersedes rev 18, rev 19 and rev 20 section C and is the section AC-098 (ii) also cites for this control; both criteria cite rev 21 section C and its table C6-T as corrected by rev 22 section B, and no criterion claims to be the only section citing it"
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-098",
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "the production dependency-reachability check of rev 20 section C (rev 20 supersedes rev 19 section C and is the only section any criterion cites for this control)",
+     "new": "the production dependency-reachability check of rev 21 section C with its fixture table C6-T as corrected by rev 22 section B (rev 21 section C supersedes rev 18, rev 19 and rev 20 section C for this control, and is the same section AC-090 cites; no criterion is the only one citing it)"
+    }
+   ]
+  }
+ ],
+ "openItems": [
+  {
+   "id": "TOKEN-REFUSAL",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " Rev 22 (SEC-21 m-76, m-78) pins two implementation details without changing the decision: the refusal message is written synchronously to stderr by a direct process.stderr.write call and then the process exits with code 2 - Logger.error is forbidden in the refusal path because utils/Logger.js:107 points logFilePath at reports/execution.log and the write path calls fs.promises.mkdir at :142 and fs.promises.appendFile at :145, which would be a filesystem write before refusal; and the AC-084 carve-out is exactly ONE literal occurrence, the frozen REJECTED_ENV_KEYS array at module scope in src/core/pilot/PilotLifecycle.js, read by both stage checks. neg-token-refusal-order must assert exit code 2 and that no file write (no reports/execution.log creation or append, no run/ write) happens before exit."
+    }
+   ]
+  }
+ ],
+ "openItemsAdd": [],
+ "counts": {
+  "set": {
+   "rev22Note": "Rev 22 changes no count: total 98, must 89, should 6, could 3, deferredToPhase18P 11, deferredUnderOptionC 5, deferredIds and mixedPhase18PIds unchanged. The only numeric changes are internal: the AC-084 carve-out occurrence budget 2 -> 1 and the enumerated inversion rows of table C6-T 22 -> 25 (the declared total of twenty-five inversion fixtures and three positive controls is unchanged). No criterion is added, removed or re-phased, and M-23 is not reopened."
+  }
+ },
+ "exitCodes": {
+  "set": {
+   "rev22Note": "Rev 22 changes no exit code and no precedence. The rev 6 order stands: 2 > 3 > 18 > 17 > 16 > 15 > 13 > 12 > 11 > 14 > 10 > 1 > 0. It only pins how the exit-2 PILOT_CONFIG_REJECTED_ENV_KEY refusal is emitted: a direct synchronous process.stderr.write, never Logger.error, with no filesystem write before exit (rev 22 section D)."
+  }
+ },
+ "docEdits": [
+  {
+   "file": "docs/architecture/phase-18-rev21-patch.md",
+   "replace": [
+    {
+     "old": "| X1..X9 | inversion | rev 20 set (edges, classification, builtins, env injection) | fail |",
+     "new": "| X1 | inversion | inline `NODE_OPTIONS=\"--require ./tests/x.js\" node falcon.js` in a production step and its `env:`-block twin (C3.9) | fail |\n| X2 | inversion | a production entry committed as `test` (step 226 and `start`), rejected by C4.1 recomputation | fail |\n| X3 | inversion | `require(path.join(\"..\",\"tests\",\"x\"))` in `scripts/` from a production root | fail |\n| X4 | inversion | `import(\"../../tests/x\")` in `src/` | fail |\n| X5 | inversion | `spawn(process.execPath,[\"tests/x.js\"])` from a production root | fail |\n| X6 | inversion | a `production` step running `node tests/experimental/x.js` | fail |\n| X7 | inversion | `createRequire(__filename)(\"../../tests/x\")` in `src/` | fail |\n| X8 | inversion | `|| true` relied on as an unknown executable (removing C3.6a must fail the current tree) | fail |\n| X9 | inversion | `set -o pipefail` relied on as an unknown executable (same sense as X8) | fail |"
+    },
+    {
+     "old": "| X17..X22 | inversion | rev 20 remaining set, renumbered by the table, not by prose | fail |",
+     "new": "| X17 | inversion | `new Worker(\"./tests/x.js\")` in `scripts/` from a production root | fail |\n| X18 | inversion | a production step `bash -c \"node tests/x.js\"` | fail |\n| X19 | inversion | a production step `nohup node tests/x.js &` | fail |\n| X20 | inversion | a production step `npx playwright test` | fail |\n| X21 | inversion | a new unclassified `package.json` script | fail |\n| X22 | inversion | a new unclassified `ci.yml` `run:` step | fail |\n| X23 | inversion | a classification value other than `production`/`test` | fail |\n| X24 | inversion | an unclassified `pre`/`post` lifecycle script | fail |\n| X25 | inversion | `falcon.js` requiring `scripts/fixture/server.js` | fail |"
+    },
+    {
+     "old": "the checker asserts its own fixture inventory against this table (count and ids) where the table is machine-readable",
+     "new": "the checker asserts its own fixture directory against this table - both the count and the id set - and fails on any extra, missing or duplicate id (rev 22 section B completes the enumeration: X1..X25 contiguous plus P1..P3, with the nineteen rev 20 fixtures at X1..X10 and X17..X25 and the rev 19 fourteen at X3..X7 and X17..X25)"
+    },
+    {
+     "old": "The carve-out becomes **two occurrences in one file**, `src/core/pilot/PilotLifecycle.js`: one frozen array literal `REJECTED_ENV_KEYS` (sole member: the key string) and **one refusal site per stage**, both reading the same frozen array. The walker fails on any third occurrence,",
+     "new": "The carve-out is **exactly one occurrence in one file** (corrected by rev 22 section E; the rev 21 count of two was wrong), `src/core/pilot/PilotLifecycle.js`: one frozen array literal `REJECTED_ENV_KEYS` at module scope (sole member: the key string), plus **one refusal site per stage**, both of which *read* that array and therefore contain no literal. The walker fails on any second occurrence,"
+    },
+    {
+     "old": "message states that *protected-action approval is not supported in Phase 18*.",
+     "new": "message states that *protected-action approval is not supported in Phase 18*. The message is written synchronously to **stderr** by a direct `process.stderr.write` call and the process then exits with code 2; **`Logger.error` is forbidden** here, because `utils/Logger.js:107` points `logFilePath` at `reports/execution.log` and the write path calls `fs.promises.mkdir` at `:142` and `fs.promises.appendFile` at `:145`, which would be a filesystem write before the refusal (rev 22 section D)."
+    },
+    {
+     "old": "`neg-token-refusal-order` (refusal precedes browser launch, any `run/` write, any manifest read and any target request, asserted on the ordered event log)",
+     "new": "`neg-token-refusal-order` (refusal precedes browser launch, any `run/` write, any manifest read and any target request, asserted on the ordered event log; **and**, per rev 22 D.3, exit code is exactly 2, no file write occurs before exit - `reports/execution.log` neither created nor appended, nothing created or modified under `run/` - and the text appears on stderr, not stdout, with the case run against a clean `reports/` directory)"
+    }
+   ]
+  }
+ ],
+ "coverage": [
+  {
+   "finding": "SEC-21 M-24 (major): table C6-T enumerated 22 inversion fixtures while declaring 25; three rev 20 fixtures had no id",
+   "disposition": "fixed",
+   "where": "rev 22 section B; docEdits on rev21-patch.md rows X1..X9 and X17..X22 -> X1..X9 and X17..X25 with one-line descriptions for all 25 plus P1..P3; checker self-assertion of count and id set",
+   "ownerPoint": "M-24 was flagged as owner-waivable; rev 22 fixes it instead of waiving it"
+  },
+  {
+   "finding": "SEC-21 m-77: AC-098 (ii) claimed rev 20 section C is the only section any criterion cites, contradicting AC-090's rev 21 C6-T citation",
+   "disposition": "fixed",
+   "where": "rev 22 section C; ac P18-AC-098 requirement and P18-AC-090 requirement - both cite rev 21 section C and table C6-T, 'only section' wording dropped",
+   "ownerPoint": "none"
+  },
+  {
+   "finding": "SEC-21 m-76: emission channel unnamed; the implied Logger.error appends reports/execution.log, breaking the no-filesystem-access rule and invisible to neg-token-refusal-order",
+   "disposition": "fixed",
+   "where": "rev 22 section D; ac P18-AC-084 carve-out emission/refusal/inversionTests; openItems TOKEN-REFUSAL state; docEdits on rev 21 B.2 and B.5. Logger facts verified at 74768d8: utils/Logger.js:107 logFilePath, :142 mkdir, :145 appendFile",
+   "ownerPoint": "5"
+  },
+  {
+   "finding": "SEC-21 m-78: carve-out allowed two occurrences but the one-frozen-array pattern yields one",
+   "disposition": "fixed",
+   "where": "rev 22 section E; ac P18-AC-084 prohibitedLiteralsNote and prohibitedLiteralsCarveOut (occurrences 1, pattern, rule, neg-token-refusal-carveout inverted on a SECOND occurrence); docEdit on rev 21 B.4",
+   "ownerPoint": "5"
+  }
+ ]
+}
