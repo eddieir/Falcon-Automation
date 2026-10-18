@@ -421,3 +421,15 @@ Deferred test and case sets, each with its named inversion, none of which is a P
 ## 8. Historical context (non-authoritative commit identifiers)
 
 `909d794` (rev 17 criterion text), `0fbe099`, `dd8b3da`, `63f80e4`, `91e05b0` and `5c355cb` on the local branch `docs/phase-18-architecture` are cited in design history only. No tag exists or is proposed. Nothing in this document or in any live requirement depends on retrieving them.
+
+
+## Appendix R21 (rev 21, closing the SEC-20 m-68 residual)
+
+**Authority rule.** This tracked document is the sole authority for every deferred 18P-PROTECTED-NONGET text. No acceptance criterion, requirement, merge condition or open item depends on any tag or historical commit remaining reachable. Short commit identifiers that appear in this record, including inside text preserved verbatim from earlier revisions, are **historical context only and are not dependencies**; the earlier proposal of an annotated tag carrying the rev 17 criterion text is **WITHDRAWN** - no such tag is created, pushed, cited or relied on.
+
+**Deferred content check.** The verbatim copies required by the 18P-DOC merge condition are unchanged by rev 21: the eleven wholly deferred criteria, the deferred clauses of the eight mixed criteria, the rev 17 text of the seven criteria that lost sentences, the OWNER-12 and OWNER-13 deferred-work lists, the approval-writer research, the relevant SEC-04 to SEC-20 findings including the m-51 and m-52 conditions, the SPIKE-R facts and the deferred test obligations. Rev 21 adds nothing to the deferred scope and removes nothing from it.
+
+**Rev 21 corrections that touch quoted text here.** Where a preserved copy cites "fourteen inversion fixtures with one positive control" or "rev 19 section C", the quotation is left **verbatim** because its purpose is preservation; the live rules are rev 21 section C (C3.4b child_process capability-escape model and fixture table C6-T, the single source of truth for fixture ids and counts) and rev 21 section D (the unchanged rev 6 exit precedence, under which exit 13 masks none of 18, 17, 16 or 15 and never masks a pilot-store integrity violation). `PILOT_APPROVAL_RUN_TOKEN` is, in Phase 18, rejected on presence in every `falcon.js` invocation with exit 2 and reason `PILOT_CONFIG_REJECTED_ENV_KEY`; nothing in this deferred record authorises reading, measuring, storing or forwarding its value.
+
+**Status.** Non-normative for Phase 18, non-production, unshipped, not authorised and not scheduled.
+
