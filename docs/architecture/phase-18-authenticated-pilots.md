@@ -558,7 +558,7 @@ Rows below merge the revision 1 table with the revision 2 amendments (rev 2 wins
 | 048 | PolicyEngine step 6 before step 7 | U, R |
 | 049 | ActionClassifier ambiguity, CONTROL_AMBIGUOUS | R |
 | 050 (S) | Manifest artifacts policy + playwright.config pilot project | R, S |
-| 051 | ApprovalStore + run token + CSRF fixture + armed NetworkGate | R |
+| 051 | CSRF fixture + armed NetworkGate + refusal before transmission at exit 18 with a mandatory reason code (DEFERRED to 18P under OWNER-13: the ApprovalStore and run-token mapping of this live criterion is unshipped design history; inline annotation added by rev 19, closing SEC-18 m-66) | R |
 | 052 | PolicyEngine step 7 | R |
 | 053 | approval/Binding — eight fields | U, R |
 | 054 | ApprovalStore staleness | U, R |

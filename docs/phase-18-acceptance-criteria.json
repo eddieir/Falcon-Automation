@@ -137,6 +137,18 @@
       "ref": "rev 17 section 11d.7",
       "status": "OPEN - owner confirmation requested; m-51 carried as DEFERRED PENDING CONFIRMATION in the meantime",
       "state": "Owner confirmation requested (OWNER-13-Q1): m-51 and the rev 11 to rev 15 fixture-identity assertions are carried as DEFERRED WITH THE APPROVAL MACHINERY, pending owner confirmation, because the fixture approval boundary they protected is itself deferred. This reverses the earlier instruction that m-51 stays a mandatory 18D merge condition, only because the thing m-51 protected is deferred; if the owner prefers to keep it mandatory it returns as an 18D condition at no design cost (rev 17 section 11d.7). The genuine-recording-server obligation for the AC-051 zero-transmission cases is unaffected and stays live. Correction (rev 18 section E, closes SEC-17 m-64): AC-092 is the fixture no-arbitrary-target, server-identity, listener-identity and F-case criterion, and it carries the rev 15 sections 9b and 9c assertions, which are the substance of m-51; the PTY interactive-path test is AC-094, now deferred to 18P with the writer. Section 11d.6's label of AC-092 as the 'PTY production approval test' is wrong and is corrected. If the owner keeps m-51, AC-092 returns as an 18D Must with mergeCondition true at no design cost."
+    },
+    {
+      "id": "OWNER-14-Q1",
+      "ref": "rev 19 sections C3.4 and Appendix A.3",
+      "status": "OPEN - owner confirmation requested; the check is not implementable without a decision",
+      "state": "Owner confirmation requested (OWNER-14-Q1): the dependency-reachability check treats a child-process call or workflow run: command as a graph leaf only when all three conditions hold - its executable is a literal on the closed externalExecutables list committed in docs/pilot/reachability-roots.json (git, ps, ffmpeg, ffprobe, psql, curl, allure, mkdir, cp, mv, rm, tee, head, cat, seq, sleep, echo), its argv holds no repository .js, .cjs, .mjs or .sh path, and it uses no -e, --eval, -r, --require, --import or --loader. Security accepts this as data with a closed shape that exempts no repository code and whose every addition is a reviewed change (SEC-18 remediation 2). The owner must confirm explicitly that this list is NOT an 'exemption' under section 11a.4, which bans exemptions. If the owner rules that it is, the check as specified in rev 19 section C cannot be implemented and M-23 reopens. Nothing is risk-accepted by this item."
+    },
+    {
+      "id": "OWNER-14-Q2",
+      "ref": "rev 19 sections C2, C5, G and 9",
+      "status": "OPEN - owner confirmation requested; each default is reversible at no design cost",
+      "state": "Owner confirmation requested (OWNER-14-Q2), three choices rev 19 takes as the lowest-risk defaults: (1) scripts/fixture/server.js stays where it is with no file move, and owner check 4 is covered by the exact forbidden target scripts/fixture/** for the falcon.js and src/** graphs, with fixture:serve and ci.yml step 392 classified test by rule R4 (SEC-18 remediation 6, keep-in-place option; Security accepts either option); (2) src/core/locator/HealingBenchmark.js stays production via healing:benchmark under Security's four conditions, all discharged in rev 19 section C5 - a data read is not an edge, the sink scan covers :308-310, a committed assertion that no production module requires it, and no pilot-mode invocation; (3) the annotated tag phase-18-design-rev17-text-909d794 on commit 909d794, which preserves the deferred rev 17 criterion text, is proposed but NOT created and NOT pushed by ARCH-19: pushing it is a coordinator action requiring recorded owner authorisation (SEC-18 m-68)."
     }
   ],
   "exitCodes": {
@@ -193,7 +205,8 @@
       "P18-AC-090",
       "P18-AC-095"
     ],
-    "countsNote": "rev 18 (ARCH-18): deferredToPhase18P counts criteria whose whole text is deferred (phase deferred-18P and mergeCondition false). mixedPhase18PIds lists criteria with phase mixed and at least one deferred clause; their live clauses remain Phase 18 merge conditions and are listed in phaseClauses.current with a clause-level mergeCondition. deferredUnderOptionC (5: 086, 092, 093, 096, 097) is retained unchanged as the OWNER-12 set. No criterion is deleted or renumbered; total/must/should/could are unchanged."
+    "countsNote": "rev 18 (ARCH-18): deferredToPhase18P counts criteria whose whole text is deferred (phase deferred-18P and mergeCondition false). mixedPhase18PIds lists criteria with phase mixed and at least one deferred clause; their live clauses remain Phase 18 merge conditions and are listed in phaseClauses.current with a clause-level mergeCondition. deferredUnderOptionC (5: 086, 092, 093, 096, 097) is retained unchanged as the OWNER-12 set. No criterion is deleted or renumbered; total/must/should/could are unchanged.",
+    "deferredUnderOptionCNote": "deferredUnderOptionC counts the five criteria deferred by owner decision OWNER-12 (Option C): AC-086, AC-092, AC-093, AC-096 and AC-097, whatever their rev 18 phase. It is therefore not a subset of deferredIds: AC-086 is phase mixed with a live window-validation clause, while 092, 093, 096 and 097 are wholly deferred. Definition added by rev 19 to close the SEC-18 E1 nit."
   },
   "criteria": [
     {
@@ -835,7 +848,8 @@
           "the tests-only executable for exit 0",
           "exit 14 as an expected outcome"
         ]
-      }
+      },
+      "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-074. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key."
     },
     {
       "id": "P18-AC-075",
@@ -906,7 +920,7 @@
       "priority": "Must",
       "pr": "18D",
       "requirement": "In shard mode every protected step is refused POLICY_PROTECTED_ACTION_UNSUPPORTED (exit 18, mandatory reason code per rev 17 section 11f and rev 18 section D) — statically bound protected actions before any browser launch — no run-token transport exists in Phase 18, so there is nothing to refuse (the env and file run-token refusals are DEFERRED to 18P; rev 18 section B), and run/approvals is never created",
-      "components": "plan projection pre-flight refusal + gate.perform refusal + token refusal (OD-23, ADR-0038 amended)",
+      "components": "plan projection pre-flight refusal + gate.perform refusal (no token refusal ships: the run-token transport is DEFERRED to 18P under rev 18 section B, so Phase 18 has nothing to refuse) (OD-23, ADR-0038 amended)",
       "verification": "U, R",
       "phase": "mixed",
       "mergeCondition": {
@@ -922,23 +936,34 @@
           "the env and file run-token transport refusals",
           "exit 14"
         ]
-      }
+      },
+      "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-083. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key."
     },
     {
       "id": "P18-AC-084",
       "priority": "Must",
       "pr": "18F",
-      "requirement": "No workflow contains an approve step, approve flag, run-token env key, token file or approvals path; a protected action reached in CI is refused POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 with its mandatory reason code (rev 18 section D); the static check resolves npm/yarn/npx script indirection and node/bash invocations transitively with cycle detection, walks static require graphs, fails on any reachable approve flag, token key, approvals path or any approval-module import anywhere in production, the former src/core/pilot/ carve-out being removed because no approval module exists in Phase 18 (tests/ and tests/experimental/ are covered by the production dependency-reachability check of rev 18 section C), and fails closed on any command it cannot statically resolve; it additionally fails on any require of a tests/ path from src/ or scripts/ and on any workflow invocation of a tests-only executable outside the test gate. This static check is defence in depth: the primary control is the production dependency-reachability check of rev 18 section C together with AC-098 (ii) and (iii): no production root reaches tests/, tests/experimental/ or any approval module, because none exists, and every script and workflow run: step is classified production or test in a committed file with no exempt value (the rev 10 section 4a fixture boundary is DEFERRED to 18P under OWNER-13) The walker additionally fails on any reachable customer-facing code path that could route, perform, continue, fulfil or emulate a protected non-GET request, including any dormant, flag-disabled or configuration-reachable M1 or route.fetch fallback, so that the absence of such a path is checked and not assumed. The walker finds action sites by scanning src/ for every Playwright action and request sink rather than from a fixed list, and any site not routed through the gate fails closed; it admits no exemption; and it fails on the existence of --approve-action or --emit-token-to anywhere under src/, falcon.js, scripts/, package.json or .github/ (rev 17 sections 11a, 11d.6, 11j).",
+      "requirement": "No workflow contains an approve step, approve flag, run-token env key, token file or approvals path; a protected action reached in CI is refused POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 with its mandatory reason code (rev 18 section D); the static check resolves npm/yarn/npx script indirection and node/bash invocations transitively with cycle detection, walks static require graphs, fails on any reachable approve flag, token key, approvals path or any approval-module import anywhere in production, the former src/core/pilot/ carve-out being removed because no approval module exists in Phase 18 (tests/ and tests/experimental/ are covered by the production dependency-reachability check of rev 18 section C), and fails closed on any command it cannot statically resolve; it additionally fails on any require of a tests/ path from src/ or scripts/ and on any workflow invocation of an executable whose sole purpose is testing, outside the test gate (the withdrawn literal is recorded in this criterion's prohibitedLiterals array). This static check is defence in depth: the primary control is the production dependency-reachability check of rev 19 section C together with AC-098 (ii) and (iii): no production root reaches tests/, tests/experimental/ or any approval module, because none exists, and every script and workflow run: step is classified production or test in a committed file with no exempt value (the rev 10 section 4a fixture boundary is DEFERRED to 18P under OWNER-13) The walker additionally fails on any reachable customer-facing code path that could route, perform, continue, fulfil or emulate a protected non-GET request, including any dormant, flag-disabled or configuration-reachable M1 or route.fetch fallback, so that the absence of such a path is checked and not assumed. The walker finds action sites by scanning falcon.js and src/, plus those scripts/ modules reachable from a production-classified root that can build a pilot context, for every Playwright action and request sink on a Page, Frame, Locator, ElementHandle, APIRequestContext, Route, Mouse, Keyboard, Touchscreen or BrowserContext receiver, including the evaluate, evaluateHandle, $eval, $$eval and setContent family and receivers bound by local assignment, failing closed on an unresolvable receiver, with a JSDoc annotation able only to add a sink and never to remove one (removal needs syntactic array proof), rather than from a fixed list (rev 19 section H, closing SEC-18 m-69), and any site not routed through the gate fails closed; it admits no exemption; and it fails on the existence of any member of this criterion's prohibitedLiterals array anywhere under src/, falcon.js, scripts/, package.json or .github/ (rev 17 sections 11a, 11d.6, 11j; the literals were moved into that structured array by rev 19 section F(b) so the section F lint skips them by key).",
       "components": "static ci.yml check over every job + CI pilot job expected-exit assertion (OD-24, ADR-0041); FALCON_PILOT_TEST_RUNNER is withdrawn and must not reappear",
       "verification": "S, R",
       "phase": "current",
-      "mergeCondition": true
+      "mergeCondition": true,
+      "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-084. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key.",
+      "prohibitedLiterals": [
+        "--approve-action",
+        "--emit-token-to",
+        "PILOT_APPROVER",
+        "PILOT_APPROVAL_RUN_TOKEN",
+        "pty-approve",
+        "tests-only executable"
+      ],
+      "prohibitedLiteralsNote": "Structured prohibition data (rev 19 section F(b), closing SEC-18 m-65(a)): the walker fails if any of these literals exists anywhere under src/, falcon.js, scripts/, package.json or .github/. None is a Phase 18 capability, obligation or claim. The section F lint skips this key, so a prohibition can never read as a live approval obligation."
     },
     {
       "id": "P18-AC-085",
       "priority": "Must",
       "pr": "18E",
-      "requirement": "Filesystem admission is numeric and evidence-gated: tmpfs and zfs only with a recorded statfs id and passing O_EXCL, rename and fsync behaviour tests; overlayfs, virtiofs, drvfs and every unrecorded id are refused PILOT_INTERNAL_ERROR exit 18 with an actionable message naming the observed id and path, never a skip; admission is evaluated per root against a per-root admitted-id set: tmpfs may be admitted for run/auth and run/plans after the behaviour checks and is refused for run/approvals (exit 18, reason approvals_root_not_durable), zfs stays conditional on SPIKE-FS evidence, unknown ids fail closed on every root, and no id is admissible from a kernel header, documentation or reviewer knowledge — only an observed, committed value. A missing approval history — the resolved real path of the approvals root absent, which requires both realpath and lstat of the root path to give ENOENT, or the root present and an empty directory — yields APPROVAL_REQUIRED exit 14 and is never reconstructed from a receipt, bundle, report, cache, environment variable or second root, and a freshly initialised ledger writes a genesis audit entry recording that no prior history was found; anything present but not fully verifiable — zero-length or truncated ledger, segment or anchors file, missing or unparseable header, missing referenced segment, foreign build identity, broken chain, or any read failure other than ENOENT on the root — is PILOT_INTERNAL_ERROR exit 18, reason approval_history_unverifiable, and is never downgraded to exit 14; a dangling symlink at the root, where realpath gives ENOENT but lstat succeeds, is PILOT_INTERNAL_ERROR exit 18, reason approvals_root_symlink, and is never treated as missing; and a root that is present and non-empty but holds no verifiable chain, including one holding only a lock file, only a marker or only unknown files, is PILOT_INTERNAL_ERROR exit 18, reason approval_history_unverifiable; and when the approvals root is missing beneath a symlinked parent, where both realpath and lstat of the root give ENOENT but an ancestor of the root is a symlink, the parent no-symlink rule of ADR-0030 fails first and the state is PILOT_INTERNAL_ERROR exit 18, reason approvals_root_symlink, and is never counted as missing; existsSync is forbidden anywhere in this partition and lstat is mandatory",
+      "requirement": "Filesystem admission is numeric and evidence-gated: tmpfs and zfs only with a recorded statfs id and passing O_EXCL, rename and fsync behaviour tests; overlayfs, virtiofs, drvfs and every unrecorded id are refused PILOT_INTERNAL_ERROR exit 18 with an actionable message naming the observed id and path, never a skip; admission is evaluated per root against a per-root admitted-id set: tmpfs may be admitted for run/auth and run/plans after the behaviour checks and is refused for run/approvals (exit 18, reason approvals_root_not_durable), zfs stays conditional on SPIKE-FS evidence, unknown ids fail closed on every root, and no id is admissible from a kernel header, documentation or reviewer knowledge — only an observed, committed value. DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A2; inline marker added by rev 19 to close SEC-18 m-65 and m-67) - the following approval-root partition is unshipped design history with no Phase 18 trigger, because Phase 18 creates no approvals root, writes no ledger and has no approval history, and exit 14 is reserved and unreachable: A missing approval history — the resolved real path of the approvals root absent, which requires both realpath and lstat of the root path to give ENOENT, or the root present and an empty directory — yields APPROVAL_REQUIRED exit 14 and is never reconstructed from a receipt, bundle, report, cache, environment variable or second root, and a freshly initialised ledger writes a genesis audit entry recording that no prior history was found; anything present but not fully verifiable — zero-length or truncated ledger, segment or anchors file, missing or unparseable header, missing referenced segment, foreign build identity, broken chain, or any read failure other than ENOENT on the root — is PILOT_INTERNAL_ERROR exit 18, reason approval_history_unverifiable, and is never downgraded to exit 14; a dangling symlink at the root, where realpath gives ENOENT but lstat succeeds, is PILOT_INTERNAL_ERROR exit 18, reason approvals_root_symlink, and is never treated as missing; and a root that is present and non-empty but holds no verifiable chain, including one holding only a lock file, only a marker or only unknown files, is PILOT_INTERNAL_ERROR exit 18, reason approval_history_unverifiable; and when the approvals root is missing beneath a symlinked parent, where both realpath and lstat of the root give ENOENT but an ancestor of the root is a symlink, the parent no-symlink rule of ADR-0030 fails first and the state is PILOT_INTERNAL_ERROR exit 18, reason approvals_root_symlink, and is never counted as missing; existsSync is forbidden anywhere in this partition and lstat is mandatory",
       "components": "SafeFs.assertLocalFilesystem + SPIKE-FS evidence table + filesystem behaviour tests (OD-20, ADR-0030 amended); rootKind column in the compatibility matrix; the operator guide states nothing about an approval root, because none exists in Phase 18 (the OD-20-Q1 approval-root clauses are DEFERRED to 18P under OWNER-13; 11n.G describes detection and refusal only)",
       "verification": "U, S, I",
       "phase": "mixed",
@@ -958,7 +983,8 @@
           "approval_history_unverifiable",
           "approvals_root_symlink including the symlinked-parent row"
         ]
-      }
+      },
+      "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-085. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key."
     },
     {
       "id": "P18-AC-086",
@@ -1017,20 +1043,22 @@
           "classification recomputed at gate.perform from the freshly loaded manifest against the element actually acted on",
           "the maximum rule over denied, protected, permitted",
           "PLAN_CLASSIFICATION_DRIFT when a plan row tries to lower a class",
-          "a heal or re-resolution that reclassifies to protected is refused POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 per rev 17 section 11i"
+          "a heal or re-resolution that reclassifies to protected is refused POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 per rev 17 section 11i",
+          "a heal or re-resolution whose identity differs from the recorded plan-row identity, with the element still permitted, is refused POLICY_PLAN_IDENTITY_DRIFT exit 13 with reason heal_changed_permitted_element and zero requests (rev 19 section D; this is the live substance of open item m-27)"
         ],
         "deferred-18P": [
           "the comparison against the approved element identity",
           "APPROVAL_MISMATCH exit 14"
         ]
-      }
+      },
+      "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-089. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key."
     },
     {
       "id": "P18-AC-090",
       "priority": "Must",
       "pr": "18D",
-      "requirement": "Structural unavailability (the live half of AC-098 under OWNER-13): no production path reaches any approval creation, persistence, consumption or protected-action execution code, because none exists. Any retained approval or protected-action prototype lives at exactly one permitted location, tests/experimental/, and no file under src/, scripts/, falcon.js, package.json or any workflow reaches it by a require, require.resolve, literal import(), createRequire, child-process node <literal>, worker, Playwright config or workflow run: edge; every non-literal such edge in src/, scripts/ and falcon.js fails closed. The check admits no exemption, runs even when no prototype is retained, and is verified by the roots, resolution rules and five inversion fixtures of rev 18 section C. The remainder of the rev 17 AC-090 text (the fixture approval authority, the ApprovalStore constructor, the PilotRuntime ledger source and resolver, consumption at gate.perform, the approve flags, the TTY writer and the ledger discriminator) is DEFERRED to 18P-PROTECTED-NONGET under OWNER-13, retained unweakened as unshipped design history and preserved verbatim at git revision 909d794 in this file under P18-AC-090 (rev 18 section A4).",
-      "components": "the production dependency-reachability check of rev 18 section C with its committed script and workflow classification file and five inversion fixtures + the AC-098 export-surface check. DEFERRED to 18P: the PilotApprovalResolver injection seam, tests/pilot/approval/FixtureApprovalAuthority, tests/pilot/fixtures/PilotFixtureServer, tests/pilot/bin/approved-fixture-case.cjs, the PilotActionGate consumption re-check, the ApprovalStore closure-held ledger registry, isLedgerApproval, ApprovalCliWriter and PilotFixtureServer.isFixtureServer (rev 10 section 4a, rev 11 section 5a, rev 12 sections 6a and 6c.3; ADR-0044 deferred with them).",
+      "requirement": "Structural unavailability (the live half of AC-098 under OWNER-13): no production path reaches any approval creation, persistence, consumption or protected-action execution code, because none exists. Any retained approval or protected-action prototype lives at exactly one permitted location, tests/experimental/, and no file under src/, scripts/, falcon.js, package.json or any workflow reaches it by a require, require.resolve, literal import(), createRequire, child-process node <literal>, worker, Playwright config or workflow run: edge; every non-literal such edge in src/, scripts/ and falcon.js fails closed. The check admits no exemption, runs even when no prototype is retained, and is verified by the roots, edge-resolution rules, deterministic classification rule, forbidden targets and fourteen inversion fixtures with one positive control of rev 19 section C, which supersedes rev 18 section C and is the same section AC-098 (ii) cites. The remainder of the rev 17 AC-090 text (the fixture approval authority, the ApprovalStore constructor, the PilotRuntime ledger source and resolver, consumption at gate.perform, the approve flags, the TTY writer and the ledger discriminator) is DEFERRED to 18P-PROTECTED-NONGET under OWNER-13, retained unweakened as unshipped design history and preserved verbatim at git revision 909d794 in this file under P18-AC-090 (rev 18 section A4).",
+      "components": "the production dependency-reachability check of rev 18 section C of rev 19 section C with its committed script and workflow classification file, its closed externalExecutables leaf list (OWNER-14-Q1), its forbidden target scripts/fixture/** for the falcon.js and src/** graphs, and its fourteen inversion fixtures with one positive control + the AC-098 export-surface check. DEFERRED to 18P: the PilotApprovalResolver injection seam, tests/pilot/approval/FixtureApprovalAuthority, tests/pilot/fixtures/PilotFixtureServer, tests/pilot/bin/approved-fixture-case.cjs, the PilotActionGate consumption re-check, the ApprovalStore closure-held ledger registry, isLedgerApproval, ApprovalCliWriter and PilotFixtureServer.isFixtureServer (rev 10 section 4a, rev 11 section 5a, rev 12 sections 6a and 6c.3; ADR-0044 deferred with them).",
       "verification": "U, R, S",
       "phase": "mixed",
       "mergeCondition": {
@@ -1039,7 +1067,7 @@
       },
       "phaseClauses": {
         "current": [
-          "No production path reaches any approval or protected-action prototype: it lives only under tests/ or tests/experimental/, and no file under src/, scripts/, falcon.js, package.json or any workflow requires it, verified by the production dependency-reachability check of rev 18 section C with no exemptions",
+          "No production path reaches any approval or protected-action prototype: a retained prototype lives at exactly one permitted location, tests/experimental/, and no production-classified root and no module reachable from one reaches it, nor any path under tests/ or scripts/fixture/, verified by the production dependency-reachability check of rev 19 section C with no exemptions",
           "the check runs and passes vacuously if no prototype is retained"
         ],
         "deferred-18P": [
@@ -1049,7 +1077,8 @@
           "the approve flags, the TTY writer and the ledger/fixture WeakSet discriminator",
           "every APPROVAL_REQUIRED exit 14 refusal of this criterion"
         ]
-      }
+      },
+      "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-090. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key."
     },
     {
       "id": "P18-AC-091",
@@ -1113,7 +1142,8 @@
           "crypto.timingSafeEqual for the fixture capability",
           "the net.Server and EventEmitter fixture captures"
         ]
-      }
+      },
+      "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-095. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key."
     },
     {
       "id": "P18-AC-096",
@@ -1140,9 +1170,61 @@
       "priority": "Must",
       "pr": "18D",
       "scope": "non-reachability",
-      "requirement": "No customer-facing or production path can reach any approval creation, persistence, consumption, replay or protected-action execution path, because none exists in production. Verified by: (i) the AC-084 walker with the 11j sink-scan rule and no exemptions; (ii) the production dependency-reachability check of 11a.4/11d.5, asserting that the require graph rooted at `falcon.js` and at every `package.json` script reaches no `tests/` file, no experimental fixture, and no approval module; (iii) an export-surface check that no production module exports an approval create, mint, persist or consume function; (iv) a runtime case that a protected non-GET step is refused with `POLICY_PROTECTED_ACTION_UNSUPPORTED` exit 18 with zero requests at the server and **no approval object, ledger entry, token or audit-approval record created anywhere**; (v) the prohibited-phrase and disambiguation checks of 10d and 11d.2. **Inversion:** add any production export that creates or consumes an approval, or any production require edge into `tests/` or the experimental fixture, and checks (i) to (iii) must fail.",
-      "components": "the AC-084 walker with the sink-scan rule, the production dependency-reachability check, the export-surface check and the AC-051 refusal case with no approval object created (rev 17 sections 11a, 11d.3, 11d.5). The deferred approval state-machine text moved unweakened to 18P-PROTECTED-NONGET.",
+      "requirement": "No customer-facing or production path can reach any approval creation, persistence, consumption, replay or protected-action execution path, because none exists in production. Verified by: (i) the AC-084 walker with the 11j sink-scan rule and no exemptions; (ii) the production dependency-reachability check of rev 19 section C, asserting that the dependency graph rooted at the exact production roots - `falcon.js`, `package.json` `main` and every `bin` entry (none today), and every entry classified `production` in the committed classification file `docs/pilot/reachability-roots.json` - reaches, by exact path, no path under `tests/`, no path under `tests/experimental/`, no path under `scripts/fixture/` and no approval module; test-classified roots are unconstrained, an unclassified, unknown or mis-valued `package.json` script or workflow `run:` step fails the check, there is no exempt value, and the check passes on the current tree with zero exemptions (rev 19 sections C1 to C5); (iii) an export-surface check that no production module exports an approval create, mint, persist or consume function; (iv) a runtime case that a protected non-GET step is refused with `POLICY_PROTECTED_ACTION_UNSUPPORTED` exit 18 with zero requests at the server and **no approval object, ledger entry, token or audit-approval record created anywhere**; (v) the prohibited-phrase and disambiguation checks of 10d and 11d.2. **Inversion:** add any production export that creates or consumes an approval, any production edge into `tests/`, `tests/experimental/` or `scripts/fixture/`, or any unclassified script or workflow `run:` step, and checks (i) to (iii) must fail; the fourteen inversion fixtures and the one positive control are enumerated in rev 19 section C6.",
+      "components": "the AC-084 walker with the sink-scan rule, the production dependency-reachability check, the export-surface check and the AC-051 refusal case with no approval object created (rev 17 sections 11a and 11d.3; the reachability check with its roots, edge rules, classification rule, forbidden targets and fixtures is specified by rev 19 section C, which supersedes 11a.4/11d.5 for this control). The deferred approval state-machine text moved unweakened to 18P-PROTECTED-NONGET.",
       "verification": "U, R"
     }
-  ]
+  ],
+  "lintBaseline": {
+    "tokens": [
+      "ApprovalStore",
+      "ApprovalRecord",
+      "ApprovalCliWriter",
+      "PilotApprovalResolver",
+      "approve-action",
+      "emit-token-to",
+      "RunToken",
+      "RunTokenEmitter",
+      "LedgerLock",
+      "ledger approval",
+      "approvals root",
+      "approval root",
+      "APPROVAL_MISMATCH",
+      "APPROVAL_REQUIRED",
+      "APPROVAL_STALE",
+      "APPROVAL_REPLAYED",
+      "approved half",
+      "tests-only executable",
+      "PILOT_APPROVAL",
+      "PILOT_APPROVER",
+      "replay-protected",
+      "pty-approve",
+      "approver",
+      "two-command approval workflow",
+      "approval unlocks",
+      "approve and then run",
+      "approved action runs",
+      "exit 14"
+    ],
+    "method": "case-insensitive occurrence count (not line count) over tracked files, excluding docs/security/phase-18-design-review-*.md and docs/architecture/phase-18-rev*",
+    "measuredAt": "63f80e4, before the rev 19 edits are applied; recompute once on application and commit that result as the baseline",
+    "counts": {
+      "docs/phase-18-acceptance-criteria.json": 90,
+      "docs/phase-18-plan.md": 83,
+      "docs/architecture/phase-18-authenticated-pilots.md": 80,
+      "docs/phase-18-decision-traceability.md": 65,
+      "docs/security/phase-18-threat-model.md": 47,
+      "docs/phase-18-owner-decisions.md": 38,
+      "tests/regression/p16-locator-merge.check.cjs": 11,
+      "docs/research/phase-18/proposed-scope-and-criteria.md": 6,
+      "docs/PHASE-PLANS.md": 1,
+      "tests/regression/p14-memory.check.cjs": 1
+    },
+    "rules": [
+      "fail on any increase in any file",
+      "each new hit needs an inline marker in the same line or table cell",
+      "no file-level blanket applies to README.md, docs/pilot/**, src/, scripts/, .github/, package.json or .env.example",
+      "the tests/regression/* entries are locator-healing review text and the bare word approver: baselined, never exempted"
+    ]
+  }
 }
