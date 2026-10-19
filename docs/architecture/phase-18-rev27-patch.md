@@ -5,7 +5,9 @@ Inputs: `docs/phase-18-w6t-conformance-results.md` (CONF-01, EXECUTED, PARTIAL),
 Scope: design text only. No production source file, `package.json` script or workflow step is edited by rev 27. **Rev 27 executes nothing.**
 Machine-applicable edits: `docs/architecture/phase-18-rev27-edits.json`; this document is normative for intent.
 
-**Status carried forward.** Counts stay **98 total / 89 Must / 6 Should / 3 Could**. C6-T stays **27 / 5** sourced from rev 23 section D.4. **M-23 and M-24 stay closed. M-25 stays OPEN. M-26 stays OPEN**, narrowed to the executed measurement. O-1 and the `PILOT_APPROVAL_RUN_TOKEN` text are untouched. OWNER-24 and OWNER-25 stay **DECIDED**; the supported-browser set stays **EMPTY**; scope stays **Chromium only**; **no Linux filesystem is admitted**. No exit code is added and no bypass exists. The untracked `phase-18-rev24-*` drafts are ignored.
+**Status carried forward.** Counts stay **98 total / 89 Must / 6 Should / 3 Could**.
+
+**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): this whole document is amended in place by `docs/architecture/phase-18-rev28-patch.md`. Every "42 rows" total in this document is superseded by **44 rows** (FC12 and IC9 added); the "pure JavaScript function" / "pure function" characterisation of `decide()` is WITHDRAWN and replaced by "deterministic Node-side decision function using a captured standard-library intrinsic"; the `PROXY-27` residual of section B.7 is WITHDRAWN and replaced by a proxy-rejection RULE using `util.types.isProxy` captured once at module initialization; the unreachable `disagreement` branch and its detail string are DELETED. Counts, C6-T 27/5, M-23/M-24 closed, M-25/M-26 open, O-1, OWNER-24, OWNER-25, the EMPTY supported-browser set and the exit-code registry are unchanged** C6-T stays **27 / 5** sourced from rev 23 section D.4. **M-23 and M-24 stay closed. M-25 stays OPEN. M-26 stays OPEN**, narrowed to the executed measurement. O-1 and the `PILOT_APPROVAL_RUN_TOKEN` text are untouched. OWNER-24 and OWNER-25 stay **DECIDED**; the supported-browser set stays **EMPTY**; scope stays **Chromium only**; **no Linux filesystem is admitted**. No exit code is added and no bypass exists. The untracked `phase-18-rev24-*` drafts are ignored.
 
 ## Section A — context, and what rev 27 changes
 
@@ -71,6 +73,8 @@ Non-array `perRealm` or `requiredIds`; a **sparse array** or an array with extra
 3. only complete, valid, **unanimous** validated absence ⇒ `armed:true`, exit 0 — and then only if OWNER-24 (B.1 of rev 26, same-process rule) holds.
 
 ### B.5 Reference text (pure functions, no I/O)
+
+**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): the heading's "pure functions" claim is WITHDRAWN and the code block below is superseded by rev 28 section B.5. `decide()` is a deterministic Node-side decision function that captures `isProxy` ONCE at module initialization from `node:util` and rejects a Proxy at every accepted container boundary BEFORE any property enumeration, prototype inspection, descriptor access, snapshot, clone or freeze. CONF-02 executed the text below and measured a pass-through Proxy ARMING, which the owner's rule forbids. Also changed by rev 28: the own-descriptor/accessor check now runs BEFORE the canonical-key-order check, and the unreachable `disagreement` branch is deleted. The text below stays as history**
 
 Normative behaviour; the implementation may differ in style but not in outcome.
 
@@ -231,6 +235,8 @@ The returned object carries `detail` but **not** the caller's array; the reporte
 
 ### B.7 Stated residual: Proxy
 
+**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): SECTION B.7 IS WITHDRAWN IN PLACE. `PROXY-27` is not a residual any more and NO PROXY EXCEPTION EXISTS: rev 28 section B.7 replaces it with a rule - `isProxy` captured once at module initialization from `node:util`, applied to `perRealm`, `requiredIds`, every realm record and every non-primitive own value, before any trap-triggering operation, so transparent, trapping, revoked, array-level, `requiredIds`-level, nested-value and post-validation proxies all return `shared_worker_block_unverified`, exit 18, `armed:false`, with no uncaught exception. `isProxy` identifies a Proxy, including a revoked one, without triggering a trap. What honestly remains is narrower: the rule is Node-only, an intrinsic captured at initialization cannot protect against an already-compromised process that patched `node:util` earlier, and a NON-Proxy exotic object with malicious getters is covered instead by the own-data-property, prototype, symbol-key, key-order, enumeration and two-read stability checks**
+
 Pure JavaScript **cannot** distinguish a Proxy that is observationally identical to a conforming frozen plain record from that record. Rev 27 does not claim detection. It claims: every structural read happens twice and disagreement refuses; a trap that throws, reports an accessor, hides or adds a key, breaks canonical key order or varies a value refuses; `decide` never decides on the caller's object, only on its own inert snapshot, which is not a Proxy. A Proxy supplying exactly the values of a valid record therefore yields the same decision as that record. Recorded as openItem `PROXY-27` for Security to rule on; no text may upgrade it to a detection claim.
 
 ### B.8 Interfaces
@@ -249,6 +255,8 @@ Boundary 1: browser → Node. Values cross only as the results of Falcon's own `
 ## Section C — table W6-T, CONSOLIDATED (single source, reprinted in full)
 
 **This table is the single source of SharedWorker realm and case ids, counts and expected results.** It supersedes the split of rev 25 section C (C.1–C.4) and rev 26 section C; those remain only as history. **Authoritative row count after rev 27: 42 rows.**
+
+**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): the authoritative row count is **44 rows** and the single source is the full reprint in rev 28 section C; FC12 (proxy rejection) and IC9 (the 7-case proxy battery) are added**
 
 ### C.1 Required decision realms (F1..F21) — 21 rows
 
@@ -317,7 +325,9 @@ Boundary 1: browser → Node. Values cross only as the results of Falcon's own `
 |---|---|---|---|
 | FW-1 | dedicated-worker-initiated WebSocket against a fixture with a real WS upgrade | **WebSocket behaviour remains UNMEASURED** and FW-1 stays an independent arming blocker; its **required fail-closed decision** (unmeasured ⇒ `shared_worker_block_unverified` 18, `armed:false`) is executed 3× per Node version | CONF-02 (decision only) |
 
-**Authoritative total: 21 (F1..F21) + 1 (F22) + 11 (FC1..FC11) + 8 (IC1..IC8) + 1 (FW-1) = 42 rows.** SPIKE-W6 covers 15 decision realms plus FC1, FC2, IC1 and IC2; every other row is owed to SPIKE-W7 and the section J gate. The rev 25 "34 rows" and the rev 26 "36 rows" totals are superseded by **42**. C6-T stays **27 / 5** and the two inventories stay disjoint.
+**Authoritative total: 21 (F1..F21) + 1 (F22) + 11 (FC1..FC11) + 8 (IC1..IC8) + 1 (FW-1) = 42 rows.**
+
+**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): the authoritative total is 21 (F1..F21) + 1 (F22) + **12** (FC1..FC12) + **9** (IC1..IC9) + 1 (FW-1) = **44 rows**, reprinted in full in rev 28 section C** SPIKE-W6 covers 15 decision realms plus FC1, FC2, IC1 and IC2; every other row is owed to SPIKE-W7 and the section J gate. The rev 25 "34 rows" and the rev 26 "36 rows" totals are superseded by **42**. C6-T stays **27 / 5** and the two inventories stay disjoint.
 
 ## Section D — the exhaustive sweep, defined precisely
 
@@ -343,7 +353,7 @@ For **every** realm index (21) × **every** required key (11) × **every** mutat
 
 Sweep B: for every realm (21) × these 6 in-schema substitutions: `measurable:false`, `timedOut:true`, `repetitionsConsistent:false`, `error:'threw'`, `typeofSharedWorker:'function'`, `constructed:true`. **Count 21 × 6 = 126.** Expected: all `armed:false`, exit 18; the 42 presence cases (`typeofSharedWorker:'function'`, `constructed:true`) ⇒ `shared_worker_present`; the other 84 ⇒ `shared_worker_block_unverified`.
 
-Sweep C (13 named cases, each applied to `B27`): C1 extra own property on a record; C2 inherited property (`Object.create(validRecord)` with the own key deleted); C3 getter for a required key; C4 setter for a required key; C5 Proxy whose trap varies between reads; C6 symbol own key; C7 sparse array (`delete arr[7]`); C8 extra own key on the array; C9 class-instance record; C10 null-prototype record; C11 non-canonical key order; C12 duplicate realm id; C13 post-validation mutation (mutate the caller's record after validation, before the decision). Expected: **every** case `armed:false`, exit 18, `shared_worker_block_unverified` with the expected `detail`; for C13 the decision must be **unchanged** relative to the unmutated base, or a refusal — never a new `armed:true`. Unknown `schemaVersion` is covered by Sweep A `invalidValue`/`typeChange` and by FC11.
+Sweep C (13 named cases, each applied to `B27`) **- SUPERSEDED BY REV 28: 20 named cases (the 13 below plus 7 proxy cases C14..C20), so the schema-derived totals become Sweep A 1155 + Sweep B 126 + Sweep C 20 = 1301 refusals plus exactly 1 authorised `armed:true` across 1302 `decide()` invocations; the C3/C4 expected detail is `record-accessor-property`, not `record-key-order`, because the accessor check now runs first**: C1 extra own property on a record; C2 inherited property (`Object.create(validRecord)` with the own key deleted); C3 getter for a required key; C4 setter for a required key; C5 Proxy whose trap varies between reads; C6 symbol own key; C7 sparse array (`delete arr[7]`); C8 extra own key on the array; C9 class-instance record; C10 null-prototype record; C11 non-canonical key order; C12 duplicate realm id; C13 post-validation mutation (mutate the caller's record after validation, before the decision). Expected: **every** case `armed:false`, exit 18, `shared_worker_block_unverified` with the expected `detail`; for C13 the decision must be **unchanged** relative to the unmutated base, or a refusal — never a new `armed:true`. Unknown `schemaVersion` is covered by Sweep A `invalidValue`/`typeChange` and by FC11.
 
 **Checker assertions, derived from the schema:** `|CANONICAL_REQUIRED_REALM_IDS| = 21`, `|REQUIRED_KEYS| = 11`, `|MUTATIONS| = 5`, `|VALID_NEGATIVES| = 6`, `|STRUCTURAL| = 13` ⇒ Sweep A `21*11*5 = 1155`, Sweep B `21*6 = 126`, Sweep C `13`, total **1294 refusals** plus **exactly 1** `armed:true` (the `B27` control) across **1295** `decide` invocations. The sweep **must report ZERO unexpected `armed:true`**; one unexpected arming is a gate failure, not a warning.
 
@@ -401,9 +411,13 @@ No public surface change; no exit code added; precedence unchanged (`2 > 3 > 18 
 *Context:* CONF-01 executed the ADR-0050 / rev 26 `decide()` and measured 105 of 441 single-field mutations arming, because a deleted `descriptor` or `error` was indistinguishable from a measured negative and `mechanism` was never validated.
 *Decision:* a realm record is evidence only if it is a frozen-snapshot plain object with exactly the 11 required own data keys in canonical order, `schemaVersion === 1`, and every value matching an exact type or closed enumeration; "no error", "no descriptor" and "no native constructor" are the named string sentinels `'none'`, `'absent'`, `'absent'`; `decide` snapshots, validates and freezes before deciding; every other input shape refuses with `shared_worker_block_unverified`, exit 18. Precedence stays unverified → present → armed.
 *Consequences:* the probe must emit schema-conforming records and may never default a missing measurement; a probe schema bump cannot silently arm; `armed:true` exists only for the synthetic authorised positive control; Proxy indistinguishability is a stated residual (`PROXY-27`); table W6-T is consolidated at 42 rows.
+
+**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): ADR-0051 is AMENDED by ADR-0052 (rev 28 section I): the Proxy residual is withdrawn and replaced by the `isProxy` rejection rule, `decide()` is a deterministic Node-side function rather than a pure JavaScript one, and table W6-T is 44 rows**
 *Alternatives rejected:* section E. *Failure modes, fallback, rollback, observability:* section F.
 
 ## Section J — executed W6-T conformance gate (CONF-02), required before Security
+
+**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): CONF-02 has EXECUTED and returned PARTIAL (`docs/phase-18-conf02-results.md`): a pass-through Proxy armed, FC1 and IC4 were not executed as independent rows, and F13/F14 were not created. The live gate is **CONF-03**, rev 28 section J, over 44 rows**
 
 CONF-01 is **superseded, not upgraded**. Rev 27 executes nothing; `CONF-02` and `W6T-GATE` stay NOT EXECUTED / NOT SATISFIED.
 
@@ -465,7 +479,7 @@ Command form: `git grep -nI -- "<pattern>" 7d2c1de -- docs/` over `decide(perRea
 
 - **Developer:** implement `inspectRecordShape`, `snapshotRecord`, `validateRecord` and `decide(perRealm, requiredIds)` exactly as section B.5 — pure, synchronous, total, no I/O, CommonJS, `Logger.*` only, `fs.promises.*` for evidence writes. The probe must emit schema-version-1 records and **must never default, coerce or fill a missing measurement**. Do not add a field, do not accept `undefined`/`null`/`''` as a negative, do not add a flag, environment variable, exemption or warning mode (OWNER-25), do not cache or transfer a probe result across browser processes (OWNER-24), never emit `shared_worker_blocked`. Do **not** implement any browser-identity mechanism: `OPEN-BID-27` is undecided, and the section J wrapper is scaffolding that must never enter product code.
 - **QA:** fixtures from the consolidated **42-row** table C only; the checker asserts the id set, the 42-row total and the sweep counts derived from the schema constants (1155 / 126 / 13; 1294 refusals + exactly 1 authorised `armed:true`). Generate sweep records **from the schema**, not by hand. F5, F7, F11 and F21 stay required fail-closed and must never be rewritten into passes. `armed:true` only at unit level. Pure rows on both Node versions, 3 repetitions; browser rows per section J.1.
-- **Security:** review scope is the B.2 schema and its sentinel choice, the B.3 rejection set, the B.6 ordering rule, the **B.7 Proxy residual (`PROXY-27`)**, the section D sweep definition and whether any input shape can still arm, the section J.2 identity scaffolding and the honesty of `OPEN-BID-27`, the section J.4 FC2 definition, the section K dispositions including the unapplied rev 26 `SPIKE-W` note, and the M-25/M-26 closure conditions (executed CONF-02 **plus** your review; documentation alone must not close either).
+- **Security:** review scope is the B.2 schema and its sentinel choice, the B.3 rejection set, the B.6 ordering rule, the **B.7 proxy-rejection RULE of rev 28** (`PROXY-27` withdrawn; review the `isProxy` capture-at-initialization rule, the boundary coverage and the honestly stated Node-only and process-integrity assumptions), the section D sweep definition and whether any input shape can still arm, the section J.2 identity scaffolding and the honesty of `OPEN-BID-27`, the section J.4 FC2 definition, the section K dispositions including the unapplied rev 26 `SPIKE-W` note, and the M-25/M-26 closure conditions (executed CONF-02 **plus** your review; documentation alone must not close either).
 - **DevOps:** no workflow or `NODE_OPTIONS` change in rev 27; GoogleSearchTest stays out of CI; the pure-function rows are deterministic and browser-free and are the only part suitable for CI today; CI must expect exit 18, must not treat the refusal as a flake, and must match the reason set. CONF-02 is a scratch run, not a CI job: unique profile and process group per run, cleanup verified, no non-loopback request, no secret written.
 
 ## Needs anchors (not applied by rev 27)
