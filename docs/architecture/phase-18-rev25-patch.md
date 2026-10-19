@@ -71,7 +71,7 @@ Both are **double-labelled**: top-level code `PILOT_INTERNAL_ERROR`, process exi
 
 ### B.5 Interfaces
 
-- **Internal, new:** `SharedWorkerCapabilityProbe.measure(browser, { realms, timeoutMs })` → `{ perRealm: [{ id, mechanism, typeofSharedWorker, descriptor, nativeCtorMatched, constructed, measurable, error, timedOut }] }`, and `decide(perRealm)` → `{ armed, exit, reason, perRealm }`. Pure, synchronous, no I/O: `decide` is the primary unit test seam.
+- **Internal, new:** `SharedWorkerCapabilityProbe.measure(browser, { realms, timeoutMs })` → `{ perRealm: [{ id, mechanism, typeofSharedWorker, descriptor, nativeCtorMatched, constructed, measurable, error, timedOut }] }`, and `decide(perRealm)` → `{ armed, exit, reason, perRealm }`. Pure, synchronous, no I/O: `decide` is the primary unit test seam. (**WITHDRAWN BY REV 26 and REPLACED BY REV 27 (ARCH-27): the live signature is `decide(perRealm, requiredIds)` over the closed, versioned per-realm evidence schema of `phase-18-rev27-patch.md` section B; the record fields listed above are superseded by the exact 11-key required set, `nativeCtorValue`/`nativeCtorMatched` are replaced by `nativeCtor`, and absence of a field is always unverified.**)
 - **Internal, changed:** `NetworkGate.install(context, { mode: "execute" })` refuses at install time, **before any navigation**, on a non-armed decision. The refusal carries the full `perRealm` record to the reporter.
 - **Public surface:** unchanged — no new CLI flag, no new environment variable, no new config key. CommonJS throughout; `Logger.info` / `Logger.warning` / `Logger.error` only, no `console.log`; `fs.promises.*` for any evidence write.
 - **Observability:** one `Logger.error` line naming code, exit, reason and realm id, plus a structured `sharedWorkerCapability` block in the run report (per-realm id, mechanism, decision inputs, duration). No target URL query or fragment, no page-supplied string, no secret.
@@ -142,7 +142,7 @@ Coverage legend: **W6** = measured by SPIKE-W6; **W7** = owed to SPIKE-W7. Every
 | IC4 | inversion: probe disabled or removed | execute mode must **not** arm (no default-allow); removing the gate must fail the test | W7 |
 | FW-1 | dedicated-worker-initiated WebSocket against a real WS upgrade (carried from the withdrawn W2-15) | still **UNMEASURED**; an independent arming blocker in its own right | W7 |
 
-**Totals, single source:** 21 required decision realms (F1..F21), 1 informational realm (F22), 7 mechanism cases (FC1..FC7), 4 control fixtures (IC1..IC4), 1 carried worker-WebSocket case (FW-1) = **34 rows**. SPIKE-W6 covers **15 decision realms plus FC1, FC2, IC1 and IC2**. Reachability-checker table C6-T is untouched at **27 / 5** and remains sourced from rev 23 section D.4; the two inventories are disjoint.
+**Totals — SUPERSEDED BY REV 26 AND CONSOLIDATED BY REV 27 (ARCH-27): this table is NO LONGER the single source. The single source is the full consolidated table reprinted in `phase-18-rev27-patch.md` section C, whose authoritative total is 42 rows (21 F + 1 informational F22 + 11 FC (FC1..FC11) + 8 IC (IC1..IC8) + 1 FW-1). The historical totals read:** 21 required decision realms (F1..F21), 1 informational realm (F22), 7 mechanism cases (FC1..FC7), 4 control fixtures (IC1..IC4), 1 carried worker-WebSocket case (FW-1) = **34 rows**. SPIKE-W6 covers **15 decision realms plus FC1, FC2, IC1 and IC2**. Reachability-checker table C6-T is untouched at **27 / 5** and remains sourced from rev 23 section D.4; the two inventories are disjoint.
 
 ---
 
