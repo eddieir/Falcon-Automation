@@ -6,7 +6,8 @@ Status: **MEASURED on one runner image on one day. Observations only: no filesys
 
 | Item | Value |
 |---|---|
-| Workflow | `Phase 18 Linux evidence (one-shot)` on the temporary branch `evidence/phase18-linux`, one run, id 39145426875, event `push`, conclusion **success** (all steps) |
+| Workflow run | `Phase 18 Linux evidence (one-shot)`, run id **39145426875**, URL https://github.com/eddieir/Falcon-Automation/actions/runs/39145426875, event `push` on the temporary branch `evidence/phase18-linux`, created 2026-10-18T16:31:58Z, status `completed`, conclusion **success** (every step succeeded) |
+| Exact commit run | `1f9cfb18c0fb03daaa2283f31fbd328fa71c0921` (one commit on top of `origin/main` at `c92f473aa1456d94e6eae67a16e1d1b18ced31c7`; `git merge-base` verified before the push) |
 | Evidence branch head | `1f9cfb1`, one commit on top of `origin/main` at `c92f473` (verified `git merge-base`) |
 | Content | 7 harness scripts under `scripts/evidence/phase18/` (copied from the SPIKE-FS, H-8 and LINUX-01 scratch harnesses; `babelcheck.js` reads the repo from `process.cwd()`) and the workflow file. Permissions `contents: read`, `persist-credentials: false`, pinned action SHAs copied from `ci.yml`, no secrets, 15-minute timeout, artifact path limited to the evidence directory, 7-day retention |
 | Runner | `ubuntu24` image `20261012.334.1`, kernel `6.17.0-1022-azure` (`x86_64`), `RUNNER_OS=Linux`, `RUNNER_ARCH=X64` |
@@ -76,10 +77,26 @@ Status: **MEASURED on one runner image on one day. Observations only: no filesys
 - **Inference (not proven):** the runner's behaviour is likely stable across images, but only this image was run. Docker Desktop results (LINUX-01) agree on every property and every type id they measured except that Docker's root was overlayfs and its volumes and bind mounts are different mounts.
 - **Recommendation:** treat this as the authoritative GitHub-hosted evidence for the fixed set of properties above. Whether tmpfs, ext4 or any other filesystem becomes an admitted root is for the architect to propose from this evidence, for Security to review, and for the owner to decide. This document admits nothing.
 
+## Cleanup proof (checked 2026-10-19)
+
+| Item | Result |
+|---|---|
+| Remote branch `evidence/phase18-linux` | deleted; `git ls-remote --heads origin 'evidence/*'` returns 0 lines |
+| Workflow artifact `phase18-linux-evidence` (id 12143790122) | deleted via the Actions API; the run's artifact list reports `total_count` 0 and the repository-wide artifact list has no artifact of that name |
+| Pull request | none opened (`gh pr list --head evidence/phase18-linux --state all` returns an empty list) |
+| Local worktree and local branch | removed |
+| Retained | the run record and its logs on GitHub (workflow runs are not deleted), the raw artifact files in the session scratch directory, and this document with the hashes above |
+
+## Do these results close the Ubuntu x64 gaps?
+
+- **H-8, Node 24.21.0 on Linux x64: closed for the measured items only.** Node and npm versions, child_process behaviour, the 82-file AST parse, the DEP0190 warning, and the synchronous stderr + `exit(2)` delivery to a file and a pipe are now measured on the GitHub-hosted runner. Not measured, so still open: Chromium launch under Node 24 on Linux, `.env` (dotenv) load ordering, and a run of `falcon.js` itself.
+- **Filesystem evidence on the GitHub-hosted runner: closed for the nine measured properties on three roots (ext4 runner root, tmpfs, ramfs) on one image on one day.** Still open: `F_FULLFSYNC` and power-loss durability, ZFS, other runner images, self-hosted or other CI environments, and repeat runs.
+- **Admission: nothing is admitted by this document.** Under OWNER-23 no Linux filesystem is admitted until the owner and Security accept an admission proposal built on this evidence. The observed ids (`0xef53`, `0x1021994`, `0x858458f6`) are observations. Unknown or unverified roots continue to fail closed.
+
 ## Limitations and deviations
 
 - One run, one image, one day; no repetition across runs.
 - Docker Desktop and this runner agree; neither covers power loss, ZFS, `F_FULLFSYNC` or self-hosted runners.
 - The harness reports `mount` as unavailable inside Node; `/proc/mounts` was used instead.
 - The ramfs measurement needed `sudo mount` on the disposable runner VM; no privileged container was used.
-- No deviation from the owner's authorisation was required. The temporary remote branch and workflow artifacts are deleted after this document is committed (see the ledger).
+- No deviation from the owner's authorisation was required. The temporary remote branch and workflow artifact were deleted after the first version of this document was committed (`1946785`); see the cleanup proof above and the ledger.
