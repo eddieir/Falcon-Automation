@@ -62,7 +62,7 @@ function decide(perRealm) {
 ```
 
 Every realm result is computed strictly out-of-page: via `page.evaluate` /
-`frame.evaluate` in an isolated world, reading `typeof SharedWorker`, the property
+`frame.evaluate` (**CORRECTION recorded by ARCH-26 per SEC-24 m-88: these normally execute in the page's MAIN world, not an isolated world; the measurements below are unaffected, but no integrity claim may rest on world isolation**), reading `typeof SharedWorker`, the property
 descriptor, and a captured pre-mutation native constructor reference (via
 `page.addInitScript`, Playwright's equivalent of
 `Page.addScriptToEvaluateOnNewDocument`). No value posted by the fixture page is
