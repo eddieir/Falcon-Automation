@@ -38,7 +38,7 @@ Owner stop rule: an ambiguous result after SPIKEW-05 adopts the fail-closed fall
 
 1. launches the approved browser in an **isolated, empty `BrowserContext`** (fresh browser process, fresh context, no customer target contacted);
 2. captures a **pre-author-script native constructor reference** in every realm it creates, via `addInitScript`, before any page script runs;
-3. determines **out of page** — `page.evaluate` / `frame.evaluate` in an isolated world, reading `typeof SharedWorker`, the property descriptor, and the pre-captured native reference — whether `SharedWorker` capability is available in every **applicable realm** of table W6-T;
+3. determines **out of page** — `page.evaluate` / `frame.evaluate`, reading `typeof SharedWorker`, the property descriptor, and the pre-captured native reference — whether (**CORRECTED BY REV 26, SEC-24 m-88: `page.evaluate` / `frame.evaluate` normally execute in the page's MAIN world, not an isolated world. The integrity of the read does NOT rest on world isolation. It rests on (a) the probe running against a Falcon-authored local document before any external target access, (b) capturing the required native references before any mutable page code runs, (c) validating that the browser process, executable, arguments, environment and context configuration are exactly those the run will use - the OWNER-24 same-process rule - and (d) failing closed on any inconsistency. F17 and F18, realms created after the probe or after arming, require the same care and stay fail-closed until measured.**) `SharedWorker` capability is available in every **applicable realm** of table W6-T;
 4. decides, and then either arms or refuses.
 
 **Decision function** (Falcon-equivalent of the executed SPIKE-W6 function; normative shape, not literal code):
@@ -78,7 +78,7 @@ Both are **double-labelled**: top-level code `PILOT_INTERNAL_ERROR`, process exi
 
 ### B.6 Trust boundaries and control flow
 
-Node process (trusted: probe, decision, refusal) → browser process (semi-trusted: realms created by Falcon) → target page/realm (**untrusted**, and the only direction of data flow is browser-to-Node through Falcon's own isolated-world reads). The boundary the design depends on is that `page.evaluate` / `frame.evaluate` results are produced by Falcon's own expression in an isolated world and are not author-controllable values. **Known fidelity caveat, measured:** `frame.evaluate` runs via `Runtime.evaluate` and is **not** gated by the HTML `sandbox` script restriction, so for sandboxed realms the probe can read a different answer than an embedded `<script>` would. That caveat is exactly why F5 and F7 are REQUIRED fail-closed rows and not passes.
+Node process (trusted: probe, decision, refusal) → browser process (semi-trusted: realms created by Falcon) → target page/realm (**untrusted**, and the only direction of data flow is browser-to-Node through Falcon's own `evaluate` reads). **CORRECTED BY REV 26 (SEC-24 m-88):** the boundary the design depends on is NOT world isolation - Playwright's `page.evaluate` / `frame.evaluate` normally run in the page's MAIN world. It is that the expression is Falcon's own, that it runs against a Falcon-authored local document **before any external target access**, that the required native references were captured before any mutable page code could run, that the browser process and launch configuration are validated as the ones the run will use (OWNER-24 same-process rule), and that any inconsistency fails closed. The same care applies to F17 and F18. **Known fidelity caveat, measured:** `frame.evaluate` runs via `Runtime.evaluate` and is **not** gated by the HTML `sandbox` script restriction, so for sandboxed realms the probe can read a different answer than an embedded `<script>` would. That caveat is exactly why F5 and F7 are REQUIRED fail-closed rows and not passes.
 
 ---
 
@@ -126,7 +126,7 @@ Coverage legend: **W6** = measured by SPIKE-W6; **W7** = owed to SPIKE-W7. Every
 |---|---|---|---|
 | FC1 | pre-author-script native-constructor capture via `addInitScript`, compared with the evaluate-time read in every measurable realm | must match; a mismatch ⇒ `shared_worker_block_unverified` | W6 (matched in every measurable realm) |
 | FC2 | page mutation evasion: `delete`, `Object.defineProperty` / `Reflect.defineProperty` redefinition, assignment, prototype and `__proto__` manipulation, `with`-scope shadowing | decision unchanged; the pre-captured native reference stays usable (`new NativeCtor(...)`) | W6 (confirmed: pre-capture defeats page mutation) |
-| FC3 | no page-supplied value influences the decision | structural: the decision reads only Falcon's own isolated-world results; a fixture that posts a forged "absent" verdict changes nothing | W7 |
+| FC3 | no page-supplied value influences the decision | structural: the decision reads only the results of Falcon's own `evaluate` expression against a Falcon-authored document (main world, SEC-24 m-88); a fixture that posts a forged "absent" verdict changes nothing | W7 |
 | FC4 | probe timeout in a required realm | `shared_worker_block_unverified` | W7 |
 | FC5 | required realm cannot be created | `shared_worker_block_unverified` | W7 |
 | FC6 | realm results disagree | `shared_worker_block_unverified` | W7 |

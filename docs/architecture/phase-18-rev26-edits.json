@@ -1,0 +1,170 @@
+{
+ "schema": "phase-18-rev23-edits/1",
+ "revision": "0063e78 on docs/phase-18-architecture",
+ "producedBy": "ARCH-26 rev 26 patch; apply with a script; docs/architecture/phase-18-rev26-patch.md is normative",
+ "notes": [
+  "Same schema as phase-18-rev25-edits.json: ac[] with set/replaceText/appendText {field,text}, openItems/openItemsAdd, counts, exitCodes, docEdits[{file,replace[{old,new}],append,after}].",
+  "Every 'old' anchor in this file was verified by exact string count to occur EXACTLY ONCE in its target file at 0063e78. Short SHAs only; no 40-character SHA anywhere; no AI attribution.",
+  "OWNER-24 and OWNER-25 are DECIDED by the owner and replace the rev 25 OPEN items of the same ids. OWNER-24: Phase 18 supports only an exact browser binary and launch configuration that passes the complete W6-T SharedWorker conformance gate, probed in the SAME browser process, context configuration, executable, arguments, environment and security posture the pilot run will use; the current Chromium build is UNSUPPORTED for arming; the supported-browser set is EMPTY today; a safe refusal is an acceptable Phase 18 result. OWNER-25: NO runtime exception or bypass of any kind.",
+  "Rev 26 weakens nothing: counts stay 98/89/6/3, C6-T stays 27/5 sourced from rev 23 section D.4, M-23 and M-24 stay closed, M-25 stays OPEN (closure needs the executed W6-T conformance measurement plus Security), O-1 and the PILOT_APPROVAL_RUN_TOKEN text are untouched, the Linux admission position stays 'nothing admitted', scope stays Chromium only.",
+  "The only inventory change is inside table W6-T: FC8 and IC5 are added for the closed decide() contract, so the single-source total moves from 34 rows to 36 rows (21 F + 1 informational F22 + 8 FC + 5 IC + 1 FW-1). SPIKE-W6 coverage is unchanged (15 decision realms plus FC1, FC2, IC1, IC2).",
+  "Rev 26 consumes docs/security/phase-18-design-review-23.md (SEC-24: M-26, M-25 carried, m-87..m-90), docs/architecture/phase-18-rev25-patch.md and phase-18-rev25-edits.json, docs/phase-18-spike-w6-findings.md with its coordinator note, and docs/architecture/phase-18-rev23-patch.md.",
+  "The untracked docs/architecture/phase-18-rev24-* drafts are ignored: superseded drafts on the rejected CDP assumption, not applied and not copied."
+ ],
+ "ac": [
+  {
+   "id": "P18-AC-091",
+   "appendText": [
+    {
+     "field": "requirement",
+     "text": " REV 26 (SEC-24 M-26, m-87): the arming decision is the CLOSED, TOTAL pure function decide(perRealm, requiredIds) of rev 26 section B.5. requiredIds MUST equal the canonical required-realm set exactly - the required F-rows of table W6-T, ids F1..F21 - with no missing id, no duplicate, no extra and no unknown id; perRealm must be an array in which every required id appears exactly once. A realm demonstrates absence ONLY when all required fields affirmatively validate (measurable===true, no error, timedOut===false, typeof==='undefined', descriptor===undefined, the pre-captured native reference value exactly undefined, constructed===false, repetitions consistent). null, 'object', a missing or undefined field, an exception, a timeout, disagreement or any other value yields shared_worker_block_unverified. Deterministic precedence: malformed, incomplete or unverified evidence => shared_worker_block_unverified exit 18 FIRST; otherwise any measured presence => shared_worker_present exit 18; only complete, valid, unanimous measured absence arms. REV 26 (OWNER-24, OWNER-25): arming additionally requires that the probe ran in the SAME browser process, executable, arguments, environment and context configuration the run will use, and that the browser passed the complete W6-T conformance gate; the supported-browser set is EMPTY today, so no armed pilot may run. There is no CLI override, environment-variable override, manifest exemption, target allowlist, operator acknowledgement, hidden flag or downgrade from refusal to warning."
+    }
+   ]
+  }
+ ],
+ "openItems": [
+  {
+   "id": "OWNER-24",
+   "set": {
+    "ref": "owner decision recorded in the ARCH-26 task packet; rev 26 sections B, F, G and H",
+    "state": "DECIDED (owner), replacing the rev 25 OPEN item. Phase 18 supports ONLY an exact browser binary and launch configuration that passes the COMPLETE W6-T SharedWorker conformance gate. The capability probe must execute in the SAME browser process, browser context configuration, executable, arguments, environment and security posture that the pilot run will use (the same-process rule). The currently pinned Chromium build is UNSUPPORTED for arming because SharedWorker is present. Firefox and WebKit must not be substituted, no older browser may be selected, and no undocumented feature flag may be used. No operational browser may be claimed to exist until one passes the complete gate; the SUPPORTED-BROWSER SET IS EMPTY TODAY. A safe refusal is an acceptable Phase 18 result: components that do not depend on arming may be implemented later in the approved PR sequence, but NO customer pilot may execute while the supported set is empty. If the probed browser process exits, crashes, relaunches, changes executable or arguments, or creates a differently configured context, the approval is INVALID and the complete probe runs again before any target access. No probe result may be transferred to another browser process or cached across launches."
+   }
+  },
+  {
+   "id": "OWNER-25",
+   "set": {
+    "ref": "owner decision recorded in the ARCH-26 task packet; rev 26 sections B and H",
+    "state": "DECIDED (owner), replacing the rev 25 OPEN item. There is NO runtime exception and NO bypass: no CLI override, no environment-variable override, no manifest exemption, no target allowlist, no operator acknowledgement, no hidden flag, and no downgrade from refusal to warning. Supporting another browser or another launch configuration requires measured evidence, an architecture revision, a Security review with ZERO blockers and ZERO majors, a normal code pull request, green CI, and explicit owner approval."
+   }
+  },
+  {
+   "id": "SPIKE-W",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " SUPERSEDED BY REV 25 AND REV 26 (SEC-24 m-89), recorded here in place because the rev 25 marker was not applied to this item: the design consequence above (SharedWorker construction blocked before page scripts run, out-of-page CDP detection via Target.setAutoAttach with waitForDebuggerOnStart, a run-scoped exposeBinding, exit 18 reason shared_worker_blocked, and SPIKE-W2 as the 18C merge gate) is WITHDRAWN AND NOT ACCEPTED, and the sentence 'SPIKE-W2 IS REQUIRED BEFORE 18C MERGES and until every one of its cases is recorded MEASURED-PASS the pilot REFUSES TO ARM execute mode' IS WITHDRAWN. shared_worker_blocked is withdrawn from the registry and no code may emit it. SPIKE-W's own measurements stand with the SEC-23 m-85 repetition corrections. The live design is the rev 25 section B fail-closed capability refusal with the rev 26 closed decide(perRealm, requiredIds) contract and table W6-T (36 rows), whose required rows are measured in part by SPIKE-W6 and completed by SPIKE-W7; refuse-to-arm stays unconditional and its trigger is the decide() outcome, not SPIKE-W2 evidence."
+    }
+   ]
+  },
+  {
+   "id": "M-25",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " REV 26: unchanged and still OPEN as a Major. Closure still needs (1) an EXECUTED W6-T conformance measurement covering every required row and (2) a Security review of that executed result. Rev 26 adds the executed-gate definition (rev 26 section J) but executes nothing."
+    }
+   ]
+  }
+ ],
+ "openItemsAdd": [
+  {
+   "id": "M-26",
+   "ref": "docs/security/phase-18-design-review-23.md (SEC-24); rev 26 sections B.5 and C",
+   "state": "ADDRESSED BY DESIGN IN REV 26, NOT CLOSED BY DOCUMENTATION. SEC-24 found that armed:true was reachable with a missing measurement because decide(perRealm) took no required-realm set and treated any typeof other than 'function' as absent. Rev 26 replaces it with the CLOSED, TOTAL decide(perRealm, requiredIds): exact canonical required-id-set equality, rejection of missing/duplicate/extra/unknown ids, malformed entries and non-array input, affirmative validation of every required field for an absence verdict, and a deterministic precedence that puts unverified evidence first. New W6-T rows FC8 and IC5 enumerate the negative cases. Closure needs the executed conformance measurement (rev 26 section J) plus Security."
+  },
+  {
+   "id": "m-87",
+   "ref": "docs/security/phase-18-design-review-23.md (SEC-24); rev 26 section B.5",
+   "state": "ADDRESSED. One order is chosen and stated: unverified/malformed evidence precedes measured presence, evaluated across ALL required realms rather than stopping at the first matching realm. Rev 26 states which outcomes SPIKEW-06 actually exercised under the old first-match order and that the default build's reason under rev 26 would be shared_worker_block_unverified rather than the shared_worker_present that SPIKEW-06 printed. Both are exit-18 refusals; this is a reason-code change only."
+  },
+  {
+   "id": "m-88",
+   "ref": "docs/security/phase-18-design-review-23.md (SEC-24); rev 26 section B.2/B.6 corrections",
+   "state": "ADDRESSED. The 'isolated world' claim is removed from rev 25 B.2, B.6 and FC3 and from the SPIKE-W6 findings text. Accurate statement: Playwright page.evaluate/frame.evaluate normally execute in the page's MAIN world. Probe integrity rests on a Falcon-authored local document evaluated BEFORE any external target access, on capturing the required native references before any mutable page code runs, on validating the exact browser process and launch configuration (the same-process rule of OWNER-24), and on failing closed on any inconsistency. F17 and F18 (realms created after the probe or after arming) need the same care and stay fail-closed until measured."
+  },
+  {
+   "id": "m-89",
+   "ref": "docs/security/phase-18-design-review-23.md (SEC-24); rev 26 section K",
+   "state": "ADDRESSED by in-place SUPERSEDED notes plus a repository-wide contradiction search whose every hit and disposition is listed in rev 26 section K. Notes added: acceptance-criteria openItems SPIKE-W (the 'SPIKE-W2 IS REQUIRED BEFORE 18C MERGES ... MEASURED-PASS' sentence), rev 23 patch line 52 (shared_worker_blocked), line 64 ('every case in B.5 ... MEASURED-PASS'), and unexecuted gates 1, 2, 3 and 8."
+  },
+  {
+   "id": "m-90",
+   "ref": "docs/security/phase-18-design-review-23.md (SEC-24); rev 25 section E.2; rev 26 section K",
+   "state": "ADDRESSED. Rev 23 patch line 16 (row 3, 'tmpfs admitted'), line 203 (the LINUX-01 row) and line 215 (unexecuted gate 7, 'the admission test that tmpfs 0x1021994 is accepted') are corrected in place to 'candidate; refused until accepted by owner and Security', consistent with rev 25 section E.2. No Linux filesystem is admitted and gate 7 no longer encodes a tmpfs admission."
+  },
+  {
+   "id": "W6T-GATE",
+   "ref": "rev 26 section J",
+   "state": "NOT EXECUTED. The W6-T conformance gate run required before the next Security review: every row at least 3 repetitions, expected versus actual reason/exit/arming recorded per row, full realm inventory, browser process identity, executable hash, launch arguments and repetition counts captured, Node 22.19.0 and Node 24.21.0, hermetic loopback fixtures only, no process left running. On the current Chromium the expected outcome is always a refusal, and a refusal is a PASS when it is the expected outcome; no missing measurement may arm."
+  }
+ ],
+ "counts": {
+  "set": {
+   "rev26Note": "Rev 26 changes NO criterion count: total 98, must 89, should 6, could 3; deferredToPhase18P 11, deferredUnderOptionC 5, deferredIds and mixedPhase18PIds unchanged. No criterion is added, removed or re-phased; M-23 and M-24 stay closed; C6-T stays 27 inversion fixtures (X1..X27) and 5 positive controls (P1..P5) sourced from rev 23 section D.4. The single inventory change is inside table W6-T, which remains the single source of SharedWorker realm and case ids and counts: FC8 (requiredIds exact-set equality and malformed-input rejection) and IC5 (the enumerated decide() negative-case battery: missing realm, duplicate id, extra id, unknown id, undefined measurable, null typeof, 'object' typeof, malformed record, non-array input, conflicting repetitions) are ADDED, so the total moves from 34 rows to 36 rows: 21 required decision realms (F1..F21), 1 informational realm (F22), 8 decision-function/mechanism cases (FC1..FC8), 5 control fixtures (IC1..IC5) and 1 carried worker-WebSocket case (FW-1). SPIKE-W6 coverage is unchanged at 15 decision realms plus FC1, FC2, IC1 and IC2. The implementation checker asserts the W6-T id set and the 36-row total; every live '34 rows' statement is superseded by this note."
+  }
+ },
+ "exitCodes": {
+  "set": {
+   "rev26Note": "Rev 26 adds no exit code and changes no precedence: the rev 6 order stands, 2 > 3 > 18 > 17 > 16 > 15 > 13 > 12 > 11 > 14 > 10 > 1 > 0. shared_worker_present and shared_worker_block_unverified remain the only SharedWorker reasons, both double-labelled PILOT_INTERNAL_ERROR with exit 18; shared_worker_blocked stays WITHDRAWN and no code may emit it; POLICY_SHARED_WORKER_BLOCKED must not appear anywhere. Rev 26 fixes only the REASON SELECTION between the two live reasons: malformed, incomplete or unverified evidence is evaluated FIRST across all required realms and yields shared_worker_block_unverified; only when every required realm is complete and valid does a measured presence yield shared_worker_present. Consequence to state openly: on the current pinned Chromium build SPIKEW-06 printed shared_worker_present (its harness stopped at the first matching realm) while under rev 26 precedence the same build yields shared_worker_block_unverified because F5, F7 and F11 were unmeasurable. Both are exit-18 refusals; the exit code and the arming outcome are identical and only the reason code differs. Neither reason has an override flag, environment variable, warning mode or degraded mode (OWNER-25), and no page-supplied value may influence either."
+  }
+ },
+ "docEdits": [
+  {
+   "file": "docs/architecture/phase-18-rev23-patch.md",
+   "replace": [
+    {
+     "old": "tmpfs admitted for the ephemeral roots only, overlayfs/virtiofs/ext4 not admitted",
+     "new": "tmpfs a CANDIDATE for the ephemeral roots only - **CORRECTED BY REV 26 (SEC-24 m-90): candidate; refused until accepted by owner and Security; the rev 23 'ADMITTED' wording is withdrawn and NO Linux filesystem is admitted (rev 25 section E.2)** - overlayfs/virtiofs/ext4 not admitted"
+    },
+    {
+     "old": "**tmpfs admitted for the ephemeral roots only; overlayfs and virtiofs not admitted;",
+     "new": "**tmpfs a CANDIDATE for the ephemeral roots only - CORRECTED BY REV 26 (SEC-24 m-90): candidate; refused until accepted by owner and Security, not admitted; overlayfs and virtiofs not admitted;"
+    },
+    {
+     "old": "plus the admission test that tmpfs `0x1021994` is accepted for `run/auth` and `run/plans` and refused for an approvals root",
+     "new": "plus - **CORRECTED BY REV 26 (SEC-24 m-90): tmpfs `0x1021994` is a CANDIDATE, refused until accepted by owner and Security, so this gate must NOT encode a tmpfs admission** - the refusal test that tmpfs `0x1021994` is refused on EVERY root, including `run/auth`, `run/plans` and any approvals root, with exit 18 naming the observed id and path"
+    },
+    {
+     "old": "**The pilot must REFUSE TO ARM execute mode unless every case in B.5 is recorded MEASURED-PASS",
+     "new": "**SUPERSEDED BY REV 26 (ARCH-26, SEC-24 m-89): the B.5 'every case MEASURED-PASS' requirement is WITHDRAWN together with the SPIKE-W2 programme. Refuse-to-arm is KEPT and unconditional, but its trigger is the rev 26 section B.5 closed decide(perRealm, requiredIds) outcome against table W6-T (36 rows), not B.5 evidence.** The withdrawn text read: **The pilot must REFUSE TO ARM execute mode unless every case in B.5 is recorded MEASURED-PASS"
+    },
+    {
+     "old": "Every attempted `SharedWorker` construction refuses the run: **`PILOT_INTERNAL_ERROR`, exit 18, reason `shared_worker_blocked`**",
+     "new": "SUPERSEDED BY REV 26 (ARCH-26, SEC-24 m-89): there is no construction block and `shared_worker_blocked` is WITHDRAWN from the registry; no code may emit it. The live reasons are `shared_worker_present` and `shared_worker_block_unverified`, both exit 18 under `PILOT_INTERNAL_ERROR`. Withdrawn text follows. Every attempted `SharedWorker` construction refuses the run: **`PILOT_INTERNAL_ERROR`, exit 18, reason `shared_worker_blocked`**"
+    },
+    {
+     "old": "1. SPIKE-W2 cases W2-1..W2-16 with their 16 inversion fixtures (18C merge gate).",
+     "new": "1. ~~SPIKE-W2 cases W2-1..W2-16 with their 16 inversion fixtures (18C merge gate).~~ SUPERSEDED BY REV 26 (ARCH-26, SEC-24 m-89): WITHDRAWN. Replaced by the required rows of table W6-T (rev 25 section C as amended by rev 26: 36 rows), measured in part by SPIKE-W6 and completed by SPIKE-W7, plus the executed conformance gate of rev 26 section J."
+    },
+    {
+     "old": "2. The `shared_worker_blocked` refusal test: exit 18, correct reason, **zero** fixture requests and zero mutations, repeated (SPIKE-W's leak was reproducible).",
+     "new": "2. ~~The `shared_worker_blocked` refusal test.~~ SUPERSEDED BY REV 26 (ARCH-26, SEC-24 m-89): WITHDRAWN - `shared_worker_blocked` no longer exists, so there is no such test. The replacement gate is that execute mode never arms while SharedWorker capability is present or unverified, asserted through the pure decide() unit cases (IC3, IC5) and the W6-T conformance run."
+    },
+    {
+     "old": "3. The `shared_worker_block_unverified` arming-refusal test: with SPIKE-W2 evidence absent or incomplete, execute-mode install refuses with exit 18 before any navigation (an inversion fixture must show that removing the gate lets the run arm).",
+     "new": "3. The `shared_worker_block_unverified` arming-refusal test - SUPERSEDED BY REV 26 (ARCH-26, SEC-24 m-89): the trigger is RESTATED: with the W6-T evidence absent, incomplete, malformed or unverified (NOT 'SPIKE-W2 evidence'), execute-mode install refuses with exit 18 before any navigation, and an inversion fixture (IC4) must show that removing the gate lets the run arm."
+    },
+    {
+     "old": "8. The worker-initiated WebSocket measurements W2-15 and W2-16 against a fixture with a real WS upgrade.",
+     "new": "8. SUPERSEDED BY REV 26 (ARCH-26, SEC-24 m-89): the W2-15/W2-16 ids are WITHDRAWN with the SPIKE-W2 matrix. The surviving requirement is carried as case FW-1 of table W6-T: a DEDICATED-worker-initiated WebSocket against a fixture with a real WS upgrade, still UNMEASURED and an independent arming blocker. A shared-worker-initiated WebSocket cannot arise because execute mode never arms while SharedWorker capability is present or unverified."
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-rev25-patch.md",
+   "replace": [
+    {
+     "old": "3. determines **out of page** — `page.evaluate` / `frame.evaluate` in an isolated world, reading `typeof SharedWorker`, the property descriptor, and the pre-captured native reference — whether",
+     "new": "3. determines **out of page** — `page.evaluate` / `frame.evaluate`, reading `typeof SharedWorker`, the property descriptor, and the pre-captured native reference — whether (**CORRECTED BY REV 26, SEC-24 m-88: `page.evaluate` / `frame.evaluate` normally execute in the page's MAIN world, not an isolated world. The integrity of the read does NOT rest on world isolation. It rests on (a) the probe running against a Falcon-authored local document before any external target access, (b) capturing the required native references before any mutable page code runs, (c) validating that the browser process, executable, arguments, environment and context configuration are exactly those the run will use - the OWNER-24 same-process rule - and (d) failing closed on any inconsistency. F17 and F18, realms created after the probe or after arming, require the same care and stay fail-closed until measured.**)"
+    },
+    {
+     "old": "the only direction of data flow is browser-to-Node through Falcon's own isolated-world reads). The boundary the design depends on is that `page.evaluate` / `frame.evaluate` results are produced by Falcon's own expression in an isolated world and are not author-controllable values.",
+     "new": "the only direction of data flow is browser-to-Node through Falcon's own `evaluate` reads). **CORRECTED BY REV 26 (SEC-24 m-88):** the boundary the design depends on is NOT world isolation - Playwright's `page.evaluate` / `frame.evaluate` normally run in the page's MAIN world. It is that the expression is Falcon's own, that it runs against a Falcon-authored local document **before any external target access**, that the required native references were captured before any mutable page code could run, that the browser process and launch configuration are validated as the ones the run will use (OWNER-24 same-process rule), and that any inconsistency fails closed. The same care applies to F17 and F18."
+    },
+    {
+     "old": "structural: the decision reads only Falcon's own isolated-world results;",
+     "new": "structural: the decision reads only the results of Falcon's own `evaluate` expression against a Falcon-authored document (main world, SEC-24 m-88);"
+    }
+   ]
+  },
+  {
+   "file": "docs/phase-18-spike-w6-findings.md",
+   "replace": [
+    {
+     "old": "`frame.evaluate` in an isolated world, reading `typeof SharedWorker`, the property",
+     "new": "`frame.evaluate` (**CORRECTION recorded by ARCH-26 per SEC-24 m-88: these normally execute in the page's MAIN world, not an isolated world; the measurements below are unaffected, but no integrity claim may rest on world isolation**), reading `typeof SharedWorker`, the property"
+    }
+   ]
+  }
+ ]
+}
