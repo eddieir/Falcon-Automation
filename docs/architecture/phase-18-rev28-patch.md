@@ -51,11 +51,15 @@ The rev 27 rejection set stays in force verbatim. Rev 28 adds, **ahead of everyt
 
 ### B.4 Precedence (unchanged)
 
+**AMENDED IN PLACE BY REV 29 (ARCH-29, CONF-03): the precedence ORDER below is right but it was not enforced by the rev 28 reference text. Rev 29 makes it explicit as GLOBAL VALIDATION BEFORE CLASSIFICATION: every required record is validated first (containers, required-ID set, complete inventory, schema, types, descriptors, captured-constructor agreement, repetitions, consistency); any invalid, incomplete, inconsistent or unverified record yields `shared_worker_block_unverified` exit 18 and WINS over any presence; only then may presence be inspected. See rev 29 sections B.4a (validity matrix) and B.5.**
+
 1. invalid, incomplete or unverified evidence (now including any proxy) ⇒ `armed:false`, exit **18**, `shared_worker_block_unverified`;
 2. otherwise any **measured presence** ⇒ `armed:false`, exit **18**, `shared_worker_present`;
 3. only complete, valid, **unanimous** validated absence ⇒ `armed:true`, exit 0 — and then only if OWNER-24 (same-process rule) holds.
 
 ### B.5 Reference text — deterministic Node-side decision function using a captured standard-library intrinsic
+
+**SUPERSEDED BY REV 29 (ARCH-29, CONF-03 FC1 defect): the code block below is NOT the live reference. CONF-03 measured `shared_worker_present` detail `realm:F1` where the contract requires `shared_worker_block_unverified` detail `realm-not-affirmatively-validated:F1`, because `hasMeasuredPresence` classified a realm present without checking captured-constructor evidence. The live reference is rev 29 section B.5: `isProxy` first, snapshot, VALIDATE EVERY REQUIRED RECORD against the rev 29 validity matrix, and only then classify. `isCleanAbsence`/`hasMeasuredPresence` are replaced by `isValidAbsence`/`isValidPresence`.**
 
 Normative behaviour; the implementation may differ in style but not in outcome or in **order of checks**.
 
@@ -165,6 +169,12 @@ function isCleanAbsence(v) {
     && v.mechanism !== 'unavailable';
 }
 
+// WITHDRAWN BY REV 29 (ARCH-29): hasMeasuredPresence is REPLACED by isValidPresence (rev 29 B.5).
+// A record is present ONLY if typeofSharedWorker === 'function' AND descriptor is 'present-data'
+// or 'present-accessor' AND nativeCtor === 'present'. nativeCtor 'mismatch', 'uncaptured' or
+// 'absent' with typeof 'function' is INVALID => armed:false, exit 18,
+// shared_worker_block_unverified, detail realm-not-affirmatively-validated:<id>.
+// DO NOT IMPLEMENT the function below.
 function hasMeasuredPresence(v) {
   return v.typeofSharedWorker === 'function' || v.constructed === true;
 }
@@ -264,6 +274,8 @@ module.exports = {
 
 ### B.6 Order of operations, stated as a rule
 
+**AMENDED BY REV 29 (ARCH-29): the rule gains its missing middle step. ORDER OF OPERATIONS (normative): reject proxies -> inspect shape (accessor before key order) -> snapshot twice -> compare -> validate the snapshot schema -> freeze -> VALIDATE EVERY REQUIRED RECORD AGAINST THE VALIDITY MATRIX (containers, required-ID set, complete realm inventory, schema, types, descriptors, captured-constructor agreement, repetitions and consistency) -> only if EVERY required record is valid, inspect presence -> any valid-present realm => shared_worker_present exit 18 -> arm only when every required record is VALID-ABSENT. Classification may never precede validation; a single invalid, incomplete, inconsistent or unverified record wins over any presence and over any arming.**
+
 **reject proxies → inspect shape (accessor before key order) → snapshot twice → compare → validate the snapshot → freeze → decide on the frozen snapshot.** The caller's object is read only by descriptor reads of a known non-Proxy plain object and by the two `JSON.stringify` passes. Every value the decision reads comes from the frozen snapshot, which is created inside `snapshotAndValidate` and cannot be reached by the caller. Therefore mutating the caller's record **after** validation and **before** the decision — including replacing a field with a Proxy or an accessor — cannot change the decision; the decision is either unchanged or, if the mutation is visible across the two snapshot reads, a refusal (`record-unstable`). `JSON` round-trip is kept over `structuredClone` for the rev 27 reasons.
 
 ### B.7 Proxy rejection rule (supersedes the rev 27 residual; `PROXY-27` withdrawn)
@@ -299,7 +311,7 @@ Boundary 1: browser → Node, unchanged (Falcon's own `evaluate` against a Falco
 
 ## Section C — table W6-T, CONSOLIDATED (single source, reprinted in full)
 
-**This table is the single source of SharedWorker realm and case ids, counts and expected results.** It supersedes the rev 27 section C reprint and the rev 25 / rev 26 split, which remain only as history. **Authoritative row count after rev 28: 44 rows.**
+**This table is the single source of SharedWorker realm and case ids, counts and expected results.** It supersedes the rev 27 section C reprint and the rev 25 / rev 26 split, which remain only as history. **SUPERSEDED BY REV 29 (ARCH-29, CONF-03): the authoritative row count is 49 ROWS (21 F + 1 F22 + 15 FC (FC1..FC15) + 10 IC (IC1..IC10) + 1 FW-1 + 1 MT-1) and the single source is `docs/architecture/phase-18-rev29-patch.md` section C. Rev 29 adds FC13, FC14, FC15, IC10 and the META-TEST row MT-1, and corrects the FC1 mismatch expectation.** Authoritative row count after rev 28: 44 rows (superseded).
 
 ### C.1 Required decision realms (F1..F21) — 21 rows
 
@@ -335,9 +347,11 @@ Boundary 1: browser → Node, unchanged (Falcon's own `evaluate` against a Falco
 
 ### C.3 Decision-function and mechanism cases (FC1..FC12) — 12 rows
 
+**SUPERSEDED BY REV 29: FC1..FC15 — 15 rows (rev 29 section C adds FC13, FC14 and FC15).**
+
 | Id | Case | Expected result | Coverage |
 |---|---|---|---|
-| FC1 | **independently executable row (J.5):** pre-author-script native-constructor capture via `addInitScript`, compared with the evaluate-time read, **its own run per measurable realm per repetition**, plus a mismatch-injection sub-case | match ⇒ `nativeCtor:'present'` or `'absent'` as measured and the row PASSES on agreement; injected mismatch ⇒ `nativeCtor:'mismatch'` ⇒ `shared_worker_block_unverified` 18 | W6 (matched) / CONF-03 |
+| FC1 | **expectation CORRECTED BY REV 29: the mismatch-injection sub-case expects EXACTLY `armed:false`, exit 18, `shared_worker_block_unverified`, detail `realm-not-affirmatively-validated:<realm id>`, and nothing else; the oracle comes only from the rev 29 contract.** **independently executable row (J.5):** pre-author-script native-constructor capture via `addInitScript`, compared with the evaluate-time read, **its own run per measurable realm per repetition**, plus a mismatch-injection sub-case | match ⇒ `nativeCtor:'present'` or `'absent'` as measured and the row PASSES on agreement; injected mismatch ⇒ `nativeCtor:'mismatch'` ⇒ `shared_worker_block_unverified` 18 | W6 (matched) / CONF-03 |
 | FC2 | page-mutation evasion (five sub-observations, J.4) | decision unchanged and the pre-captured native reference still usable; otherwise `shared_worker_block_unverified` 18 | W6; `fc2Pass:true` measured by CONF-02 |
 | FC3 | no page-supplied value influences the decision | structural: the decision reads only Falcon's own `evaluate` results through the validated frozen snapshot; a forged "absent" verdict changes nothing. Representative executable case: forged extra key ⇒ `record-keys-mismatch:index-0` | W7 |
 | FC4 | probe timeout in a required realm | `timedOut:true` ⇒ `shared_worker_block_unverified` 18, `realm-not-affirmatively-validated:ID` | W7 |
@@ -352,6 +366,8 @@ Boundary 1: browser → Node, unchanged (Falcon's own `evaluate` against a Falco
 
 ### C.4 Control fixtures (IC1..IC9) — 9 rows
 
+**SUPERSEDED BY REV 29: IC1..IC10 — 10 rows (rev 29 section C adds IC10, the present-record constructor-evidence battery) and the expectations of IC3, IC5 and IC6 are corrected there.**
+
 | Id | Fixture | Expected result | Coverage |
 |---|---|---|---|
 | IC1 | positive control: `new SharedWorker(url)` against the loopback fixture | the fixture's HTTP log records the shared-worker **script fetch** (probe is not vacuous) | W6 + CONF-02 (PASS) |
@@ -359,18 +375,20 @@ Boundary 1: browser → Node, unchanged (Falcon's own `evaluate` against a Falco
 | IC3 | inversion at unit level, synthetic `perRealm`: (a) 21 schema-valid clean-absence records ⇒ `armed:true` exit 0 (**authorised positive control; the only place `armed:true` is exercised, never against a customer target**); (b) one present ⇒ 18 `shared_worker_present`; (c) one unmeasurable ⇒ 18 `realm-not-affirmatively-validated:ID`; (d) **disagreement, redefined:** exercised through the field-validation path, expected `detail` exactly `realm-not-affirmatively-validated:ID`; (e) empty array ⇒ 18 `realm-missing:F1` | as stated | W7 / CONF-03 |
 | IC4 | **independently executable row (J.6):** probe disabled or removed | (a) probe stubbed to emit nothing ⇒ `armed:false`, exit 18, `realm-missing:F1`; (b) probe stubbed to emit a partial array ⇒ `realm-missing:<first absent id>`; (c) **gate removed:** with the `decide` call deleted from the arming path, the test **must FAIL** — a passing suite with the gate removed is itself a defect | W7 / CONF-03 |
 | IC5 | `decide()` negative-case battery: (1) missing realm `realm-missing:F1`; (2) duplicate id `realm-duplicate:F1`; **(3a) `requiredIds`-level extra id (22-entry `requiredIds`) ⇒ `required-id-set-malformed`; (3b) `perRealm`-level extra record (22 records, the extra one schema-valid) ⇒ `realm-duplicate:ID` when its id repeats a required id, or `realm-unknown-or-extra:ID` when its id is outside the required set**; (4) unknown id `required-id-unknown`; (5) `measurable:undefined` `record-keys-mismatch:index-0`; (6) `typeofSharedWorker:null` `record-value-type:typeofSharedWorker:index-0`; (7) `typeofSharedWorker:'object'` `realm-not-affirmatively-validated:F1`; (8) primitive record `record-not-plain-object:index-0`; (9) non-array `perRealm` `input-not-array`; (10) `repetitionsConsistent:false` `realm-not-affirmatively-validated:F1` | every case ⇒ 18 `shared_worker_block_unverified`, `armed:false`, with the stated `detail` | W7 / CONF-03 |
-| IC6 | exhaustive single-field mutation sweep (section D): 21 × 11 × 5 = **1155** malformed cases, plus 21 × 6 = **126** valid-negative substitutions | **1155** ⇒ 18 `shared_worker_block_unverified`; of the 126: 42 ⇒ 18 `shared_worker_present`, 84 ⇒ 18 `shared_worker_block_unverified`; **zero unexpected `armed:true`** | W7 / CONF-02 (PASS) / CONF-03 |
+| IC6 | **expectation CORRECTED BY REV 29: all 126 Sweep B cases refuse with `shared_worker_block_unverified`; presence is exercised by Sweep D (21 valid-present controls + 174 refusals).** exhaustive single-field mutation sweep (section D): 21 × 11 × 5 = **1155** malformed cases, plus 21 × 6 = **126** valid-negative substitutions | **1155** ⇒ 18 `shared_worker_block_unverified`; of the 126: 42 ⇒ 18 `shared_worker_present`, 84 ⇒ 18 `shared_worker_block_unverified`; **zero unexpected `armed:true`** | W7 / CONF-02 (PASS) / CONF-03 |
 | IC7 | structural rejection battery, **20** named cases (section D.3) | every case ⇒ 18 `shared_worker_block_unverified` with the expected `detail` | W7 / CONF-03 |
 | IC8 | browser process identity established before the run and re-verified immediately before the simulated run step (J.2) | identity established and unchanged, or ⇒ 18 `shared_worker_block_unverified`; **it never arms** | CONF-02 (PASS) / CONF-03 |
 | **IC9** (new) | **proxy battery, 7 named cases** (= sweep C14..C20): transparent pass-through record proxy; trapping record proxy (throwing `get`/`getOwnPropertyDescriptor`); **revoked** proxy; `perRealm`-array proxy; `requiredIds` proxy; nested non-primitive own-value proxy; post-validation substituted proxy through the SEAM-28 seam | every case `armed:false`, exit 18, `shared_worker_block_unverified` with the `detail` of FC12; **no uncaught exception in any case**; 3 repetitions per Node version | CONF-03 |
 
 ### C.5 Carried worker-WebSocket case — 1 row
 
+**REV 29 ADDS a section C.6 META-TEST row (MT-1): the gate fails if a row's recorded pass flag disagrees with its expected reason, exit code, armed value or detail; pass flags must be recomputed by an independent checker.**
+
 | Id | Case | Expected result | Coverage |
 |---|---|---|---|
 | FW-1 | dedicated-worker-initiated WebSocket against a fixture with a real WS upgrade | **WebSocket behaviour remains UNMEASURED** and FW-1 stays an independent arming blocker; its **required fail-closed decision** (unmeasured ⇒ `shared_worker_block_unverified` 18, `armed:false`, `detail fw1-websocket-unmeasured`) is executed 3× per Node version | CONF-02 (decision only) / CONF-03 |
 
-**Authoritative total: 21 (F1..F21) + 1 (F22) + 12 (FC1..FC12) + 9 (IC1..IC9) + 1 (FW-1) = 44 rows.** SPIKE-W6 covers 15 decision realms plus FC1, FC2, IC1 and IC2; every other row is owed to SPIKE-W7 and the section J gate. The rev 25 "34 rows", rev 26 "36 rows" and rev 27 "42 rows" totals are superseded by **44**. C6-T stays **27 / 5** and the two inventories stay disjoint.
+**SUPERSEDED BY REV 29 (ARCH-29): the authoritative total is 21 (F1..F21) + 1 (F22) + 15 (FC1..FC15) + 10 (IC1..IC10) + 1 (FW-1) + 1 (MT-1) = 49 ROWS, reprinted with its changed and new rows in rev 29 section C.** Rev 28 total (superseded): 21 (F1..F21) + 1 (F22) + 12 (FC1..FC12) + 9 (IC1..IC9) + 1 (FW-1) = 44 rows. SPIKE-W6 covers 15 decision realms plus FC1, FC2, IC1 and IC2; every other row is owed to SPIKE-W7 and the section J gate. The rev 25 "34 rows", rev 26 "36 rows" and rev 27 "42 rows" totals are superseded by **44**. C6-T stays **27 / 5** and the two inventories stay disjoint.
 
 ## Section D — the exhaustive sweep, defined precisely
 
@@ -384,7 +402,7 @@ Unchanged: every realm index (21) × every required key (11) × every mutation (
 
 ### D.3 Sweep B — valid-but-negative substitutions, and Sweep C — structural battery (now 20 cases)
 
-Sweep B unchanged: 21 realms × 6 in-schema substitutions (`measurable:false`, `timedOut:true`, `repetitionsConsistent:false`, `error:'threw'`, `typeofSharedWorker:'function'`, `constructed:true`). **Count = `|IDS| × |VALID_NEGATIVES| = 21 × 6 = 126`**; the 42 presence cases ⇒ `shared_worker_present`, the other 84 ⇒ `shared_worker_block_unverified`.
+Sweep B unchanged: 21 realms × 6 in-schema substitutions (`measurable:false`, `timedOut:true`, `repetitionsConsistent:false`, `error:'threw'`, `typeofSharedWorker:'function'`, `constructed:true`). **Count = `|IDS| × |VALID_NEGATIVES| = 21 × 6 = 126`**; **CORRECTED BY REV 29 (ARCH-29): all 126 Sweep B cases ⇒ `shared_worker_block_unverified`. The former 42 presence cases are INVALID under the rev 29 validity matrix, because substituting `typeofSharedWorker:'function'` or `constructed:true` into a clean-absence record leaves `nativeCtor:'absent'`; measured presence is exercised instead by the new Sweep D (rev 29 section D).**
 
 Sweep C, each case applied to `B27`, with the **exact expected `detail`**:
 
@@ -411,7 +429,7 @@ Sweep C, each case applied to `B27`, with the **exact expected `detail`**:
 | **C19** | nested structured evidence value: a required key holds a Proxy object | `record-value-proxy:<key>:index-0` |
 | **C20** | post-validation **proxy** substitution: `snapshotAndValidate` succeeds, the test then replaces a field (or the record) in the caller's original array with a Proxy, then calls `decideFromSnapshot` | decision **unchanged** relative to the unmutated base; the substituted proxy is never read, and if it is ever observed the refusal is `snapshot-proxy:*` — never a new `armed:true` |
 
-**Checker assertions, derived from the schema (formulas, not literals):** `|CANONICAL_REQUIRED_REALM_IDS| = 21`, `|REQUIRED_KEYS| = 11`, `|MUTATIONS| = 5`, `|VALID_NEGATIVES| = 6`, `|STRUCTURAL| = 13 + 7 = 20` ⇒ Sweep A `21*11*5 = 1155`, Sweep B `21*6 = 126`, Sweep C `20`, total **1301 refusals** plus **exactly 1** `armed:true` (the `B27` control) across **1302** `decide` invocations. The harness must compute these numbers from the constants and then compare them with this document, as CONF-02A did. **Zero unexpected `armed:true` is a gate condition, not a warning.**
+**SUPERSEDED BY REV 29 (ARCH-29): the live formulas are Sweep A 21*11*5 = 1155, Sweep B 21*6 = 126 (all refusals), Sweep C 20, Sweep D 21 + 63 + 42 + 63 + 6 = 195 ⇒ 1496 refusals (1475 `shared_worker_block_unverified` + 21 `shared_worker_present`) plus exactly one authorised `armed:true` across 1497 `decide` invocations (rev 29 section D).** Checker assertions, derived from the schema (formulas, not literals):** `|CANONICAL_REQUIRED_REALM_IDS| = 21`, `|REQUIRED_KEYS| = 11`, `|MUTATIONS| = 5`, `|VALID_NEGATIVES| = 6`, `|STRUCTURAL| = 13 + 7 = 20` ⇒ Sweep A `21*11*5 = 1155`, Sweep B `21*6 = 126`, Sweep C `20`, total **1301 refusals** plus **exactly 1** `armed:true` (the `B27` control) across **1302** `decide` invocations. The harness must compute these numbers from the constants and then compare them with this document, as CONF-02A did. **Zero unexpected `armed:true` is a gate condition, not a warning.**
 
 ## Section E — alternatives considered
 
@@ -478,6 +496,8 @@ No public surface change; no exit code added; precedence unchanged (`2 > 3 > 18 
 
 ## Section J — executed W6-T conformance gate (CONF-03), required before Security
 
+**SUPERSEDED BY REV 29 (ARCH-29): CONF-03 has EXECUTED and returned PARTIAL (`docs/phase-18-conf03-results.md`) with a required-row failure (FC1 mismatch-injection). The live gate is CONF-04, rev 29 section J: the full 49-row matrix on Node 22.19.0 and 24.21.0, all sweeps including Sweep D, the corrected FC1 expectation and the MT-1 meta-test. CONF-03 must never be presented as a pass.**
+
 CONF-01 and CONF-02 are **superseded, not upgraded**; both stay **PARTIAL** records of what they executed. Rev 28 executes nothing; `CONF-03` and `W6T-GATE` stay NOT EXECUTED / NOT SATISFIED.
 
 ### J.1 Executed-gate spec
@@ -512,7 +532,7 @@ Unchanged from rev 27 section J.4: FC2 passes only when, in every measurable rea
 
 **Procedure.** For each measurable realm, for each repetition: (1) before any page script runs, `addInitScript` captures the native constructor reference and records a **capture marker** (`present` / `absent`) plus the constructor's identity fingerprint into a Falcon-owned variable the page cannot name; (2) the realm is created and `evaluate` reads `typeof SharedWorker`, the own-property descriptor and the comparison of the live binding against the pre-captured reference; (3) the realm record's `nativeCtor` is set from that comparison only — `present` on agreement with a present reference, `absent` on agreement with an absent one, `mismatch` on disagreement, `uncaptured` when step (1) did not run.
 **Inputs.** The loopback fixtures of the realm under test; no external target.
-**Expected result.** Agreement in every measurable realm ⇒ the row PASSES with `nativeCtor` `present` or `absent` as measured. **Mismatch-injection sub-case:** the fixture replaces `window.SharedWorker` with a look-alike before the read ⇒ `nativeCtor:'mismatch'` ⇒ `armed:false`, exit 18, `shared_worker_block_unverified`, `detail realm-not-affirmatively-validated:<realm id>`.
+**Expected result — CORRECTED BY REV 29 (ARCH-29): agreement in every measurable realm ⇒ the row PASSES with `nativeCtor` `present` or `absent` as measured AND the record classified by the rev 29 validity matrix; the mismatch-injection sub-case expects EXACTLY `armed:false`, exit 18, `shared_worker_block_unverified`, detail `realm-not-affirmatively-validated:<realm id>` — `shared_worker_present` is a FAILURE for that sub-case, and a harness expectation is never the oracle.** **Mismatch-injection sub-case:** the fixture replaces `window.SharedWorker` with a look-alike before the read ⇒ `nativeCtor:'mismatch'` ⇒ `armed:false`, exit 18, `shared_worker_block_unverified`, `detail realm-not-affirmatively-validated:<realm id>`.
 **Evidence recorded.** Per realm per repetition: the capture marker, the evaluate-time read, the comparison outcome, the resulting `nativeCtor` value, the decision, the Node version, the browser identity and the network observation. FC1 is its **own** run: it may not be inferred from the `nativeCtor` field of another row's array run (the CONF-02 defect).
 
 ### J.6 IC4 as an independently executable row
