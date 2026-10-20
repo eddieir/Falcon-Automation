@@ -6,7 +6,7 @@ Task: for each of M1..M5, determine whether it detects each OPEN-BID-27 scenario
 
 Repository HEAD: `e38a941` (branch `docs/phase-18-architecture`). Nothing in the repo was edited; all artifacts are under this scratchpad.
 
-Environment: macOS Darwin 25.5.0 arm64 loopback; Playwright 1.64.0; Chromium 156.0.8078.4 (revision `@f842f52ef39fd97b449eb27cff414bf05a98ddce`); Node 22.19.0 and Node 24.21.0; 3 reps per Node (rep 0 at 60 s inter-sample wait; reps 1-2 at 10 s wait).
+Environment: macOS Darwin 25.5.0 arm64 loopback; Playwright 1.64.0; Chromium 156.0.8078.4 (revision `@f842f52ef39f (shortened)`); Node 22.19.0 and Node 24.21.0; 3 reps per Node (rep 0 at 60 s inter-sample wait; reps 1-2 at 10 s wait).
 
 ## Scope executed vs not executed
 
