@@ -7,7 +7,7 @@ Environment: macOS arm64; Node v22.19.0 and v24.21.0; stderr empty on both; resu
 | Item | Node 22 | Node 24 |
 |---|---|---|
 | Independent contract oracle (MT-1) failures | 0 | 0 |
-| Rows covered / uncovered | 58 / 0 | 58 / 0 |
+| Schema rows (52) covered / uncovered; 58 = oracle coverage labels incl. sweep and sub-row labels | 52 / 0 | 52 / 0 |
 | MT-2 (5 injected faults detected) | 5 of 5 | 5 of 5 |
 | Sweep A / B / C / D | 1155 / 126 / 20 / 195, 0 mismatches | same |
 | Sweep E | 16 executable, 0 mismatches, 2 invariant controls (construction throws) | same |
