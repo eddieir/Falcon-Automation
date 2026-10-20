@@ -5,8 +5,8 @@
 | Row | Realm | Measurement | Gate outcome |
 |---|---|---|---|
 | F16 | srcdoc iframe | measurable; `typeof SharedWorker` = `function`; descriptor present | `shared_worker_present` (refuse) |
-| F17 | iframe appended after top load | measurable; `function` | `shared_worker_present` |
-| F18 | page restored from back/forward cache (bfcache observed) | measurable; `function` | `shared_worker_present` |
+| F17 | iframe appended after top load (the capture init script was not pre-installed in this late frame, so the probe was injected inline; capture-versus-live comparison is unreliable here) | measurable; `function` | `shared_worker_present` |
+| F18 | back-navigation realm (bfcache restoration NOT independently confirmed: the harness flag rests on a URL check only, no `pageshow.persisted` probe) | measurable; `function` | `shared_worker_present` |
 | F19 | `javascript:` URL frame | **UNMEASURABLE**: no navigable frame was produced (`frame-not-found`) | `shared_worker_block_unverified` (refuse) |
 | F20 | `<object>` document | measurable; `function` | `shared_worker_present` |
 | F21 | service worker scope | measurable; `typeof SharedWorker` = `undefined` | see note |
