@@ -1,0 +1,694 @@
+{
+ "schema": "phase-18-w6t-expectations/1",
+ "derivedFrom": "docs/architecture/phase-18-rev30-patch.md sections B.3a, B.4, B.4a, B.5, C, D (rev 30, ARCH-30)",
+ "rules": {
+  "harnessExpectedFields": "ignore",
+  "unknownRowOrCaseClass": "fail",
+  "missingEntry": "fail",
+  "skip": "forbidden",
+  "unmeasuredRequiredRow": "partial-and-refuse",
+  "detailMatch": "exact string after substituting the case's realm id or index",
+  "armedTrueAllowance": "exactly one across the whole run: sweep case class D-control"
+ },
+ "rowTotals": {
+  "rows": 57,
+  "f": 21,
+  "f22": 1,
+  "fc": 22,
+  "ic": 10,
+  "fw": 1,
+  "mt": 2
+ },
+ "rows": {
+  "F1..F21": {
+   "kind": "measurement",
+   "perRealm": true,
+   "requiredRecordedFields": [
+    "realmId",
+    "measuredStatus",
+    "mechanism",
+    "typeofSharedWorker",
+    "descriptor",
+    "nativeCtor",
+    "constructed",
+    "repetitionsConsistent",
+    "error",
+    "timedOut",
+    "classification",
+    "popupEventSource?"
+   ],
+   "oracle": "recompute classification from the recorded evidence fields with the B.4a matrix and compare with the recorded classification; measuredStatus must be 'measured' or 'unmeasured' and 'unmeasured' can never be a pass",
+   "fullGateExpectation": {
+    "armed": false,
+    "exit": 18
+   }
+  },
+  "F22": {
+   "kind": "informational",
+   "oracle": "must not appear in any canonical required set and must never influence a decision",
+   "expect": {
+    "influencesDecision": false
+   }
+  },
+  "FC1": {
+   "subcases": {
+    "agreement": {
+     "kind": "measurement",
+     "oracle": "nativeCtor as measured and classification by B.4a"
+    },
+    "mismatch-injection": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "realm-not-affirmatively-validated:{realmId}"
+    }
+   }
+  },
+  "FC2": {
+   "kind": "measurement",
+   "expect": {
+    "fc2Pass": true,
+    "subObservationsPerRealm": 5,
+    "explained": true
+   }
+  },
+  "FC3": {
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified"
+  },
+  "FC4": {
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified"
+  },
+  "FC5": {
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified"
+  },
+  "FC6": {
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified",
+   "detail": "realm-not-affirmatively-validated:{realmId}",
+   "forbiddenDetailSubstring": "disagreement"
+  },
+  "FC7": {
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified"
+  },
+  "FC8": {
+   "subcases": {
+    "a-missing-one": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "realm-missing:{firstMissingCanonicalId}"
+    },
+    "b-missing-many": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "realm-missing:{firstMissingCanonicalId}"
+    },
+    "c-noncanonical-id-schema": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "record-value-enum:id:index-{n}"
+    },
+    "c-noncanonical-id-postschema": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "realm-unknown-or-extra:{id}"
+    },
+    "d-duplicate": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "realm-duplicate:{id}"
+    },
+    "e-empty": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "realm-missing:F1"
+    },
+    "f-oversized": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "input-length-excessive:perRealm"
+    }
+   }
+  },
+  "FC9": {
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified"
+  },
+  "FC10": {
+   "kind": "seam",
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified"
+  },
+  "FC11": {
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified"
+  },
+  "FC12": {
+   "subcases": {
+    "passthrough-perRealm": {
+     "detail": "input-proxy:perRealm"
+    },
+    "passthrough-record": {
+     "detail": "record-proxy:index-{n}"
+    },
+    "throwing-trap": {
+     "detail": "record-proxy:index-{n}"
+    },
+    "lying-trap": {
+     "detail": "record-proxy:index-{n}"
+    },
+    "revoked": {
+     "detail": "record-proxy:index-{n}"
+    },
+    "nested-value": {
+     "detail": "record-value-proxy:{key}:index-{n}"
+    },
+    "substituted-after-validation": {
+     "detail": "snapshot-proxy:record"
+    }
+   },
+   "commonExpect": {
+    "armed": false,
+    "exit": 18,
+    "reason": "shared_worker_block_unverified",
+    "uncaughtThrows": 0
+   }
+  },
+  "FC13": {
+   "subcases": {
+    "first": {
+     "detail": "realm-not-affirmatively-validated:F1"
+    },
+    "middle": {
+     "detail": "realm-not-affirmatively-validated:F11"
+    },
+    "last": {
+     "detail": "realm-not-affirmatively-validated:F21"
+    }
+   },
+   "commonExpect": {
+    "armed": false,
+    "exit": 18,
+    "reason": "shared_worker_block_unverified"
+   }
+  },
+  "FC14": {
+   "subcases": {
+    "a-invalid-F3-present-F8": {
+     "detail": "realm-not-affirmatively-validated:F3"
+    },
+    "b-present-F3-invalid-F8": {
+     "detail": "realm-not-affirmatively-validated:F8"
+    },
+    "c-three-invalid": {
+     "detail": "realm-not-affirmatively-validated:F2"
+    }
+   },
+   "commonExpect": {
+    "armed": false,
+    "exit": 18,
+    "reason": "shared_worker_block_unverified"
+   }
+  },
+  "FC15": {
+   "kind": "seam",
+   "subcases": {
+    "i-flip-to-mismatch": {
+     "oracle": "byte-identical to the unmutated decision"
+    },
+    "ii-flip-to-present": {
+     "oracle": "byte-identical to the unmutated decision"
+    },
+    "iii-field-proxy": {
+     "oracle": "byte-identical, or refusal with detail snapshot-proxy:record or record-unstable:index-{n}"
+    },
+    "iv-replace-record": {
+     "oracle": "byte-identical, or refusal with detail record-unstable:index-{n}"
+    }
+   },
+   "forbidden": {
+    "newReason": "shared_worker_present",
+    "newArmed": true
+   }
+  },
+  "FC16": {
+   "subcases": {
+    "a-own-nonenumerable-slice": {
+     "detail": "array-sparse-or-extra-keys"
+    },
+    "b-swapped-prototype-slice": {
+     "detail": "input-prototype-invalid:perRealm"
+    },
+    "c-own-enumerable-method": {
+     "detail": "array-sparse-or-extra-keys"
+    },
+    "d-inherited-method": {
+     "inert": true,
+     "note": "rev 31 correction: Array.prototype pollution is inert; outcome equals the unpolluted base outcome; callerFunctionInvocations 0",
+     "perBase": {
+      "SEC25": {
+       "armed": false,
+       "exit": 18,
+       "reason": "shared_worker_block_unverified",
+       "detail": "realm-not-affirmatively-validated:F3"
+      },
+      "BP30(8)": {
+       "armed": false,
+       "exit": 18,
+       "reason": "shared_worker_present",
+       "detail": "realm:F9"
+      },
+      "B27-clean": {
+       "armed": true,
+       "exit": 0,
+       "reason": "shared_worker_absent_all_realms",
+       "authorisedArm": true
+      }
+     }
+    },
+    "e-index-getter": {
+     "detail": "array-accessor-element:index-{n}"
+    },
+    "f-index-setter-only": {
+     "detail": "array-accessor-element:index-{n}"
+    },
+    "g-sparse-hole": {
+     "detail": "array-sparse-or-extra-keys"
+    },
+    "h-extra-own-property": {
+     "detail": "array-sparse-or-extra-keys"
+    },
+    "i-symbol-own-key": {
+     "detail": "array-sparse-or-extra-keys"
+    },
+    "j-accessor-length": {
+     "invariantControl": true,
+     "note": "rev 31: construction of an accessor-length Array throws before decide(); asserted as a JavaScript invariant, not an executable refusal"
+    },
+    "k-length-over-bound": {
+     "detail": "input-length-excessive:perRealm"
+    },
+    "l-proxy-container": {
+     "detail": "input-proxy:perRealm"
+    }
+   },
+   "commonExpect": {
+    "armed": false,
+    "exit": 18,
+    "reason": "shared_worker_block_unverified",
+    "callerFunctionInvocations": 0,
+    "bases": [
+     "B27",
+     "BP30"
+    ]
+   }
+  },
+  "FC17": {
+   "subcases": {
+    "a-export-keys": {
+     "expect": {
+      "exportKeys": [
+       "decide"
+      ]
+     }
+    },
+    "b-internals-absent": {
+     "expect": {
+      "decideFromSnapshot": "undefined",
+      "snapshotAndValidate": "undefined",
+      "isValidAbsence": "undefined",
+      "isValidPresence": "undefined",
+      "createDecider": "undefined"
+     }
+    },
+    "c-export-swap": {
+     "expect": {
+      "assignmentOutcome": [
+       "throws-TypeError-strict",
+       "ignored-sloppy"
+      ],
+      "decisionAfter": "byte-identical to baseline"
+     }
+    },
+    "d-canonical-tamper": {
+     "expect": {
+      "mutationOutcome": [
+       "throws",
+       "ignored"
+      ],
+      "frozen": true,
+      "decisionAfter": "byte-identical to baseline"
+     }
+    },
+    "e-second-argument": {
+     "expect": {
+      "decisionAfter": "byte-identical to the one-argument call"
+     }
+    }
+   }
+  },
+  "IC1": {
+   "kind": "control",
+   "oracle": "fixture definition in rev 28 J.6; executed independently"
+  },
+  "IC2": {
+   "kind": "control",
+   "oracle": "fixture definition in rev 28 J.6; executed independently"
+  },
+  "IC3": {
+   "subcases": {
+    "a-all-absent": {
+     "armed": true,
+     "exit": 0,
+     "reason": "shared_worker_absent_all_realms"
+    },
+    "b-one-valid-present": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_present",
+     "detail": "realm:{id}"
+    },
+    "c-unmeasurable": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "realm-not-affirmatively-validated:{id}"
+    },
+    "d-disagreement": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "realm-not-affirmatively-validated:{id}"
+    },
+    "e-empty": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "realm-missing:F1"
+    },
+    "f-present-looking-bad-ctor": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "realm-not-affirmatively-validated:{id}"
+    },
+    "g-reduced-inventory": {
+     "armed": false,
+     "exit": 18,
+     "reason": "shared_worker_block_unverified",
+     "detail": "realm-missing:{firstMissingCanonicalId}"
+    }
+   }
+  },
+  "IC4": {
+   "kind": "control",
+   "oracle": "fixture definition in rev 28 J.4; executed independently"
+  },
+  "IC5": {
+   "commonExpect": {
+    "armed": false,
+    "exit": 18,
+    "reason": "shared_worker_block_unverified"
+   },
+   "subcases": {
+    "1..10": {
+     "oracle": "rev 28 IC5 details, with every requiredIds-based case re-expressed against the perRealm inventory"
+    },
+    "11-function-with-absent-descriptor": {
+     "detail": "realm-not-affirmatively-validated:F1"
+    },
+    "12-constructed-with-undefined-typeof": {
+     "detail": "realm-not-affirmatively-validated:F1"
+    },
+    "13-ignored-second-argument": {
+     "oracle": "byte-identical to the one-argument call"
+    },
+    "14-no-argument": {
+     "detail": "input-not-array"
+    },
+    "15-null-or-string": {
+     "detail": "input-not-array"
+    }
+   }
+  },
+  "IC6": {
+   "kind": "sweeps",
+   "oracle": "section D case classes; counts re-derived from the schema constants"
+  },
+  "IC7": {
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified"
+  },
+  "IC8": {
+   "kind": "control",
+   "oracle": "fixture definition in rev 28 J.6; executed independently"
+  },
+  "IC9": {
+   "subcases": {
+    "proxy-1": {
+     "detail": "input-proxy:perRealm"
+    },
+    "proxy-2": {
+     "detail": "record-proxy:index-{n}"
+    },
+    "proxy-3": {
+     "detail": "record-value-proxy:{key}:index-{n}"
+    },
+    "proxy-4-revoked": {
+     "detail": "record-proxy:index-{n}"
+    },
+    "proxy-5-throwing": {
+     "detail": "record-proxy:index-{n}"
+    },
+    "proxy-6-lying": {
+     "detail": "record-proxy:index-{n}"
+    },
+    "proxy-7-post-validation": {
+     "detail": "snapshot-proxy:record"
+    }
+   },
+   "commonExpect": {
+    "armed": false,
+    "exit": 18,
+    "reason": "shared_worker_block_unverified",
+    "uncaughtThrows": 0
+   }
+  },
+  "IC10": {
+   "subcases": {
+    "a-missing-nativeCtor": {
+     "detail": "record-keys-mismatch:index-{n}"
+    },
+    "b-uncaptured": {
+     "detail": "realm-not-affirmatively-validated:{id}"
+    },
+    "c-mismatch": {
+     "detail": "realm-not-affirmatively-validated:{id}"
+    },
+    "d-proxy-value": {
+     "detail": "record-value-proxy:nativeCtor:index-{n}"
+    },
+    "e-inconsistent": {
+     "detail": "realm-not-affirmatively-validated:{id}"
+    }
+   },
+   "commonExpect": {
+    "armed": false,
+    "exit": 18,
+    "reason": "shared_worker_block_unverified",
+    "uncaughtThrows": 0,
+    "repetitionsPerNodeVersion": 3
+   }
+  },
+  "FW-1": {
+   "kind": "measurement",
+   "requiredRecordedFields": [
+    "measuredStatus",
+    "failClosedPathExecuted"
+   ],
+   "expect": {
+    "armed": false,
+    "exit": 18,
+    "reason": "shared_worker_block_unverified"
+   },
+   "oracle": "unmeasured status may never be recorded as a pass; the fail-closed path must be executed 3 times per Node version"
+  },
+  "MT-1": {
+   "kind": "meta",
+   "oracle": "this file is the oracle; the checker must read no harness expected* field and must cover every row and case class"
+  },
+  "MT-2": {
+   "kind": "meta",
+   "expect": {
+    "runsAgainstWrongCopy": 1,
+    "failuresReported": 5,
+    "mappedTo": [
+     "reason",
+     "exit",
+     "armed",
+     "detail",
+     "deleted-entry-uncovered"
+    ]
+   }
+  },
+  "FC18": {
+   "inputs": 10,
+   "minPropertiesPatched": 700,
+   "onlyAuthorisedArm": "all-absent (authorised arm)",
+   "baseline": [
+    "true|0|shared_worker_absent_all_realms|undefined",
+    "false|18|shared_worker_present|realm:F9",
+    "false|18|shared_worker_block_unverified|realm-not-affirmatively-validated:F3",
+    "false|18|shared_worker_block_unverified|realm-missing:F1",
+    "false|18|shared_worker_block_unverified|realm-missing:F21",
+    "false|18|shared_worker_block_unverified|realm-not-affirmatively-validated:F1",
+    "false|18|shared_worker_block_unverified|record-value-type:schemaVersion:index-0",
+    "false|18|shared_worker_block_unverified|record-proxy:index-0",
+    "false|18|shared_worker_block_unverified|record-keys-mismatch:index-0",
+    "false|18|shared_worker_block_unverified|input-not-array"
+   ],
+   "note": "rev 32: every configurable property of every global built-in and util.types patched after load (one at a time and all at once, plus inherited accessors on Object/Array prototypes): zero caller executions, unchanged decisions ; rev 34 repeats the sweep through the gate (784 properties, 0 caller executions)"
+  },
+  "FC19": {
+   "cases": 8,
+   "expect": "refuse, no throw, bounded time: cyclic record value, self-containing array, 200000-deep array and object values, 5000-deep Proxy chain, sparse length 1e9, 1025 records, 50 MB string",
+   "reason": "shared_worker_block_unverified",
+   "exit": 18,
+   "armed": false
+  },
+  "FC20": {
+   "expect": "no wrong decision and no arm on invalid input at 1001 stack depths (4000-11000 frames); behind the gate an exception raised inside decide by real stack exhaustion becomes decision-exception (observed 1 of 1001 depths on Node 22 in 3 of 3 runs, 0 on Node 24)"
+  },
+  "FC21": {
+   "expect": "export frozen with one key; strict assignment, defineProperty and delete throw TypeError; sloppy assignment ignored; require returns the same object; a load-time captured function is unaffected; a fresh require after cache removal is a different instance"
+  },
+  "FC22": {
+   "subcases": {
+    "a": "production export frozen, single key gateDecide",
+    "b": "production gate refuses every input: worker_websocket_containment_unverified, fw2:unmeasured, exit 18",
+    "c": "evidence only: arity 1, extra arguments ignored",
+    "d": "authorised arm and refusal pass through by value",
+    "e": "13 injected thrown values -> shared_worker_block_unverified exit 18 decision-exception; hostile members never run",
+    "f": "25 runaway-recursion exhaustions inside the decision call -> decision-exception",
+    "g": "exception after the real decide returned an arm -> refusal",
+    "h": "29 malformed results -> decision-result-malformed; 0 trap or accessor runs",
+    "i": "three valid refusal reasons preserved, supplied object never returned",
+    "j": "well-formed frozen arm is rebuilt",
+    "k": "documented scope: a lying well-formed arm from a compromised captured decide is accepted"
+   },
+   "rows": 11
+  }
+ },
+ "caseClasses": {
+  "A-mutation": {
+   "count": 1155,
+   "formula": "|IDS|*|REQUIRED_KEYS|*|MUTATIONS| = 21*11*5",
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified"
+  },
+  "B-valid-negative": {
+   "count": 126,
+   "formula": "|IDS|*|VALID_NEGATIVES| = 21*6",
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified"
+  },
+  "C-structural": {
+   "count": 20,
+   "formula": "|STRUCTURAL| = 20",
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified",
+   "oracle": "rev 28 D.3 details, with the former requiredIds-container cases re-expressed as perRealm-container cases"
+  },
+  "D-pos": {
+   "count": 21,
+   "formula": "|IDS|",
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_present",
+   "detail": "realm:{id}"
+  },
+  "D-ctor": {
+   "count": 63,
+   "formula": "|IDS|*|CTOR_NEGATIVES| = 21*3",
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified",
+   "detail": "realm-not-affirmatively-validated:{id}"
+  },
+  "D-desc": {
+   "count": 42,
+   "formula": "|IDS|*|DESC_NEGATIVES| = 21*2",
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified",
+   "detail": "realm-not-affirmatively-validated:{id}"
+  },
+  "D-absctor": {
+   "count": 63,
+   "formula": "|IDS|*3",
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified",
+   "detail": "realm-not-affirmatively-validated:{id}"
+  },
+  "D-mix": {
+   "count": 6,
+   "formula": "|POS|*|PARTNER| = 3*2",
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified",
+   "boundaryRule": "non-circular: F1 uses F2 and F3, F11 uses F10 and F12, F21 uses F20 and F19",
+   "detail": "realm-not-affirmatively-validated:{firstInvalidCanonicalId}"
+  },
+  "D-control": {
+   "count": 1,
+   "formula": "1",
+   "armed": true,
+   "exit": 0,
+   "reason": "shared_worker_absent_all_realms"
+  },
+  "E-hostile": {
+   "count": 18,
+   "executable": 16,
+   "invariantControls": 2,
+   "formula": "|HOSTILE|*|BASES| = 9*2; 2 accessor-length constructions throw (invariant controls)",
+   "armed": false,
+   "exit": 18,
+   "reason": "shared_worker_block_unverified",
+   "oracle": "FC16 details per pattern; callerFunctionInvocations 0"
+  }
+ },
+ "runTotals": {
+  "invocations": 1513,
+  "refusals": 1512,
+  "blockUnverified": 1491,
+  "present": 21,
+  "armedTrue": 1,
+  "armedTrueNamedRows": [
+   "IC3.a",
+   "FC16.d-clean-control"
+  ]
+ }
+}
