@@ -40,7 +40,7 @@ Unchanged from rev 27 section B.2: exactly 11 own data properties in canonical o
 The rev 27 rejection set stays in force verbatim. Rev 28 adds, **ahead of everything else**:
 
 - `perRealm` is a Proxy ⇒ `input-proxy:perRealm`;
-- `requiredIds` is a Proxy, or any `requiredIds` element is a Proxy ⇒ `input-proxy:requiredIds`;
+- **WITHDRAWN BY REV 30 (ARCH-30): `requiredIds` is no longer an input, so `input-proxy:requiredIds`, `required-id-set-malformed`, `required-id-unknown` and `required-id-missing` are withdrawn from the detail vocabulary; the required-realm list is private, frozen and literal. The rev 30 container rules replace them (`input-prototype-invalid:perRealm`, `input-length-unreadable:perRealm`, `input-length-excessive:perRealm`, `array-accessor-element:index-N`, `array-descriptor-malformed:index-N`, `canonical-required-set-corrupt`).** Superseded rev 28 rule: `requiredIds` is a Proxy, or any `requiredIds` element is a Proxy ⇒ `input-proxy:requiredIds`;
 - any realm record is a Proxy ⇒ `record-proxy:index-N`;
 - any non-primitive own value of a record (the only way a nested structured evidence value can appear) is a Proxy ⇒ `record-value-proxy:KEY:index-N`; a non-primitive own value that is **not** a Proxy is still rejected by the type checks (`record-value-type:KEY`);
 - a snapshot that is somehow a Proxy ⇒ `snapshot-proxy:index-N` / `snapshot-proxy:input` (defence in depth: `JSON.parse` cannot produce one).
@@ -69,7 +69,11 @@ Normative behaviour; the implementation may differ in style but not in outcome o
 // standard-library intrinsic, captured ONCE here at module initialization.
 const { types } = require('node:util');
 const isProxy = types.isProxy;            // never re-read, never taken from input
-Object.freeze(module.exports);            // see B.8 note on export immutability
+// WITHDRAWN BY REV 30 (ARCH-30, minor m-91): this freeze runs BEFORE module.exports is
+// reassigned at the bottom of the file, so the real exports were never frozen and decide
+// could be swapped (confirmed in security design review 24). The live rule is: no early
+// freeze, and the LAST statement of the module is module.exports = Object.freeze({ decide }).
+Object.freeze(module.exports);            // see B.8 note on export immutability - WITHDRAWN
 
 const SCHEMA_VERSION = 1;
 
@@ -191,6 +195,11 @@ function snapshotAndValidate(perRealm, requiredIds) {
     if (proxyFault(requiredIds[i])) return no('input-proxy:requiredIds');
     if (typeof requiredIds[i] !== 'string') return no('required-id-set-malformed');
   }
+  // WITHDRAWN BY REV 30 (ARCH-30, M-26 fixed): calling a method on the caller's array let a
+  // non-enumerable own `slice` override, or a swapped array prototype, cut the required set to
+  // ['F1'] and arm with F2 valid-present, F3 nativeCtor 'mismatch' and F21 unmeasured
+  // (reproduction in security design review 24). Rev 30 removes requiredIds from the API and
+  // reads caller arrays only through own data-property descriptors. DO NOT IMPLEMENT this line.
   const req = requiredIds.slice();
   const canonical = CANONICAL_REQUIRED_REALM_IDS;
   if (req.length !== canonical.length || new Set(req).size !== req.length) {

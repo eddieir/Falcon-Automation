@@ -55,6 +55,8 @@ Common preconditions for **both** valid classes: `measurable:true`, `error:'none
 
 ### B.5 Reference text (reprinted; supersedes rev 28 B.5)
 
+**SUPERSEDED BY REV 30 (ARCH-30, security design review 24): the code block below is NOT the live reference. `requiredIds` is REMOVED from the production API (`decide(perRealm)` only), the required-realm list is a private frozen literal canonical list, caller containers are read only through own data-property descriptors from captured intrinsics (no caller method, getter or iterator is ever invoked), `decideFromSnapshot` and `snapshotAndValidate` are PRIVATE and unexported, and the file's last statement is `module.exports = Object.freeze({ decide })`. The live reference is the complete module in rev 30 section B.5.**
+
 Normative behaviour; the implementation may differ in style but not in outcome or in **order of checks**. Everything in rev 28 B.5 from the intrinsic capture through `snapshotAndValidate` is **unchanged and still normative** (`isProxy` captured once at module initialization; proxy rejection first; shape inspection with accessor before key order; two snapshot reads; schema validation; freeze). Only the classification layer changes:
 
 ```js
@@ -134,6 +136,9 @@ function decideFromSnapshot(snapshot) {
   return { armed: true, exit: 0, reason: 'shared_worker_absent_all_realms' };
 }
 
+// WITHDRAWN BY REV 30 (ARCH-30): the signature decide(perRealm, requiredIds) is withdrawn.
+// The live signature is decide(perRealm); the required-realm id list is private, frozen,
+// built from literals and never read from input. DO NOT IMPLEMENT the function below.
 function decide(perRealm, requiredIds) {
   const v = snapshotAndValidate(perRealm, requiredIds);
   return v.ok ? decideFromSnapshot(v.snapshot) : v.result;
@@ -141,15 +146,20 @@ function decide(perRealm, requiredIds) {
 
 module.exports = {
   decide,                                  // the ONLY product entry point
-  snapshotAndValidate, decideFromSnapshot, // exported for tests (SEAM-28)
+  // WITHDRAWN BY REV 30: snapshotAndValidate and decideFromSnapshot are PRIVATE and MUST NOT
+  // be exported. The SEAM-28 seam is reached only by a test-only loader that recompiles the
+  // same source and calls the internal createDecider({testHooks:{exposeInternals:true}}).
+  snapshotAndValidate, decideFromSnapshot, // exported for tests (SEAM-28) - WITHDRAWN
   inspectRecordShape, snapshotRecord, validateRecord,
   isValidAbsence, isValidPresence          // exported for tests only
 };
 ```
 
-`isCleanAbsence` and `hasMeasuredPresence` are **withdrawn as names and as behaviour**; no code may implement `hasMeasuredPresence`. Pass 3 is redundant given passes 1 and 2 and is kept as defence in depth so that a future edit to pass 2 cannot produce an arming decision from a non-absent record. `module.exports` stays frozen; the two new exports are test seams only and cannot influence a production decision.
+`isCleanAbsence` and `hasMeasuredPresence` are **withdrawn as names and as behaviour**; no code may implement `hasMeasuredPresence`. Pass 3 is redundant given passes 1 and 2 and is kept as defence in depth so that a future edit to pass 2 cannot produce an arming decision from a non-absent record. **CORRECTED BY REV 30 (minor m-91): in the rev 28/29 text `Object.freeze(module.exports)` ran BEFORE `module.exports` was reassigned, so the exports were NOT frozen and `decide` could be swapped. Rev 30 removes the early freeze and makes `module.exports = Object.freeze({ decide })` the LAST statement of the module; `snapshotAndValidate`, `decideFromSnapshot`, `isValidAbsence` and `isValidPresence` are no longer exported at all.** Superseded rev 29 sentence: `module.exports` stays frozen; the two new exports are test seams only and cannot influence a production decision.
 
 ### B.6 Order of operations (amended)
+
+**AMENDED AGAIN BY REV 30 (ARCH-30): the rule gains its container layer at the front. ORDER OF OPERATIONS (normative): reject proxies -> read the caller container through own data-property descriptors only (Array.prototype identity, readable bounded length, no accessor element, no malformed descriptor, no sparse index, no extra own property, no symbol key; each index read exactly once) -> inspect record shape (accessor before key order) -> snapshot twice -> compare -> validate the snapshot schema -> freeze -> assert the private canonical list is 21 frozen literal ids -> validate EVERY canonical required record against the B.4a matrix -> only then inspect presence -> arm only on unanimous VALID-ABSENT. No caller method, getter, setter or iterator is ever invoked, and the required-realm set is never caller-supplied.**
 
 **reject proxies → inspect shape (accessor before key order) → snapshot twice → compare → validate the snapshot schema → freeze → validate EVERY required record against the B.4a matrix → only then inspect presence → arm only on unanimous VALID-ABSENT.** Post-validation mutation immunity is unchanged: the decision reads only the frozen snapshot, so replacing a captured reference, a field or a whole record in the caller's objects after validation (SEAM-28) leaves the decision unchanged or produces a refusal, never a new `shared_worker_present` and never a new `armed:true`.
 
@@ -158,6 +168,8 @@ module.exports = {
 The proxy-rejection rule, the interface list and the trust boundaries of rev 28 stay as written, with two additions: `isValidAbsence`/`isValidPresence` join the SEAM-28 internal exports, and `SharedWorkerCapabilityProbe.measure(...)` must emit `nativeCtor` **only** from the FC1 comparison — never defaulted, inferred or copied from another realm.
 
 ## Section C — table W6-T, rev 29 delta (49 rows)
+
+**SUPERSEDED BY REV 30 (ARCH-30): the authoritative table is `docs/architecture/phase-18-rev30-patch.md` section C at 52 ROWS (21 F + 1 F22 + 17 FC (FC1..FC17) + 10 IC + 1 FW-1 + 2 MT). Rev 30 adds FC16, FC17 and MT-2, replaces MT-1 with a contract-derived oracle, and re-expresses FC8 and every other `requiredIds`-based case as a canonical-set or `perRealm`-inventory case.**
 
 **Rows not listed below are unchanged from the rev 28 section C reprint and stay exactly as listed there** (F1..F21, F22, FC2..FC5, FC7..FC12, IC1, IC2, IC4, IC7, IC8, IC9, FW-1). Changed and new rows:
 
@@ -177,9 +189,9 @@ The proxy-rejection rule, the interface list and the trust boundaries of rev 28 
 
 | Id | Case | Expected result |
 |---|---|---|
-| **MT-1** | **meta-test on the harness itself.** For every recorded row, an **independent checker** — separate from the harness that produced the row, reading its oracle from rev 29 sections B.4, B.4a and B.5 — recomputes the pass flag from `expected` versus `actual` (`reason`, `exit`, `armed`, `detail`) | the gate **FAILS** if any row's recorded pass flag disagrees with the recomputed verdict, or if a row records a pass while its expected reason, exit code, armed value or detail differ from the contract. Harness-authored pass flags are advisory only. The CONF-03 FC1 `pass:true` is the motivating defect and is **not accepted** |
+| **MT-1 (REPLACED BY REV 30: the oracle is a contract-derived machine-readable expectations file, `phase-18-rev30-expectations.json`, shipped in rev 30 section C.6; the checker MUST ignore every harness-recorded `expected*` field, MUST cover every row and generated case class including the 34 rows CONF-04 skipped and every `isProxy` row, and MUST FAIL rather than skip. Rev 30 adds MT-2, the self-test against deliberately wrong expectations.)** | **meta-test on the harness itself.** For every recorded row, an **independent checker** — separate from the harness that produced the row, reading its oracle from rev 29 sections B.4, B.4a and B.5 — recomputes the pass flag from `expected` versus `actual` (`reason`, `exit`, `armed`, `detail`) | the gate **FAILS** if any row's recorded pass flag disagrees with the recomputed verdict, or if a row records a pass while its expected reason, exit code, armed value or detail differ from the contract. Harness-authored pass flags are advisory only. The CONF-03 FC1 `pass:true` is the motivating defect and is **not accepted** |
 
-**Authoritative total: 21 (F1..F21) + 1 (F22) + 15 (FC1..FC15) + 10 (IC1..IC10) + 1 (FW-1) + 1 (MT-1) = 49 rows.** The rev 25 "34 rows", rev 26 "36 rows", rev 27 "42 rows" and rev 28 "44 rows" totals are superseded by **49**. C6-T stays **27 / 5** and the two inventories stay disjoint.
+**SUPERSEDED BY REV 30 (ARCH-30): the authoritative total is 21 (F1..F21) + 1 (F22) + 17 (FC1..FC17) + 10 (IC1..IC10) + 1 (FW-1) + 2 (MT-1, MT-2) = 52 ROWS, reprinted with its changed and new rows in rev 30 section C.** Rev 29 total (superseded): 21 (F1..F21) + 1 (F22) + 15 (FC1..FC15) + 10 (IC1..IC10) + 1 (FW-1) + 1 (MT-1) = 49 rows. The rev 25 "34 rows", rev 26 "36 rows", rev 27 "42 rows" and rev 28 "44 rows" totals are superseded by **49**. C6-T stays **27 / 5** and the two inventories stay disjoint.
 
 ## Section D — sweeps (counts by formula)
 
@@ -188,7 +200,7 @@ Constants: `|IDS| = 21`, `|REQUIRED_KEYS| = 11`, `|MUTATIONS| = 5`, `|VALID_NEGA
 - **Sweep A** (unchanged): `21 × 11 × 5 = 1155` ⇒ all `shared_worker_block_unverified`.
 - **Sweep B** (expectation corrected): `21 × 6 = 126` ⇒ **all** `shared_worker_block_unverified`.
 - **Sweep C** (unchanged): **20** structural cases ⇒ all `shared_worker_block_unverified` with the rev 28 D.3 details.
-- **Sweep D** (new). Base `BP29(i)` = `B27` with record `i` replaced by a **VALID-PRESENT** record (`typeof:'function'`, `descriptor:'present-data'`, `nativeCtor:'present'`, `constructed:true`).
+- **Sweep D** (new; **boundary rule stated by rev 30 (minor m-95): `preceding` means canonical index i-1 and `following` means canonical index i+1 in the F1..F21 order, with NO wraparound. At `F1` there is no preceding realm, so both D-mix partners are taken forward: `F2` and `F3`. At `F21` there is no following realm, so both are taken backward: `F20` and `F19`. At `F11` they are `F10` and `F12`. The count stays 6**). Base `BP29(i)` = `B27` with record `i` replaced by a **VALID-PRESENT** record (`typeof:'function'`, `descriptor:'present-data'`, `nativeCtor:'present'`, `constructed:true`).
   - `D-pos` = `|IDS|` = **21** ⇒ `shared_worker_present`, detail `realm:<id>` (the authorised presence controls; `armed:false`).
   - `D-ctor` = `|IDS| × |CTOR_NEGATIVES|` = **63**: `BP29(i)` with `nativeCtor` substituted ⇒ `realm-not-affirmatively-validated:<id>`. This is the new mutation of `nativeCtor` in present records.
   - `D-desc` = `|IDS| × |DESC_NEGATIVES|` = **42**: `BP29(i)` with `descriptor` substituted ⇒ same refusal.
@@ -196,7 +208,7 @@ Constants: `|IDS| = 21`, `|REQUIRED_KEYS| = 11`, `|MUTATIONS| = 5`, `|VALID_NEGA
   - `D-mix` = `|POS| × |PARTNER|` = **6**: one INVALID record at `F1`, `F11` or `F21` combined with a VALID-PRESENT record at the preceding or following required realm ⇒ `shared_worker_block_unverified`, **never** `shared_worker_present`.
   - **Sweep D total = `21 + 63 + 42 + 63 + 6 = 195`.**
 
-**Checker assertions (formulas, not literals):** `1155 + 126 + 20 + 195 = 1496` refusals — **1475** `shared_worker_block_unverified` and **21** `shared_worker_present` — plus **exactly 1** `armed:true` (the `B27` control) across **1497** `decide` invocations. The harness must derive these from the schema constants and then compare them with this document. **Zero unexpected `armed:true` and zero unexpected `shared_worker_present` are gate conditions, not warnings.**
+**SUPERSEDED BY REV 30 (ARCH-30): the live formulas add Sweep E (`9 hostile container patterns x 2 bases = 18`), giving `1155 + 126 + 20 + 195 + 18 = 1514` refusals — **1493** `shared_worker_block_unverified` and **21** `shared_worker_present` — plus exactly **1** authorised `armed:true` across **1515** `decide` invocations (rev 30 section D).** Checker assertions (formulas, not literals):** `1155 + 126 + 20 + 195 = 1496` refusals — **1475** `shared_worker_block_unverified` and **21** `shared_worker_present` — plus **exactly 1** `armed:true` (the `B27` control) across **1497** `decide` invocations. The harness must derive these from the schema constants and then compare them with this document. **Zero unexpected `armed:true` and zero unexpected `shared_worker_present` are gate conditions, not warnings.**
 
 ## Section E — alternatives considered
 
@@ -219,7 +231,7 @@ No schema change (`schemaVersion` stays `1`), no public surface, no CLI flag, no
 
 | Seam | Rows / sweeps | AC |
 |---|---|---|
-| `decide(perRealm, requiredIds)` | FC1, FC13, FC14, IC3, IC5, IC6, IC10, Sweeps A–D | P18-AC-091 |
+| `decide(perRealm)` **(rev 30: the `requiredIds` parameter is withdrawn; this is the ONLY product export)** | FC1, FC13, FC14, FC16, FC17, IC3, IC5, IC6, IC10, Sweeps A–E | P18-AC-091 |
 | `snapshotAndValidate` + `decideFromSnapshot` (SEAM-28) | FC10, FC15, C13, C20 | P18-AC-091 |
 | `isValidAbsence` / `isValidPresence` (test-only exports) | the B.4a matrix, row by row | P18-AC-091 |
 | independent checker | MT-1 | P18-AC-091, W6T-GATE |
@@ -232,6 +244,8 @@ No schema change (`schemaVersion` stays `1`), no public surface, no CLI flag, no
 **Consequences.** One extra pass over 21 frozen records; Sweep B loses its presence cases and Sweep D (195 cases) gains them; the authoritative table is 49 rows; the executed gate is CONF-04. ADR-0051 and ADR-0052 stay in force and are **amended** by this ADR only on the classification order. No exit code, reason code, detail string or public surface changes.
 
 ## Section J — executed W6-T conformance gate (CONF-04), required before Security
+
+**SUPERSEDED BY REV 30 (ARCH-30): CONF-04 has executed and is not accepted as satisfying the gate — its MT-1 checker read the harness's own `expected*` fields instead of the contract and skipped 34 of 237 rows including the `isProxy` rows, and the popup gesture was not independently verified. The live gate is CONF-05, rev 30 section J: the full 52-row matrix, Sweeps A–E, the contract-derived oracle with total coverage, MT-2, and recorded popup event sources. CONF-01 to CONF-04 stay PARTIAL records and are not edited.**
 
 CONF-01, CONF-02 and CONF-03 are **superseded, not upgraded**; all three stay **PARTIAL** records and are not edited. Rev 29 executes nothing; `CONF-04` and `W6T-GATE` stay NOT EXECUTED / NOT SATISFIED. CONF-04 inherits rev 28 J.1 items 2–5, 8–12 and sections J.2, J.4, J.6, J.7 and J.8 verbatim, and adds or tightens:
 
