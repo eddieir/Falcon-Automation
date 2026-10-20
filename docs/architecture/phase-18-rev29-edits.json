@@ -1,0 +1,184 @@
+{
+ "schema": "phase-18-rev23-edits/1",
+ "revision": "7caef92 on docs/phase-18-architecture",
+ "producedBy": "ARCH-29 rev 29 patch; apply with a script; docs/architecture/phase-18-rev29-patch.md is normative",
+ "notes": [
+  "Same schema as phase-18-rev28-edits.json: ac[] with set/replaceText/appendText {field,text}, openItems/openItemsAdd, counts, exitCodes, docEdits[{file,replace[{old,new}],append,after}].",
+  "Every 'old' anchor in this file was verified by exact string count to occur EXACTLY ONCE in its target file at 7caef92 (script-verified, 18 anchors, 0 failures). Short SHAs only; no 40-character SHA anywhere; no AI attribution.",
+  "OWNER DECISION applied by rev 29 (after CONF-03 PARTIAL, docs/phase-18-conf03-results.md): GLOBAL VALIDATION BEFORE CLASSIFICATION. ORDER OF OPERATIONS (normative): reject proxies -> inspect shape (accessor before key order) -> snapshot twice -> compare -> validate the snapshot schema -> freeze -> VALIDATE EVERY REQUIRED RECORD AGAINST THE VALIDITY MATRIX (containers, required-ID set, complete realm inventory, schema, types, descriptors, captured-constructor agreement, repetitions and consistency) -> only if EVERY required record is valid, inspect presence -> any valid-present realm => shared_worker_present exit 18 -> arm only when every required record is VALID-ABSENT. Classification may never precede validation; a single invalid, incomplete, inconsistent or unverified record wins over any presence and over any arming.",
+  "VALIDITY MATRIX (normative, applied to every required record AFTER schema, type, enum, descriptor and primitiveness validation and BEFORE any presence inspection). Common preconditions for BOTH valid classes: measurable:true, error:'none', timedOut:false, repetitionsConsistent:true, mechanism!=='unavailable'. VALID-ABSENT: typeofSharedWorker:'undefined' AND descriptor:'absent' AND nativeCtor:'absent' AND constructed:false. VALID-PRESENT: typeofSharedWorker:'function' AND descriptor in {'present-data','present-accessor'} AND nativeCtor:'present' AND constructed in {true,false}. INVALID (=> shared_worker_block_unverified, exit 18, armed:false, detail realm-not-affirmatively-validated:<id>) for EVERY other combination, in particular: typeof 'function' with nativeCtor 'absent', 'mismatch' or 'uncaptured'; typeof 'function' with descriptor 'absent' or 'unreadable'; typeof 'undefined' with nativeCtor 'present', 'mismatch' or 'uncaptured'; typeof 'undefined' with constructed:true; constructed:true with nativeCtor!=='present'; typeofSharedWorker 'object', 'other' or 'unreadable' in any combination; descriptor 'unreadable' in any combination. AGREEMENT RULE: nativeCtor MUST be 'present' iff typeofSharedWorker is 'function' and MUST be 'absent' iff typeofSharedWorker is 'undefined'; 'mismatch' and 'uncaptured' are NEVER valid.",
+  "The rev 28 helpers isCleanAbsence/hasMeasuredPresence are REPLACED by isValidAbsence/isValidPresence. hasMeasuredPresence (typeof==='function' || constructed===true) is WITHDRAWN: it classified a realm present without checking captured-constructor evidence, which is the measured CONF-03 FC1 defect (recorded decision shared_worker_present detail realm:F1 where the contract requires shared_worker_block_unverified detail realm-not-affirmatively-validated:F1). A constructor/reference mismatch or any uncaptured or disagreeing constructor evidence MUST yield shared_worker_block_unverified even when typeofSharedWorker is 'function'.",
+  "The contradictory FC1 expectation is REMOVED. FC1 mismatch-injection expects EXACTLY: armed:false, exit 18, shared_worker_block_unverified, detail realm-not-affirmatively-validated:<realm id>, and nothing else. No other outcome is a pass for that sub-case. The oracle for every row comes ONLY from the rev 29 contract (B.4/B.4a/B.5); a harness expectation may never be the oracle.",
+  "NEW ROWS: FC13 (validation-before-classification, with mismatch injected in the FIRST (F1), MIDDLE (F11) and LAST (F21) required realm), FC14 (one invalid record combined with another VALID-PRESENT record => shared_worker_block_unverified, never shared_worker_present; plus multiple invalid records, refused at the first required id in requiredIds order), FC15 (captured reference changed AFTER validation through the SEAM-28 seam => decision unchanged or a refusal, never a new present or armed outcome), IC10 (present-record constructor-evidence battery: missing, substituted, proxied and inconsistent constructor evidence) and MT-1 (META-TEST). AUTHORITATIVE ROW COUNT BECOMES 49 ROWS: 21 (F1..F21) + 1 (F22) + 15 (FC1..FC15) + 10 (IC1..IC10) + 1 (FW-1) + 1 (MT-1) = 49. Every live '44 rows' total is superseded by 49.",
+  "MT-1 (META-TEST row): the gate FAILS if any row's recorded pass flag disagrees with that row's expected reason, exit code, armed value or detail. Harness pass flags MUST be recomputed from expected-versus-actual by an INDEPENDENT checker that reads the rev 29 contract, not by the harness that produced the row. The CONF-03 FC1 pass:true is the motivating defect and is not accepted.",
+  "SWEEPS, counts by formula: Sweep A |IDS|*|REQUIRED_KEYS|*|MUTATIONS| = 21*11*5 = 1155 refusals (unchanged). Sweep B |IDS|*|VALID_NEGATIVES| = 21*6 = 126 refusals, now ALL shared_worker_block_unverified: the former '42 presence cases => shared_worker_present' are INVALID under rev 29 because typeofSharedWorker:'function' or constructed:true over a clean-absence record leaves nativeCtor:'absent'. Sweep C 20 refusals (unchanged). NEW Sweep D over BP29(i) = B27 with record i replaced by a VALID-PRESENT record: D-pos |IDS| = 21 => shared_worker_present detail realm:<id>; D-ctor |IDS|*|CTOR_NEGATIVES=3 ('absent','mismatch','uncaptured')| = 63; D-desc |IDS|*|DESC_NEGATIVES=2 ('absent','unreadable')| = 42; D-absctor |IDS|*3 ('present','mismatch','uncaptured') over B27 = 63; D-mix |POS={F1,F11,F21}|*|PARTNER=2| = 6 => Sweep D = 195. Totals: 1496 refusals (1475 shared_worker_block_unverified + 21 shared_worker_present) plus EXACTLY ONE authorised armed:true (the B27 positive control) across 1497 decide() invocations. Zero unexpected armed:true and zero unexpected shared_worker_present are gate conditions.",
+  "Section J becomes the CONF-04 gate. CONF-01, CONF-02 and CONF-03 stay PARTIAL records of what they executed and are NOT edited (evidence documents are referenced, never rewritten). CONF-04 requires the FULL matrix rerun on Node 22.19.0 and 24.21.0, every Node-side row, all sweeps and proxy cases, every browser row and the 21-realm gate, FC1, FC2, IC1, IC2, IC4 and IC8 executed independently, popups created by a real user gesture, >=3 repetitions per required row, identity and same-process checks, zero unexpected arms, zero uncaught throws, zero skipped required rows, zero non-loopback requests, FC1 unverified in EVERY repetition, the current Chromium refusing in EVERY full-gate repetition, fc2Pass true and explained, cleanup of CONF-04-owned processes/profiles/identity files/fixtures/listeners, and READ-ONLY identification (pid, owner process, command, relation) of the two pre-existing loopback listeners without terminating anything CONF-04 did not start. Worker WebSocket and F16..F21 stay labelled by measured/unmeasured status with their fail-closed decision paths tested.",
+  "Rev 29 weakens nothing: counts stay 98/89/6/3, C6-T stays 27/5, M-23 and M-24 stay closed, M-25 and M-26 stay OPEN, O-1 and the PILOT_APPROVAL_RUN_TOKEN text are untouched, OWNER-24 and OWNER-25 stay DECIDED, PROXY-27 stays withdrawn, the supported-browser set stays EMPTY, scope stays Chromium only, reason codes stay snake_case, no exit code is added, no public surface and no bypass exists.",
+  "Rev 29 consumes docs/phase-18-conf03-results.md, docs/phase-18-conf03a-nodeside-results.md, docs/phase-18-conf03b-browser-results.md, docs/architecture/phase-18-rev28-patch.md and phase-18-rev28-edits.json. Rev 29 executes nothing and commits nothing."
+ ],
+ "ac": [
+  {
+   "id": "P18-AC-091",
+   "appendText": [
+    {
+     "field": "requirement",
+     "text": " REV 29 (CONF-03 FC1 defect; GLOBAL VALIDATION BEFORE CLASSIFICATION): decide() MUST validate EVERY required realm record before it inspects presence. Validation covers the input containers, the required-ID set (exactly F1..F21), the complete realm inventory, the schema version, types, enumerations, own-descriptor shape, primitiveness, captured-constructor evidence (nativeCtor agreement with typeofSharedWorker), repetitions and consistency. ANY invalid, incomplete, inconsistent or unverified required record yields armed:false, exit 18, shared_worker_block_unverified, detail realm-not-affirmatively-validated:<id>, and WINS over any presence. Only after every required record passes validation may presence be inspected; then any VALID-PRESENT realm yields armed:false, exit 18, shared_worker_present, detail realm:<id>; arming is permitted only when every required record affirmatively proves absence. VALIDITY MATRIX (normative, applied to every required record AFTER schema, type, enum, descriptor and primitiveness validation and BEFORE any presence inspection). Common preconditions for BOTH valid classes: measurable:true, error:'none', timedOut:false, repetitionsConsistent:true, mechanism!=='unavailable'. VALID-ABSENT: typeofSharedWorker:'undefined' AND descriptor:'absent' AND nativeCtor:'absent' AND constructed:false. VALID-PRESENT: typeofSharedWorker:'function' AND descriptor in {'present-data','present-accessor'} AND nativeCtor:'present' AND constructed in {true,false}. INVALID (=> shared_worker_block_unverified, exit 18, armed:false, detail realm-not-affirmatively-validated:<id>) for EVERY other combination, in particular: typeof 'function' with nativeCtor 'absent', 'mismatch' or 'uncaptured'; typeof 'function' with descriptor 'absent' or 'unreadable'; typeof 'undefined' with nativeCtor 'present', 'mismatch' or 'uncaptured'; typeof 'undefined' with constructed:true; constructed:true with nativeCtor!=='present'; typeofSharedWorker 'object', 'other' or 'unreadable' in any combination; descriptor 'unreadable' in any combination. AGREEMENT RULE: nativeCtor MUST be 'present' iff typeofSharedWorker is 'function' and MUST be 'absent' iff typeofSharedWorker is 'undefined'; 'mismatch' and 'uncaptured' are NEVER valid. The rev 28 helper hasMeasuredPresence is WITHDRAWN and replaced by isValidPresence; a constructor/reference mismatch (nativeCtor 'mismatch') or any uncaptured or disagreeing constructor evidence MUST yield shared_worker_block_unverified even when typeofSharedWorker is 'function'. A record whose captured reference is replaced after validation cannot change the decision (frozen snapshot, SEAM-28). ORDER OF OPERATIONS (normative): reject proxies -> inspect shape (accessor before key order) -> snapshot twice -> compare -> validate the snapshot schema -> freeze -> VALIDATE EVERY REQUIRED RECORD AGAINST THE VALIDITY MATRIX (containers, required-ID set, complete realm inventory, schema, types, descriptors, captured-constructor agreement, repetitions and consistency) -> only if EVERY required record is valid, inspect presence -> any valid-present realm => shared_worker_present exit 18 -> arm only when every required record is VALID-ABSENT. Classification may never precede validation; a single invalid, incomplete, inconsistent or unverified record wins over any presence and over any arming."
+    }
+   ]
+  }
+ ],
+ "openItems": [
+  {
+   "id": "CONF-03",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " EXECUTED AND PARTIAL (docs/phase-18-conf03-results.md). STOP CONDITION MET: the required FC1 mismatch-injection row returned shared_worker_present detail realm:F1 where the contract requires shared_worker_block_unverified detail realm-not-affirmatively-validated:F1, 3 of 3 repetitions on each Node version. Cause located in the rev 28 reference decide(): hasMeasuredPresence classified a present realm without checking captured-constructor evidence. Rev 29 fixes the contract (validation before classification, nativeCtor agreement required) and CONF-04 (rev 29 section J) replaces CONF-03 as the live gate. CONF-03 is NOT edited and must never be presented as a pass; Security stays undispatched until CONF-04 returns."
+    }
+   ]
+  },
+  {
+   "id": "W6T-GATE",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " NOT SATISFIED. The authoritative table is rev 29 section C at 49 ROWS (21 F + 1 F22 + 15 FC + 10 IC + 1 FW-1 + 1 MT-1); the '44 rows' total of rev 28 is superseded. The gate now also requires Sweep D (195 cases), the rev 29 validity matrix, the corrected FC1 expectation (shared_worker_block_unverified, detail realm-not-affirmatively-validated:<id>, and nothing else) and the MT-1 meta-test, whose pass flags must be recomputed by an independent checker. The executed gate is CONF-04."
+    }
+   ]
+  },
+  {
+   "id": "M-25",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " STAYS OPEN. CONF-03 returned PARTIAL with a required-row failure, so nothing in it can close M-25. Closure requires an EXECUTED CONF-04 against the rev 29 contract plus a Security review; documentation alone must not close it."
+    }
+   ]
+  },
+  {
+   "id": "M-26",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " STAYS OPEN. Same condition as M-25: executed CONF-04 against the rev 29 contract plus a Security review."
+    }
+   ]
+  }
+ ],
+ "openItemsAdd": [
+  {
+   "id": "CONF-04",
+   "ref": "rev 29 section J; supersedes the CONF-03 gate",
+   "state": "NOT EXECUTED. The executed W6-T conformance gate required before the next Security review and before any ruling on M-25 or M-26. Full matrix rerun of all 49 rows on Node 22.19.0 and 24.21.0, >=3 repetitions per required row, all sweeps (1155/126/20/195) and all proxy cases, every browser row and the 21-realm gate, FC1, FC2, IC1, IC2, IC4 and IC8 executed independently, popups created by a real user gesture, identity and same-process checks, zero unexpected armed:true, zero uncaught throws, zero skipped required rows, zero non-loopback requests, FC1 shared_worker_block_unverified in every repetition, the pinned Chromium refusing in every full-gate repetition, fc2Pass true and explained, MT-1 satisfied by an independent checker, cleanup of CONF-04-owned processes, profiles, identity files, fixtures and listeners, and read-only identification (pid, owner process, command, relation) of the two pre-existing loopback listeners with nothing terminated that CONF-04 did not start. Any unmeasured required row keeps the gate PARTIAL and arming refused."
+  },
+  {
+   "id": "VALID-29",
+   "ref": "rev 29 sections B.4a and B.5",
+   "state": "DECIDED AND CLOSED AS A DESIGN DECISION, OPEN AS A MEASUREMENT OBLIGATION. Global validation before classification and the validity matrix are normative. Verification is owed to CONF-04 rows FC1, FC13, FC14, FC15, IC10, IC3, IC5, IC6 and Sweep D."
+  },
+  {
+   "id": "META-29",
+   "ref": "rev 29 section C.6 row MT-1",
+   "state": "OPEN until CONF-04 records it. A row's recorded pass flag must be recomputed from expected versus actual by an independent checker reading the rev 29 contract; a disagreement between a recorded pass flag and the row's expected reason, exit code, armed value or detail FAILS the gate. Motivated by the CONF-03 FC1 pass:true that used a different expectation."
+  }
+ ],
+ "counts": {
+  "set": {
+   "rev29Note": "Rev 29 changes NO criterion count: total 98, must 89, should 6, could 3; deferredToPhase18P 11, deferredUnderOptionC 5, deferredIds and mixedPhase18PIds unchanged. M-23 and M-24 stay closed; M-25 and M-26 stay OPEN; C6-T stays 27 inversion fixtures (X1..X27) and 5 positive controls (P1..P5), disjoint from W6-T. The single inventory change is inside table W6-T, reprinted in rev 29 section C, whose AUTHORITATIVE ROW COUNT BECOMES 49 ROWS: 21 required decision realms (F1..F21), 1 informational realm (F22), 15 decision-function and mechanism cases (FC1..FC15, adding FC13 validation-before-classification with mismatch in the first, middle and last required realm, FC14 invalid-plus-present and multiple-invalid, FC15 post-validation constructor-reference substitution), 10 control fixtures (IC1..IC10, adding the present-record constructor-evidence battery) and 1 carried worker-WebSocket case (FW-1), plus 1 META-TEST row (MT-1). Sweep counts by formula: A 21*11*5=1155, B 21*6=126 (now all refusals), C 20, NEW D 21+63+42+63+6=195 => 1496 refusals (1475 shared_worker_block_unverified + 21 shared_worker_present) plus exactly one authorised armed:true across 1497 decide() invocations. The rev 25 '34 rows', rev 26 '36 rows', rev 27 '42 rows' and rev 28 '44 rows' totals are superseded by 49."
+  }
+ },
+ "exitCodes": {
+  "set": {
+   "rev29Note": "Rev 29 adds no exit code, removes none and changes no precedence: the rev 6 order stands, 2 > 3 > 18 > 17 > 16 > 15 > 13 > 12 > 11 > 14 > 10 > 1 > 0. Reason codes stay snake_case. shared_worker_present and shared_worker_block_unverified remain the only SharedWorker reasons, both double-labelled PILOT_INTERNAL_ERROR with exit 18; shared_worker_blocked stays WITHDRAWN and POLICY_SHARED_WORKER_BLOCKED must not appear anywhere. Rev 29 only MOVES outcomes from shared_worker_present to shared_worker_block_unverified: validation of every required record now precedes classification, so a record with typeofSharedWorker 'function' and nativeCtor 'mismatch', 'uncaptured' or 'absent', or with descriptor 'absent' or 'unreadable', is unverified rather than present, with detail realm-not-affirmatively-validated:<id>. No new detail string is introduced; the detail vocabulary is unchanged and page-supplied strings never reach a detail. shared_worker_present keeps detail realm:<id> and is emitted only for a VALID-PRESENT record once every required record has passed validation."
+  }
+ },
+ "docEdits": [
+  {
+   "file": "docs/architecture/phase-18-rev28-patch.md",
+   "replace": [
+    {
+     "old": "**Authoritative row count after rev 28: 44 rows.**",
+     "new": "**SUPERSEDED BY REV 29 (ARCH-29, CONF-03): the authoritative row count is 49 ROWS (21 F + 1 F22 + 15 FC (FC1..FC15) + 10 IC (IC1..IC10) + 1 FW-1 + 1 MT-1) and the single source is `docs/architecture/phase-18-rev29-patch.md` section C. Rev 29 adds FC13, FC14, FC15, IC10 and the META-TEST row MT-1, and corrects the FC1 mismatch expectation.** Authoritative row count after rev 28: 44 rows (superseded)."
+    },
+    {
+     "old": "**Authoritative total: 21 (F1..F21) + 1 (F22) + 12 (FC1..FC12) + 9 (IC1..IC9) + 1 (FW-1) = 44 rows.**",
+     "new": "**SUPERSEDED BY REV 29 (ARCH-29): the authoritative total is 21 (F1..F21) + 1 (F22) + 15 (FC1..FC15) + 10 (IC1..IC10) + 1 (FW-1) + 1 (MT-1) = 49 ROWS, reprinted with its changed and new rows in rev 29 section C.** Rev 28 total (superseded): 21 (F1..F21) + 1 (F22) + 12 (FC1..FC12) + 9 (IC1..IC9) + 1 (FW-1) = 44 rows."
+    },
+    {
+     "old": "### B.4 Precedence (unchanged)",
+     "new": "### B.4 Precedence (unchanged)\n\n**AMENDED IN PLACE BY REV 29 (ARCH-29, CONF-03): the precedence ORDER below is right but it was not enforced by the rev 28 reference text. Rev 29 makes it explicit as GLOBAL VALIDATION BEFORE CLASSIFICATION: every required record is validated first (containers, required-ID set, complete inventory, schema, types, descriptors, captured-constructor agreement, repetitions, consistency); any invalid, incomplete, inconsistent or unverified record yields `shared_worker_block_unverified` exit 18 and WINS over any presence; only then may presence be inspected. See rev 29 sections B.4a (validity matrix) and B.5.**"
+    },
+    {
+     "old": "### B.5 Reference text — deterministic Node-side decision function using a captured standard-library intrinsic",
+     "new": "### B.5 Reference text — deterministic Node-side decision function using a captured standard-library intrinsic\n\n**SUPERSEDED BY REV 29 (ARCH-29, CONF-03 FC1 defect): the code block below is NOT the live reference. CONF-03 measured `shared_worker_present` detail `realm:F1` where the contract requires `shared_worker_block_unverified` detail `realm-not-affirmatively-validated:F1`, because `hasMeasuredPresence` classified a realm present without checking captured-constructor evidence. The live reference is rev 29 section B.5: `isProxy` first, snapshot, VALIDATE EVERY REQUIRED RECORD against the rev 29 validity matrix, and only then classify. `isCleanAbsence`/`hasMeasuredPresence` are replaced by `isValidAbsence`/`isValidPresence`.**"
+    },
+    {
+     "old": "function hasMeasuredPresence(v) {",
+     "new": "// WITHDRAWN BY REV 29 (ARCH-29): hasMeasuredPresence is REPLACED by isValidPresence (rev 29 B.5).\n// A record is present ONLY if typeofSharedWorker === 'function' AND descriptor is 'present-data'\n// or 'present-accessor' AND nativeCtor === 'present'. nativeCtor 'mismatch', 'uncaptured' or\n// 'absent' with typeof 'function' is INVALID => armed:false, exit 18,\n// shared_worker_block_unverified, detail realm-not-affirmatively-validated:<id>.\n// DO NOT IMPLEMENT the function below.\nfunction hasMeasuredPresence(v) {"
+    },
+    {
+     "old": "### B.6 Order of operations, stated as a rule",
+     "new": "### B.6 Order of operations, stated as a rule\n\n**AMENDED BY REV 29 (ARCH-29): the rule gains its missing middle step. ORDER OF OPERATIONS (normative): reject proxies -> inspect shape (accessor before key order) -> snapshot twice -> compare -> validate the snapshot schema -> freeze -> VALIDATE EVERY REQUIRED RECORD AGAINST THE VALIDITY MATRIX (containers, required-ID set, complete realm inventory, schema, types, descriptors, captured-constructor agreement, repetitions and consistency) -> only if EVERY required record is valid, inspect presence -> any valid-present realm => shared_worker_present exit 18 -> arm only when every required record is VALID-ABSENT. Classification may never precede validation; a single invalid, incomplete, inconsistent or unverified record wins over any presence and over any arming.**"
+    },
+    {
+     "old": "the 42 presence cases ⇒ `shared_worker_present`, the other 84 ⇒ `shared_worker_block_unverified`.",
+     "new": "**CORRECTED BY REV 29 (ARCH-29): all 126 Sweep B cases ⇒ `shared_worker_block_unverified`. The former 42 presence cases are INVALID under the rev 29 validity matrix, because substituting `typeofSharedWorker:'function'` or `constructed:true` into a clean-absence record leaves `nativeCtor:'absent'`; measured presence is exercised instead by the new Sweep D (rev 29 section D).**"
+    },
+    {
+     "old": "| IC6 | exhaustive single-field mutation sweep (section D)",
+     "new": "| IC6 | **expectation CORRECTED BY REV 29: all 126 Sweep B cases refuse with `shared_worker_block_unverified`; presence is exercised by Sweep D (21 valid-present controls + 174 refusals).** exhaustive single-field mutation sweep (section D)"
+    },
+    {
+     "old": "**Checker assertions, derived from the schema (formulas, not literals):**",
+     "new": "**SUPERSEDED BY REV 29 (ARCH-29): the live formulas are Sweep A 21*11*5 = 1155, Sweep B 21*6 = 126 (all refusals), Sweep C 20, Sweep D 21 + 63 + 42 + 63 + 6 = 195 ⇒ 1496 refusals (1475 `shared_worker_block_unverified` + 21 `shared_worker_present`) plus exactly one authorised `armed:true` across 1497 `decide` invocations (rev 29 section D).** Checker assertions, derived from the schema (formulas, not literals):**"
+    },
+    {
+     "old": "## Section J — executed W6-T conformance gate (CONF-03), required before Security",
+     "new": "## Section J — executed W6-T conformance gate (CONF-03), required before Security\n\n**SUPERSEDED BY REV 29 (ARCH-29): CONF-03 has EXECUTED and returned PARTIAL (`docs/phase-18-conf03-results.md`) with a required-row failure (FC1 mismatch-injection). The live gate is CONF-04, rev 29 section J: the full 49-row matrix on Node 22.19.0 and 24.21.0, all sweeps including Sweep D, the corrected FC1 expectation and the MT-1 meta-test. CONF-03 must never be presented as a pass.**"
+    },
+    {
+     "old": "| FC1 | **independently executable row (J.5):**",
+     "new": "| FC1 | **expectation CORRECTED BY REV 29: the mismatch-injection sub-case expects EXACTLY `armed:false`, exit 18, `shared_worker_block_unverified`, detail `realm-not-affirmatively-validated:<realm id>`, and nothing else; the oracle comes only from the rev 29 contract.** **independently executable row (J.5):**"
+    },
+    {
+     "old": "**Expected result.** Agreement in every measurable realm ⇒ the row PASSES with `nativeCtor` `present` or `absent` as measured.",
+     "new": "**Expected result — CORRECTED BY REV 29 (ARCH-29): agreement in every measurable realm ⇒ the row PASSES with `nativeCtor` `present` or `absent` as measured AND the record classified by the rev 29 validity matrix; the mismatch-injection sub-case expects EXACTLY `armed:false`, exit 18, `shared_worker_block_unverified`, detail `realm-not-affirmatively-validated:<realm id>` — `shared_worker_present` is a FAILURE for that sub-case, and a harness expectation is never the oracle.**"
+    },
+    {
+     "old": "### C.3 Decision-function and mechanism cases (FC1..FC12) — 12 rows",
+     "new": "### C.3 Decision-function and mechanism cases (FC1..FC12) — 12 rows\n\n**SUPERSEDED BY REV 29: FC1..FC15 — 15 rows (rev 29 section C adds FC13, FC14 and FC15).**"
+    },
+    {
+     "old": "### C.4 Control fixtures (IC1..IC9) — 9 rows",
+     "new": "### C.4 Control fixtures (IC1..IC9) — 9 rows\n\n**SUPERSEDED BY REV 29: IC1..IC10 — 10 rows (rev 29 section C adds IC10, the present-record constructor-evidence battery) and the expectations of IC3, IC5 and IC6 are corrected there.**"
+    },
+    {
+     "old": "### C.5 Carried worker-WebSocket case — 1 row",
+     "new": "### C.5 Carried worker-WebSocket case — 1 row\n\n**REV 29 ADDS a section C.6 META-TEST row (MT-1): the gate fails if a row's recorded pass flag disagrees with its expected reason, exit code, armed value or detail; pass flags must be recomputed by an independent checker.**"
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-rev27-patch.md",
+   "replace": [
+    {
+     "old": "Every \"42 rows\" total in this document is superseded by **44 rows**",
+     "new": "Every \"42 rows\" total in this document is superseded by **49 rows** (rev 29, ARCH-29; the rev 28 figure of 44 rows is itself superseded)"
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-rev26-patch.md",
+   "replace": [
+    {
+     "old": "**SUPERSEDED BY REV 27 AND AGAIN BY REV 28 (ARCH-28: 44 rows, gate CONF-03,",
+     "new": "**SUPERSEDED BY REV 27, REV 28 AND AGAIN BY REV 29 (ARCH-29: 49 rows, gate CONF-04, `phase-18-rev29-patch.md` section J; the rev 28 figure of 44 rows and gate CONF-03 are superseded) (ARCH-28: 44 rows, gate CONF-03,"
+    },
+    {
+     "old": "**SUPERSEDED BY REV 27 AND AGAIN BY REV 28: 44 rows; the checker asserts",
+     "new": "**SUPERSEDED BY REV 27, REV 28 AND AGAIN BY REV 29: 49 rows and the sweep counts 1155 / 126 / 20 / 195 (rev 29 section D); 44 rows; the checker asserts"
+    }
+   ]
+  }
+ ]
+}
