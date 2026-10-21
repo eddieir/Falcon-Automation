@@ -29,6 +29,7 @@
 
 const { createRequire } = require("node:module");
 const { createGuardedFetch } = require("../transport/guardedFetch");
+const { constructSdkClient } = require("../transport/sdkConstruct");
 const { validateEndpointUrl, classifyAddress } = require("../transport/EndpointPolicy");
 const RetryPolicy = require("../RetryPolicy");
 const LlmBudget = require("../LlmBudget");
@@ -147,7 +148,7 @@ class OpenAICompatibleProvider {
                 typeof this._config.apiKey === "string" && this._config.apiKey !== ""
                     ? this._config.apiKey
                     : UNUSED_KEY_PLACEHOLDER;
-            const client = new OpenAI({
+            const client = constructSdkClient(OpenAI, {
                 apiKey,
                 baseURL: baseUrl,
                 organization: null,

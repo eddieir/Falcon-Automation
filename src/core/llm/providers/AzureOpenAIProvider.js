@@ -22,6 +22,7 @@
 
 const { createRequire } = require("node:module");
 const { createGuardedFetch } = require("../transport/guardedFetch");
+const { constructSdkClient } = require("../transport/sdkConstruct");
 const RetryPolicy = require("../RetryPolicy");
 const LlmBudget = require("../LlmBudget");
 const Semaphore = require("../Semaphore");
@@ -116,7 +117,7 @@ class AzureOpenAIProvider {
             // auth is unsupported this phase and no such flow is ever
             // started). No api-version query/header is ever added — the
             // Azure v1 surface does not use one (R1 item 3).
-            const client = new OpenAI({
+            const client = constructSdkClient(OpenAI, {
                 apiKey: this._config.apiKey,
                 baseURL: baseUrl,
                 organization: null,

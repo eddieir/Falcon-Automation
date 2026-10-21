@@ -6,6 +6,14 @@ See [README.md](README.md) for the current feature set, architecture, and usage.
 
 ---
 
+## OpenAI client hardening
+
+- **`OPENAI_CUSTOM_HEADERS` is no longer applied.** The `openai` SDK parses that variable in its constructor and merges it over the client's own headers, so a value in the environment could replace the `Authorization` and `OpenAI-Organization` headers Falcon sets. Falcon's OpenAI clients (the three LLM providers and the legacy `AIHealer` client) are now built through `src/core/llm/transport/sdkConstruct.js`, which hides the variable while the SDK constructor runs and restores it afterwards. It also pins the SDK's admin key and webhook secret, which Falcon does not use, to null. Anyone who relied on the variable to add gateway headers will no longer have them sent; Falcon has no documented setting for extra headers.
+- **SDK logging**: the legacy `AIHealer` client now sets `logLevel: "off"` like the three providers.
+- Tests: `tests/regression/openai-client-hardening.check.cjs` (real SDK, loopback server, no external calls).
+
+---
+
 ## Dependency and GitHub Actions updates (pull requests #55 and #56)
 
 Consolidated into pull request #53 and validated against the post-#54 code.
