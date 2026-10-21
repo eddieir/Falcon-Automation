@@ -6,7 +6,7 @@ Sources: `phase-18-rev42-patch.md` (row T3, section 8 rows f01 to f07), `phase-1
 
 | Field | Content |
 |---|---|
-| **Threat** | Shipped code loads a Node builtin that the design treats as disallowed (for example `child_process`), or loads code dynamically, by a form that no static check recognises. |
+| **Threat** | Shipped code loads a Node builtin that the design treats as disallowed (for example `child_process`), or loads code dynamically, by a form that the advisory scanner does not recognise (f01 to f03 returned CLEAN) or that no static check can cover reliably. Other forms in the corpus (f04 to f07) were flagged. |
 | **Affected assets** | The process-integrity boundary around the test process: the supervisor's assumption that code in the test process does not spawn processes, replace the process image or reach loader internals. Also any property of the run that depends on that assumption. |
 | **Prerequisites** | An **authorised** first-party change (Scope A), or any untrusted code already running in the process (outside Scope A, covered only by C5). |
 | **Exploit conditions** | A loader call spelled as `arguments[1]('child_process')`, `(0, require)('child_process')`, `require?.('child_process')`, `this.module.require(...)`, or one of the builtin-loading paths (`process.getBuiltinModule`, `_linkedBinding`, `process.binding`, `process.dlopen`, `process.execve`, `module.require`, `process.mainModule`). Reference scanner output: f01 to f03 CLEAN, loading `child_process` on Node 22 (SEC-37); f04 to f07 flagged. A load-time `process.execve` replaces the process image. |
