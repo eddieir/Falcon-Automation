@@ -21,6 +21,7 @@
 
 const { createRequire } = require("node:module");
 const { createGuardedFetch } = require("../transport/guardedFetch");
+const { constructSdkClient } = require("../transport/sdkConstruct");
 const RetryPolicy = require("../RetryPolicy");
 const LlmBudget = require("../LlmBudget");
 const Semaphore = require("../Semaphore");
@@ -105,7 +106,7 @@ class OpenAIProvider {
                 maxResponseBytes: this._config.maxResponseBytes,
                 deps: this._deps.transportDeps,
             });
-            const client = new OpenAI({
+            const client = constructSdkClient(OpenAI, {
                 apiKey: this._config.apiKey,
                 baseURL: baseUrl,
                 organization: null,
