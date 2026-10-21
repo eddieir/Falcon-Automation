@@ -5,6 +5,7 @@ const Middleware = require("../Middleware");
 const AdaptiveRetry = require("./AdaptiveRetry");
 const ConfigManager = require("../ConfigManager");
 const LlmProviderRegistry = require("../llm/LlmProviderRegistry");
+const { constructSdkClient } = require("../llm/transport/sdkConstruct");
 const ProviderContext = require("../llm/ProviderContext");
 const LlmTelemetry = require("../llm/LlmTelemetry");
 const SharedLocatorMemory = require("../locator/sharedLocatorMemory");
@@ -1076,12 +1077,13 @@ class AIHealer {
         // ambient OPENAI_BASE_URL/OPENAI_ORG_ID/OPENAI_PROJECT_ID env value
         // can redirect or relabel this pre-Phase-17 path, and no SDK-level
         // retry layer double-retries on top of AdaptiveRetry.
-        const client = new OpenAI({
+        const client = constructSdkClient(OpenAI, {
             apiKey,
             baseURL: "https://api.openai.com/v1",
             organization: null,
             project: null,
             maxRetries: 0,
+            logLevel: "off",
         });
         this._openai = client;
         return client;
