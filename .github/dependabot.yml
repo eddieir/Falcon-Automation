@@ -1,8 +1,23 @@
 version: 2
-# Each ecosystem opens at most one grouped PR per weekly run. The groups cover
+# Each group opens at most one grouped PR per weekly run. The groups cover
 # every update type, so major bumps arrive in the same PR as minor/patch ones:
 # review the major-version release notes before merging, don't just trust a
 # green check.
+#
+# npm groups are disjoint in this file: Playwright is its own group, and
+# production and development dependencies are grouped separately. Playwright is
+# pinned to an exact version and checked by scripts/playwright/verify-pin.js. A
+# Playwright update PR must also update scripts/playwright/expected-browser.json
+# and pass fresh validation; until it does, the CI verification step fails.
+# That is a CI check only. GitHub does not enforce required checks or reviews on
+# main today, so the failing check does not by itself block a merge. A person
+# has to edit expected-browser.json on a Playwright update branch; this is a
+# known operational limitation.
+#
+# tests/regression/dependabot-groups.check.cjs only checks this file against
+# package.json. It is not evidence of how GitHub Dependabot resolves groups.
+# Verify the grouping through actual Dependabot update jobs after this file is
+# merged.
 updates:
   # Keeps the SHA-pinned action references in .github/workflows current.
   - package-ecosystem: "github-actions"
@@ -17,7 +32,15 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 3
     groups:
-      npm-all:
+      playwright:
+        patterns: ["playwright", "playwright-core", "@playwright/test"]
+      npm-production:
+        dependency-type: "production"
         patterns: ["*"]
+        exclude-patterns: ["playwright", "playwright-core", "@playwright/test"]
+      npm-development:
+        dependency-type: "development"
+        patterns: ["*"]
+        exclude-patterns: ["playwright", "playwright-core", "@playwright/test"]
