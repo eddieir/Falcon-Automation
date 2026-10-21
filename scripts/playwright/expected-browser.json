@@ -1,0 +1,7 @@
+{
+  "playwright": "1.64.0",
+  "chromium": {
+    "revision": "1248",
+    "browserVersion": "156.0.8078.4"
+  }
+}
