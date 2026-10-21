@@ -20,7 +20,9 @@ function constructSdkClient(OpenAI, options) {
     const saved = process.env[CUSTOM_HEADERS_ENV];
     if (present) delete process.env[CUSTOM_HEADERS_ENV];
     try {
-        return new OpenAI(options);
+        // The admin key and webhook secret are also read from the environment
+        // by default; Falcon uses neither, so they are pinned to null here.
+        return new OpenAI({ adminAPIKey: null, webhookSecret: null, ...options });
     } finally {
         if (present) process.env[CUSTOM_HEADERS_ENV] = saved;
     }

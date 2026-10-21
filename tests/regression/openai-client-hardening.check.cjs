@@ -100,6 +100,57 @@ test("AIHealer._getOpenAIClient turns SDK logging off and ignores OPENAI_CUSTOM_
   }
 });
 
+test("constructSdkClient does not pick up the SDK's admin key or webhook secret from the environment", async () => {
+  await withEnv("OPENAI_ADMIN_KEY", "sk-admin-canary", () =>
+    withEnv("OPENAI_WEBHOOK_SECRET", "whsec-canary", async () => {
+      const client = constructSdkClient(OpenAI, { apiKey: KEY, maxRetries: 0 });
+      assert.equal(client.adminAPIKey, null);
+      assert.equal(client.webhookSecret, null);
+    }));
+});
+
+const dns = require("node:dns");
+const OpenAIProvider = require(path.join(root, "src", "core", "llm", "providers", "OpenAIProvider.js"));
+const AzureOpenAIProvider = require(path.join(root, "src", "core", "llm", "providers", "AzureOpenAIProvider.js"));
+const OpenAICompatibleProvider = require(path.join(root, "src", "core", "llm", "providers", "OpenAICompatibleProvider.js"));
+
+function providerCase(name, build) {
+  test(`${name} sends its own key and ignores OPENAI_CUSTOM_HEADERS`, () =>
+    withEnv("OPENAI_CUSTOM_HEADERS", HOSTILE, async () => {
+      let seen = null;
+      const server = http.createServer((req, res) => {
+        seen = req.headers;
+        req.resume();
+        req.on("end", () => {
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify({ id: "c", object: "chat.completion", created: 1, model: "m", choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: "ok" } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
+        });
+      });
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const port = server.address().port;
+        const baseUrl = `http://127.0.0.1:${port}/v1`;
+        const config = { provider: "openai", model: "m", timeoutMs: 3000, maxAttempts: 1, runBudget: 10, maxResponseBytes: 65536, concurrency: 1, apiKey: KEY };
+        const deps = {
+          baseUrl,
+          policyOpts: { allowLoopback: true, allowHttpLoopback: true, extraAllowedPorts: [port] },
+          transportDeps: { lookup: dns.lookup, httpRequest: http.request, httpsRequest: require("node:https").request },
+          sleep: async () => {},
+        };
+        const result = await build(config, deps).complete({ prompt: "hi", maxOutputTokens: 16, temperature: 0 });
+        assert.equal(result.ok, true, JSON.stringify(result));
+        assertClean(seen);
+      } finally {
+        await new Promise((resolve) => server.close(resolve));
+      }
+    }));
+}
+providerCase("OpenAIProvider", (config, deps) => new OpenAIProvider(config, deps));
+providerCase("AzureOpenAIProvider", (config, deps) =>
+  new AzureOpenAIProvider({ ...config, azureDeployment: config.model, azureResource: "res", azureHostSuffix: "openai.azure.com" }, deps));
+providerCase("OpenAICompatibleProvider", (config, deps) =>
+  new OpenAICompatibleProvider({ ...config, allowCustomEndpoint: true, allowHttpLoopback: true, endpoint: deps.baseUrl }, deps));
+
 test("no production source builds an SDK client except through constructSdkClient", () => {
   const offenders = [];
   (function walk(dir) {
