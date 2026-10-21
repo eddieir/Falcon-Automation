@@ -12,12 +12,22 @@
  *      packages report that version.
  *   3. The installed `playwright-core` browsers.json lists Chromium (and the
  *      headless shell) at the expected revision and browser version.
- *   4. Chromium actually launches from a directory carrying the expected
- *      revision, and the running browser reports the expected version.
+ *   4. The path Playwright reports for full Chromium carries the expected
+ *      revision, and a headless launch reports the expected browser version
+ *      (the headless shell shares the revision and version in browsers.json).
+ *
+ * Updating the pin: change package.json, the lockfile and expected-browser.json
+ * together in one reviewed pull request. A dependency bump (for example a
+ * grouped Dependabot update) that moves Playwright makes this check fail until
+ * the reference file is updated by hand; that is intended, and the failure is
+ * closed.
  *
  * What it does not do: it is not a hash or provenance check of the browser
  * binary, and it does not prove the build is genuine; it detects a different
- * revision or version from the one recorded in the reference file.
+ * revision or version from the one recorded in the reference file. It reads the
+ * same node_modules the tests use, and a change to this script, the reference
+ * file or the workflow can weaken it, so it is only as independent as the
+ * review of the pull request that changes them.
  *
  * Usage: node scripts/playwright/verify-pin.js [--expected=<file>] [--root=<dir>] [--no-launch]
  *   --expected  alternative reference file (used by the regression test to
