@@ -76,7 +76,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",
-    "allure": "^3.20.1",
+    "allure": "^3.21.0",
     "socket.io-client": "^4.8.4"
   }
 }
