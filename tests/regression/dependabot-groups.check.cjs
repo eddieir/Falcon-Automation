@@ -93,11 +93,11 @@ test("npm has exactly the playwright, production and development groups", () => 
   assert.equal(npm.groups["npm-development"].type, "development");
 });
 
-test("the pull-request limit covers every npm group", () => {
+test("local model: the pull-request limit is at least the number of npm groups", () => {
   assert.ok(npm.limit >= Object.keys(npm.groups).length);
 });
 
-test("every direct dependency, and playwright-core, falls in exactly one group", () => {
+test("local model: every direct dependency, and playwright-core, falls in exactly one group", () => {
   const direct = [
     ...Object.keys(pkg.dependencies || {}).map((name) => [name, "production"]),
     ...Object.keys(pkg.devDependencies || {}).map((name) => [name, "development"]),
@@ -109,7 +109,7 @@ test("every direct dependency, and playwright-core, falls in exactly one group",
   }
 });
 
-test("Playwright packages are only in the playwright group, whichever dependency type they use", () => {
+test("local model: Playwright packages are only in the playwright group, whichever dependency type they use", () => {
   for (const name of PLAYWRIGHT) {
     for (const type of ["production", "development"]) {
       assert.deepEqual(groupsFor(npm, name, type).map((g) => g.name), ["playwright"], `${name} as ${type}`);
@@ -117,14 +117,14 @@ test("Playwright packages are only in the playwright group, whichever dependency
   }
 });
 
-test("other packages are split by dependency type and never join the playwright group", () => {
+test("local model: other packages are split by dependency type and never join the playwright group", () => {
   assert.deepEqual(groupsFor(npm, "dotenv", "production").map((g) => g.name), ["npm-production"]);
   assert.deepEqual(groupsFor(npm, "mysql2", "production").map((g) => g.name), ["npm-production"]);
   assert.deepEqual(groupsFor(npm, "openai", "production").map((g) => g.name), ["npm-production"]);
   assert.deepEqual(groupsFor(npm, "allure", "development").map((g) => g.name), ["npm-development"]);
 });
 
-test("Playwright stays an exact pin, so its update arrives as one reference change", () => {
+test("Playwright is an exact pin, so an update changes the pin and the reference file together", () => {
   const declared = { ...pkg.dependencies, ...pkg.devDependencies };
   assert.match(declared.playwright, /^\d+\.\d+\.\d+$/);
   assert.equal(declared["@playwright/test"], declared.playwright);
