@@ -1,8 +1,16 @@
 version: 2
-# Each ecosystem opens at most one grouped PR per weekly run. The groups cover
+# Each group opens at most one grouped PR per weekly run. The groups cover
 # every update type, so major bumps arrive in the same PR as minor/patch ones:
 # review the major-version release notes before merging, don't just trust a
 # green check.
+#
+# npm groups are disjoint: Playwright is its own group, and production and
+# development dependencies are grouped separately. Playwright is pinned to an
+# exact version and checked by scripts/playwright/verify-pin.js, so its PR must
+# also update scripts/playwright/expected-browser.json and pass fresh
+# validation; the verifier fails closed until it does. A test in
+# tests/regression/dependabot-groups.check.cjs keeps every direct dependency in
+# exactly one group.
 updates:
   # Keeps the SHA-pinned action references in .github/workflows current.
   - package-ecosystem: "github-actions"
@@ -17,7 +25,15 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 3
     groups:
-      npm-all:
+      playwright:
+        patterns: ["playwright", "playwright-core", "@playwright/test"]
+      npm-production:
+        dependency-type: "production"
         patterns: ["*"]
+        exclude-patterns: ["playwright", "playwright-core", "@playwright/test"]
+      npm-development:
+        dependency-type: "development"
+        patterns: ["*"]
+        exclude-patterns: ["playwright", "playwright-core", "@playwright/test"]
