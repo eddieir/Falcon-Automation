@@ -29,8 +29,8 @@ function writeReference(name, mutate) {
   return file;
 }
 
-test("reference pins Playwright 1.64.0, Chromium revision 1248 and browser 156.0.8078.4", () => {
-  assert.equal(reference.playwright, "1.64.0");
+test("reference pins Playwright 1.64.1, Chromium revision 1248 and browser 156.0.8078.4", () => {
+  assert.equal(reference.playwright, "1.64.1");
   assert.equal(reference.chromium.revision, "1248");
   assert.equal(reference.chromium.browserVersion, "156.0.8078.4");
 });
@@ -77,10 +77,10 @@ test("a wrong expected browser version fails verification, with and without laun
 });
 
 test("a wrong expected Playwright version fails verification", () => {
-  const file = writeReference("wrong-playwright.json", (r) => { r.playwright = "1.63.0"; });
+  const file = writeReference("wrong-playwright.json", (r) => { r.playwright = "1.64.0"; });
   const result = run([`--expected=${file}`, "--no-launch"]);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /installed playwright is 1\.64\.0, expected 1\.63\.0/);
+  assert.match(result.stderr, /installed playwright is 1\.64\.1, expected 1\.64\.0/);
 });
 
 test("a malformed or missing reference fails closed", () => {
