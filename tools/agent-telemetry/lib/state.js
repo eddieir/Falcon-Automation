@@ -4,14 +4,16 @@
 // deterministic. Absent facts stay null; the UI renders them as UNKNOWN.
 
 const MAX_TIMELINE = 1500;
+const DUPLICATE_WINDOW_MS = 5000;
 
 function reduce(events, snapshots = [], { now = Date.now(), staleMs = 30 * 60 * 1000, defs = {} } = {}) {
   const sorted = events.map((e, i) => [e, i]).sort((a, b) => (a[0].ts < b[0].ts ? -1 : a[0].ts > b[0].ts ? 1 : a[1] - b[1])).map((x) => x[0]);
-  const seen = new Set();
+  const seen = new Map(); // dedupe key -> first-seen time (ms)
   const sessions = new Map();
   const agents = new Map();
   const timeline = [];
   let duplicates = 0;
+  let seenEvents = 0;
 
   const sess = (sid) => {
     if (!sessions.has(sid)) sessions.set(sid, { sid, project: null, entry: null, tp: null, tpd: null, model: null, startSource: null, startedAt: null, startObserved: false, endedAt: null, endReason: null, firstEventAt: null, lastEventAt: null, lastEvent: null, eventCount: 0, turns: 0, toolCount: 0, toolFailures: 0, stopFailures: 0, lastError: null });
@@ -26,9 +28,14 @@ function reduce(events, snapshots = [], { now = Date.now(), staleMs = 30 * 60 * 
 
   for (const e of sorted) {
     if (!e || typeof e.sid !== "string" || typeof e.ts !== "string" || typeof e.ev !== "string") continue;
+    // A duplicate hook delivery arrives with an identical payload id within moments. The same id much
+    // later is a genuinely repeated event (identical bytes), so it is counted, not dropped.
     const dedupe = e.id || `${e.ev}|${e.sid}|${e.aid || ""}|${e.ts}`;
-    if (seen.has(dedupe)) { duplicates++; continue; }
-    seen.add(dedupe);
+    const when = Date.parse(e.ts);
+    const first = seen.get(dedupe);
+    if (first !== undefined && !(Number.isFinite(when) && Math.abs(when - first) > DUPLICATE_WINDOW_MS)) { duplicates++; continue; }
+    seen.set(dedupe, Number.isFinite(when) ? when : 0);
+    seenEvents++;
 
     const s = sess(e.sid);
     s.eventCount++;
@@ -152,7 +159,7 @@ function reduce(events, snapshots = [], { now = Date.now(), staleMs = 30 * 60 * 
   return {
     sessions: outSessions, agents: outAgents, limits,
     timeline: timeline.slice(-MAX_TIMELINE),
-    stats: { events: seen.size, duplicates, maxConcurrentAgents: maxConcurrent, runningAgents: outAgents.filter((a) => a.status === "running" && !a.partial).length, partialAgents: outAgents.filter((a) => a.partial).length, activeSessions: outSessions.filter((s) => s.status === "active").length },
+    stats: { events: seenEvents, duplicates, maxConcurrentAgents: maxConcurrent, runningAgents: outAgents.filter((a) => a.status === "running" && !a.partial).length, partialAgents: outAgents.filter((a) => a.partial).length, activeSessions: outSessions.filter((s) => s.status === "active").length },
   };
 }
 

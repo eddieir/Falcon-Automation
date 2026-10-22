@@ -27,8 +27,9 @@ function sanitizeHook(input, ctx = {}) {
   const sid = str(input.session_id, ID);
   if (!sid) return null;
   const now = ctx.now instanceof Date ? ctx.now : new Date();
-  // The id only identifies one delivery (duplicate hook deliveries share it); it is a truncated
-  // SHA-256 of the raw payload, so it reveals nothing about prompts or other content it covers.
+  // The id only identifies one delivery (duplicate hook deliveries share it). It is a truncated
+  // SHA-256 of the raw payload: not reversible, but it could confirm an exact guess of the whole
+  // payload, which a process that can already read the transcripts could do anyway.
   const out = { v: 1, id: crypto.createHash("sha256").update(String(ctx.raw ?? JSON.stringify(input))).digest("hex").slice(0, 16), ts: now.toISOString(), src: "hook", ev, sid };
 
   const aid = str(input.agent_id, ID);
