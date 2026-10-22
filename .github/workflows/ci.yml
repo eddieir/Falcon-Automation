@@ -541,3 +541,22 @@ jobs:
             echo "::error::expected exit code 2 (rejected) for a missing shard, got $rc"
             exit 1
           fi
+
+  # Developer tooling only (tools/agent-telemetry). Isolated from Falcon's
+  # product jobs: it needs nothing else, nothing needs it, and it installs no
+  # packages because the tests use Node built-ins only. It runs the dashboard
+  # tests and the statusline checks on the supported Node 24 runtime.
+  agent-telemetry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Dashboard tests
+        run: node --test tools/agent-telemetry/test/*.test.js
+      - name: Statusline checks
+        run: node tools/agent-telemetry/statusline/test-statusline.js
