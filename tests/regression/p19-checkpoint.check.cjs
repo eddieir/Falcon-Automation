@@ -787,3 +787,104 @@ test("an UNKNOWN revision is never a baseline: --verify exits 6", async () => {
     process.chdir(cwd);
   }
 });
+
+test("--verify exits 5 when any header line is edited, added, removed or reordered", async () => {
+  const runId = "hdrall1";
+  const { ledgerRoot, runDir } = await makeFixture(runId);
+  await append(runDir, { type: "run_started" });
+  const args = [`--run-id=${runId}`, `--ledger-root=${ledgerRoot}`, "--revision=abc1234"];
+  assert.equal((await run(args)).code, 0);
+  const cpPath = checkpointPathFor(runDir);
+  const original = fs.readFileSync(cpPath, "utf8");
+  const edits = {
+    "GENERATED_AT edited": original.replace(/^GENERATED_AT: .*$/m, "GENERATED_AT: 2001-01-01T00:00:00.000Z"),
+    "SIZE edited": original.replace(/^SIZE: .*$/m, "SIZE: OK est=1 target=1500"),
+    "line added": original.replace(/^SIZE: .*$/m, (m) => `${m}\nNOTE: hello`),
+    "line removed": original.replace(/^GENERATED_AT: .*\n/m, ""),
+    "lines reordered": original.replace(/^(RUN_ID: .*)\n(LAST_SEQ: .*)\n/m, "$2\n$1\n"),
+  };
+  for (const [name, text] of Object.entries(edits)) {
+    assert.notEqual(text, original, `${name}: precondition`);
+    fs.writeFileSync(cpPath, text);
+    assert.equal((await run([...args, "--verify"])).code, 5, name);
+  }
+  fs.writeFileSync(cpPath, original);
+  assert.equal((await run([...args, "--verify"])).code, 0, "restored file verifies again");
+});
+
+test("sanitizeLine removes every forbidden unicode character, not only the first", () => {
+  const out = Checkpoint.sanitizeLine("a​b‮c d‏e", 100);
+  assert.equal(out, "abcde");
+});
+
+test("WORKTREE_ID makes +dirty observable: another edit or a new untracked file after the checkpoint exits 6", async () => {
+  const { execFileSync } = require("node:child_process");
+  const git = (cwd, ...a) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...a], { cwd, encoding: "utf8" });
+  const repo = temp();
+  git(repo, "init", "-q");
+  fs.writeFileSync(path.join(repo, "a.txt"), "one\n");
+  git(repo, "add", "a.txt");
+  git(repo, "commit", "-q", "-m", "init");
+
+  const runId = "wtid1";
+  const { ledgerRoot, runDir } = await makeFixture(runId);
+  await append(runDir, { type: "run_started" });
+  const args = [`--run-id=${runId}`, `--ledger-root=${ledgerRoot}`];
+  const cwd = process.cwd();
+  process.chdir(repo);
+  try {
+    assert.equal((await run(args)).code, 0);
+    assert.match(fs.readFileSync(checkpointPathFor(runDir), "utf8"), /^WORKTREE_ID: CLEAN$/m);
+    assert.equal((await run([...args, "--verify"])).code, 0, "clean tree verifies");
+
+    fs.writeFileSync(path.join(repo, "a.txt"), "two\n");
+    assert.equal((await run(args)).code, 0);
+    const dirtyText = fs.readFileSync(checkpointPathFor(runDir), "utf8");
+    assert.match(dirtyText, /^REVISION: [0-9a-f]{7,40}\+dirty$/m);
+    assert.match(dirtyText, /^WORKTREE_ID: [0-9a-f]{12}$/m);
+    assert.equal((await run([...args, "--verify"])).code, 0, "same dirty tree verifies");
+
+    fs.writeFileSync(path.join(repo, "a.txt"), "three\n");
+    assert.equal((await run([...args, "--verify"])).code, 6, "another edit under the same +dirty revision is drift");
+
+    fs.writeFileSync(path.join(repo, "a.txt"), "two\n");
+    assert.equal((await run([...args, "--verify"])).code, 0, "reverting to the recorded content verifies again");
+    fs.writeFileSync(path.join(repo, "new.txt"), "x\n");
+    assert.equal((await run([...args, "--verify"])).code, 6, "a new untracked file is drift");
+  } finally {
+    process.chdir(cwd);
+  }
+});
+
+test("WORKTREE_ID sees edits to a file whose name starts with a quote and to a retargeted symlink", async () => {
+  const { execFileSync } = require("node:child_process");
+  const git = (cwd, ...a) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...a], { cwd, encoding: "utf8" });
+  const repo = temp();
+  git(repo, "init", "-q");
+  fs.writeFileSync(path.join(repo, "a.txt"), "one\n");
+  git(repo, "add", "a.txt");
+  git(repo, "commit", "-q", "-m", "init");
+  const quoted = path.join(repo, '"foo"');
+  fs.writeFileSync(quoted, "v1\n");
+  fs.symlinkSync("a.txt", path.join(repo, "link"));
+
+  const runId = "wtid2";
+  const { ledgerRoot, runDir } = await makeFixture(runId);
+  await append(runDir, { type: "run_started" });
+  const args = [`--run-id=${runId}`, `--ledger-root=${ledgerRoot}`];
+  const cwd = process.cwd();
+  process.chdir(repo);
+  try {
+    assert.equal((await run(args)).code, 0);
+    assert.equal((await run([...args, "--verify"])).code, 0, "unchanged tree verifies");
+    fs.writeFileSync(quoted, "v2\n");
+    assert.equal((await run([...args, "--verify"])).code, 6, "edit to a quote-named file is drift");
+    fs.writeFileSync(quoted, "v1\n");
+    assert.equal((await run([...args, "--verify"])).code, 0);
+    fs.rmSync(path.join(repo, "link"));
+    fs.symlinkSync("elsewhere", path.join(repo, "link"));
+    assert.equal((await run([...args, "--verify"])).code, 6, "a retargeted symlink is drift");
+  } finally {
+    process.chdir(cwd);
+  }
+});

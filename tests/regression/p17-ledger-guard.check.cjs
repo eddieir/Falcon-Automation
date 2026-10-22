@@ -37,6 +37,29 @@ test("a subagent cannot append events or write the ledger from Bash", () => {
   }
 });
 
+test("a subagent cannot run the checkpoint tool, but may read it or run its tests", () => {
+  for (const cmd of [
+    "node scripts/production-cycle/checkpoint.js --run-id x",
+    "node scripts/production-cycle/checkpoint.js --run-id x --verify",
+    "node --no-warnings ./scripts/production-cycle/checkpoint.js --run-id x",
+    "cd scripts/production-cycle && node checkpoint.js --run-id x",
+    "npm run production:checkpoint -- --run-id x",
+    "node scripts/production-cycle/checkpoint --run-id x",
+    "node -e \"require('./scripts/production-cycle/checkpoint').main(['--run-id=x'])\"",
+  ]) {
+    assert.ok(decide(sub(cmd)), `should deny: ${cmd}`);
+    assert.equal(decide(main(cmd)), null, `coordinator may run: ${cmd}`);
+  }
+  for (const cmd of [
+    "node --test tests/regression/p19-checkpoint.check.cjs",
+    "grep -n verify scripts/production-cycle/checkpoint.js",
+    "grep production:checkpoint package.json",
+    "cat .claude/skills/production-cycle/SKILL.md",
+  ]) {
+    assert.equal(decide(sub(cmd)), null, `should allow: ${cmd}`);
+  }
+});
+
 test("a subagent may still read the ledger and run ordinary commands", () => {
   for (const cmd of [
     "cat .git/production-cycle/run1/evidence/notes.md",

@@ -167,6 +167,59 @@ function computeRevision(explicit) {
 }
 
 /**
+ * Working-tree identity (the "+dirty" blind spot): a short hash over the
+ * sorted list of tracked paths that differ from HEAD plus untracked,
+ * non-ignored paths, each with its content hash. "CLEAN" when there are none,
+ * "NOT_COMPUTED" when the caller supplied --revision, "UNKNOWN" when git
+ * cannot answer or the set is too large. Git is run without a shell; the
+ * path and status queries also use no optional locks and no fsmonitor.
+ */
+const WORKTREE_MAX_PATHS = 500;
+const WORKTREE_MAX_FILE_BYTES = 64 * 1024 * 1024;
+const WORKTREE_MAX_TOTAL_BYTES = 256 * 1024 * 1024;
+function computeWorktreeId(explicitRevision) {
+  if (explicitRevision !== undefined) return "NOT_COMPUTED";
+  let top;
+  // Git answers only; file contents are hashed in Node so unusual file names
+  // (leading quote, spaces) are never interpreted by git.
+  const git = (args) =>
+    execFileSync("git", ["-c", "core.fsmonitor=false", "--no-optional-locks", ...args], { encoding: "utf8", cwd: top, maxBuffer: 16 * 1024 * 1024 });
+  try {
+    top = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+    const names = new Set();
+    for (const out of [git(["diff", "--name-only", "-z", "HEAD"]), git(["ls-files", "-o", "--exclude-standard", "-z"])]) {
+      for (const n of out.split("\0")) if (n) names.add(n);
+    }
+    if (names.size === 0) return "CLEAN";
+    if (names.size > WORKTREE_MAX_PATHS) return "UNKNOWN";
+    const parts = [];
+    let total = 0;
+    for (const n of [...names].sort()) {
+      let st;
+      try {
+        st = fs.lstatSync(path.join(top, n));
+      } catch {
+        parts.push(`${n}\0DELETED`);
+        continue;
+      }
+      if (st.isSymbolicLink()) {
+        parts.push(`${n}\0LINK\0${fs.readlinkSync(path.join(top, n))}`);
+      } else if (st.isFile()) {
+        total += st.size;
+        if (st.size > WORKTREE_MAX_FILE_BYTES || total > WORKTREE_MAX_TOTAL_BYTES) return "UNKNOWN";
+        const sha = crypto.createHash("sha256").update(fs.readFileSync(path.join(top, n))).digest("hex");
+        parts.push(`${n}\0${sha}\0${st.mode & 0o111 ? "x" : "-"}`);
+      } else {
+        parts.push(`${n}\0OTHER`);
+      }
+    }
+    return crypto.createHash("sha256").update(parts.join("\n"), "utf8").digest("hex").slice(0, 12);
+  } catch {
+    return "UNKNOWN";
+  }
+}
+
+/**
  * Compare two revision strings as prefixes of each other. "+dirty" vs a
  * clean revision never matches, even if the base shas are prefixes of one
  * another. "UNKNOWN" never matches anything, including itself.
@@ -448,8 +501,10 @@ function computeAcStatus(ac, events, revision, invalidatedIds) {
   return { status: "OPEN", reason: reasons.join("; ") || "not done" };
 }
 
+const UNICODE_STRIP_RE = new RegExp(Schema.UNICODE_FORBIDDEN_RE.source, "g");
+
 function sanitizeLine(value, maxLen) {
-  let s = String(value).replace(Schema.UNICODE_FORBIDDEN_RE, "").replace(/[\r\n]+/g, " ");
+  let s = String(value).replace(UNICODE_STRIP_RE, "").replace(/[\r\n]+/g, " ");
   if (typeof maxLen === "number" && s.length > maxLen) {
     let cut = Math.max(0, maxLen - 13);
     if (cut > 0 && /[\uD800-\uDBFF]/.test(s[cut - 1])) cut -= 1; // do not split a surrogate pair
@@ -567,35 +622,40 @@ function renderPacketBody(ctx, levels) {
   return lines.join("\n");
 }
 
-function packetDigest(runId, lastSeq, lastHash, revision, body) {
-  return sha256HexOfLine(`${runId}\n${lastSeq}\n${lastHash}\n${revision}\n${body}`);
+const HEADER_KEYS = Object.freeze(["RUN_ID", "LAST_SEQ", "LAST_HASH", "REVISION", "WORKTREE_ID", "GENERATED_AT", "SIZE", "PACKET_SHA256"]);
+
+// The digest covers every header line before PACKET_SHA256, exactly as
+// written, plus the body, so no header field or body byte can change
+// unnoticed.
+function packetDigest(headerLinesBeforeDigest, body) {
+  return sha256HexOfLine(`${headerLinesBeforeDigest.join("\n")}\n\n${body}`);
 }
 
 /**
  * Renders the full checkpoint.md text: a header block (RUN_ID/LAST_SEQ/
- * LAST_HASH/REVISION/GENERATED_AT/PACKET_SHA256/SIZE) followed by the body.
- * PACKET_SHA256 is the sha256 hex of RUN_ID, LAST_SEQ, LAST_HASH, REVISION and the exact body bytes (the text after
- * the header's trailing blank line, before any further writing), so
+ * LAST_HASH/REVISION/WORKTREE_ID/GENERATED_AT/SIZE/PACKET_SHA256, in that
+ * exact order) followed by the body. PACKET_SHA256 is the sha256 hex of every
+ * header line before it plus the exact body bytes, so
  * --verify can recompute it from the file and detect accidental or
  * casual single-character edits to the body. This is NOT tamper-proof:
  * the ledger hash chain is unsigned, so a same-user rewrite of both the
  * body and this header line together would still verify.
  */
 function renderPacket(ctx, levels) {
-  const { runId, lastSeq, lastHash, revision, generatedAt, sizeLine } = ctx;
+  const { runId, lastSeq, lastHash, revision, worktreeId, generatedAt, sizeLine } = ctx;
   const body = renderPacketBody(ctx, levels);
   const safeRunId = sanitizeLine(runId, 64);
   const safeRevision = sanitizeLine(revision, 64);
-  const packetSha256 = packetDigest(safeRunId, lastSeq, lastHash, safeRevision, body);
 
   const header = [];
   header.push(`RUN_ID: ${safeRunId}`);
   header.push(`LAST_SEQ: ${lastSeq}`);
   header.push(`LAST_HASH: ${lastHash}`);
   header.push(`REVISION: ${safeRevision}`);
+  header.push(`WORKTREE_ID: ${worktreeId}`);
   header.push(`GENERATED_AT: ${generatedAt}`);
-  header.push(`PACKET_SHA256: ${packetSha256}`);
   header.push(`${sizeLine}`);
+  header.push(`PACKET_SHA256: ${packetDigest(header, body)}`);
 
   return `${header.join("\n")}\n\n${body}`;
 }
@@ -750,6 +810,7 @@ function generateMode({ runDir, eventsPath, runId, flags }) {
     lastSeq: readResult.lastSeq,
     lastHash: lastVerifiedHash(events),
     revision: revResult.revision,
+    worktreeId: computeWorktreeId(flags.revision),
     revisionWarning: revResult.warning,
     generatedAt: new Date().toISOString(),
     inFlight,
@@ -810,7 +871,26 @@ function verifyMode({ runDir, eventsPath, runId, flags }) {
     return false;
   }
 
+  // The header must be exactly the expected lines, in order, then a blank
+  // line: extra, missing, reordered or edited header lines are all rejected.
+  const bodyStart = text.indexOf("\n\n");
+  const headerLines = bodyStart === -1 ? [] : text.slice(0, bodyStart).split("\n");
+  if (headerLines.length !== HEADER_KEYS.length || !HEADER_KEYS.every((k, i) => headerLines[i].startsWith(`${k}: `))) {
+    logError("--verify could not parse checkpoint.md header", "CHECKPOINT_UNPARSEABLE");
+    process.exitCode = 5;
+    return false;
+  }
   const header = parseCheckpointHeader(text);
+  if (
+    !/^\d+$/.test(header.LAST_SEQ) ||
+    !/^[0-9a-f]{64}$/.test(header.LAST_HASH) ||
+    !/^[0-9a-f]{64}$/.test(header.PACKET_SHA256) ||
+    !/^(CLEAN|NOT_COMPUTED|UNKNOWN|[0-9a-f]{12})$/.test(header.WORKTREE_ID)
+  ) {
+    logError("--verify could not parse checkpoint.md header", "CHECKPOINT_UNPARSEABLE");
+    process.exitCode = 5;
+    return false;
+  }
   const oldSeq = Number(header.LAST_SEQ);
   const oldHash = header.LAST_HASH;
   const oldRevision = header.REVISION;
@@ -825,12 +905,10 @@ function verifyMode({ runDir, eventsPath, runId, flags }) {
     process.exitCode = 5;
     return false;
   }
-  // PACKET_SHA256 covers RUN_ID, LAST_SEQ, LAST_HASH, REVISION and the exact body bytes after the header's blank line. It
-  // detects casual edits; it is not tamper-proof because the chain is unsigned.
-  const bodyStart = text.indexOf("\n\n");
-  const packetHash =
-    bodyStart === -1 ? null : packetDigest(header.RUN_ID, header.LAST_SEQ, header.LAST_HASH, header.REVISION, text.slice(bodyStart + 2));
-  if (!header.PACKET_SHA256 || packetHash !== header.PACKET_SHA256) {
+  // PACKET_SHA256 covers every header line before it and the exact body. It
+  // detects edits; it is not tamper-proof because the digest is unkeyed and
+  // the chain is unsigned, so a same-user rewrite of file and digest verifies.
+  if (packetDigest(headerLines.slice(0, -1), text.slice(bodyStart + 2)) !== header.PACKET_SHA256) {
     logError("--verify mismatch — checkpoint content does not match its PACKET_SHA256", "VERIFY_PACKET_MISMATCH");
     process.exitCode = 5;
     return false;
@@ -871,7 +949,17 @@ function verifyMode({ runDir, eventsPath, runId, flags }) {
     return usageError("invalid --revision", "USAGE_BAD_REVISION");
   }
   const currentRevision = revResult.revision;
-  const drift = currentRevision !== oldRevision || currentRevision === "UNKNOWN" || oldRevision === "UNKNOWN";
+  const oldWorktree = header.WORKTREE_ID;
+  const currentWorktree = computeWorktreeId(flags.revision);
+  if (flags.revision !== undefined && oldWorktree !== "NOT_COMPUTED") {
+    Logger.warning("checkpoint: --verify skipped the working-tree comparison because --revision was given");
+  }
+  // Compared only when both sides were computed from git (no explicit --revision).
+  const worktreeDrift =
+    oldWorktree !== "NOT_COMPUTED" &&
+    currentWorktree !== "NOT_COMPUTED" &&
+    (currentWorktree !== oldWorktree || currentWorktree === "UNKNOWN" || oldWorktree === "UNKNOWN");
+  const drift = currentRevision !== oldRevision || currentRevision === "UNKNOWN" || oldRevision === "UNKNOWN" || worktreeDrift;
 
   const invalidatedIds = collectInvalidatedIds(events);
   // "Old" is the state the checkpoint recorded: only events up to its seq.
@@ -939,6 +1027,8 @@ module.exports = {
   main,
   parseArgs,
   computeRevision,
+  computeWorktreeId,
+  sanitizeLine,
   revisionMatches,
   computeInFlight,
   collectInvalidatedIds,
