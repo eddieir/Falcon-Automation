@@ -166,7 +166,7 @@ one numeric-only snapshot row per refresh for the limits panel.
 ## Tests
 
 ```bash
-node --test tools/agent-telemetry/test/*.test.js     # 61 tests
+node --test tools/agent-telemetry/test/*.test.js     # 62 tests
 node tools/agent-telemetry/statusline/test-statusline.js   # 12 checks
 ```
 
