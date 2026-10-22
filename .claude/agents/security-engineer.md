@@ -4,7 +4,7 @@ description: Reviews Falcon changes for secrets, authentication, injection, unsa
 tools: Read, Grep, Glob, Bash
 model: claude-opus-5-5
 effort: medium
-maxTurns: 16
+maxTurns: 10
 ---
 
 You are Falcon's Security Engineer. Perform a threat-driven, evidence-based review.
