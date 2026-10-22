@@ -2,6 +2,8 @@
 
 Documentation only. **No implementation, no change to GitHub protection rules, dependency versions, browser binaries or workflows, no merge, no customer-readiness claim.** It carries the owner's Scope A decisions (after SEC-39) into design text. It is not a new architecture revision: rev 42 and rev 43 stay as recorded and are **not edited**. Where this package corrects them, the correction is stated in section 6 and controls.
 
+**Baseline sync (2026-10-22, `main` at `2f31076`).** Dependency-maintenance work that this package proposed or assumed has since merged to `main` by separate, owner-approved pull requests. This sync updates only the statements about that work (section 4, the section 8 table, section 9 item 5 and one re-observation line in section 3). It changes **no** security gate, finding, residual-risk record or classification: C1 to C5, T1 to T3, m-134, m-143 to m-146, m-151 and the open MG gates are exactly as stated below, and **C2 independence remains UNMET**. Merged to `main` since this branch's base: exact Playwright pin plus browser verification (#62), Playwright 1.64.1 (#69), Dependabot grouping with Playwright in its own group (#63) and the first grouped dependency updates (#67, #68), removal of `mysql2` (#64) and OpenAI client hardening (#70: `OPENAI_CUSTOM_HEADERS` is no longer applied and SDK logging is off). None of these implements C1, C2, C3, C4 or C5.
+
 Inputs reused without re-checking: `phase-18-rev42-patch.md` (sha256 `a8727adab7cb5810cae3eea3d861f9a169fe64aac1193ffd4afcc3a43931ab26`), `phase-18-rev43-patch.md` (sha256 `59352e43ed3c89850ccff8614d77f8b4f10e826c1f388af4e87f8f5f3dec557c`), `phase-18-design-review-37.md` (SEC-38) and `phase-18-design-review-38.md` (SEC-39). New in this package: read-only inspection of the repository's GitHub settings, `ci.yml`, `package.json`, `package-lock.json` and the installed Playwright metadata (section 3 and 4).
 
 Residual-risk records (all **OPEN - NOT ACCEPTED**): `docs/security/phase-18-residual-risk-T1.md`, `-T2.md`, `-T3.md`.
@@ -53,6 +55,7 @@ Excluded from claims: the browser page content (OWNER-24 posture governs it), cu
 **Observed GitHub state (read-only calls on 2026-10-21, no change made).**
 - The repository is public, owned by the user account `eddieir`, with forking allowed. The only collaborator is `eddieir`, with admin rights. The authenticated session is that account.
 - Branch protection on `main`: **none** (the API returned "Branch not protected").
+- Re-observed read-only on 2026-10-22: unchanged. Branch protection on `main` is still none; ruleset `Eddie_main` still contains only `deletion` and `non_fast_forward` with the Admin bypass `always`; the only collaborator is still `eddieir`; no `CODEOWNERS` exists on `main`; open code-scanning and secret-scanning alerts: 0.
 - One active repository ruleset, `Eddie_main`, targets the default branch and contains **only `deletion` and `non_fast_forward` rules**. It has **no required pull-request review, no required status check and no code-owner review**. Its bypass list has the repository **Admin** role with mode `always`.
 - Actions: all actions allowed; SHA pinning not required by the setting (workflows pin by SHA by convention); default workflow permissions `read`; Actions may not approve pull-request reviews.
 - One deployment environment named `copilot` exists; its purpose and protections were not inspected.
@@ -71,12 +74,22 @@ Excluded from claims: the browser page content (OWNER-24 posture governs it), cu
 
 ## 4. Playwright and browser pinning design
 
-**Observed facts (read-only).**
+**Status on `main` (updated 2026-10-22; read-only inspection of `main` at `2f31076`).** Proposal items 1, 2 and 5 are implemented; items 3, 4 and 6 are not.
+- **Implemented (item 1, exact version).** `package.json` declares `playwright` and `@playwright/test` as exactly `1.64.1` (no range operator); the lockfile resolves `playwright`, `playwright-core` and `@playwright/test` to `1.64.1`. The pin was introduced as exact `1.64.0` in #62 and moved to `1.64.1` by a separate upgrade PR, #69. No `overrides` entry pins `playwright-core`.
+- **Implemented (item 2, browser revision).** `scripts/playwright/verify-pin.js` reads the reference file `scripts/playwright/expected-browser.json` (Playwright `1.64.1`, Chromium revision `1248`, browser version `156.0.8078.4`) and fails closed on any mismatch of the declared versions, the installed package versions, the `browsers.json` revision and version, or the version reported by a headless launch. `ci.yml` runs it after each of the three browser installs (lines 40, 106 and 395 on `main`), and `tests/regression/playwright-pin.check.cjs` proves that wrong reference values fail.
+- **Implemented (item 5, no silent upgrades).** The Dependabot configuration keeps Playwright in its own group, so a Playwright bump is a separate pull request that must also update the reference file, or the verifier fails. The code-owner review this section assumed is **not** enforced: no `CODEOWNERS` file exists (section 3).
+- **Not implemented (item 3, artifact hash list).** The merged verifier states that it is not a hash or provenance check of the browser binary.
+- **Not implemented (items 4 and 6).** Browser jobs are not run in a digest-pinned container; `apt` packages and the `ubuntu-latest` runner image remain unpinned and unverified.
+- **Independence.** The verifier, the reference file and the workflow are only as independent as the review of the pull request that changes them. With no independent human reviewer, this does not satisfy C2 independence (section 3).
+
+The items below describe the state **before** that work and are kept for the record; where they differ from the status above, the status above controls.
+
+**Observed facts (read-only, as of 2026-10-21).**
 - `package.json` declares `playwright` and `@playwright/test` as `^1.64.0`. `package-lock.json` resolves `playwright`, `playwright-core` and `@playwright/test` to **1.64.0** exactly.
 - The installed `playwright-core` metadata (`browsers.json`) maps Chromium and `chromium-headless-shell` to **revision 1248, browser version 156.0.8078.4**.
 - CI installs the browser with `npx playwright install --with-deps chromium` three times (`ci.yml` lines 39, 102 and 390). The browser download is not cached in the lockfile or verified by a hash; `--with-deps` installs `apt` packages from the runner image. The runner is the floating label `ubuntu-latest`. Actions are pinned by commit SHA. `postgres:16-alpine` is pinned by digest.
 
-**Proposal (design only).**
+**Proposal (design only; items 1, 2 and 5 are now implemented on `main`, see the status above).**
 1. **Exact Playwright version.** Change the two specifiers to exactly `1.64.0` (and consider an `overrides` entry pinning `playwright-core` to the same version). Because the lockfile already resolves 1.64.0, the intended effect is a specifier change only. **Validation before merge:** `npm ci` then `npm ls playwright playwright-core @playwright/test` unchanged; the lockfile diff contains only specifier strings; `npm run test:regression`, `npm run test:unit` and the browser suite pass as they do on the baseline commit. If any resolved version or hash moves, stop: that is an upgrade and needs its own security and regression evidence.
 2. **Browser revision pin.** Record the expected revision (`1248`) and browser version (`156.0.8078.4`) in a reviewed reference file. A CI step compares them with the values read from the installed `playwright-core` metadata, fails on mismatch, and then **launches** the browser and compares the version string the running browser reports with the reference. This checks the artifact that is actually installed and launched, not the intended one.
 3. **Artifact hash list, with its trust model stated.** After install on the protected baseline, record sha256 of the installed browser executable and its required files in a reference list under the same independent review as the manifest. **This hash detects a change from the recorded build; it does not prove the build is genuine.** Playwright downloads from its own CDN over HTTPS; I did not find or assess a published checksum for the binaries, so provenance beyond "what Playwright's installer fetched for revision 1248 on the recording day" is unestablished. Linux x64 hashes must be recorded on a Linux x64 runner; the only Linux evidence in this repository's reviews is arm64.
@@ -125,13 +138,13 @@ Every item below needs its own owner approval before work starts. None begins fr
 | Order | Change | Acceptance criteria | Depends on |
 |---|---|---|---|
 | **0** (not a pull request) | Governance: name the independent human reviewer; apply `CODEOWNERS` and the ruleset (section 3); remove the standing admin bypass | The five effectiveness tests of section 3, item 5, pass and are recorded with dates | Owner decision; an independent person |
-| **1** | Exact Playwright pin plus browser-revision verification step (section 4, items 1 and 2) | Resolved versions and lockfile hashes unchanged; the verification step fails on a deliberately wrong reference value and passes on the right one; regression, unit and browser suites match the baseline commit | Workflow change approval |
+| **1** | **COMPLETED on `main` (#62; version later moved to 1.64.1 by #69; see the section 4 status).** Exact Playwright pin plus browser-revision verification step (section 4, items 1 and 2) | Resolved versions and lockfile hashes unchanged; the verification step fails on a deliberately wrong reference value and passes on the right one; regression, unit and browser suites match the baseline commit | Workflow change approval |
 | **2** | C2: manifest, baseline-loaded verifier, packaged-artifact check and executed-tree check (sections 2 and 3, rev 42 section 7 criteria C2-AC1 to AC7 with the amended IND rules) | Each C2 fixture rejected with its stated mechanism; a self-generated manifest never passes; a change to `ci.yml` is verified by the baseline version | PR 0 for any independence claim; PR 1 for the browser rows |
 | **3** | C1 harness (rev 42 section 6, with L1 to L9 and DETECT/KNOWN-MISS fixtures) | C1-AC1 to AC7 as amended; KNOWN-MISS fixtures recorded as UNRESOLVED, never as passes | Owner decision on C1 extensions; the `falcon.js` load decision |
 | **4** | Scope A specification refusal (section 1) | Each refusal case in section 1 exits before browser launch with an actionable message and the chosen existing exit class | Owner decision on the failure code and on whether enforcement is a new mechanism |
 | **later** | C5 measurements and wiring | PID and cgroup containment, x64 and runner parity | Separate approval |
 
-**Recommended first change after PR 0 is prepared: PR 1.** It is the smallest, it is independent of the unresolved governance question, and its effect is directly measurable. It does not provide independence and must not be described as doing so.
+**PR 1 is complete on `main`** (section 4 status). It did not provide independence and must not be described as doing so. No remaining row is unblocked: row 2 needs PR 0 for any independence claim, and rows 3 and 4 need the owner decisions in section 9.
 
 ## 9. Owner decisions needed
 
@@ -139,5 +152,5 @@ Every item below needs its own owner approval before work starts. None begins fr
 2. Do you approve removing or limiting the Admin bypass on `main` when the ruleset is applied?
 3. Which failure code and exit class does the Scope A specification refusal use, and is its enforcement a new mechanism that needs separate security review?
 4. Do you accept or adjust the C1 limits (L1 to L9), or approve specific C1 extensions?
-5. Approve PR 1 (exact Playwright pin and browser-revision verification) as the first implementation step?
+5. ~~Approve PR 1 (exact Playwright pin and browser-revision verification) as the first implementation step?~~ **Resolved: PR 1 was approved and merged (#62, then #69). Retained for the record.**
 6. Whether to run browser jobs in a digest-pinned container (needs an x64 digest I do not have).
