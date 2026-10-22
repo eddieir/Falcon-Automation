@@ -70,6 +70,7 @@ function writeAtomic(file, obj) {
 }
 
 function syncRuntime() {
+  fs.mkdirSync(OPS, { recursive: true, mode: 0o700 }); // created owner-only; an existing directory keeps its mode
   for (const f of COPY) {
     fs.mkdirSync(path.dirname(path.join(RUNTIME, f)), { recursive: true });
     fs.copyFileSync(path.join(__dirname, f), path.join(RUNTIME, f));
