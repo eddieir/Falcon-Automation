@@ -154,3 +154,9 @@ test("installer: a stale temp file from a crashed run does not block --apply", (
   fs.writeFileSync(settingsFile, "{}");
   assert.strictEqual(runInstall(["--apply"], { FALCON_OPS_DIR: tmp(), FALCON_SETTINGS_FILE: settingsFile }).status, 0);
 });
+
+test("installer: a freshly created ops directory, telemetry directory and backups are owner-only (0700)", () => {
+  const base = tmp(), ops = path.join(base, "fresh-ops"), settingsFile = path.join(base, "settings.json"); fs.writeFileSync(settingsFile, "{}");
+  assert.strictEqual(runInstall(["--apply"], { FALCON_OPS_DIR: ops, FALCON_SETTINGS_FILE: settingsFile }).status, 0);
+  for (const d of [ops, path.join(ops, "telemetry"), path.join(ops, "backups", "pre-hooks")]) assert.strictEqual(fs.statSync(d).mode & 0o777, 0o700, d);
+});
