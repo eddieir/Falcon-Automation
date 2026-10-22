@@ -205,10 +205,21 @@ function computeWorktreeId(explicitRevision) {
       if (st.isSymbolicLink()) {
         parts.push(`${n}\0LINK\0${fs.readlinkSync(path.join(top, n))}`);
       } else if (st.isFile()) {
-        total += st.size;
-        if (st.size > WORKTREE_MAX_FILE_BYTES || total > WORKTREE_MAX_TOTAL_BYTES) return "UNKNOWN";
-        const sha = crypto.createHash("sha256").update(fs.readFileSync(path.join(top, n))).digest("hex");
-        parts.push(`${n}\0${sha}\0${st.mode & 0o111 ? "x" : "-"}`);
+        // Open without following links and size-check the open descriptor, so a
+        // file swapped after lstat cannot bypass the caps.
+        const fd = fs.openSync(path.join(top, n), fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+        try {
+          const fst = fs.fstatSync(fd);
+          if (!fst.isFile()) return "UNKNOWN";
+          total += fst.size;
+          if (fst.size > WORKTREE_MAX_FILE_BYTES || total > WORKTREE_MAX_TOTAL_BYTES) return "UNKNOWN";
+          const buf = Buffer.alloc(fst.size);
+          const got = fs.readSync(fd, buf, 0, buf.length, 0);
+          const sha = crypto.createHash("sha256").update(buf.subarray(0, got)).digest("hex");
+          parts.push(`${n}\0${sha}\0${fst.mode & 0o111 ? "x" : "-"}`);
+        } finally {
+          fs.closeSync(fd);
+        }
       } else {
         parts.push(`${n}\0OTHER`);
       }
@@ -541,8 +552,9 @@ function renderPacketBody(ctx, levels) {
   if (inFlight.length === 0) {
     lines.push("- none");
   } else {
+    lines.push("Each task below is NOT confirmed running and NOT confirmed finished: re-verify it from the ledger, never re-dispatch it automatically.");
     for (const t of inFlight) {
-      lines.push(`- ${sanitizeLine(t.taskId, 64)}: ${t.type} at seq ${t.seq} — NOT confirmed running, NOT confirmed finished; re-verify from the ledger, never re-dispatch automatically.`);
+      lines.push(`- ${sanitizeLine(t.taskId, 64)}: ${t.type} at seq ${t.seq}`);
     }
   }
   lines.push("");
@@ -551,8 +563,23 @@ function renderPacketBody(ctx, levels) {
   if (verdictInfo.stale.length === 0) {
     lines.push("- none");
   } else {
-    for (const v of verdictInfo.stale) {
-      lines.push(`- ${sanitizeLine(v.taskId, 64)} [${v.type}] verdict=${v.verdict} reviewedRevision=${sanitizeLine(v.reviewedRevision, 64)} reason=${v.reason}`);
+    // Only the latest stale verdict per task and type is listed; earlier ones
+    // are superseded by it, and their number is stated, never silently dropped.
+    const latest = new Map();
+    for (const v of verdictInfo.stale) latest.set(`${v.taskId}\0${v.type}`, v);
+    // Tasks that share type, verdict, reviewed revision and reason are listed on one line.
+    const groups = new Map();
+    for (const v of latest.values()) {
+      const key = `${v.type}\0${v.verdict}\0${v.reviewedRevision}\0${v.reason}`;
+      if (!groups.has(key)) groups.set(key, { v, tasks: [] });
+      groups.get(key).tasks.push(sanitizeLine(v.taskId, 64));
+    }
+    for (const { v, tasks } of groups.values()) {
+      lines.push(`- [${v.type}] verdict=${v.verdict} reviewedRevision=${sanitizeLine(v.reviewedRevision, 64)} reason=${v.reason} tasks(${tasks.length}): ${tasks.join(", ")}`);
+    }
+    const superseded = verdictInfo.stale.length - latest.size;
+    if (superseded > 0) {
+      lines.push(`- (${superseded} earlier stale verdict(s) for the same tasks omitted as superseded; the ledger has them)`);
     }
   }
   lines.push("");
@@ -953,6 +980,8 @@ function verifyMode({ runDir, eventsPath, runId, flags }) {
   const currentWorktree = computeWorktreeId(flags.revision);
   if (flags.revision !== undefined && oldWorktree !== "NOT_COMPUTED") {
     Logger.warning("checkpoint: --verify skipped the working-tree comparison because --revision was given");
+  } else if (flags.revision === undefined && oldWorktree === "NOT_COMPUTED") {
+    Logger.warning("checkpoint: --verify skipped the working-tree comparison because the checkpoint was made with --revision");
   }
   // Compared only when both sides were computed from git (no explicit --revision).
   const worktreeDrift =

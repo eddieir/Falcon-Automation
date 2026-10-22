@@ -159,7 +159,7 @@ test("in-flight dispatch with no closer is listed UNVERIFIED", async () => {
   const cpText = fs.readFileSync(checkpointPathFor(runDir), "utf8");
   assert.match(cpText, /## In-flight tasks \(UNVERIFIED\)/);
   assert.match(cpText, /DEV-05.*dispatch_created/);
-  assert.match(cpText, /NOT confirmed running, NOT confirmed finished/);
+  assert.match(cpText, /NOT confirmed running and NOT confirmed finished/);
 });
 
 test("a closed task is not listed as in-flight", async () => {
@@ -192,7 +192,7 @@ test("stale verdict after a --revision change is listed with reason", async () =
   assert.equal(code, 0);
   const cpText = fs.readFileSync(checkpointPathFor(runDir), "utf8");
   assert.match(cpText, /## Stale verdicts/);
-  assert.match(cpText, /DEV-07.*verdict=PASS.*reviewedRevision=deadbee.*reason=stale-revision/);
+  assert.match(cpText, /verdict=PASS reviewedRevision=deadbee reason=stale-revision tasks\(1\): DEV-07/);
   assert.match(cpText, /## Current verdicts \(non-stale\)\n- none/);
 });
 
@@ -455,7 +455,7 @@ test("a verdict invalidated by a later verdict_invalidated event is listed stale
   assert.equal(code, 0);
   const cpText = fs.readFileSync(checkpointPathFor(runDir), "utf8");
   assert.match(cpText, /## Stale verdicts/);
-  assert.match(cpText, /DEV-30.*verdict=PASS.*reviewedRevision=abc1234.*reason=invalidated/);
+  assert.match(cpText, /verdict=PASS reviewedRevision=abc1234 reason=invalidated tasks\(1\): DEV-30/);
   assert.match(cpText, /## Current verdicts \(non-stale\)\n- none/);
 });
 
@@ -616,7 +616,7 @@ test("end-to-end resume using only the checkpoint and narrowly scoped supporting
   assert.match(header.LAST_HASH, /^[0-9a-f]{64}$/, "LAST_HASH recoverable from checkpoint.md");
 
   assert.match(cpText, /## In-flight tasks \(UNVERIFIED\)[\s\S]*TASK-01.*dispatch_created/, "UNVERIFIED task recoverable");
-  assert.match(cpText, /## Stale verdicts[\s\S]*TASK-02.*verdict=PASS/, "stale verdict recoverable");
+  assert.match(cpText, /## Stale verdicts[\s\S]*verdict=PASS[^\n]*TASK-02/, "stale verdict recoverable");
   const acSection = cpText.split("## Acceptance criteria")[1].split("## Open risks")[0];
   assert.match(acSection.split("### BLOCKED")[1].split("### OPEN")[0], /AC-BLOCKED/, "blocked AC recoverable");
   assert.match(acSection.split("### OPEN")[1].split("### DONE")[0], /AC-OPEN/, "open AC recoverable");
@@ -887,4 +887,21 @@ test("WORKTREE_ID sees edits to a file whose name starts with a quote and to a r
   } finally {
     process.chdir(cwd);
   }
+});
+
+test("stale verdicts: only the latest per task and type is listed, with an explicit count of the superseded ones", async () => {
+  const runId = "supers1";
+  const { ledgerRoot, runDir } = await makeFixture(runId);
+  await append(runDir, { type: "run_started" });
+  for (const rev of ["1111111", "2222222", "3333333"]) {
+    await append(runDir, { type: "review_verdict", taskId: "CR-07", status: "ACCEPTED", verdict: "PASS", targetRevision: rev });
+  }
+  await append(runDir, { type: "review_verdict", taskId: "SEC-07", status: "DONE", verdict: "FAIL", targetRevision: "1111111" });
+  assert.equal((await run([`--run-id=${runId}`, `--ledger-root=${ledgerRoot}`, "--revision=abc1234"])).code, 0);
+  const cp = fs.readFileSync(checkpointPathFor(runDir), "utf8");
+  const section = cp.split("## Stale verdicts")[1].split("## Acceptance criteria")[0];
+  assert.equal((section.match(/CR-07/g) || []).length, 1, "one CR-07 line");
+  assert.match(section, /reviewedRevision=3333333/, "the latest one is the one listed");
+  assert.match(section, /SEC-07/, "a task with a single stale verdict is still listed");
+  assert.match(section, /2 earlier stale verdict\(s\) for the same tasks omitted as superseded/);
 });
