@@ -32,6 +32,15 @@ test("hostile agent type, tool and model values are dropped, not stored", () => 
   assert.ok(!("tool" in t));
   assert.ok(!("model" in sanitizeHook(payload({ model: "<b>" }))));
 });
+test("event id is a truncated SHA-256 of the raw payload and the source never uses a weak hash", () => {
+  const raw = JSON.stringify(payload({}));
+  const a = sanitizeHook(JSON.parse(raw), { raw }), b = sanitizeHook(JSON.parse(raw), { raw: raw + " " });
+  assert.match(a.id, /^[0-9a-f]{16}$/); assert.notStrictEqual(a.id, b.id);
+  assert.strictEqual(a.id, require("crypto").createHash("sha256").update(raw).digest("hex").slice(0, 16));
+  for (const f of ["lib/sanitize.js", "lib/store.js", "lib/usage.js", "server.js", "hook.js", "install.js"]) {
+    assert.ok(!/createHash\(\s*["'](md5|sha1)["']/i.test(fs.readFileSync(path.join(__dirname, "..", f), "utf8")), `${f} must not use md5 or sha1`);
+  }
+});
 test("identical delivery yields the same event id (dedupe key)", () => {
   const raw = JSON.stringify(payload({}));
   assert.strictEqual(sanitizeHook(JSON.parse(raw), { raw }).id, sanitizeHook(JSON.parse(raw), { raw }).id);
