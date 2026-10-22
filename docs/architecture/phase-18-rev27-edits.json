@@ -1,0 +1,164 @@
+{
+ "schema": "phase-18-rev23-edits/1",
+ "revision": "7d2c1de on docs/phase-18-architecture",
+ "producedBy": "ARCH-27 rev 27 patch; apply with a script; docs/architecture/phase-18-rev27-patch.md is normative",
+ "notes": [
+  "Same schema as phase-18-rev26-edits.json: ac[] with set/replaceText/appendText {field,text}, openItems/openItemsAdd, counts, exitCodes, docEdits[{file,replace[{old,new}],append,after}].",
+  "Every 'old' anchor in this file was verified by exact string count to occur EXACTLY ONCE in its target file at 7d2c1de (script-verified). Short SHAs only; no 40-character SHA anywhere; no AI attribution.",
+  "OWNER DECISION applied by rev 27: decide() takes a CLOSED, VERSIONED PER-REALM EVIDENCE SCHEMA. Permissive property access is removed. A realm record must carry EXACTLY the 11 required own keys in canonical order (schemaVersion, id, mechanism, measurable, error, timedOut, typeofSharedWorker, descriptor, nativeCtor, constructed, repetitionsConsistent), every value validated against an exact type or enumeration, absence expressed by NAMED STRING SENTINELS (error:'none', descriptor:'absent', nativeCtor:'absent'). ABSENCE OF A FIELD IS ALWAYS UNVERIFIED. mechanism, error and descriptor are explicitly required.",
+  "Order of operations is normative: structural inspection of the caller's input -> inert snapshot (JSON round-trip) -> freeze -> schema validation of the snapshot -> decision on the frozen snapshot. Mutation of the caller's object after validation cannot change the decision.",
+  "Rejected and refused with shared_worker_block_unverified exit 18: non-array input, sparse or extra-keyed arrays, missing key, extra key, inherited key, accessor (getter/setter), symbol key, non-canonical key order, non-plain record (class instance, null-prototype), duplicate realm id, unknown schemaVersion, wrong type, out-of-enumeration value, and any record whose two structural reads disagree.",
+  "Precedence is unchanged in order and tightened in step 1: invalid/unverified evidence first (shared_worker_block_unverified, exit 18), measured presence second (shared_worker_present, exit 18), unanimous validated absence last (armed). The rev 26 requiredIds exact-set rules stay in force verbatim.",
+  "Table W6-T is CONSOLIDATED by rev 27: the single source is the full table reprinted in rev 27 section C, superseding the rev 25 section C and rev 26 section C split. The authoritative row count after rev 27 is 42 rows (21 F + 1 informational F22 + 11 FC + 8 IC + 1 FW-1). Every live '34 rows' and standalone '36 rows' total is superseded by 42.",
+  "Rev 27 weakens nothing: counts stay 98/89/6/3, C6-T stays 27/5 sourced from rev 23 section D.4, M-23 and M-24 stay closed, M-25 stays OPEN, O-1 and the PILOT_APPROVAL_RUN_TOKEN text are untouched, OWNER-24 and OWNER-25 stay DECIDED, the supported-browser set stays EMPTY, no Linux filesystem is admitted, scope stays Chromium only, no exit code is added and no bypass exists.",
+  "Rev 27 consumes docs/phase-18-w6t-conformance-results.md (CONF-01 PARTIAL), docs/architecture/phase-18-rev26-patch.md and phase-18-rev26-edits.json, docs/architecture/phase-18-rev25-patch.md table W6-T, and docs/security/phase-18-design-review-23.md (SEC-24).",
+  "Browser identity for section J is MEASUREMENT SCAFFOLDING ONLY and never product code: a scratch executable wrapper used as Playwright executablePath, no browser.process() dependency and no ps heuristic. The product-side equivalent requirement is recorded as an OPEN design question (OPEN-BID-27), not decided.",
+  "The untracked docs/architecture/phase-18-rev24-* drafts are ignored.",
+  "Rev 27 executes nothing. CONF-02 is the executed gate that must follow it."
+ ],
+ "ac": [
+  {
+   "id": "P18-AC-091",
+   "appendText": [
+    {
+     "field": "requirement",
+     "text": " REV 27 (CONF-01, closed per-realm evidence schema): decide() no longer reads realm properties permissively. A realm record is evidence ONLY if it is a plain object whose own property names are EXACTLY and IN ORDER schemaVersion, id, mechanism, measurable, error, timedOut, typeofSharedWorker, descriptor, nativeCtor, constructed, repetitionsConsistent, every one a data property (no getter, no setter, no symbol key, no inherited key, no extra key, no missing key), with schemaVersion exactly 1, id a canonical F1..F21 id, mechanism one of page.evaluate|frame.evaluate|popup.page.evaluate|unavailable, measurable|timedOut|constructed|repetitionsConsistent strict booleans, error one of the sentinel none or threw|timeout|not-created|frame-not-found|unexpected-success-no-allow-scripts|unreachable, typeofSharedWorker one of undefined|function|object|other|unreadable, descriptor one of the sentinel absent or present-data|present-accessor|unreadable, nativeCtor one of the sentinel absent or present|mismatch|uncaptured. ABSENCE OF A FIELD IS ALWAYS UNVERIFIED: a missing, null, empty-string or coerced value is NEVER a synonym for a valid negative; no descriptor, no error and no native constructor are expressed only by the named sentinels. Non-array input, a sparse or extra-keyed array, a duplicate realm id, a non-plain record (Proxy with varying reads, class instance, null-prototype), an unknown schemaVersion, a wrong type or an out-of-enumeration value all yield shared_worker_block_unverified, exit 18. decide() first takes an inert snapshot of its input, freezes it, validates the snapshot and decides on the snapshot, so mutating the caller's record after validation cannot change the decision. A realm demonstrates absence only when measurable===true, error==='none', timedOut===false, typeofSharedWorker==='undefined', descriptor==='absent', nativeCtor==='absent', constructed===false, repetitionsConsistent===true and mechanism is an evaluate mechanism. Precedence stays invalid/unverified first, measured presence second, unanimous validated absence last; the rev 26 requiredIds exact-set rules stay. The rev 26 nativeCtorValue and nativeCtorMatched fields are withdrawn and replaced by nativeCtor."
+    }
+   ]
+  }
+ ],
+ "openItems": [
+  {
+   "id": "M-26",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " REV 27: STILL OPEN as a Major, now narrowed to the executed measurement. CONF-01 (docs/phase-18-w6t-conformance-results.md) EXECUTED the rev 26 decide() and found 105 of 441 single-field mutations still produced armed:true (mechanism deleted/null/blank, descriptor deleted, error deleted/null/blank), because rev 26 treated an absent descriptor or error as the absence signal and never validated mechanism. Rev 27 replaces the permissive property access with the closed, versioned per-realm evidence schema of rev 27 section B.5 plus the snapshot-validate-decide order of B.6, under which absence of a field is always unverified. Closure now needs the CONF-02 executed gate (rev 27 section J): the exhaustive 1155-case single-field mutation sweep, the 126-case valid-negative sweep and the 13-case structural battery must report ZERO unexpected armed:true, with the only armed:true outcome the authorised all-absent positive control, plus a Security review. Documentation alone must not close M-26."
+    }
+   ]
+  },
+  {
+   "id": "M-25",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " REV 27: unchanged and still OPEN as a Major. CONF-01 was PARTIAL (not the full matrix, no browser process identity captured, fc2Pass unexplained), so it does not satisfy the executed-measurement condition. Closure still needs the complete executed W6-T conformance measurement (rev 27 section J, now 42 rows) plus a Security review of the executed result."
+    }
+   ]
+  },
+  {
+   "id": "W6T-GATE",
+   "set": {
+    "ref": "rev 27 section J; first attempt recorded in docs/phase-18-w6t-conformance-results.md (CONF-01, PARTIAL)",
+    "state": "NOT SATISFIED. CONF-01 ran against the rev 26 decide() and returned PARTIAL: 105 of 441 single-field mutations armed, browser process identity was not captured (pid, startTime and ps candidates all null, so the OWNER-24 same-process rule was never exercised), fcDerived.fc2Pass was false with no explanation, and the run was not the full row matrix with every row repeated. CONF-02 supersedes it and must execute the rev 27 section J spec: all 42 W6-T rows, each row independently at least 3 times on Node 22.19.0 and at least 3 times on Node 24.21.0; per row the id, expected, actual, reason, exit, armed, Node and browser identity, repetition index and target/network observation; real-browser rows with fresh isolated state (unique profile and process group per run, cleanup verified); browser identity established by the scratch executable wrapper and corroborated over CDP, re-verified immediately before each simulated run step; zero non-loopback requests and no external target access in every refusal run; FW-1 keeps its honest 'WebSocket behaviour unmeasured' statement while its required fail-closed decision is executed 3 times per Node; FC2 reported with its five named sub-observations so fc2Pass is attributable; the mutation sweeps reporting zero unexpected armed:true. A refusal is a PASS when it is the expected outcome; no missing measurement may arm; if any row is unmeasured the gate reports PARTIAL and arming stays refused."
+   }
+  },
+  {
+   "id": "SPIKE-W",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " SUPERSEDED BY REV 25, REV 26 AND REV 27, recorded here in place because the rev 26 marker for this item was NOT applied at 7d2c1de (the sentence below is still live in this file): the design consequence above (SharedWorker construction blocked before page scripts run, out-of-page CDP detection via Target.setAutoAttach with waitForDebuggerOnStart, a run-scoped exposeBinding, exit 18 reason shared_worker_blocked, and SPIKE-W2 as the 18C merge gate) is WITHDRAWN AND NOT ACCEPTED, and the sentence 'SPIKE-W2 IS REQUIRED BEFORE 18C MERGES and until every one of its cases is recorded MEASURED-PASS the pilot REFUSES TO ARM execute mode' IS WITHDRAWN. shared_worker_blocked is withdrawn from the registry and no code may emit it. SPIKE-W's own measurements stand with the SEC-23 m-85 repetition corrections. The live design is the rev 25 section B fail-closed capability refusal with the rev 27 closed, versioned per-realm evidence schema and decide(perRealm, requiredIds) contract, against the consolidated table W6-T of rev 27 section C (42 rows), whose required rows are measured in part by SPIKE-W6 and completed by SPIKE-W7 and the CONF-02 executed gate; refuse-to-arm stays unconditional and its trigger is the decide() outcome, not SPIKE-W2 evidence."
+    }
+   ]
+  }
+ ],
+ "openItemsAdd": [
+  {
+   "id": "OPEN-BID-27",
+   "ref": "rev 27 section J.2 and section I",
+   "state": "OPEN DESIGN QUESTION, NOT DECIDED. The section J browser-identity scaffolding (a scratch executable wrapper used as Playwright's executablePath that records its own pid, start time, normalized arguments and a random per-run identity token to a private scratch file and then execs the real pinned Chromium so the pid is unchanged) is MEASUREMENT SCAFFOLDING ONLY and must never appear in product code. The product-side equivalent requirement is that Falcon must establish the same identity WITHOUT a wrapper through the launch API it already uses, and must refuse when identity cannot be established or any value changes. Which mechanism satisfies that (a launch-API-provided process handle, a CDP Browser.getVersion plus SystemInfo.getProcessInfo corroboration, an executable hash plus argument snapshot taken at launch, or a combination) is NOT decided by rev 27 and must not be invented by the Developer. browser.process() and ps-based discovery are explicitly not acceptable as the sole basis; CONF-01 showed ps discovery finding zero candidates."
+  },
+  {
+   "id": "PROXY-27",
+   "ref": "rev 27 section B.7 (stated residual)",
+   "state": "OPEN, stated residual, Security to rule. Pure JavaScript cannot distinguish a Proxy that is observationally identical to a conforming frozen plain record from that record itself. Rev 27's position, stated rather than hidden: (a) every structural read is performed twice and any disagreement refuses (record-unstable); (b) a trap that throws, reports an accessor, varies a value, hides or adds a key, or breaks canonical key order refuses; (c) decide() never decides on the caller's object, only on its own inert snapshot, which is by construction not a Proxy; (d) a Proxy that supplies exactly the values of a valid record therefore yields the same decision as that record, which is sound but is NOT a detection claim. No rev 27 text may claim Proxy detection."
+  },
+  {
+   "id": "CONF-02",
+   "ref": "rev 27 section J; supersedes the CONF-01 attempt",
+   "state": "NOT EXECUTED. The executed W6-T conformance gate required before the next Security review and before any ruling on M-25 or M-26. Scope and recording requirements are the W6T-GATE item and rev 27 section J. It must also resolve FC2 explicitly: FC2 passes only when, in EVERY measurable realm, each of the five page-mutation evasions (delete, defineProperty/Reflect.defineProperty redefinition, assignment, prototype and __proto__ manipulation, with-scope shadowing) leaves the pre-captured native constructor reference usable AND leaves the decision byte-identical to the pre-mutation decision; the harness must emit the five sub-observations per realm so that a false fc2Pass is attributable to a named sub-observation. The CONF-01 fcDerived.fc2Pass=false is UNEXPLAINED and must not be carried as a result."
+  }
+ ],
+ "counts": {
+  "set": {
+   "rev27Note": "Rev 27 changes NO criterion count: total 98, must 89, should 6, could 3; deferredToPhase18P 11, deferredUnderOptionC 5, deferredIds and mixedPhase18PIds unchanged. No criterion is added, removed or re-phased; M-23 and M-24 stay closed; M-25 and M-26 stay OPEN; C6-T stays 27 inversion fixtures (X1..X27) and 5 positive controls (P1..P5) sourced from rev 23 section D.4 and stays disjoint from W6-T. The single inventory change is inside table W6-T, which rev 27 CONSOLIDATES: the authoritative table is the full reprint in rev 27 section C, which supersedes the rev 25 section C and rev 26 section C split, and the AUTHORITATIVE ROW COUNT AFTER REV 27 IS 42 ROWS: 21 required decision realms (F1..F21), 1 informational realm (F22), 11 decision-function/mechanism cases (FC1..FC11) and 8 control fixtures (IC1..IC8), plus 1 carried worker-WebSocket case (FW-1). Added by rev 27: FC9 (per-realm evidence schema contract: exact required key set, own data properties only, canonical key order, plain-object prototype), FC10 (snapshot -> freeze -> validate -> decide order and post-validation mutation immunity), FC11 (schemaVersion gating: only version 1 accepted, unknown version refuses), IC6 (exhaustive single-field mutation sweep, 21 realms x 11 required keys x 5 mutations = 1155 cases, plus the 21 x 6 = 126 valid-negative substitutions, zero unexpected armed:true), IC7 (structural rejection battery, 13 named cases), IC8 (browser process identity establishment and re-verification; failure or any change refuses). SPIKE-W6 coverage is unchanged at 15 decision realms plus FC1, FC2, IC1 and IC2. The implementation checker asserts the W6-T id set, the 42-row total and the sweep counts derived from the schema constants (21 = canonical realm ids, 11 = required keys, 5 = mutations per key, 6 = valid-negative substitutions, 13 = structural cases). Every live '34 rows' statement and every standalone '36 rows' total is superseded by this note."
+  }
+ },
+ "exitCodes": {
+  "set": {
+   "rev27Note": "Rev 27 adds no exit code, removes none and changes no precedence: the rev 6 order stands, 2 > 3 > 18 > 17 > 16 > 15 > 13 > 12 > 11 > 14 > 10 > 1 > 0. shared_worker_present and shared_worker_block_unverified remain the only SharedWorker reasons, both double-labelled PILOT_INTERNAL_ERROR with exit 18; shared_worker_blocked stays WITHDRAWN and no code may emit it; POLICY_SHARED_WORKER_BLOCKED must not appear anywhere. Rev 27 only widens what selects shared_worker_block_unverified: every schema violation (missing key, extra key, inherited key, accessor, symbol key, non-canonical key order, wrong type, out-of-enumeration value, unknown schemaVersion, non-plain record, unstable record, sparse or extra-keyed array, non-array input, duplicate realm id) and every absent field, since absence of a field is always unverified. New detail strings are added for attributability and are never page-supplied: schema-version-unknown, record-keys-mismatch, record-key-order, record-accessor-property, record-symbol-key, record-prototype-invalid, record-unstable, record-value-type, record-value-enum, array-sparse-or-extra-keys, plus the rev 26 detail strings which stay unchanged. A detail string never changes the exit code or the arming outcome. Neither reason has an override flag, environment variable, warning mode or degraded mode (OWNER-25), and no page-supplied value may influence either."
+  }
+ },
+ "docEdits": [
+  {
+   "file": "docs/architecture/phase-18-rev26-patch.md",
+   "replace": [
+    {
+     "old": "### B.5 `decide(perRealm, requiredIds)` — reference text (pure function, no I/O)",
+     "new": "### B.5 `decide(perRealm, requiredIds)` — reference text (pure function, no I/O)\n\n**SUPERSEDED BY REV 27 (ARCH-27, CONF-01): the reference text below is WITHDRAWN as the live contract because its property access is permissive. CONF-01 executed it and found 105 of 441 single-field mutations still armed (`mechanism` deleted/null/blank, `descriptor` deleted, `error` deleted/null/blank), because `isCleanAbsence` treats `r.descriptor === undefined` and a missing or null `error` as the absence signal and never validates `mechanism`. The live contract is the closed, versioned per-realm evidence schema plus `validateRecord`/`decide` of `docs/architecture/phase-18-rev27-patch.md` section B.5, under which ABSENCE OF A FIELD IS ALWAYS UNVERIFIED and `nativeCtorValue`/`nativeCtorMatched` are replaced by `nativeCtor`. The precedence order, the `requiredIds` exact-set rules and the refusal outcomes are KEPT unchanged. The withdrawn text follows for history.**"
+    },
+    {
+     "old": "The rev 25 \"34 rows\" total is superseded by **36**; C6-T remains untouched at **27 / 5** and the two inventories stay disjoint.",
+     "new": "The rev 25 \"34 rows\" total is superseded by **36** — **SUPERSEDED AGAIN BY REV 27 (ARCH-27): the authoritative total is 42 rows (21 F + 1 informational F22 + 11 FC + 8 IC + 1 FW-1), and the single source is no longer this amendment table but the FULL consolidated table reprinted in `phase-18-rev27-patch.md` section C, which supersedes the rev 25 + rev 26 split. Added by rev 27: FC9, FC10, FC11, IC6, IC7, IC8.** C6-T remains untouched at **27 / 5** and the two inventories stay disjoint."
+    },
+    {
+     "old": "The only inventory change is inside table W6-T: **34 rows → 36 rows** (FC8 and IC5 added).",
+     "new": "The only inventory change is inside table W6-T: **34 rows → 36 rows** (FC8 and IC5 added). **SUPERSEDED BY REV 27: 36 rows → 42 rows (FC9, FC10, FC11, IC6, IC7, IC8 added), consolidated into the single full table in `phase-18-rev27-patch.md` section C.**"
+    },
+    {
+     "old": "1. **Coverage:** every row of table W6-T (36 rows), **at least 3 repetitions per row**, on **Node 22.19.0 and Node 24.21.0**, hermetic loopback fixtures only, a fresh browser process and fresh empty context per run.",
+     "new": "1. **Coverage:** every row of table W6-T — **SUPERSEDED BY REV 27: 42 rows, each row executed INDEPENDENTLY at least 3 times on Node 22.19.0 and at least 3 times on Node 24.21.0 (CONF-01 ran F1..F21 as one array per run, which does not satisfy this), with the per-row record, browser-identity and sweep requirements of `phase-18-rev27-patch.md` section J** — hermetic loopback fixtures only, a fresh browser process, a unique profile and process group and a fresh empty context per run."
+    },
+    {
+     "old": "- **QA:** fixtures from **table W6-T only**, now **36 rows**; the checker asserts the id set and the 36-row total. Add FC8 and IC5; amend IC3 to the 21-realm array.",
+     "new": "- **QA:** fixtures from **table W6-T only** — **SUPERSEDED BY REV 27: 42 rows; the checker asserts the id set, the 42-row total and the sweep counts derived from the schema constants; add FC9, FC10, FC11, IC6, IC7 and IC8 on top of FC8 and IC5** — amend IC3 to the 21-realm array of fully schema-valid records."
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-rev25-patch.md",
+   "replace": [
+    {
+     "old": "**Totals, single source:** 21 required decision realms (F1..F21), 1 informational realm (F22), 7 mechanism cases (FC1..FC7), 4 control fixtures (IC1..IC4), 1 carried worker-WebSocket case (FW-1) = **34 rows**.",
+     "new": "**Totals — SUPERSEDED BY REV 26 AND CONSOLIDATED BY REV 27 (ARCH-27): this table is NO LONGER the single source. The single source is the full consolidated table reprinted in `phase-18-rev27-patch.md` section C, whose authoritative total is 42 rows (21 F + 1 informational F22 + 11 FC (FC1..FC11) + 8 IC (IC1..IC8) + 1 FW-1). The historical totals read:** 21 required decision realms (F1..F21), 1 informational realm (F22), 7 mechanism cases (FC1..FC7), 4 control fixtures (IC1..IC4), 1 carried worker-WebSocket case (FW-1) = **34 rows**."
+    },
+    {
+     "old": "and `decide(perRealm)` → `{ armed, exit, reason, perRealm }`. Pure, synchronous, no I/O: `decide` is the primary unit test seam.",
+     "new": "and `decide(perRealm)` → `{ armed, exit, reason, perRealm }`. Pure, synchronous, no I/O: `decide` is the primary unit test seam. (**WITHDRAWN BY REV 26 and REPLACED BY REV 27 (ARCH-27): the live signature is `decide(perRealm, requiredIds)` over the closed, versioned per-realm evidence schema of `phase-18-rev27-patch.md` section B; the record fields listed above are superseded by the exact 11-key required set, `nativeCtorValue`/`nativeCtorMatched` are replaced by `nativeCtor`, and absence of a field is always unverified.**)"
+    }
+   ]
+  },
+  {
+   "file": "docs/phase-18-spike-w6-findings.md",
+   "replace": [
+    {
+     "old": "## Decision function (Falcon-equivalent, written in harness.js)",
+     "new": "## Decision function (Falcon-equivalent, written in harness.js)\n\n**NOTE ADDED BY ARCH-27 (rev 27, CONF-01): the harness function recorded below is a FACTUAL RECORD of what SPIKE-W6 executed and its measurements stand. It is NOT the live contract. It stops at the first matching realm and reads realm properties permissively, and CONF-01 showed that even the tightened rev 26 successor armed on 105 of 441 single-field mutations. The live contract is the closed, versioned per-realm evidence schema plus `validateRecord`/`decide(perRealm, requiredIds)` of `docs/architecture/phase-18-rev27-patch.md` section B. No arming claim may rest on the function below.**"
+    }
+   ]
+  },
+  {
+   "file": "docs/phase-18-w6t-conformance-results.md",
+   "replace": [
+    {
+     "old": "- RECOMMENDATION (not applied): a narrow rev 27 for the field-presence rule, a fix to the harness's process discovery, then a full re-run of the 36-row matrix with every row repeated, before any Security ruling on M-26.",
+     "new": "- RECOMMENDATION (not applied): a narrow rev 27 for the field-presence rule, a fix to the harness's process discovery, then a full re-run of the 36-row matrix with every row repeated, before any Security ruling on M-26.\n\n**DISPOSITION ADDED BY ARCH-27 (design only, nothing re-executed).** The recommendation is accepted and widened by the owner: rev 27 (`docs/architecture/phase-18-rev27-patch.md`) replaces permissive property access with a CLOSED, VERSIONED per-realm evidence schema (exactly 11 required own data keys in canonical order, exact types and enumerations, named sentinels `error:'none'`, `descriptor:'absent'`, `nativeCtor:'absent'`, snapshot -> freeze -> validate -> decide), so the five arming mutation classes recorded above (`mechanism` deleted/null/blank, `descriptor` deleted, `error` deleted/null/blank) all refuse with `shared_worker_block_unverified`, exit 18. Items 2 and 3 above are design-resolved and measurement-owed: browser identity no longer depends on `browser.process()` or `ps` discovery but on the rev 27 section J.2 scratch executable wrapper plus CDP corroboration, and `fc2Pass` is given an exact definition with five named per-realm sub-observations (rev 27 openItem `CONF-02`), so it may no longer be reported as an unexplained flag. Item 4's coverage gap stands: the re-run is CONF-02 over the consolidated 42-row table, each row executed independently at least 3 times per Node version. This document stays the record of CONF-01 and is NOT upgraded to a pass; M-25 and M-26 stay OPEN."
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-rev23-patch.md",
+   "replace": [
+    {
+     "old": "closed decide(perRealm, requiredIds) outcome against table W6-T (36 rows), not B.5 evidence.",
+     "new": "closed decide(perRealm, requiredIds) outcome against table W6-T - CORRECTED BY REV 27 (ARCH-27): the live contract is the rev 27 section B.5 closed, VERSIONED per-realm evidence schema, and the authoritative table is the consolidated rev 27 section C table of 42 rows, not 36 - not B.5 evidence."
+    },
+    {
+     "old": "Replaced by the required rows of table W6-T (rev 25 section C as amended by rev 26: 36 rows)",
+     "new": "Replaced by the required rows of table W6-T (**CORRECTED BY REV 27: the single source is the consolidated rev 27 section C table, 42 rows; the rev 25 + rev 26 split and the 34/36 totals are superseded**)"
+    }
+   ]
+  }
+ ]
+}

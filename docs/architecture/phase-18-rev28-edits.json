@@ -1,0 +1,179 @@
+{
+ "schema": "phase-18-rev23-edits/1",
+ "revision": "98db206 on docs/phase-18-architecture",
+ "producedBy": "ARCH-28 rev 28 patch; apply with a script; docs/architecture/phase-18-rev28-patch.md is normative",
+ "notes": [
+  "Same schema as phase-18-rev27-edits.json: ac[] with set/replaceText/appendText {field,text}, openItems/openItemsAdd, counts, exitCodes, docEdits[{file,replace[{old,new}],append,after}].",
+  "Every 'old' anchor in this file was verified by exact string count to occur EXACTLY ONCE in its target file at 98db206 (script-verified). Short SHAs only; no 40-character SHA anywhere; no AI attribution.",
+  "OWNER DECISION applied by rev 28: decide() REJECTS PROXIES using util.types.isProxy. isProxy is captured ONCE at module initialization (const { types } = require('node:util'); const isProxy = types.isProxy) and is never read through an argument, a property of page-controlled state or any mutable input. The proxy check runs BEFORE property enumeration, prototype inspection, descriptor access, snapshotting, cloning and freezing, at EVERY accepted container boundary: perRealm, requiredIds, every realm record, and every own value of a record that is not a primitive. Every proxy case returns armed:false, exit 18, shared_worker_block_unverified and NEVER throws and NEVER arms. isProxy detects Proxy objects, including revoked ones, without triggering any trap.",
+  "PROXY-27 IS SUPERSEDED IN PLACE AND WITHDRAWN AS A RESIDUAL. No PROXY-27 exception is created or accepted. What honestly remains is narrower and stated: (a) the rule is Node-only (util.types has no browser equivalent, so the decision function is Node-side by contract); (b) an intrinsic captured at module initialization cannot protect against an already-compromised Node process that patched node:util before this module loaded; (c) a NON-Proxy host or exotic object with malicious getters is not covered by isProxy and is handled by the own-data-property, key-order, prototype, snapshot-stability and enumeration checks.",
+  "The claim 'pure JavaScript function' is WITHDRAWN EVERYWHERE and replaced by 'deterministic Node-side decision function using a captured standard-library intrinsic'. decide() still performs no I/O, no clock read, no network, no filesystem and no environment read, is synchronous, total and deterministic on Node 22.19.0 and 24.21.0; it is no longer claimed to be implementable in pure ECMAScript.",
+  "The explicit 'disagreement' branch of the rev 27 decide() is DELETED as dead code (it was unreachable: clean absence forces typeofSharedWorker==='undefined' for every realm, and any differing non-clean-absence realm is already refused at precedence step 1). FC6 and IC3-d are redefined as reachable rows exercised through the field-validation path, with the exact expected detail realm-not-affirmatively-validated:<id>. The detail string 'disagreement' is WITHDRAWN from the vocabulary and no code may emit it.",
+  "ACCESSOR-BEFORE-KEY-ORDER is now canonical: inspectRecordShape runs the own-descriptor/accessor check BEFORE the canonical-key-order check, so a getter or setter on a required key refuses with record-accessor-property (not record-key-order). Sweep C3/C4 expected detail is record-accessor-property.",
+  "TEST SEAM (internal module exports only, no public surface, no product-reachable hook): decide(perRealm, requiredIds) is composed of snapshotAndValidate(perRealm, requiredIds) -> {ok:false, result} | {ok:true, snapshot} where snapshot is a frozen array of frozen validated snapshots, and decideFromSnapshot(snapshot) -> verdict. Both are exported for tests so a test can mutate the caller's original objects between validation and decision, including replacing a field with a Proxy or an accessor, and assert the decision is unchanged or a refusal. Product callers use decide() only; no hook, flag, environment variable or configuration key is added (OWNER-25).",
+  "IC5 'extra id' is split into two exact sub-cases: IC5-3a a requiredIds-level extra id (22-entry requiredIds) => required-id-set-malformed, and IC5-3b a perRealm-level extra record (22 records, the 22nd a schema-valid record whose id repeats or is out of the required set) => realm-duplicate:<id> or realm-unknown-or-extra:<id>.",
+  "FC1 and IC4 are now INDEPENDENTLY EXECUTABLE rows with their own procedure, inputs, expected result and recorded evidence (rev 28 sections J.5 and J.6). F13 and F14 require explicit popup creation by the harness (rev 28 section J.7): the CONF-02 'not-created' outcome is recorded as REALM NOT MEASURED, never as a pass.",
+  "Table W6-T is reprinted in full in rev 28 section C and the AUTHORITATIVE ROW COUNT BECOMES 44 ROWS: 21 required decision realms (F1..F21) + 1 informational realm (F22) + 12 decision-function/mechanism cases (FC1..FC12) + 9 control fixtures (IC1..IC9) + 1 carried worker-WebSocket case (FW-1). Added by rev 28: FC12 (proxy rejection at every accepted container boundary, before any enumeration or descriptor access) and IC9 (the seven-case proxy battery: transparent pass-through, trapping, revoked, perRealm-array proxy, requiredIds proxy, nested-value proxy, post-validation substituted proxy). Every live '42 rows' total is superseded by 44.",
+  "Sweep counts are derived from the schema constants: |CANONICAL_REQUIRED_REALM_IDS|=21, |REQUIRED_KEYS|=11, |MUTATIONS|=5, |VALID_NEGATIVES|=6, |STRUCTURAL|=13+7=20. Sweep A 21*11*5=1155, Sweep B 21*6=126, Sweep C 20 => 1301 refusals plus EXACTLY ONE authorised armed:true (the B27 positive control) across 1302 decide() invocations. Zero unexpected armed:true is a gate condition, not a warning.",
+  "Rev 28 weakens nothing: counts stay 98/89/6/3, C6-T stays 27/5 sourced from rev 23 section D.4, M-23 and M-24 stay closed, M-25 stays OPEN, M-26 stays OPEN, O-1 and the PILOT_APPROVAL_RUN_TOKEN text are untouched, OWNER-24 and OWNER-25 stay DECIDED, the supported-browser set stays EMPTY, scope stays Chromium only, no Linux filesystem is admitted, reason codes stay snake_case, no exit code is added and no bypass exists.",
+  "Rev 28 consumes docs/phase-18-conf02-results.md (CONF-02, EXECUTED, PARTIAL), docs/phase-18-conf02a-pure-results.md (the four SPEC-AMBIGUOUS items), docs/phase-18-conf02b-browser-results.md, docs/architecture/phase-18-rev27-patch.md and phase-18-rev27-edits.json. Evidence documents are NOT edited by rev 28; they are referenced.",
+  "Rev 28 executes nothing. CONF-03 (rev 28 section J) is the executed gate that must follow it; CONF-02 stays PARTIAL and must not be sent to Security as a pass.",
+  "The untracked docs/architecture/phase-18-rev24-* drafts are ignored."
+ ],
+ "ac": [
+  {
+   "id": "P18-AC-091",
+   "appendText": [
+    {
+     "field": "requirement",
+     "text": " REV 28 (CONF-02, proxy rejection and the withdrawal of the pure-JavaScript claim): decide() is a DETERMINISTIC NODE-SIDE DECISION FUNCTION USING A CAPTURED STANDARD-LIBRARY INTRINSIC, not a pure JavaScript function. It captures isProxy ONCE at module initialization from node:util (require('node:util').types.isProxy) and never reads it through an argument, a mutable input or any page-controlled state. BEFORE any property enumeration, prototype inspection, descriptor access, snapshot, clone or freeze, decide() REJECTS A PROXY AT EVERY ACCEPTED CONTAINER BOUNDARY: perRealm (detail input-proxy:perRealm), requiredIds (input-proxy:requiredIds), every realm record (record-proxy:index-N) and every non-primitive own value of a record (record-value-proxy:KEY:index-N); a proxy substituted after validation is refused or ignored by the frozen snapshot (snapshot-proxy:index-N). Every proxy case yields armed:false, exit 18, shared_worker_block_unverified, never an uncaught exception and never armed; transparent pass-through, trapping, revoked, array-level, requiredIds-level, nested-value and post-validation proxies are all covered, and isProxy detects a Proxy, including a revoked one, without triggering a trap. The rev 27 PROXY-27 residual is WITHDRAWN and superseded by this rule; no exception exists. What remains, stated honestly: the rule is Node-only, an intrinsic captured at initialization cannot protect against an already-compromised process that patched node:util earlier, and a NON-Proxy exotic object with malicious accessors is covered instead by the own-data-property, prototype, key-order, enumeration and snapshot-stability checks. ORDER OF CHECKS IS NORMATIVE: proxy rejection, then plain-object and prototype, then symbol keys, then own-descriptor/accessor (a getter or setter refuses with record-accessor-property), then canonical key order (record-key-order), then snapshot, then types and enumerations, then freeze, then decide. The unreachable 'disagreement' branch and the detail string disagreement are DELETED; realm disagreement is refused through the field-validation path with detail realm-not-affirmatively-validated:ID. decide() is composed of the internal, test-only exports snapshotAndValidate(perRealm, requiredIds) and decideFromSnapshot(snapshot) so post-validation mutation immunity is directly testable; no public surface, flag, environment variable, configuration key or product-reachable hook is added (OWNER-25)."
+    }
+   ]
+  }
+ ],
+ "openItems": [
+  {
+   "id": "PROXY-27",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " SUPERSEDED AND WITHDRAWN BY REV 28 (ARCH-28, owner decision after CONF-02). NO PROXY-27 EXCEPTION IS CREATED OR ACCEPTED. CONF-02 executed the rev 27 reference decide() and measured the predicted outcome: a pass-through Proxy over an otherwise-valid all-absent base ARMED (armed:true, exit 0), which the owner's rule forbids. Rev 28 replaces the residual with a RULE: decide() captures isProxy once at module initialization from node:util and rejects a Proxy at every accepted container boundary (perRealm, requiredIds, every realm record, every non-primitive own value) BEFORE any enumeration, prototype inspection, descriptor access, snapshot, clone or freeze, so transparent, trapping, revoked, array-level, requiredIds-level, nested-value and post-validation proxies all yield armed:false, exit 18, shared_worker_block_unverified without an uncaught exception. util.types.isProxy identifies a Proxy, including a revoked Proxy, without triggering any trap. The statement 'pure JavaScript cannot distinguish a Proxy...' is withdrawn as a residual because the decision function is no longer claimed to be pure JavaScript: it is a deterministic Node-side decision function using a captured standard-library intrinsic. What honestly remains is narrower and is NOT an arming exception: (a) Node-only dependence - util.types has no browser equivalent, so the decision function is Node-side by contract; (b) an intrinsic captured at module initialization cannot protect against an already-compromised Node process that patched node:util before this module loaded - that is a process-integrity assumption, recorded, not a detection claim; (c) a NON-Proxy host or exotic object with malicious getters is outside isProxy's scope and is covered by the own-data-property, prototype, symbol-key, key-order, enumeration and two-read snapshot-stability checks. Verification is owed to CONF-03 rows FC12 and IC9 (seven proxy cases, each >=3 repetitions per Node version); until CONF-03 executes them this item is CLOSED AS A DESIGN DECISION and OPEN AS A MEASUREMENT OBLIGATION."
+    }
+   ]
+  },
+  {
+   "id": "M-26",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " REV 28: STILL OPEN as a Major. CONF-02 (docs/phase-18-conf02-results.md, PARTIAL) executed the rev 27 decide(): all 1155 malformed single-field mutations, the 126 valid-negative substitutions and the 13 structural cases refused on both Node 22.19.0 and 24.21.0 with zero unexpected armed:true, so the rev 27 schema closed the five CONF-01 arming classes - BUT a pass-through Proxy ARMED, and FC1, IC4 and the F13/F14 popup realms were not executed as independent measured rows. Rev 28 closes the Proxy path by rule (isProxy captured once at module initialization, proxy rejection before any enumeration or descriptor access, at every accepted container boundary) and deletes the unreachable disagreement branch. Closure now needs the CONF-03 executed gate (rev 28 section J): the 44-row table with every row independently >=3 repetitions on Node 22.19.0 and 24.21.0, Sweep A 1155 + Sweep B 126 + Sweep C 20 reporting zero unexpected armed:true with the only armed:true outcome the authorised all-absent positive control, all seven proxy cases refusing, FC1 and IC4 measured as independent rows, F13/F14 created or the exact reason recorded, plus a Security review. Documentation alone must not close M-26."
+    }
+   ]
+  },
+  {
+   "id": "M-25",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " REV 28: unchanged and still OPEN as a Major. CONF-02 was PARTIAL (a Proxy armed; FC1 and IC4 not executed as independent rows; F13 and F14 not created, recorded as error not-created and therefore REALM NOT MEASURED; SystemInfo.getProcessInfo unavailable; worker WebSocket behaviour still unmeasured). Closure still needs the complete executed W6-T conformance measurement (rev 28 section J, now 44 rows) plus a Security review of the executed result."
+    }
+   ]
+  },
+  {
+   "id": "CONF-02",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " EXECUTED, PARTIAL, AND SUPERSEDED BY CONF-03. Result recorded in docs/phase-18-conf02-results.md with the agent drafts docs/phase-18-conf02a-pure-results.md and docs/phase-18-conf02b-browser-results.md (evidence documents, not edited by rev 28). Stop conditions met: a pass-through Proxy armed, and FC1 and IC4 were not executed as independent rows. Also not measured: F13 and F14 (popups not created; error not-created), SystemInfo.getProcessInfo, worker WebSocket behaviour, any non-pinned browser, Linux and the GitHub-hosted runner. Explained and carried forward as measured: fc2Pass true with its named sub-observations, browser identity established through the scratch wrapper with 0 non-loopback requests, and the three sweeps at their schema-derived counts with zero unexpected armed:true apart from the Proxy case. CONF-02 must NOT be sent to Security as a pass and must not be upgraded; the four SPEC-AMBIGUOUS items it raised are resolved by rev 28 sections B.3, B.5, B.6, C and J."
+    }
+   ]
+  },
+  {
+   "id": "W6T-GATE",
+   "set": {
+    "ref": "rev 28 section J (CONF-03); first attempt CONF-01 (docs/phase-18-w6t-conformance-results.md, PARTIAL), second attempt CONF-02 (docs/phase-18-conf02-results.md, PARTIAL)",
+    "state": "NOT SATISFIED. CONF-02 executed the rev 27 contract and returned PARTIAL: a pass-through Proxy armed (armed:true, exit 0), FC1 and IC4 were not executed as independent rows, and F13/F14 were not created so the popup realms were not measured. CONF-03 supersedes it and must execute the rev 28 section J spec: all 44 W6-T rows, each row INDEPENDENTLY at least 3 times on Node 22.19.0 and at least 3 times on Node 24.21.0; per row the id, expected, actual, reason, exit, armed, Node version and browser identity, repetition index and the target/network observation; all seven FC12/IC9 proxy cases (transparent, trapping, revoked, perRealm-array, requiredIds, nested-value, post-validation substitution through the snapshotAndValidate/decideFromSnapshot seam) each refusing with shared_worker_block_unverified exit 18 and never throwing; FC1 as its own run per realm per repetition including a mismatch injection; IC4 with the probe disabled and with the gate removed, where removing the gate MUST fail the test; F13 and F14 created by the harness or the exact reason recorded as REALM NOT MEASURED; the mutation sweeps at 1155 + 126 + 20 with zero unexpected armed:true; the identity wrapper and the FW-1 fail-closed decision 3x per Node; cleanup verified INCLUDING any stale fixture or harness processes left by CONF-01 or CONF-02; zero non-loopback requests in every refusal run. Honest handling of API or network failure is mandatory: preserve the evidence collected, list the affected rows as NOT MEASURED, and never replace a missing measurement with an inferred, reused or defaulted value. A refusal is a PASS when it is the expected outcome; if any row is unmeasured the gate reports PARTIAL and arming stays refused."
+   }
+  }
+ ],
+ "openItemsAdd": [
+  {
+   "id": "CONF-03",
+   "ref": "rev 28 section J; supersedes the CONF-02 attempt",
+   "state": "NOT EXECUTED. The executed W6-T conformance gate required before the next Security review and before any ruling on M-25 or M-26. Scope and recording requirements are the W6T-GATE item and rev 28 section J. It must additionally: execute every proxy case of FC12 and IC9 against the rev 28 reference decide() and assert armed:false, exit 18, shared_worker_block_unverified with no uncaught exception; execute FC1 and IC4 as independent rows; create the F13 and F14 popup realms or record the exact reason they could not be created; exercise post-validation mutation (including substituting a field with a Proxy or an accessor) through the internal snapshotAndValidate/decideFromSnapshot seam and assert the decision is unchanged or a refusal; re-derive the sweep counts from the schema constants (1155 / 126 / 20) before comparing them with the document; and verify cleanup of any stale processes left by earlier CONF runs. CONF-03 must not reuse a CONF-02 measurement for any row it re-specifies."
+  },
+  {
+   "id": "SEAM-28",
+   "ref": "rev 28 sections B.5, B.8 and H",
+   "state": "DECIDED, NOT A RESIDUAL. decide(perRealm, requiredIds) is composed of two internal functions that are exported FOR TESTS ONLY: snapshotAndValidate(perRealm, requiredIds) returning {ok:false, result} or {ok:true, snapshot} where snapshot is a frozen array of frozen validated record snapshots, and decideFromSnapshot(snapshot) returning the verdict. Exactly these two plus inspectRecordShape, snapshotRecord and validateRecord are module-internal exports; NOTHING ELSE reaches product callers, which call decide() only. No injected hook, callback, flag, environment variable or configuration key exists in product code, so the seam cannot be used to influence a production decision; its only purpose is to let a test mutate the caller's original objects between validation and decision. The public surface is unchanged (OWNER-25)."
+  }
+ ],
+ "counts": {
+  "set": {
+   "rev28Note": "Rev 28 changes NO criterion count: total 98, must 89, should 6, could 3; deferredToPhase18P 11, deferredUnderOptionC 5, deferredIds and mixedPhase18PIds unchanged. No criterion is added, removed or re-phased; M-23 and M-24 stay closed; M-25 and M-26 stay OPEN; C6-T stays 27 inversion fixtures (X1..X27) and 5 positive controls (P1..P5) sourced from rev 23 section D.4 and stays disjoint from W6-T. The single inventory change is inside table W6-T, reprinted in full in rev 28 section C, whose AUTHORITATIVE ROW COUNT BECOMES 44 ROWS: 21 required decision realms (F1..F21), 1 informational realm (F22), 12 decision-function/mechanism cases (FC1..FC12), 9 control fixtures (IC1..IC9) and 1 carried worker-WebSocket case (FW-1). Added by rev 28: FC12 (proxy rejection at every accepted container boundary, performed before any property enumeration, prototype inspection, descriptor access, snapshot, clone or freeze, using isProxy captured once at module initialization from node:util) and IC9 (proxy battery, 7 named cases: transparent pass-through, trapping, revoked, perRealm-array proxy, requiredIds proxy, nested non-primitive value proxy, post-validation substituted proxy). Redefined, not added: FC6 and IC3-d (the unreachable disagreement branch is deleted; the rows are exercised through the field-validation path with detail realm-not-affirmatively-validated:ID), FC10 (post-validation mutation now exercised through the internal snapshotAndValidate/decideFromSnapshot test seam), FC1 and IC4 (now independently executable rows with their own procedure and recorded evidence), IC5-3 (split into IC5-3a requiredIds-level extra id and IC5-3b perRealm-level extra record). Sweep counts derived from the schema constants: 21 canonical realm ids, 11 required keys, 5 mutations per key, 6 valid-negative substitutions, 20 structural cases (the 13 of rev 27 plus 7 proxy cases) => Sweep A 21*11*5=1155, Sweep B 21*6=126, Sweep C 20, total 1301 refusals plus exactly 1 authorised armed:true across 1302 decide() invocations. Every live '42 rows' total and the '13 structural cases' count are superseded by this note (44 rows, 20 structural cases); the rev 25 '34 rows', rev 26 '36 rows' and rev 27 '42 rows' totals are history."
+  }
+ },
+ "exitCodes": {
+  "set": {
+   "rev28Note": "Rev 28 adds no exit code, removes none and changes no precedence: the rev 6 order stands, 2 > 3 > 18 > 17 > 16 > 15 > 13 > 12 > 11 > 14 > 10 > 1 > 0. Reason codes stay snake_case. shared_worker_present and shared_worker_block_unverified remain the only SharedWorker reasons, both double-labelled PILOT_INTERNAL_ERROR with exit 18; shared_worker_blocked stays WITHDRAWN and no code may emit it; POLICY_SHARED_WORKER_BLOCKED must not appear anywhere. Rev 28 only widens what selects shared_worker_block_unverified, by adding proxy rejection at every accepted container boundary. New detail strings, closed and never page-supplied: input-proxy:perRealm, input-proxy:requiredIds, record-proxy:index-N, record-value-proxy:KEY:index-N, snapshot-proxy:index-N. The rev 27 detail string 'disagreement' is WITHDRAWN together with its unreachable branch and no code may emit it; realm disagreement is reported as realm-not-affirmatively-validated:ID. The rev 27 detail strings otherwise stay unchanged, with one canonical ORDERING correction: the own-descriptor/accessor check now runs BEFORE the canonical-key-order check, so a getter or setter on a required key refuses with record-accessor-property and record-key-order is reserved for a genuinely reordered key set. A detail string never changes the exit code or the arming outcome. Neither reason has an override flag, environment variable, warning mode or degraded mode (OWNER-25), and no page-supplied value may influence either."
+  }
+ },
+ "docEdits": [
+  {
+   "file": "docs/architecture/phase-18-rev27-patch.md",
+   "replace": [
+    {
+     "old": "**Status carried forward.** Counts stay **98 total / 89 Must / 6 Should / 3 Could**.",
+     "new": "**Status carried forward.** Counts stay **98 total / 89 Must / 6 Should / 3 Could**.\n\n**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): this whole document is amended in place by `docs/architecture/phase-18-rev28-patch.md`. Every \"42 rows\" total in this document is superseded by **44 rows** (FC12 and IC9 added); the \"pure JavaScript function\" / \"pure function\" characterisation of `decide()` is WITHDRAWN and replaced by \"deterministic Node-side decision function using a captured standard-library intrinsic\"; the `PROXY-27` residual of section B.7 is WITHDRAWN and replaced by a proxy-rejection RULE using `util.types.isProxy` captured once at module initialization; the unreachable `disagreement` branch and its detail string are DELETED. Counts, C6-T 27/5, M-23/M-24 closed, M-25/M-26 open, O-1, OWNER-24, OWNER-25, the EMPTY supported-browser set and the exit-code registry are unchanged**"
+    },
+    {
+     "old": "### B.5 Reference text (pure functions, no I/O)",
+     "new": "### B.5 Reference text (pure functions, no I/O)\n\n**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): the heading's \"pure functions\" claim is WITHDRAWN and the code block below is superseded by rev 28 section B.5. `decide()` is a deterministic Node-side decision function that captures `isProxy` ONCE at module initialization from `node:util` and rejects a Proxy at every accepted container boundary BEFORE any property enumeration, prototype inspection, descriptor access, snapshot, clone or freeze. CONF-02 executed the text below and measured a pass-through Proxy ARMING, which the owner's rule forbids. Also changed by rev 28: the own-descriptor/accessor check now runs BEFORE the canonical-key-order check, and the unreachable `disagreement` branch is deleted. The text below stays as history**"
+    },
+    {
+     "old": "### B.7 Stated residual: Proxy",
+     "new": "### B.7 Stated residual: Proxy\n\n**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): SECTION B.7 IS WITHDRAWN IN PLACE. `PROXY-27` is not a residual any more and NO PROXY EXCEPTION EXISTS: rev 28 section B.7 replaces it with a rule - `isProxy` captured once at module initialization from `node:util`, applied to `perRealm`, `requiredIds`, every realm record and every non-primitive own value, before any trap-triggering operation, so transparent, trapping, revoked, array-level, `requiredIds`-level, nested-value and post-validation proxies all return `shared_worker_block_unverified`, exit 18, `armed:false`, with no uncaught exception. `isProxy` identifies a Proxy, including a revoked one, without triggering a trap. What honestly remains is narrower: the rule is Node-only, an intrinsic captured at initialization cannot protect against an already-compromised process that patched `node:util` earlier, and a NON-Proxy exotic object with malicious getters is covered instead by the own-data-property, prototype, symbol-key, key-order, enumeration and two-read stability checks**"
+    },
+    {
+     "old": "**Authoritative row count after rev 27: 42 rows.**",
+     "new": "**Authoritative row count after rev 27: 42 rows.**\n\n**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): the authoritative row count is **44 rows** and the single source is the full reprint in rev 28 section C; FC12 (proxy rejection) and IC9 (the 7-case proxy battery) are added**"
+    },
+    {
+     "old": "**Authoritative total: 21 (F1..F21) + 1 (F22) + 11 (FC1..FC11) + 8 (IC1..IC8) + 1 (FW-1) = 42 rows.**",
+     "new": "**Authoritative total: 21 (F1..F21) + 1 (F22) + 11 (FC1..FC11) + 8 (IC1..IC8) + 1 (FW-1) = 42 rows.**\n\n**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): the authoritative total is 21 (F1..F21) + 1 (F22) + **12** (FC1..FC12) + **9** (IC1..IC9) + 1 (FW-1) = **44 rows**, reprinted in full in rev 28 section C**"
+    },
+    {
+     "old": "Sweep C (13 named cases, each applied to `B27`):",
+     "new": "Sweep C (13 named cases, each applied to `B27`) **- SUPERSEDED BY REV 28: 20 named cases (the 13 below plus 7 proxy cases C14..C20), so the schema-derived totals become Sweep A 1155 + Sweep B 126 + Sweep C 20 = 1301 refusals plus exactly 1 authorised `armed:true` across 1302 `decide()` invocations; the C3/C4 expected detail is `record-accessor-property`, not `record-key-order`, because the accessor check now runs first**:"
+    },
+    {
+     "old": "## Section J — executed W6-T conformance gate (CONF-02), required before Security",
+     "new": "## Section J — executed W6-T conformance gate (CONF-02), required before Security\n\n**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): CONF-02 has EXECUTED and returned PARTIAL (`docs/phase-18-conf02-results.md`): a pass-through Proxy armed, FC1 and IC4 were not executed as independent rows, and F13/F14 were not created. The live gate is **CONF-03**, rev 28 section J, over 44 rows**"
+    },
+    {
+     "old": "*Consequences:* the probe must emit schema-conforming records and may never default a missing measurement; a probe schema bump cannot silently arm; `armed:true` exists only for the synthetic authorised positive control; Proxy indistinguishability is a stated residual (`PROXY-27`); table W6-T is consolidated at 42 rows.",
+     "new": "*Consequences:* the probe must emit schema-conforming records and may never default a missing measurement; a probe schema bump cannot silently arm; `armed:true` exists only for the synthetic authorised positive control; Proxy indistinguishability is a stated residual (`PROXY-27`); table W6-T is consolidated at 42 rows.\n\n**SUPERSEDED BY REV 28 (ARCH-28, CONF-02): ADR-0051 is AMENDED by ADR-0052 (rev 28 section I): the Proxy residual is withdrawn and replaced by the `isProxy` rejection rule, `decide()` is a deterministic Node-side function rather than a pure JavaScript one, and table W6-T is 44 rows**"
+    },
+    {
+     "old": "the **B.7 Proxy residual (`PROXY-27`)**,",
+     "new": "the **B.7 proxy-rejection RULE of rev 28** (`PROXY-27` withdrawn; review the `isProxy` capture-at-initialization rule, the boundary coverage and the honestly stated Node-only and process-integrity assumptions),"
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-rev23-patch.md",
+   "replace": [
+    {
+     "old": "section C table of 42 rows, not 36",
+     "new": "section C table of 42 rows, not 36 - CORRECTED AGAIN BY REV 28 (ARCH-28): the authoritative table is the consolidated rev 28 section C table of 44 rows, and the live contract adds proxy rejection via an `isProxy` intrinsic captured at module initialization"
+    },
+    {
+     "old": "the single source is the consolidated rev 27 section C table, 42 rows; the rev 25 + rev 26 split and the 34/36 totals are superseded",
+     "new": "the single source is the consolidated rev 28 section C table, 44 rows; the rev 25 + rev 26 split and the 34/36/42 totals are superseded"
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-rev25-patch.md",
+   "replace": [
+    {
+     "old": "whose authoritative total is 42 rows (21 F + 1 informational F22 + 11 FC (FC1..FC11) + 8 IC (IC1..IC8) + 1 FW-1)",
+     "new": "whose authoritative total is - CORRECTED BY REV 28 (ARCH-28) - 44 rows in `phase-18-rev28-patch.md` section C (21 F + 1 informational F22 + 12 FC (FC1..FC12) + 9 IC (IC1..IC9) + 1 FW-1); the rev 27 total of 42 rows (21 F + 1 F22 + 11 FC + 8 IC + 1 FW-1) is history"
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-rev26-patch.md",
+   "replace": [
+    {
+     "old": "**SUPERSEDED BY REV 27: 42 rows, each row executed INDEPENDENTLY",
+     "new": "**SUPERSEDED BY REV 27 AND AGAIN BY REV 28 (ARCH-28: 44 rows, gate CONF-03, `phase-18-rev28-patch.md` section J): 42 rows, each row executed INDEPENDENTLY"
+    },
+    {
+     "old": "**SUPERSEDED BY REV 27: 42 rows; the checker asserts the id set, the 42-row total and the sweep counts derived from the schema constants; add FC9, FC10, FC11, IC6, IC7 and IC8 on top of FC8 and IC5**",
+     "new": "**SUPERSEDED BY REV 27 AND AGAIN BY REV 28: 44 rows; the checker asserts the id set, the 44-row total and the sweep counts derived from the schema constants (1155 / 126 / 20); add FC12 and IC9 on top of FC9, FC10, FC11, IC6, IC7, IC8, FC8 and IC5**"
+    }
+   ]
+  }
+ ]
+}

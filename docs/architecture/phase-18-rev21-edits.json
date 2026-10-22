@@ -1,0 +1,267 @@
+{
+ "schema": "phase-18-rev21-edits/1",
+ "revision": "3763891 on docs/phase-18-architecture",
+ "producedBy": "ARCH-21 rev 21 patch; apply with a script; docs/architecture/phase-18-rev21-patch.md is normative",
+ "notes": [
+  "Same schema as phase-18-rev20-edits.json: ac[] with set/replaceText/appendText {field,text}, openItems/openItemsAdd, counts, exitCodes, docEdits[{file,replace[{old,new}],append,after}], coverage.",
+  "Every 'old' anchor in this file was verified by grep -c -F to occur exactly once in its target field or file at 3763891.",
+  "No 40-character SHA appears anywhere; short SHAs only. No production source file, package.json script or workflow step is edited by rev 21.",
+  "SEC-20 is accepted for the design gate and its label stays PARTIAL. No unexecuted check becomes evidence. Counts unchanged; M-23 is not reopened."
+ ],
+ "ac": [
+  {
+   "id": "P18-AC-084",
+   "replaceText": [
+    {
+     "field": "prohibitedLiteralsNote",
+     "old": "with exactly one carve-out defined in prohibitedLiteralsCarveOut.",
+     "new": "with exactly one carve-out, defined in prohibitedLiteralsCarveOut and widened by rev 21 section B to two occurrences in one file (the frozen rejected-key array plus one refusal site per refusal stage)."
+    }
+   ],
+   "set": {
+    "prohibitedLiteralsCarveOut": {
+     "literal": "PILOT_APPROVAL_RUN_TOKEN",
+     "file": "src/core/pilot/PilotLifecycle.js",
+     "occurrences": 2,
+     "pattern": "one frozen array literal of rejected environment-variable names, REJECTED_ENV_KEYS, whose only member is the string PILOT_APPROVAL_RUN_TOKEN, plus exactly one refusal site per refusal stage (stage 1 before the .env load, stage 2 after it), both reading that same frozen array",
+     "rule": "The walker permits exactly these two occurrences, in exactly this file, inside exactly this pattern, and fails on a third occurrence anywhere, on an occurrence in any other file, on an occurrence outside that pattern, and on any read of the variable's value. Presence is an own-property test on the environment object, never a truthiness or value test, so a set-but-empty value refuses identically. The value is never printed, logged, hashed, digested, length-measured, compared, persisted, receipted, reported, written to any dashboard payload or artefact, or forwarded; only the key name may appear.",
+     "refusal": "PILOT_CONFIG_REJECTED_ENV_KEY, exit 2, in EVERY falcon.js invocation (pilot and non-pilot), raised from stage 1 if the key is inherited from the process environment and from stage 2 if the .env load introduced it, before any browser or context launch, any dashboard start, any pilot manifest read, any run artefact creation or modification, and any target or provider contact; the stage-2 .env read through the existing configuration path is the only accepted application filesystem access before refusal (rev 21 section B)",
+     "scopeNote": "Rev 21 section B replaces the rev 20 B1..B7 scope. This intentionally converts a previously ignored environment variable into an explicit configuration error in every invocation; the reason code stays PILOT_CONFIG_REJECTED_ENV_KEY for both stages.",
+     "inversionTests": [
+      "neg-token-refusal-stage1-inherited: the key inherited in the process environment is rejected with exit 2 and reason PILOT_CONFIG_REJECTED_ENV_KEY before the .env load",
+      "neg-token-refusal-stage2-dotenv: the key absent from the inherited environment but present in .env is rejected identically immediately after the configuration load",
+      "neg-token-refusal-empty: the key set to the empty string is rejected identically in both stages",
+      "neg-token-refusal-nonpilot-run: a plain non-pilot run (node falcon.js --no-dashboard) with the key present is rejected with exit 2, proving the refusal is not scoped to pilot mode",
+      "neg-token-refusal-order: the refusal is asserted on the ordered event log to precede browser launch, dashboard start, any pilot manifest read, any run/ write and any target request",
+      "neg-token-refusal-silence: the value string appears in no log line, report, receipt, dashboard payload or artefact",
+      "neg-token-refusal-no-measure: no hash, digest, length or comparison of the value exists anywhere in the refusal path",
+      "neg-token-refusal-carveout: a third occurrence of the literal, in this or any other file, or either occurrence moved outside the permitted pattern, fails AC-084"
+     ]
+    }
+   }
+  },
+  {
+   "id": "P18-AC-098",
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "(rev 19 sections C1 to C5)",
+     "new": "(rev 21 section C, which supersedes rev 19 and rev 20 section C for this control; no execution of the checker over any tree is claimed by any design revision)"
+    },
+    {
+     "field": "requirement",
+     "old": "the nineteen inversion fixtures and the three positive controls are enumerated in rev 20 section C6",
+     "new": "the inversion fixtures and positive controls are enumerated in the fixture table C6-T of rev 21 section C, which is the single source of truth for their ids and their count; no prose restates the count, and the checker asserts its own fixture inventory against that table (ids and count) wherever the table is machine-readable"
+    },
+    {
+     "field": "components",
+     "old": "is specified by rev 19 section C, which supersedes 11a.4/11d.5 for this control",
+     "new": "is specified by rev 21 section C, including the C3.4b child_process capability-escape model, which supersedes rev 19 and rev 20 section C and supersedes 11a.4/11d.5 for this control"
+    }
+   ],
+   "set": {
+    "reachabilityGateNote": "rev 21 (SEC-20): the dependency-reachability check specified in rev 21 section C is a MANDATORY IMPLEMENTATION GATE for 18D and 18F. SEC-20 is APPROVE WITH CONDITIONS with zero blockers and zero majors on DESIGN TEXT ONLY and its task label is PARTIAL. The checker does not exist and has not been run; no current-tree pass is claimed. These checks remain unexecuted and stay mandatory 18D/18F implementation and release gates: committed-vs-derived classification; every inversion fixture and positive control; dynamic-executable validation; variable-argument validation; child_process escape tracking (C3.4b, new in rev 21); clause-aware lint; the claims recount; receiver-type sink analysis for falcon.js and scripts/; and the Node 24 CI run. A later implementation PR cannot be granted GO on the strength of SEC-20 alone. Firefox and WebKit remain documented UNVERIFIED and are not Phase 18 blockers (Chromium-only pilot scope). The committed normative definition of the algorithm is rev 21 section C and its pseudo-spec.",
+    "fixtureInventorySource": "Fixture ids and counts for this control come from table C6-T in rev 21 section C and from nowhere else. Any prose count elsewhere is non-normative and must be corrected to a pointer; the checker asserts the count from that source where the table is machine-readable, and fails closed if its own inventory and the table disagree."
+   }
+  },
+  {
+   "id": "P18-AC-090",
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "nineteen inversion fixtures with three positive controls of rev 20 section C, which supersedes rev 18 and rev 19 section C",
+     "new": "child_process capability-escape rule (C3.4b: a child_process member identified by binding is tracked through parameters, default parameter values, assignments, object properties and returns; it is validated only where it is actually invoked, and any escape - returned, exported, stored on an escaping object, passed to a non-local function - or any never-invoked or unanalysable capability fails closed) and the fixture inventory of table C6-T of rev 21 section C, which supersedes rev 18, rev 19 and rev 20 section C"
+    },
+    {
+     "field": "components",
+     "old": "its nineteen inversion fixtures with three positive controls",
+     "new": "its fixture inventory as enumerated in table C6-T of rev 21 section C (the single source of truth for fixture ids and counts), including the forwarding-escape, returned-capability, object-property, alias-assignment, never-invoked default-parameter and unanalysable-edge inversion fixtures and the positive control built on the real two-hop GitInfo shape"
+    }
+   ]
+  }
+ ],
+ "openItems": [
+  {
+   "id": "TOKEN-REFUSAL",
+   "set": {
+    "ref": "rev 21 section B; AC-084 prohibitedLiteralsCarveOut; exitCodes.planInvalidNote",
+    "status": "OPEN - 18C/18E implementation obligation under the owner's rejection decision, widened by rev 21 to every invocation",
+    "state": "Owner decision recorded by rev 21 (SEC-20 O-1), replacing the rev 20 B1..B7 scope: if PILOT_APPROVAL_RUN_TOKEN is PRESENT, EVERY falcon.js invocation fails - pilot and non-pilot, execute and replay, dashboard and --no-dashboard, shard child and merge - with exit 2 and the stable configuration reason code PILOT_CONFIG_REJECTED_ENV_KEY. The check has two stages: (1) before the .env load, inspect the inherited process environment and refuse immediately if the key is present; (2) load .env through the existing configuration path (dotenv at falcon.js:50, unchanged); (3) inspect again and refuse immediately if .env introduced it. One reason code covers both stages, with exactly one refusal site per stage (AC-084 carve-out: two permitted occurrences in src/core/pilot/PilotLifecycle.js). The message states that protected-action approval is not supported in Phase 18. The value is never printed, logged, hashed, measured for length, compared, persisted, receipted, reported or forwarded; no browser or dashboard start; no pilot manifest read; no run artefact created or modified; no target or provider contact; the stage-2 .env read is the only accepted application filesystem access before refusal. Presence semantics are own-property presence, so a set-but-empty value refuses identically. This INTENTIONALLY converts a previously ignored environment variable into an explicit configuration error and is a deliberate behaviour change versus rev 20 and versus 2572e73. docs/pilot/limitations.md must state the rejection (rejected, not ignored; every invocation; exit 2) by the DOC gate. Exit 2 is shared with planInvalid and shard-merge rejection and is distinguished only by the mandatory reason code (exitCodes.planInvalidNote). Tests: neg-token-refusal-stage1-inherited, -stage2-dotenv, -empty, -nonpilot-run, -order, -silence, -no-measure, -carveout."
+   }
+  },
+  {
+   "id": "18P-PROTECTED-NONGET",
+   "replaceText": [
+    {
+     "field": "state",
+     "old": "preserved verbatim at git revision 909d794 under P18-AC-090",
+     "new": "copied verbatim into docs/pilot-deferred/phase-18p-protected-nonget.md, section 2, under P18-AC-090, which is the authority for that text; no tag and no commit identifier is depended on (rev 21 section F, closing the SEC-20 m-68 residual)"
+    }
+   ]
+  },
+  {
+   "id": "OWNER-13-Q1",
+   "appendText": {
+    "field": "state",
+    "text": " RESOLVED (rev 21, m-75): this item's state text is now marked resolved, not merely its status. The recorded decision is final: m-51 and AC-092 are DEFERRED with 18P-PROTECTED-NONGET; m-51 is not an 18D merge condition; AC-092 keeps phase deferred-18P with mergeCondition false; the substance of m-51 is held verbatim in docs/pilot-deferred/phase-18p-protected-nonget.md. The item is closed and is not reopened."
+   }
+  },
+  {
+   "id": "OWNER-14-Q1",
+   "replaceText": [
+    {
+     "field": "state",
+     "old": "Owner confirmation requested (OWNER-14-Q1): the dependency-reachability check treats",
+     "new": "RESOLVED (OWNER-14-Q1; decided by the owner, state text marked resolved by rev 21, m-75; the original request wording is retained below for traceability): the dependency-reachability check treats"
+    },
+    {
+     "field": "state",
+     "old": "If the owner rules that it is, the check as specified in rev 19 section C cannot be implemented and M-23 reopens.",
+     "new": "If the owner rules that it is, the check as specified in rev 21 section C cannot be implemented and M-23 reopens."
+    }
+   ],
+   "appendText": {
+    "field": "state",
+    "text": " Amended by rev 21 (SEC-20 m-73): validation condition 2 is replaced by the C3.4b capability-escape model. A child_process function identified by binding is a capability value tracked within its module through parameters, default parameter values, assignments and destructuring, object properties, array elements and returns; it is validated only where it is ACTUALLY INVOKED (receiving a capability is not invoking it), and it must then have a literal listed executable and argv resolving to literal arrays at every such call site. The checker fails closed when the capability is returned, exported, stored on an escaping object, passed to a non-local function, never invoked, or reached by any unknown or unanalysable path. The real GitInfo flow in src/core/history/GitInfo.js must be resolved across BOTH hops: the default value of the destructured parameter at :34, forwarded to the local runGit at :39 and :44, invoked at :21. Fixtures and controls, including the forwarding-escape fixture and the real two-hop positive control, are enumerated in table C6-T of rev 21 section C. Nothing is risk-accepted by this item and no execution is claimed."
+   }
+  },
+  {
+   "id": "OWNER-14-Q2",
+   "set": {
+    "status": "RESOLVED (owner): fixture server stays in place; healing:benchmark stays production tooling; the tag option is withdrawn under the no-tag decision"
+   },
+   "replaceText": [
+    {
+     "field": "state",
+     "old": "Owner confirmation requested (OWNER-14-Q2), three choices rev 19 takes as the lowest-risk defaults",
+     "new": "RESOLVED (OWNER-14-Q2; decided by the owner, state text marked resolved by rev 21, m-75; the original request wording is retained below for traceability), three choices rev 19 took as the lowest-risk defaults"
+    },
+    {
+     "field": "state",
+     "old": "(3) the annotated tag phase-18-design-rev17-text-909d794 on commit 909d794, which preserves the deferred rev 17 criterion text, is proposed but NOT created and NOT pushed by ARCH-19: pushing it is a coordinator action requiring recorded owner authorisation (SEC-18 m-68).",
+     "new": "(3) a tag-and-commit option for preserving the deferred rev 17 criterion text was proposed by rev 19 and is WITHDRAWN: no tag name and no commit identifier is created, pushed, cited or depended on, and no requirement may depend on a tag or a historical commit remaining reachable (SEC-18 m-68, closed by rev 21 section F); the deferred text lives in docs/pilot-deferred/phase-18p-protected-nonget.md, which is its sole authority."
+    }
+   ]
+  }
+ ],
+ "openItemsAdd": [
+  {
+   "id": "EXIT-PRECEDENCE",
+   "ref": "rev 21 section D; rev 6 patch line 54; rev 17 11f.3; exitCodes.policyNote",
+   "status": "OPEN - 18F implementation obligation; NOT a residual and NOT risk-accepted",
+   "state": "SEC-20 m-74: the rev 20 wording that ranked exit 13 'immediately below 18 and above 17 and 1' is a weakening and is WITHDRAWN. The established rev 6 order stands unchanged: 2 > 3 > 18 > 17 > 16 > 15 > 13 > 12 > 11 > 14 > 10 > 1 > 0. Exit 17 outranks 16, 15 and 13. Exit 13 (POLICY_PLAN_IDENTITY_DRIFT and the pre-existing policy refusals) can mask nothing above it and MUST NEVER mask a pilot-store integrity violation. Residual 21 keeps its existing meaning (exit 18 masking 17 and 1), carried and not accepted; nothing new is accepted here. Obligation: the table-driven unit test neg-merge-exit-precedence-matrix asserts, for every ordered pair of {2,3,18,17,16,15,13,12,11,14,10,1,0}, that the merged shard exit is the higher-ranked code, explicitly covering (13,18), (13,17), (13,16) and (13,15); it extends rev 6's neg-merge-exit-precedence rather than replacing it. Owner PR: 18F. Acceptance ids: AC-098 inversion and the AC-089 traceability row. Not executed; this is a gate, not evidence."
+  },
+  {
+   "id": "M73-CAPABILITY-ESCAPE",
+   "ref": "rev 21 section C (C3.4b, C3.4b.1, C3.4b.2, table C6-T); OWNER-14-Q1",
+   "status": "OPEN - mandatory 18D/18F implementation gate before the checker is built",
+   "state": "SEC-20 m-73: child_process members are modelled as an ESCAPED CAPABILITY, not by name. Tracking covers parameters, default parameter values, assignments and destructuring, object properties, array elements and returns; validation applies only where the capability is actually invoked, and the checker distinguishes a method received from a method invoked. Escapes (returned, exported, stored on an escaping object, passed to a non-local function), never-invoked capabilities and any unknown or unanalysable path FAIL CLOSED. The real two-hop GitInfo flow (src/core/history/GitInfo.js: default parameter value at :34, forwarded to the local runGit at :39 and :44, invoked at :21 with literal executable 'git' and literal argv arrays) must pass as the positive control P3, while the forwarding-escape fixture X11 and the returns, object-property, alias-assignment, never-invoked-default-parameter and unanalysable-edge fixtures X12 to X16 must fail. Fixture ids and counts live in table C6-T. Not executed."
+  }
+ ],
+ "counts": {
+  "set": {
+   "rev21Note": "Rev 21 changes no count: total 98, must 89, should 6, could 3, deferredToPhase18P 11, deferredUnderOptionC 5, deferredIds and mixedPhase18PIds unchanged. O-1, m-73, m-74, m-75 and the m-68 residual are corrections and scope statements inside existing criteria; no criterion is added, removed or re-phased, and M-23 is not reopened."
+  }
+ },
+ "exitCodes": {
+  "set": {
+   "policyNote": "13 is the policy refusal code. Phase 18 has two uses: POLICY_PLAN_IDENTITY_DRIFT (a healed or re-resolved element that stays permitted but whose identity differs from the recorded plan row, zero requests) and the pre-existing policy refusals. Merge rank (rev 21 section D, correcting the rev 20 wording that SEC-20 m-74 identified as a weakening): the established rev 6 order is unchanged - 2 > 3 > 18 > 17 > 16 > 15 > 13 > 12 > 11 > 14 > 10 > 1 > 0. Exit 17 outranks 16, 15 and 13. Exit 13 is therefore ranked BELOW 18, 17, 16 and 15: it cannot be masked by an ordinary failure (exit 1) and it can mask none of 18, 17, 16 or 15; in particular exit 13 must never mask a pilot-store integrity violation. This is a correction, not a residual, and nothing is newly accepted. Residual 21 keeps its existing scope (exit 18 masking exits 17 and 1), stated and still not accepted. Verified by the table-driven test neg-merge-exit-precedence-matrix (18F), which covers every ordered pair of the relevant codes.",
+   "planInvalidNote": "2 covers four disjoint classes, distinguished only by a mandatory reason code: PLAN_INVALID/PLAN_NO_DIGEST at PlanFile.load, shard-merge input rejection, and PILOT_CONFIG_REJECTED_ENV_KEY raised from either of the two refusal stages of rev 21 section B (stage 1 on the inherited process environment before the .env load, stage 2 immediately after that load). Under rev 21 (SEC-20 O-1) the PILOT_APPROVAL_RUN_TOKEN refusal applies to EVERY falcon.js invocation, pilot and non-pilot, not only in pilot mode: presence of the key, including a set-but-empty value, is an explicit configuration error, which intentionally replaces the previous silent-ignore behaviour. One stable code serves both stages. The reason code is mandatory precisely because the numeric code is shared."
+  }
+ },
+ "docEdits": [
+  {
+   "file": "docs/phase-18-plan.md",
+   "replace": [
+    {
+     "old": "rev 3..rev 20 patches",
+     "new": "rev 3..rev 21 patches"
+    },
+    {
+     "old": "and awaits SEC-20 on the rev 20 delta.",
+     "new": "and was reviewed by SEC-20, which reported APPROVE WITH CONDITIONS with zero blockers, zero majors and three new minors (m-73, m-74, m-75) plus a residual piece of m-68, with its task label PARTIAL because the reachability checker was never built or executed; rev 21 closes O-1, m-73, m-74, m-75 and the m-68 residual in the design and awaits SEC-21 on the rev 21 delta."
+    },
+    {
+     "old": "Implementation remains blocked pending SEC-19, the OWNER-13-Q1 (m-51) confirmation, OWNER-14-Q1 and OWNER-14-Q2, SPIKE-W",
+     "new": "Implementation remains blocked pending SEC-21 on the rev 21 delta (OWNER-13-Q1, OWNER-14-Q1 and OWNER-14-Q2 are DECIDED and closed), SPIKE-W"
+    },
+    {
+     "old": "plus the rev 19 section C dependency-reachability check",
+     "new": "plus the rev 21 section C dependency-reachability check (superseding rev 18, rev 19 and rev 20 section C), whose fixture ids and counts come from table C6-T of that section"
+    },
+    {
+     "old": "`PILOT_APPROVAL_RUN_TOKEN` is not read for its value but is **rejected on presence** in pilot mode with reason `PILOT_CONFIG_REJECTED_ENV_KEY` and exit 2 before any browser, filesystem or target access (OWNER decision recorded in rev 20 section B, closing SEC-19 m-72; this replaces the earlier silent-ignore wording).",
+     "new": "`PILOT_APPROVAL_RUN_TOKEN` is never read for its value but is **rejected on presence in every `falcon.js` invocation, pilot and non-pilot**, with reason `PILOT_CONFIG_REJECTED_ENV_KEY` and **exit 2**, by a two-stage check: stage 1 inspects the inherited process environment before the `.env` load and refuses immediately; the `.env` load then runs through the existing configuration path; stage 2 inspects again and refuses immediately if `.env` introduced the key. Presence includes a set-but-empty value. The refusal precedes any browser or dashboard start, any pilot manifest read, any run artefact write and any target or provider contact, and the value is never printed, logged, hashed, length-measured, persisted or forwarded (OWNER decision O-1 recorded in rev 21 section B, replacing the narrower rev 20 section B scope and the earlier silent-ignore wording; this intentionally turns a previously ignored variable into an explicit configuration error)."
+    }
+   ]
+  },
+  {
+   "file": "docs/security/phase-18-threat-model.md",
+   "replace": [
+    {
+     "old": "its deterministic classification rule, its closed externalExecutables leaf list and its fourteen inversion fixtures with one positive control",
+     "new": "its deterministic classification rule, its closed externalExecutables leaf list, its C3.4b child_process capability-escape rule and the fixture inventory of table C6-T in rev 21 section C (the single source of truth for fixture ids and counts)"
+    },
+    {
+     "old": "workflow classification file and its fourteen inversion fixtures with one positive control, plus the forbidden target scripts/fixture/** for the falcon.js and src/** graphs (rev 19 section C)",
+     "new": "workflow classification file and the fixture inventory of table C6-T in rev 21 section C (the single source of truth for fixture ids and counts), plus the forbidden target scripts/fixture/** for the falcon.js and src/** graphs (rev 21 section C, superseding rev 18, rev 19 and rev 20 section C)"
+    },
+    {
+     "old": "ranked in the shard merge immediately below 18 and above 17 and 1",
+     "new": "ranked in the shard merge by the unchanged rev 6 order 2 > 3 > 18 > 17 > 16 > 15 > 13 > 12 > 11 > 14 > 10 > 1 > 0, so exit 13 sits below 18, 17, 16 and 15 and above an ordinary failure, and must never mask a pilot-store integrity violation (rev 21 section D corrects the rev 20 wording, SEC-20 m-74; this is a correction, not a residual)"
+    }
+   ]
+  },
+  {
+   "file": "docs/phase-18-owner-decisions.md",
+   "replace": [
+    {
+     "old": "Annotation (rev 17): residual 21 now also covers exit 18 masking exits 17 and 1; the lostCoverage summary is written on those paths (11f.3). Nothing newly accepted.",
+     "new": "Annotation (rev 17): residual 21 now also covers exit 18 masking exits 17 and 1; the lostCoverage summary is written on those paths (11f.3). Nothing newly accepted. Annotation (rev 21, SEC-20 m-74): residual 21 is NOT extended to exit 13. The rev 6 merge order stands unchanged - 2 > 3 > 18 > 17 > 16 > 15 > 13 > 12 > 11 > 14 > 10 > 1 > 0 - so exit 17 outranks 16, 15 and 13, and exit 13 can mask none of 18, 17, 16 or 15 and must never mask a pilot-store integrity violation. The rev 20 wording that ranked 13 immediately below 18 and above 17 is withdrawn as a weakening and corrected; it is not accepted as a residual. Verified by the table-driven test neg-merge-exit-precedence-matrix (18F), which is an unexecuted gate, not evidence. Nothing newly accepted."
+    }
+   ]
+  },
+  {
+   "file": "docs/pilot-deferred/phase-18p-protected-nonget.md",
+   "append": "\n## Appendix R21 (rev 21, closing the SEC-20 m-68 residual)\n\n**Authority rule.** This tracked document is the sole authority for every deferred 18P-PROTECTED-NONGET text. No acceptance criterion, requirement, merge condition or open item depends on any tag or historical commit remaining reachable. Short commit identifiers that appear in this record, including inside text preserved verbatim from earlier revisions, are **historical context only and are not dependencies**; the earlier proposal of an annotated tag carrying the rev 17 criterion text is **WITHDRAWN** - no such tag is created, pushed, cited or relied on.\n\n**Deferred content check.** The verbatim copies required by the 18P-DOC merge condition are unchanged by rev 21: the eleven wholly deferred criteria, the deferred clauses of the eight mixed criteria, the rev 17 text of the seven criteria that lost sentences, the OWNER-12 and OWNER-13 deferred-work lists, the approval-writer research, the relevant SEC-04 to SEC-20 findings including the m-51 and m-52 conditions, the SPIKE-R facts and the deferred test obligations. Rev 21 adds nothing to the deferred scope and removes nothing from it.\n\n**Rev 21 corrections that touch quoted text here.** Where a preserved copy cites \"fourteen inversion fixtures with one positive control\" or \"rev 19 section C\", the quotation is left **verbatim** because its purpose is preservation; the live rules are rev 21 section C (C3.4b child_process capability-escape model and fixture table C6-T, the single source of truth for fixture ids and counts) and rev 21 section D (the unchanged rev 6 exit precedence, under which exit 13 masks none of 18, 17, 16 or 15 and never masks a pilot-store integrity violation). `PILOT_APPROVAL_RUN_TOKEN` is, in Phase 18, rejected on presence in every `falcon.js` invocation with exit 2 and reason `PILOT_CONFIG_REJECTED_ENV_KEY`; nothing in this deferred record authorises reading, measuring, storing or forwarding its value.\n\n**Status.** Non-normative for Phase 18, non-production, unshipped, not authorised and not scheduled.\n"
+  }
+ ],
+ "coverage": [
+  {
+   "finding": "SEC-20 O-1: refusal narrowed to pilot mode and to writes under run/",
+   "disposition": "fixed, scope widened by owner decision",
+   "where": "rev 21 section B (two-stage check, every invocation); ac P18-AC-084 prohibitedLiteralsCarveOut and prohibitedLiteralsNote; openItems TOKEN-REFUSAL; exitCodes.planInvalidNote; plan line 91 docEdit; docs/pilot/limitations.md DOC obligation",
+   "ownerPoint": "5, 6"
+  },
+  {
+   "finding": "SEC-20 m-73: child_process capability forwarded, never called; C3.4b vacuous or wrong-passing",
+   "disposition": "fixed in design, no production edit",
+   "where": "rev 21 section C (C3.4b, C3.4b.1 fail-closed escapes, C3.4b.2 real two-hop GitInfo flow at src/core/history/GitInfo.js :21/:34/:39/:44), fixture table C6-T with X11 to X16 and control P3; ac P18-AC-090 requirement and components; ac P18-AC-098 components; openItemsAdd M73-CAPABILITY-ESCAPE; OWNER-14-Q1 condition 2 amended",
+   "ownerPoint": "4"
+  },
+  {
+   "finding": "SEC-20 m-74: exit-13 merge rank contradicted the rev 6 precedence (a weakening)",
+   "disposition": "fixed, correction not residual",
+   "where": "rev 21 section D; exitCodes.policyNote; threat-model item 15 docEdit; residual 21 annotation docEdit; openItemsAdd EXIT-PRECEDENCE with neg-merge-exit-precedence-matrix owned by 18F",
+   "ownerPoint": "5"
+  },
+  {
+   "finding": "SEC-20 m-75: stale rev-19 citations, 'fourteen fixtures' counts, pending-state text for decided items",
+   "disposition": "fixed",
+   "where": "ac P18-AC-098 requirement and components; ac P18-AC-090 requirement and components; threat-model 18D and 18F rows; plan status line and 18F row; openItems OWNER-13-Q1, OWNER-14-Q1, OWNER-14-Q2 state text marked resolved; fixture counts sourced from table C6-T with a checker assertion",
+   "ownerPoint": "4"
+  },
+  {
+   "finding": "SEC-20 m-68 residual: two AC JSON references to a historical commit and a proposed tag",
+   "disposition": "fixed",
+   "where": "openItems 18P-PROTECTED-NONGET state and OWNER-14-Q2 state (choice 3 withdrawn); docs/pilot-deferred/phase-18p-protected-nonget.md Appendix R21 (authority rule, no tag, no dependency); rev 21 section F",
+   "ownerPoint": "6"
+  },
+  {
+   "finding": "Unexecuted checks and review label",
+   "disposition": "carried, not evidence",
+   "where": "ac P18-AC-098 reachabilityGateNote: SEC-20 label stays PARTIAL; committed-vs-derived classification, all inversion fixtures and positive controls, dynamic-executable validation, variable-argument validation, child_process escape tracking, clause-aware lint, claims recount, receiver-type sink analysis and Node 24 CI stay mandatory 18D/18F gates; Firefox and WebKit stay UNVERIFIED and non-blocking (Chromium-only scope); no implementation PR may be granted GO on SEC-20 alone",
+   "ownerPoint": "1, 2, 3, 4, 5, 6"
+  }
+ ]
+}

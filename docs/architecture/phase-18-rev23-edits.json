@@ -1,0 +1,201 @@
+{
+ "schema": "phase-18-rev23-edits/1",
+ "revision": "92cffc8 on docs/phase-18-architecture",
+ "producedBy": "ARCH-23 rev 23 patch; apply with a script; docs/architecture/phase-18-rev23-patch.md is normative",
+ "notes": [
+  "Same schema as phase-18-rev22-edits.json: ac[] with set/replaceText/appendText {field,text}, openItems/openItemsAdd, counts, exitCodes, docEdits[{file,replace[{old,new}],append,after}], coverage.",
+  "Every 'old' anchor in this file was verified by exact string count to occur exactly once in its target field or file at 92cffc8.",
+  "No 40-character SHA appears anywhere; short SHAs only. No production source file, package.json script or workflow step is edited by rev 23. No AI attribution anywhere.",
+  "Rev 23 consumes docs/phase-18-spike-w-findings.md, docs/phase-18-spike-fs-findings.md and docs/phase-18-h8-node24-findings.md plus owner decisions (1) to (4). M-23 and M-24 are NOT reopened, no owner decision is altered, nothing is weakened, and no unexecuted check becomes evidence.",
+  "AC-090 and AC-098 are amended by appendText (not replaceText) so that rev 22's pending replaceText on the same fields cannot conflict in either application order.",
+  "LINUX-01 reported after the first ARCH-23 pass and is committed at ba8421d (docs/phase-18-linux-evidence-findings.md); rev 23 section E now carries real Docker Desktop evidence and the earlier 'pending LINUX-01' placeholder is withdrawn. Docker Desktop is NOT the GitHub Actions ubuntu x64 runner, which remains REQUIRED and UNMEASURED."
+ ],
+ "ac": [
+  {
+   "id": "P18-AC-085",
+   "appendText": [
+    {
+     "field": "requirement",
+     "text": " REV 23 SECTION C (SPIKE-FS evidence, PARTIAL): the macOS observation statfs type 25 is a RAM-BACKED HFS+ volume (hdiutil ram:// plus diskutil eraseVolume HFS+); macOS has NO tmpfs, so this is not tmpfs evidence and must never be reported as such. Type 25 is NOT ADMITTED on any root - an id outside the admitted per-root set fails closed, exit 18, naming the observed id and path - and is recorded as an observation only. Admission is never granted by observation alone and never by documentation: it requires an owner-intended per-root entry plus the behaviour battery plus a durability argument, and this volume's durability was never measured (and for memory-backed storage would be expected to fail). APFS type 26 remains admitted for darwin exactly as the rev 4 admission table already states (observed on the dev host, re-observed by SPIKE-FS on darwin 25.5.0 for both /tmp and the repository volume, and re-observed by H-8 under both Node 22.19.0 and Node 24.21.0), for the two live Phase 18 roots run/auth and run/plans; darwin is a local/dev platform and the Linux CI root is UNMEASURED. TIGHTENING: the rev 4 Linux row admitting 0xEF53, 0x58465342 and 0x9123683E from documented magic.h constants is WITHDRAWN FROM ADMISSION, because it contradicts this criterion's own no-id-from-a-kernel-header-or-documentation rule; those ids are readmissible only as observed, committed, per-root values from LINUX-01 or a second SPIKE-FS pass on the real runner, and until then pilot execute mode on Linux, including CI, refuses with exit 18 naming the observed id. SPIKE-FS is PARTIAL: F_FULLFSYNC, reboot/power-loss durability, every Linux id and behaviour, ZFS, and the tmpfs-shared-with-ramfs comparison are UNOBSERVED; ZFS stays inadmissible on every root and 18F cannot merge on this evidence. LINUX-01 (ba8421d, rev 23 section E) now supplies observed Linux ids from digest-pinned Docker Desktop: overlay 0x794c7630, tmpfs 0x1021994, ext4 volume 0xef53, virtiofs 0x6a656a63, with the full behaviour battery PASS on every root under Node 22.19.0 and 24.21.0 on arm64 and amd64. Admission consequence: tmpfs 0x1021994 is ADMITTED for run/auth and run/plans ONLY (no durability claim) and stays REFUSED for an approval/audit root (exit 18, approvals_root_not_durable); overlayfs and virtiofs are NOT admitted on any root; ext4 0xef53 is an observation only inside a Docker Desktop VM volume and is not admitted; unknown ids still fail closed; the ramfs id is UNOBSERVED so the tmpfs-shared-with-ramfs question stays open and is an explicit residual of the tmpfs admission; ZFS stays inadmissible; F_FULLFSYNC and power-loss durability remain untested. Docker Desktop is NOT the GitHub Actions ubuntu x64 runner, which remains REQUIRED and UNMEASURED, so 18F cannot merge."
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-090",
+   "appendText": [
+    {
+     "field": "requirement",
+     "text": " REV 23 SECTION D: the fixture table C6-T is reprinted in rev 23 section D.4 and that printed table SUPERSEDES the copies in rev 22 section B and rev 21 section C; it is the single source of fixture ids and counts, now 27 inversion fixtures (X1..X27, contiguous) and 5 positive controls (P1..P5), extended by new rule C3.10 (DEP0190: child_process spawn/spawnSync with a truthy shell and a non-empty args array, forbidden and fail-closed in production-reachable code, a recorded deterministic warning in test-classified code) with fixtures X26 and X27 and controls P4 and P5. The checker asserts its own fixture directory against that table - both count and id set - and fails on any extra, missing or duplicate id. Criterion counts are unchanged at 98/89/6/3."
+    },
+    {
+     "field": "components",
+     "text": " Plus rev 23 section D rule C3.10 and the rev 23 section D.4 printing of table C6-T (27 inversion fixtures, 5 positive controls), which supersedes the rev 21 and rev 22 printed copies."
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-098",
+   "appendText": [
+    {
+     "field": "requirement",
+     "text": " REV 23 SECTION D: rule C3.10 is added to the same check (DEP0190, measured on Node 24.21.0 and absent on Node 22.19.0 in H-8): in production-reachable scope (C3.7) a spawn/spawnSync call identified by binding (C3.4b) with a truthy shell plus a non-empty args array is FORBIDDEN and fails closed, as are the unanalysable forms (non-literal shell, spread or computed options, non-literal args); the same shape on execFile/execFileSync is forbidden on the same rationale, labelled a design assumption because only the spawn/spawnSync warning emission is measured; in test-classified code the shape is a recorded deterministic warning with a committed baseline and never becomes a failure or evidence of absence. CI runs with NODE_OPTIONS unchanged; the checker's OWN process treats an observed DEP0190 warning as a failure of its own run, and if that in-process observation is infeasible the dynamic check is recorded NOT IMPLEMENTED, never green. Fixture ids and counts come from the rev 23 section D.4 printing of table C6-T: 27 inversion fixtures and 5 positive controls."
+    },
+    {
+     "field": "components",
+     "text": " Plus rev 23 section D rule C3.10 with fixtures X26 and X27 and positive controls P4 and P5, from the rev 23 section D.4 printing of table C6-T."
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-091",
+   "appendText": [
+    {
+     "field": "components",
+     "text": " CORRECTED BY REV 23 SECTION B: a SharedWorker-initiated request is NOT covered by the section 7a rule 3 non-GET gate - SPIKE-W measured 3/3 that BrowserContext.route() does not observe it and that page.on('worker') does not fire for it. SharedWorker construction is blocked in every page realm before page scripts run and every attempt refuses the run (PILOT_INTERNAL_ERROR, exit 18, reason shared_worker_blocked); execute mode refuses to arm (exit 18, shared_worker_block_unverified) until SPIKE-W2 records a pass for every frame, realm, suppression, cross-realm and WebSocket case. Worker-initiated WebSocket (dedicated and shared) is UNMEASURED and therefore also keeps arming refused."
+    }
+   ]
+  }
+ ],
+ "openItems": [
+  {
+   "id": "SPIKE-W",
+   "set": {
+    "ref": "architecture section 7a; rev 3 N-3; rev 4 N-3; rev 23 section B; ADR-0048",
+    "state": "EXECUTED and reported in docs/phase-18-spike-w-findings.md: BLOCKER FOUND. MEASURED on Playwright 1.64.0 / Chromium 156.0.8078.4 (macOS arm64, 3 reps, two runs, no flake): BrowserContext.route() does NOT observe a SharedWorker-initiated fetch (the request reached the loopback fixture and mutated it every repetition); page.on('worker') does NOT fire for a SharedWorker; context.addInitScript() does NOT execute in worker global scope (marker present on window, absent on self inside the worker); dedicated-worker traffic IS interceptable (fetch, sync XHR, importScripts, own script load, EventSource, nested workers, blob:, data:, {type:'module'}), so no dedicated-worker refusal is required on the pinned pair. CONSEQUENCE: the rev 3 claim that SharedWorker is treated as a dedicated worker by the same handler is FALSE and is superseded, and the rev 4 framing of addInitScript as defence in depth inside workers is corrected - dedicated workers are protected by the route/routeWebSocket network layer ONLY. DESIGN REVISED IN REV 23 SECTION B: SharedWorker construction is blocked in every page realm before page scripts run (non-configurable, non-writable throwing stub installed by context.addInitScript) and every attempt is detected out of page by a signal page code cannot suppress (CDP Target.setAutoAttach with waitForDebuggerOnStart for shared_worker targets, never resumed, closed and detached, plus a run-scoped exposeBinding), refusing the run with PILOT_INTERNAL_ERROR exit 18 reason shared_worker_blocked, with the decisive test assertion being zero requests recorded at the fixture and a zero mutation counter. NOTHING ABOUT THAT MECHANISM IS MEASURED. SPIKE-W2 IS REQUIRED BEFORE 18C MERGES and until every one of its cases is recorded MEASURED-PASS the pilot REFUSES TO ARM execute mode (exit 18, reason shared_worker_block_unverified). Carried-forward gaps: data: and module worker cases were corroborated by outcome pattern rather than a route-hit counter; request.frame() identity on a worker-initiated request is only known not to throw; worker-initiated WebSocket was never measured. Environment-dependent observations, not Falcon controls: navigator.sendBeacon is absent in dedicated-worker scope, new Worker(crossOriginUrl) throws synchronously by browser policy, and a route armed after worker creation still applies to that worker's later requests."
+   }
+  },
+  {
+   "id": "SPIKE-FS",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " EXECUTED PARTIALLY and reported in docs/phase-18-spike-fs-findings.md: PARTIAL. Measured on macOS (darwin 25.5.0, arm64, Node v22.19.0): APFS statfs type 26 on both /tmp and the repository volume, and a RAM-backed HFS+ volume at type 25, with O_EXCL (single and 20-way contention), same-directory rename, file fsync(2), directory fsync, cross-process lock visibility, symlink lstat/O_NOFOLLOW/swap-observability, 0600/0700 permissions under a restrictive umask and the SIGKILL leftover-partial-temp property all PASS on both volumes. UNOBSERVED: Darwin F_FULLFSYNC (Node exposes no fcntl(F_FULLFSYNC) without a native addon), reboot/power-loss durability (unmeasurable in-process by design; rev 4 rejects a capability probe as a durability substitute), every Linux id and behaviour (ext4, xfs, btrfs, overlayfs, tmpfs, virtiofs, drvfs - the Docker daemon was not running), ZFS, and whether the platform tmpfs id is shared with ramfs. Per rev 23 section C: type 25 is a RAM-backed HFS+ observation ONLY and is NOT admitted on any root; APFS 26 stays admitted for darwin as the rev 4 table already states; the documentation-derived Linux ids are withdrawn from admission until observed. 18F cannot merge and ZFS stays inadmissible on every root."
+    }
+   ]
+  },
+  {
+   "id": "H-8",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " PARTIALLY MEASURED and reported in docs/phase-18-h8-node24-findings.md. STATUS: macOS arm64 ONLY; Linux CI UNMEASURED; H-8 is NOT closed. Node 24.21.0 vs Node 22.19.0 on darwin 25.5.0 arm64: the ONLY observed behavioural difference relevant to Phase 18 is DEP0190 - Node 24.21.0 emits [DEP0190] DeprecationWarning for child_process.spawn/spawnSync called with shell:true and a non-empty args array, Node 22.19.0 does not; GitInfo.js's own execFileSync call (shell unset) is unaffected. Identical under both versions: the entire filesystem battery on APFS (statfs type 26 both), the literal-argv and ENOENT child_process checks, exit-code propagation, the 82/82 Babel parse of falcon.js plus all of src/**, and the CLI exit-2/stderr behaviour across pipe, file redirect and pseudo-TTY with no truncation. NOT MEASURED: Linux/ubuntu x64 anything (filesystem, child_process, DEP0190 presence, the real GitHub Actions runner), Playwright Chromium launch under Node 24, Darwin F_FULLFSYNC, dotenv file-based load ordering, and node falcon.js --help (skipped as unconfirmable-safe within budget). Rev 23 section D folds DEP0190 into the reachability checker as rule C3.10; rev 23 section E lists the Linux statements rev 24 must update once LINUX-01 reports."
+    }
+   ]
+  },
+  {
+   "id": "H-1",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " REV 23 SECTION B: partially measured. Dedicated-worker requests ARE interceptable by BrowserContext.route() on the pinned pair (fetch, sync XHR, importScripts, own script load, EventSource, nested, blob:, data:, module), so for dedicated workers this residual narrows to WebSocket and service workers. SharedWorker is NOT interceptable (measured 3/3) and is no longer a documented residual: construction is blocked and any attempt refuses the run (exit 18, shared_worker_blocked). addInitScript is NOT a worker-scope control and may not be cited as one. Worker-initiated WebSocket (dedicated and shared) remains UNMEASURED - SPIKE-W dropped it rather than stubbing a misleading pass - and it keeps execute mode refusing to arm until SPIKE-W2 cases W2-15 and W2-16 pass."
+    }
+   ]
+  }
+ ],
+ "openItemsAdd": [
+  {
+   "id": "SPIKE-W2",
+   "ref": "rev 23 section B.5; ADR-0048",
+   "state": "NEW, NOT STARTED, MANDATORY BEFORE 18C MERGES. Owner 18C. Measures the rev 23 section B.2 SharedWorker blocking mechanism, none of which is measured today, on the pinned Playwright 1.64.0 / Chromium 156.0.8078.4 pair against a hermetic loopback fixture, 3 repetitions minimum per case, with per-case route-hit counters (closing the SPIKE-W data:/module corroborated-by-pattern minor). Sixteen cases: W2-1 main frame; W2-2 same-origin iframe; W2-3 cross-origin iframe; W2-4 popup (window.open, target=_blank, noopener); W2-5 about:blank frame; W2-6 srcdoc iframe; W2-7 blob: frame; W2-8 sandboxed iframe (allow-scripts, and without allow-same-origin); W2-9 frame appended after arming and after first navigation; W2-10 bfcache restore then construct; W2-11 a dedicated worker constructing a SharedWorker (API ABSENT is not a pass and must be re-checked on Chromium upgrades, because addInitScript cannot reach worker scope); W2-12 page-code suppression - delete globalThis.SharedWorker, Object.defineProperty and Reflect.defineProperty redefinition, assignment, prototype and __proto__ manipulation, with-scope shadowing, and removing or overwriting the exposed binding; W2-13 cross-realm constructor taken from an about:blank, srcdoc, blob: or sandboxed iframe and from a popup; W2-14 a SharedWorker (if one ever starts) creating a blob: Worker that POSTs; W2-15 dedicated-worker-initiated WebSocket with routeWebSocket armed against a real WS upgrade; W2-16 SharedWorker-initiated WebSocket. For every case the expected result with controls on is exit 18 with the correct reason, an EMPTY fixture request log for the denied sink and a ZERO mutation counter; every case also has an INVERSION fixture that, with the control disabled, must record a NON-ZERO count, proving the case is a real channel and the test is not vacuous. ANY case not recorded MEASURED-PASS keeps the pilot refusing to arm execute mode (exit 18, shared_worker_block_unverified); W2-15 and W2-16 are currently unmeasured and therefore currently keep arming refused. Service-worker registration stays out of scope and remains covered by serviceWorkers: 'block', unverified."
+  },
+  {
+   "id": "LINUX-01",
+   "ref": "rev 23 section E; docs/phase-18-linux-evidence-findings.md at ba8421d",
+   "state": "REPORTED at ba8421d. MEASURED on digest-pinned Docker Desktop (multi-arch index digests node:22.19.0 sha256:afff6d8c... and node:24.21.0 sha256:3d27e5c1..., per-architecture manifest digests recorded in the findings doc), Node 22.19.0 and 24.21.0, arm64 native and amd64 emulated: observed statfs types overlay 0x794c7630, tmpfs 0x1021994, ext4 volume 0xef53, virtiofs 0x6a656a63; EVERY filesystem property PASSED on every root under both Node versions and both architectures (O_EXCL single and contended, same-directory rename, file and directory fsync, cross-process lock visibility, symlink lstat/O_NOFOLLOW/swap observability, 0600/0700 under a restrictive umask, SIGKILL leftover-partial-temp); DEP0190 emitted only under Node 24, confirming H-8 on Linux; Babel parse of falcon.js plus all of src/** 82/82; CLI exit 2 with intact stderr PASS. ADMISSION IMPLICATIONS under the owner rules (no id is admitted by documentation; an id enters the admitted set only as an observed committed value and only for the purpose admitted): (1) tmpfs 0x1021994 is ADMITTED for the ephemeral roots run/auth and run/plans ONLY, with no durability claim, and stays REFUSED for the approval/audit root (exit 18, approvals_root_not_durable) - unchanged by these PASS results, because what was measured is same-process success, never durability; (2) overlayfs 0x794c7630 and virtiofs 0x6a656a63 are NOT ADMITTED on any root - observation plus a passing battery is not admission and no owner decision admits them; (3) ext4 0xef53 is an OBSERVATION ONLY, taken inside a Docker Desktop VM volume, and is not admitted - the rev 23 section C.3 withdrawal stands and readmission requires an observation on the actual target runner, per root; (4) unknown ids continue to fail closed on every root, exit 18 naming the observed id and path, never a skip or a warning; (5) the ramfs id is UNOBSERVED (mount -t ramfs needed privileges the container lacked), so the rev 10 line 257 question of whether the tmpfs id is shared with ramfs is STILL UNANSWERED and admitting tmpfs for the ephemeral roots carries that explicit residual; (6) ZFS stays inadmissible on every root, not testable in Docker Desktop or on ubuntu-latest, still conditional on direct evidence from a real pool; (7) F_FULLFSYNC and power-loss durability remain untested on every platform, as before and by design. STILL REQUIRED AND UNMEASURED: the GitHub Actions ubuntu x64 runner - its per-root statfs ids, Playwright Chromium launch under Node 24 and the pilot job's admission result - so 18F CANNOT MERGE. The findings doc contains a PROPOSED evidence-only workflow_dispatch workflow (text only, unpushed, permissions contents: read, no secrets); it is a DevOps proposal, not evidence, and rev 23 counts it as an unexecuted gate."
+  }
+ ],
+ "counts": {
+  "set": {
+   "rev23Note": "Rev 23 changes no criterion count: total 98, must 89, should 6, could 3, deferredToPhase18P 11, deferredUnderOptionC 5, deferredIds and mixedPhase18PIds unchanged. No criterion is added, removed or re-phased; M-23 and M-24 are not reopened. The only numeric changes are inside fixture table C6-T, whose rev 23 section D.4 printing is the single source: 25 -> 27 inversion fixtures (X1..X27, contiguous) and 3 -> 5 positive controls (P1..P5), adding X26, X27, P4 and P5 for rule C3.10. Every stale '25 / twenty-five inversion fixtures' and 'three positive controls' statement is updated to 27 / 5 by the docEdits in this file."
+  }
+ },
+ "exitCodes": {
+  "set": {
+   "rev23Note": "Rev 23 adds no exit code and changes no precedence: the rev 6 order stands, 2 > 3 > 18 > 17 > 16 > 15 > 13 > 12 > 11 > 14 > 10 > 1 > 0. It adds TWO new exit-18 reason codes under PILOT_INTERNAL_ERROR: shared_worker_blocked (a SharedWorker construction was attempted; the run refuses, with the attempted origin and canonical path and the frame identity in the message, and never the query or fragment) and shared_worker_block_unverified (execute mode refuses to ARM because the SPIKE-W2 evidence is absent or incomplete; raised at NetworkGate install time, before any navigation). NAMING, checked against the existing registry: exit-18 reasons in this design are lower snake_case modifiers of PILOT_INTERNAL_ERROR (worker_not_interceptable, approvals_root_not_durable, approvals_root_symlink, approval_history_unverifiable) while POLICY_* is the family of top-level failure codes (POLICY_NETWORK_BLOCKED, POLICY_ORIGIN_DENIED, POLICY_REDIRECT_LIMIT), so the owner's suggested spelling POLICY_SHARED_WORKER_BLOCKED would be inconsistent on both halves; rev 23 uses shared_worker_blocked and flags this as a naming decision the owner may overrule with no behavioural change."
+  }
+ },
+ "docEdits": [
+  {
+   "file": "docs/architecture/phase-18-rev3-patch.md",
+   "replace": [
+    {
+     "old": "`SharedWorker` is treated as a dedicated worker by the same handler.",
+     "new": "**SUPERSEDED BY REV 23 SECTION B - THIS SENTENCE WAS FALSE AND IS WITHDRAWN.** SPIKE-W measured, 3 of 3 repetitions across two runs on Playwright 1.64.0 / Chromium 156.0.8078.4, that `BrowserContext.route()` does **not** observe a `SharedWorker`-initiated request (the fetch reached the loopback fixture and mutated it every repetition) and that `page.on(\"worker\")` does **not** fire for a `SharedWorker`. `SharedWorker` is therefore covered by neither this handler nor this event backstop. Rev 23 section B blocks `SharedWorker` **construction** in every page realm before page scripts run, refuses the run on any attempt (`PILOT_INTERNAL_ERROR`, exit 18, reason `shared_worker_blocked`) through an out-of-page signal page code cannot suppress, and **refuses to arm** execute mode (exit 18, reason `shared_worker_block_unverified`) until SPIKE-W2 records a pass for every frame, realm, suppression, cross-realm and WebSocket case."
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-rev4-patch.md",
+   "replace": [
+    {
+     "old": "and `SharedWorker` coverage is unverified. **Decision: prevention in the page, with the event as a backstop.**",
+     "new": "and `SharedWorker` coverage is unverified. **Decision: prevention in the page, with the event as a backstop.** **CORRECTED BY REV 23 SECTION B (SPIKE-W, measured):** `SharedWorker` coverage is no longer unverified - it is measured **absent** (no route callback, no `worker` event), so the event backstop cannot cover it; and the preventive script is **not** defence in depth *inside* workers, because `context.addInitScript()` is measured **not** to execute in worker global scope (`self.__FALCON_MARK__` absent while `window.__FALCON_MARK__` is true). Dedicated-worker traffic is protected by the `route`/`routeWebSocket` **network layer only**, which is measured to work for `fetch`, sync XHR, `importScripts`, the worker's own script load, `EventSource`, nested workers and `blob:`/`data:`/module workers. For `SharedWorker`, construction is blocked in every page realm and every attempt **refuses the run** (exit 18, `shared_worker_blocked`) - it is not a counted denial that lets the run continue - and execute mode **refuses to arm** (exit 18, `shared_worker_block_unverified`) until SPIKE-W2 passes."
+    },
+    {
+     "old": "redefines `Worker` and `SharedWorker` on `globalThis` (and on `self` for nested scopes it can reach)",
+     "new": "redefines `Worker` and `SharedWorker` on `globalThis` (and on `self` for nested scopes it can reach; **rev 23 section B: this reaches page and frame realms ONLY and never worker scope, so it is a construction block, not an in-worker control** - the `SharedWorker` stub must be installed with `Object.defineProperty(..., { writable: false, configurable: false })` and must notify Falcon out of page **before** it throws, because a page can swallow the throw but cannot swallow the out-of-page signal)"
+    },
+    {
+     "old": "| `linux` | `0xEF53`, `0x58465342`, `0x9123683E` | documented Linux `magic.h` constants for ext2/3/4, xfs, btrfs — **not yet observed on a CI runner; SPIKE-FS must record them before 18F merges** |",
+     "new": "| `linux` | **none admitted (rev 23 section C.3)** | **WITHDRAWN FROM ADMISSION BY REV 23 SECTION C.3.** `0xEF53`, `0x58465342` and `0x9123683E` were listed here from documented `magic.h` constants, which contradicts rev 9 m-21(a), rev 10 4c item 3 and AC-085 (no id from a kernel header, documentation or reviewer knowledge). They are readmissible only as observed, committed, per-root values from LINUX-01 or a second SPIKE-FS pass on the real runner. Until then pilot execute mode on Linux, **including CI**, refuses with exit 18 naming the observed id - fail-closed, a tightening, not a weakening. |"
+    },
+    {
+     "old": "HFS+ is **not** in the table: no value has been observed, so admitting it would be an unverified claim.",
+     "new": "HFS+ is **not** in the table: no value has been observed, so admitting it would be an unverified claim. **Rev 23 section C.1:** SPIKE-FS has now *observed* `25` on a **RAM-backed HFS+** volume (created unprivileged with `hdiutil attach -nomount ram://2048` plus `diskutil eraseVolume HFS+`). macOS has **no tmpfs**, so this is **not** tmpfs evidence and must never be reported as such; `25` stays **NOT ADMITTED on any root** (an id outside the admitted per-root set fails closed) and is recorded as an **observation only**. Admission is granted neither by documentation nor by observation alone: it needs an owner-intended per-root entry plus the behaviour battery plus a durability argument, and this volume's durability was never measured - for memory-backed storage it would be expected to fail."
+    },
+    {
+     "old": "| N-3 worker prevention | 7a | `neg-n1-worker-fetch` (rewritten, 50 repetitions, counter 0; Blob/data/SharedWorker) + `neg-n1-worker-backstop` (inversion) |",
+     "new": "| N-3 worker prevention | 7a, rev 23 B | `neg-n1-worker-fetch` (rewritten, 50 repetitions, counter 0; Blob/data/module) + `neg-n1-worker-backstop` (inversion). **Rev 23 section B replaces the `SharedWorker` sub-case:** `neg-sharedworker-blocked` (any construction attempt refuses the run, exit 18 `shared_worker_blocked`, with an **empty** fixture request log and a **zero** mutation counter) and `neg-sharedworker-unverified-arming` (with SPIKE-W2 evidence absent or incomplete, execute-mode install refuses with exit 18 `shared_worker_block_unverified` before any navigation; its inversion shows that removing the gate lets the run arm), plus the sixteen SPIKE-W2 cases W2-1..W2-16, each with its own inversion fixture |"
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-authenticated-pilots.md",
+   "replace": [
+    {
+     "old": "1. **Context options**: `serviceWorkers: 'block'`, `acceptDownloads: false`",
+     "new": "1. **Context options**: `serviceWorkers: 'block'`, **`SharedWorker` construction blocked before any page script runs and every attempt refusing the run (rev 23 section B, ADR-0048: exit 18 `shared_worker_blocked`; execute mode refuses to ARM with exit 18 `shared_worker_block_unverified` until SPIKE-W2 passes)**, `acceptDownloads: false`"
+    },
+    {
+     "old": "4. **`sendBeacon` and WebSocket**: beacons are `POST`s and are covered by (3).",
+     "new": "4. **`sendBeacon` and WebSocket**: beacons are `POST`s and are covered by (3). **Rev 23 section B, measured exceptions:** a `SharedWorker`-initiated request is **NOT** covered by (3) - `BrowserContext.route()` does not observe it and `page.on(\"worker\")` does not fire for it (3 of 3 repetitions) - so `SharedWorker` is handled by the construction block and run refusal of rule 1, not by this rule; `navigator.sendBeacon` is **absent** in dedicated-worker scope on the pinned Chromium (an environment observation, not a Falcon control, to be re-verified on upgrade); dedicated-worker `fetch`, sync XHR, `importScripts`, own script load, `EventSource`, nested workers and `blob:`/`data:`/module workers **are** observed and abortable by the route layer, which is the only layer protecting them (`context.addInitScript` does not execute in worker scope); and **worker-initiated WebSocket is UNMEASURED** for both dedicated and shared workers, which keeps execute mode refusing to arm until SPIKE-W2 cases W2-15 and W2-16 pass."
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-rev22-patch.md",
+   "replace": [
+    {
+     "old": "**Totals: 25 inversion fixtures (X1..X25, contiguous, no duplicate id) and 3 positive controls (P1..P3).**",
+     "new": "**Totals: 25 inversion fixtures (X1..X25, contiguous, no duplicate id) and 3 positive controls (P1..P3).** **SUPERSEDED BY REV 23 SECTION D.4: the totals are now 27 inversion fixtures (X1..X27) and 5 positive controls (P1..P5), adding X26, X27, P4 and P5 for rule C3.10 (DEP0190). The rev 23 section D.4 printing is the single source of fixture ids and counts; this table is retained as history.**"
+    },
+    {
+     "old": "- **QA:** build fixtures from table C6-T only (X1..X25, P1..P3)",
+     "new": "- **QA:** build fixtures from table C6-T only (rev 23 section D.4 printing: **X1..X27, P1..P5**; the rev 22 range X1..X25, P1..P3 is superseded)"
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-rev21-patch.md",
+   "replace": [
+    {
+     "old": "giving **twenty-five inversion fixtures and three positive controls**",
+     "new": "giving twenty-five inversion fixtures and three positive controls (**SUPERSEDED: the authoritative totals are the rev 23 section D.4 printing of C6-T, twenty-seven inversion fixtures and five positive controls, adding X26, X27, P4 and P5 for rule C3.10**)"
+    },
+    {
+     "old": "The authoritative C6-T is the rev 22 table (X1..X25 and P1..P3)",
+     "new": "The authoritative C6-T is the **rev 23 section D.4** table (X1..X27 and P1..P5), which supersedes the rev 22 table (X1..X25 and P1..P3)"
+    }
+   ]
+  },
+  {
+   "file": "docs/phase-18-plan.md",
+   "replace": [
+    {
+     "old": "Implementation remains blocked pending SEC-21 on the rev 21 delta",
+     "new": "SPIKE-W HAS EXECUTED AND FOUND A BLOCKER: on the pinned Playwright 1.64.0 / Chromium 156.0.8078.4 pair, `BrowserContext.route()` does not observe a `SharedWorker`-initiated request and `page.on(\"worker\")` does not fire for a `SharedWorker`, so the rev 3 claim of handler coverage is false and the rev 4 event backstop cannot cover it; the design is revised in rev 23 section B (construction blocked before page scripts run, out-of-page detection, refusal with exit 18 `shared_worker_blocked`) and **SPIKE-W2 is required before 18C merges**, with execute mode refusing to arm (exit 18 `shared_worker_block_unverified`) until every one of its sixteen cases is measured. SPIKE-FS is PARTIAL (macOS APFS 26 and a RAM-backed HFS+ 25 measured; `F_FULLFSYNC`, reboot durability, all Linux ids and ZFS unobserved), H-8 is macOS arm64 only with Linux CI unmeasured (its one observed difference is DEP0190 on Node 24.21.0, folded into the reachability checker as rule C3.10 with fixtures X26, X27 and controls P4, P5, totals 27/5), and LINUX-01 has reported at `ba8421d` (digest-pinned Docker Desktop: overlay, tmpfs, ext4 and virtiofs ids observed with the full battery PASS under both Node versions on arm64 and amd64; tmpfs admitted for the ephemeral `run/auth` and `run/plans` roots only and still refused for an approval root, overlayfs and virtiofs not admitted, ext4-in-VM an observation only, ramfs unobserved, ZFS untestable) while the GitHub Actions `ubuntu` x64 runner remains REQUIRED and UNMEASURED, so 18F cannot merge. Implementation remains blocked pending SEC-21 on the rev 21 delta"
+    }
+   ]
+  }
+ ]
+}
