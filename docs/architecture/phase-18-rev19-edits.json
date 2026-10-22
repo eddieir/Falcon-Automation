@@ -1,0 +1,466 @@
+{
+ "schema": "phase-18-rev19-edits/1",
+ "revision": "63f80e4 on docs/phase-18-architecture",
+ "producedBy": "ARCH-19 rev 19 patch; apply with a script; docs/architecture/phase-18-rev19-patch.md is normative",
+ "notes": [
+  "Every 'old' string was asserted by script to occur exactly once in its target field or file at the stated revision.",
+  "Schema is the rev 18 schema plus openItemsAdd and the per-criterion keys prohibitedLiterals, prohibitedLiteralsNote and deferredTextRef, plus lintBaseline and coverage. mergeCondition may be a boolean or an object keyed by phaseClauses clause label.",
+  "Nothing in this file authorises implementation, merge, publication or any tag push. Node 24 is UNVERIFIED (H-8).",
+  "No production source file, package.json script or workflow step is edited by rev 19."
+ ],
+ "ac": [
+  {
+   "id": "P18-AC-098",
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "(ii) the production dependency-reachability check of 11a.4/11d.5, asserting that the require graph rooted at `falcon.js` and at every `package.json` script reaches no `tests/` file, no experimental fixture, and no approval module;",
+     "new": "(ii) the production dependency-reachability check of rev 19 section C, asserting that the dependency graph rooted at the exact production roots - `falcon.js`, `package.json` `main` and every `bin` entry (none today), and every entry classified `production` in the committed classification file `docs/pilot/reachability-roots.json` - reaches, by exact path, no path under `tests/`, no path under `tests/experimental/`, no path under `scripts/fixture/` and no approval module; test-classified roots are unconstrained, an unclassified, unknown or mis-valued `package.json` script or workflow `run:` step fails the check, there is no exempt value, and the check passes on the current tree with zero exemptions (rev 19 sections C1 to C5);"
+    },
+    {
+     "field": "requirement",
+     "old": "or any production require edge into `tests/` or the experimental fixture, and checks (i) to (iii) must fail.",
+     "new": "any production edge into `tests/`, `tests/experimental/` or `scripts/fixture/`, or any unclassified script or workflow `run:` step, and checks (i) to (iii) must fail; the fourteen inversion fixtures and the one positive control are enumerated in rev 19 section C6."
+    },
+    {
+     "field": "components",
+     "old": "the AC-051 refusal case with no approval object created (rev 17 sections 11a, 11d.3, 11d.5).",
+     "new": "the AC-051 refusal case with no approval object created (rev 17 sections 11a and 11d.3; the reachability check with its roots, edge rules, classification rule, forbidden targets and fixtures is specified by rev 19 section C, which supersedes 11a.4/11d.5 for this control)."
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-090",
+   "set": {
+    "phaseClauses": {
+     "current": [
+      "No production path reaches any approval or protected-action prototype: a retained prototype lives at exactly one permitted location, tests/experimental/, and no production-classified root and no module reachable from one reaches it, nor any path under tests/ or scripts/fixture/, verified by the production dependency-reachability check of rev 19 section C with no exemptions",
+      "the check runs and passes vacuously if no prototype is retained"
+     ],
+     "deferred-18P": [
+      "the fixture approval authority and its loopback capability",
+      "the ApprovalStore constructor and PilotRuntime frozen ledger source and resolver",
+      "consumption re-checked at gate.perform",
+      "the approve flags, the TTY writer and the ledger/fixture WeakSet discriminator",
+      "every APPROVAL_REQUIRED exit 14 refusal of this criterion"
+     ]
+    },
+    "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-090. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key."
+   },
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "is verified by the roots, resolution rules and five inversion fixtures of rev 18 section C.",
+     "new": "is verified by the roots, edge-resolution rules, deterministic classification rule, forbidden targets and fourteen inversion fixtures with one positive control of rev 19 section C, which supersedes rev 18 section C and is the same section AC-098 (ii) cites."
+    },
+    {
+     "field": "components",
+     "old": "with its committed script and workflow classification file and five inversion fixtures",
+     "new": "of rev 19 section C with its committed script and workflow classification file, its closed externalExecutables leaf list (OWNER-14-Q1), its forbidden target scripts/fixture/** for the falcon.js and src/** graphs, and its fourteen inversion fixtures with one positive control"
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-089",
+   "set": {
+    "phaseClauses": {
+     "current": [
+      "classification recomputed at gate.perform from the freshly loaded manifest against the element actually acted on",
+      "the maximum rule over denied, protected, permitted",
+      "PLAN_CLASSIFICATION_DRIFT when a plan row tries to lower a class",
+      "a heal or re-resolution that reclassifies to protected is refused POLICY_PROTECTED_ACTION_UNSUPPORTED exit 18 per rev 17 section 11i",
+      "a heal or re-resolution whose identity differs from the recorded plan-row identity, with the element still permitted, is refused POLICY_PLAN_IDENTITY_DRIFT exit 13 with reason heal_changed_permitted_element and zero requests (rev 19 section D; this is the live substance of open item m-27)"
+     ],
+     "deferred-18P": [
+      "the comparison against the approved element identity",
+      "APPROVAL_MISMATCH exit 14"
+     ]
+    },
+    "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-089. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key."
+   }
+  },
+  {
+   "id": "P18-AC-085",
+   "set": {
+    "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-085. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key."
+   },
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "A missing approval history",
+     "new": "DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (rev 18 section A2; inline marker added by rev 19 to close SEC-18 m-65 and m-67) - the following approval-root partition is unshipped design history with no Phase 18 trigger, because Phase 18 creates no approvals root, writes no ledger and has no approval history, and exit 14 is reserved and unreachable: A missing approval history"
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-083",
+   "set": {
+    "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-083. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key."
+   },
+   "replaceText": [
+    {
+     "field": "components",
+     "old": "+ token refusal (OD-23, ADR-0038 amended)",
+     "new": "(no token refusal ships: the run-token transport is DEFERRED to 18P under rev 18 section B, so Phase 18 has nothing to refuse) (OD-23, ADR-0038 amended)"
+    }
+   ]
+  },
+  {
+   "id": "P18-AC-074",
+   "set": {
+    "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-074. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key."
+   }
+  },
+  {
+   "id": "P18-AC-095",
+   "set": {
+    "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-095. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key."
+   }
+  },
+  {
+   "id": "P18-AC-084",
+   "set": {
+    "deferredTextRef": "Non-normative: the rev 17 text of this criterion, including the sentences withdrawn by rev 18, is preserved at git revision 909d794, docs/phase-18-acceptance-criteria.json, P18-AC-084. The proposed annotated tag phase-18-design-rev17-text-909d794 on 909d794 is NOT created and NOT pushed; pushing it is a coordinator action requiring recorded owner authorisation (rev 19 section G, SEC-18 m-68). The section F lint skips this key.",
+    "prohibitedLiterals": [
+     "--approve-action",
+     "--emit-token-to",
+     "PILOT_APPROVER",
+     "PILOT_APPROVAL_RUN_TOKEN",
+     "pty-approve",
+     "tests-only executable"
+    ],
+    "prohibitedLiteralsNote": "Structured prohibition data (rev 19 section F(b), closing SEC-18 m-65(a)): the walker fails if any of these literals exists anywhere under src/, falcon.js, scripts/, package.json or .github/. None is a Phase 18 capability, obligation or claim. The section F lint skips this key, so a prohibition can never read as a live approval obligation."
+   },
+   "replaceText": [
+    {
+     "field": "requirement",
+     "old": "and on any workflow invocation of a tests-only executable outside the test gate.",
+     "new": "and on any workflow invocation of an executable whose sole purpose is testing, outside the test gate (the withdrawn literal is recorded in this criterion's prohibitedLiterals array)."
+    },
+    {
+     "field": "requirement",
+     "old": "The walker finds action sites by scanning src/ for every Playwright action and request sink rather than from a fixed list",
+     "new": "The walker finds action sites by scanning falcon.js and src/, plus those scripts/ modules reachable from a production-classified root that can build a pilot context, for every Playwright action and request sink on a Page, Frame, Locator, ElementHandle, APIRequestContext, Route, Mouse, Keyboard, Touchscreen or BrowserContext receiver, including the evaluate, evaluateHandle, $eval, $$eval and setContent family and receivers bound by local assignment, failing closed on an unresolvable receiver, with a JSDoc annotation able only to add a sink and never to remove one (removal needs syntactic array proof), rather than from a fixed list (rev 19 section H, closing SEC-18 m-69)"
+    },
+    {
+     "field": "requirement",
+     "old": "and it fails on the existence of --approve-action or --emit-token-to anywhere under src/, falcon.js, scripts/, package.json or .github/ (rev 17 sections 11a, 11d.6, 11j).",
+     "new": "and it fails on the existence of any member of this criterion's prohibitedLiterals array anywhere under src/, falcon.js, scripts/, package.json or .github/ (rev 17 sections 11a, 11d.6, 11j; the literals were moved into that structured array by rev 19 section F(b) so the section F lint skips them by key)."
+    },
+    {
+     "field": "requirement",
+     "old": "the primary control is the production dependency-reachability check of rev 18 section C",
+     "new": "the primary control is the production dependency-reachability check of rev 19 section C"
+    }
+   ]
+  }
+ ],
+ "counts": {
+  "set": {
+   "deferredUnderOptionCNote": "deferredUnderOptionC counts the five criteria deferred by owner decision OWNER-12 (Option C): AC-086, AC-092, AC-093, AC-096 and AC-097, whatever their rev 18 phase. It is therefore not a subset of deferredIds: AC-086 is phase mixed with a live window-validation clause, while 092, 093, 096 and 097 are wholly deferred. Definition added by rev 19 to close the SEC-18 E1 nit."
+  }
+ },
+ "openItemsAdd": [
+  {
+   "id": "OWNER-14-Q1",
+   "ref": "rev 19 sections C3.4 and Appendix A.3",
+   "status": "OPEN - owner confirmation requested; the check is not implementable without a decision",
+   "state": "Owner confirmation requested (OWNER-14-Q1): the dependency-reachability check treats a child-process call or workflow run: command as a graph leaf only when all three conditions hold - its executable is a literal on the closed externalExecutables list committed in docs/pilot/reachability-roots.json (git, ps, ffmpeg, ffprobe, psql, curl, allure, mkdir, cp, mv, rm, tee, head, cat, seq, sleep, echo), its argv holds no repository .js, .cjs, .mjs or .sh path, and it uses no -e, --eval, -r, --require, --import or --loader. Security accepts this as data with a closed shape that exempts no repository code and whose every addition is a reviewed change (SEC-18 remediation 2). The owner must confirm explicitly that this list is NOT an 'exemption' under section 11a.4, which bans exemptions. If the owner rules that it is, the check as specified in rev 19 section C cannot be implemented and M-23 reopens. Nothing is risk-accepted by this item."
+  },
+  {
+   "id": "OWNER-14-Q2",
+   "ref": "rev 19 sections C2, C5, G and 9",
+   "status": "OPEN - owner confirmation requested; each default is reversible at no design cost",
+   "state": "Owner confirmation requested (OWNER-14-Q2), three choices rev 19 takes as the lowest-risk defaults: (1) scripts/fixture/server.js stays where it is with no file move, and owner check 4 is covered by the exact forbidden target scripts/fixture/** for the falcon.js and src/** graphs, with fixture:serve and ci.yml step 392 classified test by rule R4 (SEC-18 remediation 6, keep-in-place option; Security accepts either option); (2) src/core/locator/HealingBenchmark.js stays production via healing:benchmark under Security's four conditions, all discharged in rev 19 section C5 - a data read is not an edge, the sink scan covers :308-310, a committed assertion that no production module requires it, and no pilot-mode invocation; (3) the annotated tag phase-18-design-rev17-text-909d794 on commit 909d794, which preserves the deferred rev 17 criterion text, is proposed but NOT created and NOT pushed by ARCH-19: pushing it is a coordinator action requiring recorded owner authorisation (SEC-18 m-68)."
+  }
+ ],
+ "docEdits": [
+  {
+   "file": "docs/phase-18-plan.md",
+   "replace": [
+    {
+     "old": "Design is architecture rev 2 plus the rev 3..rev 17 patches.",
+     "new": "Design is architecture rev 2 plus the rev 3..rev 19 patches. SEC-18 reviewed the rev 18 delta and reported zero blockers, one major (M-23: the dependency-reachability check still unimplementable) and five minors (m-65 to m-69), all closed in the design by the rev 19 patch, which awaits SEC-19 on the rev 19 delta. The owner's zero-blockers-and-zero-majors requirement is not met on any revision reviewed so far. Implementation remains blocked pending SEC-19, the OWNER-13-Q1 (m-51) confirmation, OWNER-14-Q1 and OWNER-14-Q2, SPIKE-W, SPIKE-FS, the persistence-test PR, green main, the Node 24 position (H-8, UNVERIFIED) and explicit owner authorisation."
+    },
+    {
+     "old": "(`--pilot-manifest=`, `--role=`, `--dry-run-plan=`, `--approve-*`)",
+     "new": "(`--pilot-manifest=`, `--role=`, `--dry-run-plan=`; there is no `--approve-*` flag in Phase 18 - the approval flags are DEFERRED to 18P under OWNER-13 and AC-084 fails on their existence anywhere under `src/`, `falcon.js`, `scripts/`, `package.json` or `.github/`; rev 19 closes SEC-18 m-66)"
+    },
+    {
+     "old": "- **New env keys** (`.env.example`, genuinely blank): `PILOT_ROLE_*_USERNAME`, `PILOT_ROLE_*_PASSWORD`, `PILOT_APPROVER`, `PILOT_APPROVAL_RUN_TOKEN`.",
+     "new": "- **New env keys** (`.env.example`, genuinely blank): `PILOT_ROLE_*_USERNAME`, `PILOT_ROLE_*_PASSWORD`. No approval environment key is added, because nothing reads one: `PILOT_APPROVER` and `PILOT_APPROVAL_RUN_TOKEN` are DEFERRED to 18P with the writer (OWNER-13, rev 18 section B), AC-084 fails on a run-token env key in any workflow, and this line previously contradicted line 91, section B and section 14 (rev 19 closes SEC-18 m-66)."
+    },
+    {
+     "old": "`src/core/AIHealer/AIHealer.js` (all four `_performAction` call sites `:337,:419,:586,:652` route through the gate; `:419` refused in pilot mode)",
+     "new": "`src/core/AIHealer/AIHealer.js` (**the pilot gate call is placed inside `_performAction` itself, not at its callers**: `AIHealer` is exported at `:1134` and `_performAction` at `:362` is a prototype method callable on any instance, so the rev 18 section H no-other-caller-and-not-exported proof cannot be discharged and the rule fails closed to the callee - rev 19 section H(d), closing SEC-18 m-69(d) now rather than at implementation time; the four former call sites `:337,:419,:586,:652` keep their pilot-mode behaviour and `:419` is refused in pilot mode)"
+    },
+    {
+     "old": "with the committed root classification file and six inversion fixtures",
+     "new": "of rev 19 section C, with the committed root classification file `docs/pilot/reachability-roots.json`, the single deterministic classification rule C4, the closed `externalExecutables` leaf rule (OWNER-14-Q1), the forbidden target `scripts/fixture/**` for the `falcon.js` and `src/**` graphs, and fourteen inversion fixtures with one positive control"
+    },
+    {
+     "old": "plus the rev 18 section C dependency-reachability check with its committed script and workflow classification file",
+     "new": "plus the rev 19 section C dependency-reachability check with its committed script and workflow classification file, its deterministic classification rule, its closed `externalExecutables` leaf list, its `scripts/fixture/**` forbidden target and its fourteen inversion fixtures with one positive control"
+    }
+   ]
+  },
+  {
+   "file": "docs/security/phase-18-threat-model.md",
+   "replace": [
+    {
+     "old": "Protected actions are refused in shard mode and in CI, exit 14 (D3, D4). The approver label is audit metadata, not identity.",
+     "new": "Protected actions are refused in shard mode and in CI with POLICY_PROTECTED_ACTION_UNSUPPORTED, exit 18 and a mandatory reason code (D3, D4; rev 18 section D). DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (inline annotation added by rev 19, closing SEC-18 m-66): Phase 18 has no approval, no approver label and no exit 14 for a protected step, so the deferred text, which read exit 14 and described an approver label as audit metadata rather than identity, is unshipped design history. This item is published in docs/pilot/limitations.md only in its refusal-only Phase 18 form."
+    },
+    {
+     "old": "dev containers, WSL and affected containerised runners cannot run pilot state or approval ledgers; tmpfs fsync is not durable (D5, OD-20-Q1).",
+     "new": "dev containers, WSL and affected containerised runners cannot run pilot state; tmpfs fsync is not durable (D5, OD-20-Q1). DEFERRED to 18P under OWNER-13 (rev 19, closing SEC-18 m-66): Phase 18 writes no approval ledger, so the deferred reference to approval ledgers has no Phase 18 trigger and is not published as a Phase 18 limitation."
+    },
+    {
+     "old": "approval history is tamper-evident with the approver as metadata, not authentication; same-user rollback is bounded by uid; unsigned bundles and receipts are written against a same-user writer.",
+     "new": "same-user rollback is bounded by uid, and unsigned bundles and receipts are written against a same-user writer. DEFERRED to 18P under OWNER-13 (rev 19, closing SEC-18 m-66): Phase 18 keeps no approval history and has no approver, so the tamper-evidence and approver-as-metadata half has no Phase 18 trigger, is unshipped design history and is not published in docs/pilot/limitations.md."
+    },
+    {
+     "old": "15. **Exit 14 may outrank an ordinary failure** in the merged rank; anonymous page forces FAIL, not partially pass.",
+     "new": "15. **Exit 18 may outrank an ordinary failure** in the merged rank: a by-design protected-step refusal is exit 18 with a mandatory reason code (rev 18 section D), and residual 21 (exit 18 masking exits 17 and 1) is stated and still not accepted; anonymous page forces FAIL, not partially pass. DEFERRED to 18P under OWNER-13 (rev 19, closing SEC-18 m-66): the deferred text read Exit 14, which is reserved and unreachable in Phase 18."
+    },
+    {
+     "old": "23. **Pre-load intrinsic replacement (rev 13 section 7a.2).** Code executing in the Falcon process before ApprovalStore's first statement can replace",
+     "new": "23. **Pre-load intrinsic replacement (rev 13 section 7a.2).** DEFERRED to 18P-PROTECTED-NONGET under OWNER-13 (inline annotation added by rev 19, closing SEC-18 m-66): Phase 18 ships no ApprovalStore, no ledger approval and no approval discriminator, so this item has no Phase 18 trigger and is not published as a Phase 18 limitation; it is unshipped design history and nothing in it is newly accepted. Code executing in the Falcon process before ApprovalStore's first statement can replace"
+    },
+    {
+     "old": "classification file and six inversion fixtures",
+     "new": "classification file of rev 19 section C, its deterministic classification rule, its closed externalExecutables leaf list and its fourteen inversion fixtures with one positive control"
+    },
+    {
+     "old": "classification file and its six inversion fixtures",
+     "new": "classification file and its fourteen inversion fixtures with one positive control, plus the forbidden target scripts/fixture/** for the falcon.js and src/** graphs (rev 19 section C)"
+    }
+   ]
+  },
+  {
+   "file": "docs/phase-18-decision-traceability.md",
+   "replace": [
+    {
+     "old": "refusing `APPROVAL_MISMATCH` (`heal_changed_classified_element`, exit 14)",
+     "new": "refusing the swap in one of two Phase 18 forms (rev 19 section D, closing SEC-18 m-66): `POLICY_PROTECTED_ACTION_UNSUPPORTED` (`heal_changed_classified_element`, exit 18 with its mandatory reason code) when the swapped element reclassifies to protected, and `POLICY_PLAN_IDENTITY_DRIFT` (`heal_changed_permitted_element`, exit 13, the existing policy code) when the element stays permitted but its identity differs from the recorded plan row; `APPROVAL_MISMATCH` and exit 14 are DEFERRED to 18P"
+    },
+    {
+     "old": "DOM swap during the actionability wait is refused with exit 14 and zero requests",
+     "new": "DOM swap during the actionability wait is refused with zero requests - exit 18 when the swapped element reclassifies to protected, exit 13 (POLICY_PLAN_IDENTITY_DRIFT, heal_changed_permitted_element) when it stays permitted - with one inversion row per code"
+    }
+   ]
+  },
+  {
+   "file": "docs/phase-18-owner-decisions.md",
+   "replace": [
+    {
+     "old": "Rev 12 bounds this: no in-process caller can prompt at all,",
+     "new": "Annotation (rev 19, closing the SEC-18 E16 nit): the writer-prompt analysis in the remainder of this paragraph (entry identity, process.mainModule, the bound prompt) is residual 25's subject matter, not the forwarding fixture server's, and is retained here only as mis-pasted, unshipped design history deferred to 18P; residual 25a itself concerns the forwarding fixture server alone. Rev 12 bounds this: no in-process caller can approve without a human,"
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-authenticated-pilots.md",
+   "replace": [
+    {
+     "old": "| 051 | ApprovalStore + run token + CSRF fixture + armed NetworkGate | R |",
+     "new": "| 051 | CSRF fixture + armed NetworkGate + refusal before transmission at exit 18 with a mandatory reason code (DEFERRED to 18P under OWNER-13: the ApprovalStore and run-token mapping of this live criterion is unshipped design history; inline annotation added by rev 19, closing SEC-18 m-66) | R |"
+    }
+   ]
+  }
+ ],
+ "lintBaseline": {
+  "tokens": [
+   "ApprovalStore",
+   "ApprovalRecord",
+   "ApprovalCliWriter",
+   "PilotApprovalResolver",
+   "approve-action",
+   "emit-token-to",
+   "RunToken",
+   "RunTokenEmitter",
+   "LedgerLock",
+   "ledger approval",
+   "approvals root",
+   "approval root",
+   "APPROVAL_MISMATCH",
+   "APPROVAL_REQUIRED",
+   "APPROVAL_STALE",
+   "APPROVAL_REPLAYED",
+   "approved half",
+   "tests-only executable",
+   "PILOT_APPROVAL",
+   "PILOT_APPROVER",
+   "replay-protected",
+   "pty-approve",
+   "approver",
+   "two-command approval workflow",
+   "approval unlocks",
+   "approve and then run",
+   "approved action runs",
+   "exit 14"
+  ],
+  "method": "case-insensitive occurrence count (not line count) over tracked files, excluding docs/security/phase-18-design-review-*.md and docs/architecture/phase-18-rev*",
+  "measuredAt": "63f80e4, before the rev 19 edits are applied; recompute once on application and commit that result as the baseline",
+  "counts": {
+   "docs/phase-18-acceptance-criteria.json": 90,
+   "docs/phase-18-plan.md": 83,
+   "docs/architecture/phase-18-authenticated-pilots.md": 80,
+   "docs/phase-18-decision-traceability.md": 65,
+   "docs/security/phase-18-threat-model.md": 47,
+   "docs/phase-18-owner-decisions.md": 38,
+   "tests/regression/p16-locator-merge.check.cjs": 11,
+   "docs/research/phase-18/proposed-scope-and-criteria.md": 6,
+   "docs/PHASE-PLANS.md": 1,
+   "tests/regression/p14-memory.check.cjs": 1
+  },
+  "rules": [
+   "fail on any increase in any file",
+   "each new hit needs an inline marker in the same line or table cell",
+   "no file-level blanket applies to README.md, docs/pilot/**, src/, scripts/, .github/, package.json or .env.example",
+   "the tests/regression/* entries are locator-healing review text and the bare word approver: baselined, never exempted"
+  ]
+ },
+ "coverage": [
+  {
+   "finding": "M-23 item 1 (gate text states the rejected roots)",
+   "disposition": "fixed",
+   "where": "ac P18-AC-098 requirement and inversion; rev 19 C1, C2"
+  },
+  {
+   "finding": "M-23 item 2 (no leaf rule for non-repository commands)",
+   "disposition": "fixed",
+   "where": "rev 19 C3.4-C3.6 and Appendix A.3; OWNER-14-Q1"
+  },
+  {
+   "finding": "M-23 item 3 (non-literal argv, no constant propagation)",
+   "disposition": "fixed",
+   "where": "rev 19 C3.7: fail-closed limited to the production-reachable set; no production rewrite"
+  },
+  {
+   "finding": "M-23 item 4 (classification inconsistent, (confirm))",
+   "disposition": "fixed",
+   "where": "rev 19 C4 rules R1-R4 with a fail-closed tie-break; Appendix A regenerated from package.json and ci.yml"
+  },
+  {
+   "finding": "M-23 item 5 (fixture server coverage)",
+   "disposition": "fixed, owner confirmation requested",
+   "where": "rev 19 C2 forbidden target scripts/fixture/**, no move; OWNER-14-Q2(1)"
+  },
+  {
+   "finding": "M-23 item 6 (path.join could misfire)",
+   "disposition": "fixed",
+   "where": "rev 19 C3.2 edge-argument-only resolution; HealingBenchmark.js:87 is a data read"
+  },
+  {
+   "finding": "M-23 verification (current tree passes with zero exemptions)",
+   "disposition": "walked and stated in the design; CI evidence still owed",
+   "where": "rev 19 C5 and C7 (UNVERIFIED here: no CI run)"
+  },
+  {
+   "finding": "m-65(a) lint scope and AC-084 prohibitions",
+   "disposition": "fixed",
+   "where": "rev 19 F(a), F(b); ac P18-AC-084 prohibitedLiterals plus three requirement edits"
+  },
+  {
+   "finding": "m-65(b) vacuous blankets",
+   "disposition": "fixed",
+   "where": "rev 19 F(c) per-file baseline with fail-on-increase and F(d) blanket exclusion list; lintBaseline"
+  },
+  {
+   "finding": "m-66 traceability m-27 row",
+   "disposition": "fixed",
+   "where": "rev 19 section D; two traceability docEdits; exit 18 / exit 13 split"
+  },
+  {
+   "finding": "m-66 threat-model items 9, 12, 14, 15, 23",
+   "disposition": "fixed",
+   "where": "five threat-model docEdits with Phase 18 wording"
+  },
+  {
+   "finding": "m-66 plan lines 55 and 100",
+   "disposition": "fixed",
+   "where": "plan docEdits, annotated in place, contradiction removed"
+  },
+  {
+   "finding": "m-66 AC-083 components token refusal",
+   "disposition": "fixed",
+   "where": "ac P18-AC-083 components"
+  },
+  {
+   "finding": "m-66 architecture line 561 and the plan status line",
+   "disposition": "fixed",
+   "where": "architecture-document docEdit; plan status line to rev 19"
+  },
+  {
+   "finding": "m-67 AC-089 live clause",
+   "disposition": "fixed",
+   "where": "ac P18-AC-089 phaseClauses.current fifth clause"
+  },
+  {
+   "finding": "m-67 AC-090 tests/experimental only",
+   "disposition": "fixed",
+   "where": "ac P18-AC-090 phaseClauses.current first clause"
+  },
+  {
+   "finding": "m-67 five versus six fixtures",
+   "disposition": "fixed",
+   "where": "fourteen inversion fixtures plus one positive control in AC-090, AC-098, the plan 18D and 18F rows and the threat-model 18D and 18F rows"
+  },
+  {
+   "finding": "m-67 AC-085 inline marker",
+   "disposition": "fixed",
+   "where": "ac P18-AC-085 requirement marker"
+  },
+  {
+   "finding": "m-68 deferred text preserved only by a git reference",
+   "disposition": "partly closed; tag NOT created or pushed",
+   "where": "deferredTextRef on AC-074, 083, 084, 085, 089, 090, 095; proposed tag phase-18-design-rev17-text-909d794; OWNER-14-Q2(3) authorisation required"
+  },
+  {
+   "finding": "m-69(a) falcon.js in the sink scan",
+   "disposition": "fixed",
+   "where": "rev 19 H(a); ac P18-AC-084 requirement"
+  },
+  {
+   "finding": "m-69(b) receiver types",
+   "disposition": "fixed",
+   "where": "rev 19 H(b); ac P18-AC-084 requirement"
+  },
+  {
+   "finding": "m-69(c) JSDoc cannot remove a sink",
+   "disposition": "fixed",
+   "where": "rev 19 H(c); ac P18-AC-084 requirement"
+  },
+  {
+   "finding": "m-69(d) _performAction obligation",
+   "disposition": "fixed now, in the plan",
+   "where": "rev 19 H(d); plan 18B row rewritten to gate inside _performAction"
+  },
+  {
+   "finding": "m-69(e) scripts/ sinks discharge rule",
+   "disposition": "fixed",
+   "where": "rev 19 H(e): scan limited to production-reachable modules that can build a pilot context"
+  },
+  {
+   "finding": "E1 nit deferredUnderOptionC definition",
+   "disposition": "fixed",
+   "where": "counts.deferredUnderOptionCNote"
+  },
+  {
+   "finding": "E16 nit owner-decisions 25a body",
+   "disposition": "fixed",
+   "where": "owner-decisions docEdit on residual 25a"
+  },
+  {
+   "finding": "OWNER-13-Q1 (m-51)",
+   "disposition": "OPEN, unchanged, not reopened and not accepted",
+   "where": "AC JSON open item OWNER-13-Q1; the owner decides"
+  },
+  {
+   "finding": "H-8 Node 24",
+   "disposition": "UNVERIFIED",
+   "where": "rev 19 section 1 and the DevOps handoff"
+  }
+ ]
+}

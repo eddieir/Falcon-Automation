@@ -1,0 +1,169 @@
+{
+ "schema": "phase-18-rev23-edits/1",
+ "revision": "7891f50 on docs/phase-18-architecture",
+ "producedBy": "ARCH-30 rev 30 patch; apply with a script; docs/architecture/phase-18-rev30-patch.md is normative",
+ "notes": [
+  "Same schema as phase-18-rev29-edits.json: ac[] with set/replaceText/appendText {field,text}, openItems/openItemsAdd, counts, exitCodes, docEdits[{file,replace[{old,new}],append,after}].",
+  "Every 'old' anchor in this file was verified by exact string count to occur EXACTLY ONCE in its target file at 7891f50 (script-verified, 0 failures). Short SHAs only; no 40-character SHA anywhere; no AI attribution.",
+  "OWNER DECISION applied by rev 30 (after security design review 24, docs/security/phase-18-design-review-24.md; M-26 is NOT accepted as a residual and is FIXED by design): (1) requiredIds is REMOVED from the production API. The production entry point is decide(perRealm) only. The required-realm identifier list is PRIVATE: it is built from string literals at module initialization, frozen, never exported, never read from input, and never replaceable. (2) The decision NEVER invokes a caller method or getter. Caller array elements are read only through own data-property descriptors obtained with a captured Object.getOwnPropertyDescriptor; accessors, altered prototypes (Array.prototype identity is required), sparse arrays, extra own properties, symbol keys, malformed descriptors, excessive lengths and proxies (isProxy first) are refused; each index is read exactly once. No .slice, .map, .forEach, iteration protocol or spread is applied to a caller array; copies are made with captured intrinsic index loops. (3) The decision iterates ONLY the private canonical list, so an empty or reduced required set cannot arm; the canonical length is asserted to be 21 inside the decision as defence in depth. (4) decideFromSnapshot is PRIVATE and unexported; the SEAM-28 post-validation-mutation seam is reached only through a test-only loader that recompiles the same source file and calls the internal createDecider({testHooks:{exposeInternals:true}}) factory, which the product entry never exports and never calls with hooks. (5) The actual final export object is frozen: module.exports = Object.freeze({ decide }) as the LAST statement of the file (m-91 fixed; there is no earlier freeze of a later-replaced object).",
+  "DETAIL VOCABULARY DELTA (rev 30). WITHDRAWN because requiredIds is no longer an input: input-proxy:requiredIds, required-id-set-malformed, required-id-unknown, required-id-missing. ADDED, all under the UNCHANGED reason shared_worker_block_unverified with exit 18 and armed:false: input-prototype-invalid:perRealm, input-length-unreadable:perRealm, input-length-excessive:perRealm, array-accessor-element:index-N, array-descriptor-malformed:index-N, canonical-required-set-corrupt. No reason code, exit code, flag, environment variable, configuration key or bypass is added; page-supplied strings still never reach a detail.",
+  "ROW INVENTORY: FC8 and every other requiredIds-based row or sub-case is RE-EXPRESSED as a canonical-set or perRealm-inventory case, never deleted silently. NEW ROWS: FC16 (hostile caller-container reads, carrying the security reviewer's exact reproduction), FC17 (export-surface and canonical-list integrity) and MT-2 (oracle self-test). AUTHORITATIVE ROW COUNT BECOMES 52 ROWS: 21 (F1..F21) + 1 (F22) + 17 (FC1..FC17) + 10 (IC1..IC10) + 1 (FW-1) + 2 (MT-1, MT-2) = 52. The rev 29 total of 49 rows is superseded.",
+  "MT-1 IS REPLACED (m-93). The oracle is CONTRACT-DERIVED: docs/architecture/phase-18-rev30-patch.md section C.6 ships phase-18-rev30-expectations.json, a machine-readable expectation table whose every entry is derived from the rev 30 contract text alone. The checker reads expectations ONLY from that file and MUST ignore every harness-recorded expected* field. Coverage is total: any recorded row id or generated case class that has no entry makes the checker FAIL, never skip, and the 34 rows CONF-04 skipped, including every isProxy row, have entries. MT-2 is the self-test: the checker is run against a copy of the expectations file with deliberately wrong values and MUST report failures for exactly the mutated entries.",
+  "SWEEPS, counts by formula: Sweep A 21*11*5 = 1155; Sweep B 21*6 = 126; Sweep C 20 structural cases, with the former requiredIds-container cases re-expressed as perRealm-container cases; Sweep D 21+63+42+63+6 = 195 with the explicit non-circular boundary rule for D-mix (F1 uses F2 and F3, F11 uses F10 and F12, F21 uses F20 and F19; there is no wraparound); NEW Sweep E |HOSTILE=9| * |BASES=2| = 18 hostile-container cases over the all-absent base and a one-present base, all refusals. Totals: 1514 refusals (1493 shared_worker_block_unverified + 21 shared_worker_present) plus EXACTLY ONE authorised armed:true across 1515 decide() invocations. Zero unexpected armed:true and zero unexpected shared_worker_present stay gate conditions.",
+  "GATE: section J becomes CONF-05. CONF-01 to CONF-04 stay PARTIAL records and are NOT edited. CONF-05 adds a RECORDING requirement for popup acquisition: every F13/F14 popup must record its event source (trusted user click versus gesture-free evaluate) in the raw results; until that field exists in recorded output the popup gesture claim stays UNVERIFIED and must be labelled so.",
+  "Rev 30 weakens nothing: counts stay 98/89/6/3, C6-T stays 27/5, M-23 and M-24 stay closed, M-25 stays CLOSED AS A DESIGN FINDING per security design review 24 with its implementation gates intact, O-1 and the PILOT_APPROVAL_RUN_TOKEN text are untouched, OWNER-24 and OWNER-25 stay DECIDED, PROXY-27 stays withdrawn, the supported-browser set stays EMPTY, scope stays Chromium only. Rev 30 executes nothing and commits nothing."
+ ],
+ "ac": [
+  {
+   "id": "P18-AC-091",
+   "appendText": [
+    {
+     "field": "requirement",
+     "text": " REV 30 (security design review 24; M-26 FIXED BY DESIGN, not accepted as a residual): the production decision API is decide(perRealm) ONLY. requiredIds MUST NOT be a parameter, a property of an input object, or readable from any caller-supplied value. The set of required realm identifiers is a PRIVATE canonical list built from string literals at module initialization, frozen, never exported and never replaceable; the decision iterates ONLY that list, so an empty or reduced required set can never arm, and the decision MUST assert that the canonical list still has 21 entries and is frozen (failure => armed:false, exit 18, shared_worker_block_unverified, detail canonical-required-set-corrupt). The decision MUST NOT invoke any caller method, getter, setter, iterator or proxy trap. Caller array elements MUST be read exactly once each through own data-property descriptors obtained from captured intrinsics; an accessor element, a malformed descriptor, a prototype other than the captured Array.prototype, a sparse index, an extra own property, a symbol key, an unreadable or excessive length, or a proxy at any accepted container boundary MUST yield armed:false, exit 18, shared_worker_block_unverified. .slice, .map, .forEach, spread and the iteration protocol MUST NOT be applied to a caller array. decideFromSnapshot and snapshotAndValidate MUST NOT be exported from the product module; the only test access is a test-only loader that recompiles the same source and uses the internal createDecider({testHooks}) factory, which the product entry never exports and never calls with hooks. The product module's LAST statement MUST be module.exports = Object.freeze({ decide }), so an attempt to replace or add an export fails or is ignored and cannot change a decision. A harness-recorded expectation is never an oracle: the conformance oracle MUST read a contract-derived machine-readable expectation table (phase-18-rev30-expectations.json, rev 30 section C.6), MUST cover every row and generated case class, and MUST FAIL rather than skip anything it does not cover."
+    }
+   ]
+  }
+ ],
+ "openItems": [
+  {
+   "id": "M-26",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " FIXED BY DESIGN IN REV 30, VERIFICATION OWED TO CONF-05. The owner did NOT accept M-26 as a process-integrity residual. The reproduction in security design review 24 (a non-enumerable own slice override on the caller's array, and a swapped array prototype, cutting the snapshot's requiredIds to ['F1'] so a run armed with F2 valid-present, F3 nativeCtor 'mismatch' and F21 unmeasured) is answered structurally: requiredIds is removed from the production API, the canonical required list is private, frozen and literal, caller arrays are read only through own data-property descriptors, each index once, with Array.prototype identity required, and the decision iterates only the canonical list. The reproduction becomes rows FC16 and Sweep E and must be recorded as refusing before M-26 is closed."
+    }
+   ]
+  },
+  {
+   "id": "M-25",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " CLOSED AS A DESIGN FINDING per security design review 24 (docs/security/phase-18-design-review-24.md). The executed gate stays honest and the mandatory implementation gates stay open as measurement obligations, now carried by CONF-05: F16 to F21 as real measurements, the worker WebSocket case FW-1, OPEN-BID-27 product identity, a browser that lacks SharedWorker, and the GitHub-hosted runner. Documentation alone must not close any of them."
+    }
+   ]
+  },
+  {
+   "id": "CONF-04",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " SUPERSEDED BY CONF-05 (rev 30 section J). CONF-04 is not edited and must never be presented as a pass: its MT-1 checker read the harness's own expected* fields rather than the contract and skipped 34 of 237 rows including the isProxy rows, and its popup gesture was not independently verified. CONF-05 reruns the full 52-row matrix against the rev 30 contract with a contract-derived oracle."
+    }
+   ]
+  },
+  {
+   "id": "W6T-GATE",
+   "appendText": [
+    {
+     "field": "state",
+     "text": " NOT SATISFIED. The authoritative table is rev 30 section C at 52 ROWS (21 F + 1 F22 + 17 FC (FC1..FC17) + 10 IC + 1 FW-1 + 2 MT); the rev 29 total of 49 rows is superseded. The gate now also requires FC16 (hostile caller-container reads, including the security reviewer's exact reproduction), FC17 (export-surface and canonical-list integrity), Sweep E (18 hostile-container cases), the contract-derived oracle of section C.6 with total coverage and no silent skips, MT-2 (oracle self-test with deliberately wrong expectations), and recorded popup event sources. The executed gate is CONF-05."
+    }
+   ]
+  }
+ ],
+ "openItemsAdd": [
+  {
+   "id": "CONF-05",
+   "ref": "rev 30 section J; supersedes the CONF-04 gate",
+   "state": "NOT EXECUTED. The executed W6-T conformance gate required before the next Security review and before any ruling on M-26. Full rerun of all 52 rows on Node 22.19.0 and 24.21.0, >=3 repetitions per required row, each row executed independently, Sweeps A 1155, B 126, C 20, D 195 and E 18 with counts re-derived from the schema constants, every proxy case including revoked and throwing traps, every browser row and the 21-realm gate with the pinned Chromium refusing in every full-gate repetition, FC1, FC2, FC16, FC17, IC1, IC2, IC4 and IC8 executed independently, the contract-derived oracle of section C.6 covering every row and case class with no silent skip, MT-2 self-test, zero unexpected armed:true, zero unexpected shared_worker_present, zero uncaught throws, zero skipped required rows, zero non-loopback requests, recorded popup event source per popup realm, identity and same-process checks, cleanup of CONF-05-owned artefacts only, and read-only identification of the two pre-existing loopback listeners. Any unmeasured required row keeps the gate PARTIAL and arming refused."
+  },
+  {
+   "id": "HOSTILE-30",
+   "ref": "rev 30 sections B.3a, B.5, C row FC16 and section D Sweep E",
+   "state": "DECIDED AND CLOSED AS A DESIGN DECISION, OPEN AS A MEASUREMENT OBLIGATION. Caller containers are read only through own data-property descriptors from captured intrinsics, each index once, with proxy rejection first and Array.prototype identity required; no caller method or getter is ever invoked; the required-realm list is private, frozen and literal. Verification is owed to CONF-05 rows FC16, FC17, IC3-e, IC5 and Sweep E."
+  },
+  {
+   "id": "ORACLE-30",
+   "ref": "rev 30 section C.6 rows MT-1 and MT-2, and the shipped phase-18-rev30-expectations.json",
+   "state": "OPEN until CONF-05 records it. The conformance oracle must read expectations only from the contract-derived expectations file, must ignore every harness-recorded expected* field, must cover every row id and generated case class, must FAIL (never skip) anything it does not cover, and must pass its own MT-2 self-test against deliberately wrong expectations."
+  },
+  {
+   "id": "POPUP-30",
+   "ref": "rev 30 section J item 8",
+   "state": "UNVERIFIED. The popup gesture claim for F13 and F14 stays unverified until the raw results record, per popup realm and per repetition, the event source that opened it (trusted user click versus gesture-free evaluate), the fixture URL and the timeout. Recording this is a CONF-05 requirement; until it appears in recorded output the claim must be labelled UNVERIFIED everywhere it is reported."
+  }
+ ],
+ "counts": {
+  "set": {
+   "rev30Note": "Rev 30 changes NO criterion count: total 98, must 89, should 6, could 3; deferredToPhase18P 11, deferredUnderOptionC 5, deferredIds and mixedPhase18PIds unchanged. M-23 and M-24 stay closed; M-25 is CLOSED AS A DESIGN FINDING with its implementation gates carried by CONF-05; M-26 is FIXED BY DESIGN with verification owed to CONF-05; C6-T stays 27 inversion fixtures (X1..X27) and 5 positive controls (P1..P5), disjoint from W6-T. The single inventory change is inside table W6-T, reprinted in rev 30 section C, whose AUTHORITATIVE ROW COUNT BECOMES 52 ROWS: 21 required decision realms (F1..F21), 1 informational realm (F22), 17 decision-function and mechanism cases (FC1..FC17, adding FC16 hostile caller-container reads and FC17 export-surface and canonical-list integrity, and re-expressing FC8 and every other requiredIds-based case as a canonical-set or perRealm-inventory case), 10 control fixtures (IC1..IC10) and 1 carried worker-WebSocket case (FW-1), plus 2 META-TEST rows (MT-1 the contract-derived oracle, MT-2 its self-test). Sweep counts by formula: A 21*11*5=1155, B 21*6=126, C 20, D 21+63+42+63+6=195, NEW E 9*2=18 => 1514 refusals (1493 shared_worker_block_unverified + 21 shared_worker_present) plus exactly one authorised armed:true across 1515 decide() invocations. The rev 25 '34 rows', rev 26 '36 rows', rev 27 '42 rows', rev 28 '44 rows' and rev 29 '49 rows' totals are superseded by 52."
+  }
+ },
+ "exitCodes": {
+  "set": {
+   "rev30Note": "Rev 30 adds no exit code, removes none and changes no precedence: the rev 6 order stands, 2 > 3 > 18 > 17 > 16 > 15 > 13 > 12 > 11 > 14 > 10 > 1 > 0. Reason codes stay snake_case. shared_worker_present and shared_worker_block_unverified remain the only SharedWorker reasons, both double-labelled PILOT_INTERNAL_ERROR with exit 18; shared_worker_blocked stays WITHDRAWN and POLICY_SHARED_WORKER_BLOCKED must not appear anywhere. The DETAIL vocabulary changes only as follows. WITHDRAWN with the requiredIds parameter: input-proxy:requiredIds, required-id-set-malformed, required-id-unknown, required-id-missing. ADDED, all under shared_worker_block_unverified with exit 18 and armed:false: input-prototype-invalid:perRealm (the container's prototype is not the captured Array.prototype), input-length-unreadable:perRealm (length is absent, an accessor or not a non-negative integer), input-length-excessive:perRealm (length above the 1024 bound), array-accessor-element:index-N (an element is an accessor), array-descriptor-malformed:index-N (a descriptor is neither a usable data descriptor nor an accessor) and canonical-required-set-corrupt (the private canonical list is no longer 21 frozen literal ids). Page-supplied strings still never reach a detail, and no detail carries caller-controlled text."
+  }
+ },
+ "docEdits": [
+  {
+   "file": "docs/architecture/phase-18-rev29-patch.md",
+   "replace": [
+    {
+     "old": "### B.5 Reference text (reprinted; supersedes rev 28 B.5)",
+     "new": "### B.5 Reference text (reprinted; supersedes rev 28 B.5)\n\n**SUPERSEDED BY REV 30 (ARCH-30, security design review 24): the code block below is NOT the live reference. `requiredIds` is REMOVED from the production API (`decide(perRealm)` only), the required-realm list is a private frozen literal canonical list, caller containers are read only through own data-property descriptors from captured intrinsics (no caller method, getter or iterator is ever invoked), `decideFromSnapshot` and `snapshotAndValidate` are PRIVATE and unexported, and the file's last statement is `module.exports = Object.freeze({ decide })`. The live reference is the complete module in rev 30 section B.5.**"
+    },
+    {
+     "old": "function decide(perRealm, requiredIds) {",
+     "new": "// WITHDRAWN BY REV 30 (ARCH-30): the signature decide(perRealm, requiredIds) is withdrawn.\n// The live signature is decide(perRealm); the required-realm id list is private, frozen,\n// built from literals and never read from input. DO NOT IMPLEMENT the function below.\nfunction decide(perRealm, requiredIds) {"
+    },
+    {
+     "old": "  snapshotAndValidate, decideFromSnapshot, // exported for tests (SEAM-28)",
+     "new": "  // WITHDRAWN BY REV 30: snapshotAndValidate and decideFromSnapshot are PRIVATE and MUST NOT\n  // be exported. The SEAM-28 seam is reached only by a test-only loader that recompiles the\n  // same source and calls the internal createDecider({testHooks:{exposeInternals:true}}).\n  snapshotAndValidate, decideFromSnapshot, // exported for tests (SEAM-28) - WITHDRAWN"
+    },
+    {
+     "old": "`module.exports` stays frozen; the two new exports are test seams only and cannot influence a production decision.",
+     "new": "**CORRECTED BY REV 30 (minor m-91): in the rev 28/29 text `Object.freeze(module.exports)` ran BEFORE `module.exports` was reassigned, so the exports were NOT frozen and `decide` could be swapped. Rev 30 removes the early freeze and makes `module.exports = Object.freeze({ decide })` the LAST statement of the module; `snapshotAndValidate`, `decideFromSnapshot`, `isValidAbsence` and `isValidPresence` are no longer exported at all.** Superseded rev 29 sentence: `module.exports` stays frozen; the two new exports are test seams only and cannot influence a production decision."
+    },
+    {
+     "old": "### B.6 Order of operations (amended)",
+     "new": "### B.6 Order of operations (amended)\n\n**AMENDED AGAIN BY REV 30 (ARCH-30): the rule gains its container layer at the front. ORDER OF OPERATIONS (normative): reject proxies -> read the caller container through own data-property descriptors only (Array.prototype identity, readable bounded length, no accessor element, no malformed descriptor, no sparse index, no extra own property, no symbol key; each index read exactly once) -> inspect record shape (accessor before key order) -> snapshot twice -> compare -> validate the snapshot schema -> freeze -> assert the private canonical list is 21 frozen literal ids -> validate EVERY canonical required record against the B.4a matrix -> only then inspect presence -> arm only on unanimous VALID-ABSENT. No caller method, getter, setter or iterator is ever invoked, and the required-realm set is never caller-supplied.**"
+    },
+    {
+     "old": "## Section C — table W6-T, rev 29 delta (49 rows)",
+     "new": "## Section C — table W6-T, rev 29 delta (49 rows)\n\n**SUPERSEDED BY REV 30 (ARCH-30): the authoritative table is `docs/architecture/phase-18-rev30-patch.md` section C at 52 ROWS (21 F + 1 F22 + 17 FC (FC1..FC17) + 10 IC + 1 FW-1 + 2 MT). Rev 30 adds FC16, FC17 and MT-2, replaces MT-1 with a contract-derived oracle, and re-expresses FC8 and every other `requiredIds`-based case as a canonical-set or `perRealm`-inventory case.**"
+    },
+    {
+     "old": "**Authoritative total: 21 (F1..F21) + 1 (F22) + 15 (FC1..FC15) + 10 (IC1..IC10) + 1 (FW-1) + 1 (MT-1) = 49 rows.**",
+     "new": "**SUPERSEDED BY REV 30 (ARCH-30): the authoritative total is 21 (F1..F21) + 1 (F22) + 17 (FC1..FC17) + 10 (IC1..IC10) + 1 (FW-1) + 2 (MT-1, MT-2) = 52 ROWS, reprinted with its changed and new rows in rev 30 section C.** Rev 29 total (superseded): 21 (F1..F21) + 1 (F22) + 15 (FC1..FC15) + 10 (IC1..IC10) + 1 (FW-1) + 1 (MT-1) = 49 rows."
+    },
+    {
+     "old": "| **MT-1** | **meta-test on the harness itself.**",
+     "new": "| **MT-1 (REPLACED BY REV 30: the oracle is a contract-derived machine-readable expectations file, `phase-18-rev30-expectations.json`, shipped in rev 30 section C.6; the checker MUST ignore every harness-recorded `expected*` field, MUST cover every row and generated case class including the 34 rows CONF-04 skipped and every `isProxy` row, and MUST FAIL rather than skip. Rev 30 adds MT-2, the self-test against deliberately wrong expectations.)** | **meta-test on the harness itself.**"
+    },
+    {
+     "old": "- **Sweep D** (new).",
+     "new": "- **Sweep D** (new; **boundary rule stated by rev 30 (minor m-95): `preceding` means canonical index i-1 and `following` means canonical index i+1 in the F1..F21 order, with NO wraparound. At `F1` there is no preceding realm, so both D-mix partners are taken forward: `F2` and `F3`. At `F21` there is no following realm, so both are taken backward: `F20` and `F19`. At `F11` they are `F10` and `F12`. The count stays 6**)."
+    },
+    {
+     "old": "**Checker assertions (formulas, not literals):**",
+     "new": "**SUPERSEDED BY REV 30 (ARCH-30): the live formulas add Sweep E (`9 hostile container patterns x 2 bases = 18`), giving `1155 + 126 + 20 + 195 + 18 = 1514` refusals — **1493** `shared_worker_block_unverified` and **21** `shared_worker_present` — plus exactly **1** authorised `armed:true` across **1515** `decide` invocations (rev 30 section D).** Checker assertions (formulas, not literals):**"
+    },
+    {
+     "old": "| `decide(perRealm, requiredIds)` | FC1, FC13, FC14, IC3, IC5, IC6, IC10, Sweeps A–D | P18-AC-091 |",
+     "new": "| `decide(perRealm)` **(rev 30: the `requiredIds` parameter is withdrawn; this is the ONLY product export)** | FC1, FC13, FC14, FC16, FC17, IC3, IC5, IC6, IC10, Sweeps A–E | P18-AC-091 |"
+    },
+    {
+     "old": "## Section J — executed W6-T conformance gate (CONF-04), required before Security",
+     "new": "## Section J — executed W6-T conformance gate (CONF-04), required before Security\n\n**SUPERSEDED BY REV 30 (ARCH-30): CONF-04 has executed and is not accepted as satisfying the gate — its MT-1 checker read the harness's own `expected*` fields instead of the contract and skipped 34 of 237 rows including the `isProxy` rows, and the popup gesture was not independently verified. The live gate is CONF-05, rev 30 section J: the full 52-row matrix, Sweeps A–E, the contract-derived oracle with total coverage, MT-2, and recorded popup event sources. CONF-01 to CONF-04 stay PARTIAL records and are not edited.**"
+    }
+   ]
+  },
+  {
+   "file": "docs/architecture/phase-18-rev28-patch.md",
+   "replace": [
+    {
+     "old": "Object.freeze(module.exports);            // see B.8 note on export immutability",
+     "new": "// WITHDRAWN BY REV 30 (ARCH-30, minor m-91): this freeze runs BEFORE module.exports is\n// reassigned at the bottom of the file, so the real exports were never frozen and decide\n// could be swapped (confirmed in security design review 24). The live rule is: no early\n// freeze, and the LAST statement of the module is module.exports = Object.freeze({ decide }).\nObject.freeze(module.exports);            // see B.8 note on export immutability - WITHDRAWN"
+    },
+    {
+     "old": "  const req = requiredIds.slice();",
+     "new": "  // WITHDRAWN BY REV 30 (ARCH-30, M-26 fixed): calling a method on the caller's array let a\n  // non-enumerable own `slice` override, or a swapped array prototype, cut the required set to\n  // ['F1'] and arm with F2 valid-present, F3 nativeCtor 'mismatch' and F21 unmeasured\n  // (reproduction in security design review 24). Rev 30 removes requiredIds from the API and\n  // reads caller arrays only through own data-property descriptors. DO NOT IMPLEMENT this line.\n  const req = requiredIds.slice();"
+    },
+    {
+     "old": "- `requiredIds` is a Proxy, or any `requiredIds` element is a Proxy ⇒ `input-proxy:requiredIds`;",
+     "new": "- **WITHDRAWN BY REV 30 (ARCH-30): `requiredIds` is no longer an input, so `input-proxy:requiredIds`, `required-id-set-malformed`, `required-id-unknown` and `required-id-missing` are withdrawn from the detail vocabulary; the required-realm list is private, frozen and literal. The rev 30 container rules replace them (`input-prototype-invalid:perRealm`, `input-length-unreadable:perRealm`, `input-length-excessive:perRealm`, `array-accessor-element:index-N`, `array-descriptor-malformed:index-N`, `canonical-required-set-corrupt`).** Superseded rev 28 rule: `requiredIds` is a Proxy, or any `requiredIds` element is a Proxy ⇒ `input-proxy:requiredIds`;"
+    }
+   ]
+  }
+ ]
+}
