@@ -30,6 +30,10 @@ At each approved milestone, generate a checkpoint with `node scripts/production-
 - Never replay writes, merges, or dispatches. A resumed session does not restore running tasks or hidden context.
 - Only the coordinator writes the ledger. An OVER_TARGET packet is used in full.
 
+## Waiting on CI
+
+To block on a single Actions run without polling forever, use `node scripts/production-cycle/ci-wait.js --repo=<owner/name> --run-id=<id> --sha=<40-hex>` (or `npm run production:ci-wait -- ...`). It polls `gh run view` up to a hard, pre-computed ceiling (`floor(timeout/interval)+1`, default 1200s/30s) and exits 0 only on a genuine `success` conclusion; every other outcome (failure, cancelled, skipped/neutral, timeout, run-not-found/sha-mismatch, a `gh` CLI error, or bad input) gets its own documented exit code — see the header comment in that file. A single run's success is printed as "this run only — not PR readiness". `--pr=<n> --require=<comma-separated exact check names>` (instead of `--run-id`) polls `gh pr view` and succeeds only once every listed check name is present with a SUCCESS conclusion on the expected `--sha`; that means "the listed checks are green on this SHA", nothing more. It does not check branch protection, reviews, other required checks or mergeability, and checks are matched by name only.
+
 ## Phase 0 — Intake and risk
 
 Read `CLAUDE.md`, relevant repository files, user-supplied context, and current Git status. Record objective, source, affected users, urgency, constraints, non-goals, success definition, unknowns, risk class, and decision owner in the ledger. Ask the human only when an unknown materially affects scope, safety, cost, public API, or data handling; otherwise state a reversible assumption.
