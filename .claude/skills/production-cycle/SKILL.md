@@ -21,6 +21,15 @@ Require a concise return of at most 200 words with these fields: `TASK_ID`, `REV
 
 Bound coordination: at most 2 concurrent tasks. Dispatch ceilings, including retries and resumed tasks: fast work 4, standard work 8, full work 16. Classify scope and risk at intake. These are soft coordination ceilings, not claimed model-token usage or guaranteed hard token caps. Never fabricate token or cost measurements. Allow at most one retry per blocked task; then replan within the remaining ceiling or report the blocker. Do not automatically escalate to a more expensive model. Do not skip a required risk gate to fit a budget; surface the constraint and obtain a human decision if the gate cannot be completed.
 
+## Resume from a checkpoint
+
+At each approved milestone, generate a checkpoint with `node scripts/production-cycle/checkpoint.js --run-id=<id>` (or `npm run production:checkpoint -- --run-id=<id>`). To continue in a fresh Claude Code session, invoke `/production-cycle resume <run-id>`; the skill receives the text after its name as `$ARGUMENTS`.
+- First run the same command with `--verify`; stop if it fails. Exit 6 means outdated: re-verify from the ledger and git, then regenerate.
+- Read only `checkpoint.md`, the ledger events after its `lastSeq`, and narrowly cited evidence, not old transcripts.
+- Treat UNVERIFIED items as unknown and re-verify them from the ledger and git. Stale verdicts must be re-run for the current revision.
+- Never replay writes, merges, or dispatches. A resumed session does not restore running tasks or hidden context.
+- Only the coordinator writes the ledger. An OVER_TARGET packet is used in full.
+
 ## Phase 0 — Intake and risk
 
 Read `CLAUDE.md`, relevant repository files, user-supplied context, and current Git status. Record objective, source, affected users, urgency, constraints, non-goals, success definition, unknowns, risk class, and decision owner in the ledger. Ask the human only when an unknown materially affects scope, safety, cost, public API, or data handling; otherwise state a reversible assumption.
