@@ -108,3 +108,14 @@ test("runningAgents counts only agents whose start was observed", () => {
   const st = R([ev(55, { ev: "SubagentStart", sid: "s1", aid: "ok", atype: "developer" }), ev(56, { ev: "PostToolUse", sid: "s1", aid: "late", atype: "qa-engineer", tool: "Read" })]);
   assert.strictEqual(st.stats.runningAgents, 1); assert.strictEqual(st.stats.partialAgents, 1);
 });
+
+test("duplicate deliveries are dropped only within a few seconds; the same id much later is a real repeated event", () => {
+  const base = { v: 1, id: "same-id", ev: "Stop", sid: "s1" };
+  const mk = (iso) => ({ ...base, ts: iso });
+  const t0 = Date.parse(ev(10, {}).ts);
+  const iso = (ms) => new Date(t0 + ms).toISOString();
+  const near = R([mk(iso(0)), mk(iso(1500))], [], { staleMs: 1e12 });
+  assert.strictEqual(near.stats.duplicates, 1); assert.strictEqual(near.stats.events, 1); assert.strictEqual(near.sessions[0].turns, 1);
+  const later = R([mk(iso(0)), mk(iso(60000)), mk(iso(120000))], [], { staleMs: 1e12 });
+  assert.strictEqual(later.stats.duplicates, 0); assert.strictEqual(later.stats.events, 3); assert.strictEqual(later.sessions[0].turns, 3, "repeated identical Stop events are all counted");
+});
