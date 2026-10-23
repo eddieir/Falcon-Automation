@@ -2,22 +2,26 @@
 
 **Prepared:** 2026-10-23. **Repository:** https://github.com/eddieir/Falcon-Automation
 
-> Milestone *definitions* below are not yet GitHub milestone objects: this GitHub integration supports issue creation but not milestone creation. Issues have been created and intentionally remain unassigned to GitHub milestones. Existing engineering phases in `docs/PHASE-PLANS.md` still govern work already planned; reconcile before implementation. No due dates or superiority claims are invented.
+ > GitHub milestone setup is pending execution of `scripts/roadmap/setup-github-milestones.sh`. The setup performs authenticated milestone creation and issue assignment; this documentation alone does not create GitHub milestone objects.
 
-## GitHub milestone definitions (create in repository settings)
+## Milestones ordered by provisional delivery target
 
-| Key | Milestone title | Required outcome | Issue count |
+**Important:** These are planning targets, not promised releases. Actual GitHub milestone URLs appear in [FALCON-MILESTONE-LINKS.md](FALCON-MILESTONE-LINKS.md) **after** the setup script has been executed and the generated file committed. Until then the links do not exist.
+
+| Delivery order | Milestone | Target date | GitHub issues |
 |---|---|---|---|
-| M0 | Competitive evidence baseline | Evidence register, neutral benchmark, claim audit | 3 |
-| M1 | Trustworthy Alpha | Business assertions, state-aware journeys, no false green | 3 |
-| M2 | Secure Technical Preview | Phase 18 C2 governance, action policy, auth | 3 |
-| M3 | Verified Self-Healing | Healing corpus, scoped refusal and rollback | 3 |
-| M4 | Developer Beta | Playwright interoperability and onboarding | 3 |
-| M5 | Efficient CI | Impact selection, triage and runtime budgets | 3 |
-| M6 | Enterprise Operations | RBAC, retention, multi-project CI | 4 |
-| M7 | Customer Pilot | Pilot evidence, ROI, packaging | 3 |
-| M8 | Advanced QA | Accessibility, visual, API/UI correlation | 3 |
-| M9 | Independent Competitive Release | Comparative benchmark, independent review, dossier | 3 |
+| M0 | Competitive evidence baseline | 2026-11-13 | [#74](https://github.com/eddieir/Falcon-Automation/issues/74)–[#76](https://github.com/eddieir/Falcon-Automation/issues/76) |
+| M1 | Trustworthy Alpha | 2027-01-08 | [#77](https://github.com/eddieir/Falcon-Automation/issues/77)–[#79](https://github.com/eddieir/Falcon-Automation/issues/79) |
+| M2 | Secure Technical Preview | 2027-02-19 | [#80](https://github.com/eddieir/Falcon-Automation/issues/80)–[#82](https://github.com/eddieir/Falcon-Automation/issues/82) |
+| M3 | Verified Self-Healing | 2027-03-26 | [#83](https://github.com/eddieir/Falcon-Automation/issues/83)–[#85](https://github.com/eddieir/Falcon-Automation/issues/85) |
+| M4 | Developer Beta | 2027-05-07 | [#86](https://github.com/eddieir/Falcon-Automation/issues/86)–[#88](https://github.com/eddieir/Falcon-Automation/issues/88) |
+| M5 | Efficient CI | 2027-06-18 | [#89](https://github.com/eddieir/Falcon-Automation/issues/89)–[#91](https://github.com/eddieir/Falcon-Automation/issues/91) |
+| M6 | Enterprise Operations | 2027-08-13 | [#92](https://github.com/eddieir/Falcon-Automation/issues/92)–[#95](https://github.com/eddieir/Falcon-Automation/issues/95) |
+| M7 | Customer Pilot | 2027-09-24 | [#96](https://github.com/eddieir/Falcon-Automation/issues/96)–[#98](https://github.com/eddieir/Falcon-Automation/issues/98) |
+| M8 | Advanced QA | 2027-12-03 | [#99](https://github.com/eddieir/Falcon-Automation/issues/99)–[#101](https://github.com/eddieir/Falcon-Automation/issues/101) |
+| M9 | Independent Competitive Release | 2028-01-14 | [#102](https://github.com/eddieir/Falcon-Automation/issues/102)–[#104](https://github.com/eddieir/Falcon-Automation/issues/104) |
+
+Run `bash scripts/roadmap/setup-github-milestones.sh` after authenticating `gh` with Issues write permissions. The script creates/reuses all 10 milestone objects, assigns issues #74–#104, prints the exact milestone URLs, and creates `docs/FALCON-MILESTONE-LINKS.md` for review and commit to this PR. It checks for unexpected issue titles and existing conflicting milestone assignments rather than overwriting them.
 
 ## Release and review policy
 
