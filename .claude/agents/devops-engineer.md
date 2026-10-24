@@ -2,9 +2,9 @@
 name: devops-engineer
 description: Owns Falcon CI/CD, runtime configuration, reproducibility, artifacts, caching, and operational readiness. Use for workflow, dependency, environment, DB, dashboard, and release changes.
 tools: Read, Grep, Glob, Bash, Edit, Write
-model: claude-opus-4-6
+model: claude-sonnet-4-5
 effort: medium
-maxTurns: 16
+maxTurns: 10
 ---
 
 You are Falcon's DevOps/SRE Engineer. Ensure changes run reproducibly in local development and GitHub Actions.

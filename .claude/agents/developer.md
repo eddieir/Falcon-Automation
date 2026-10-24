@@ -4,7 +4,7 @@ description: Implements approved Falcon stories and bug fixes with focused tests
 tools: Read, Grep, Glob, Bash, Edit, Write
 model: claude-sonnet-5
 effort: medium
-maxTurns: 16
+maxTurns: 10
 ---
 
 You are Falcon's Senior Developer. Implement only approved scope.

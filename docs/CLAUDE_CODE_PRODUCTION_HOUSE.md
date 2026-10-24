@@ -26,20 +26,20 @@ The main session is normally the director; do not launch a second director to re
 
 ## Model and ownership map
 
-The routing table in `CLAUDE.md` is the single source of truth for models; this table repeats it for convenience and must match it and each agent's front matter. Only two low-risk pairs share a model (Product Manager/Technical Writer, Project Manager/Release Manager).
+The routing table in `CLAUDE.md` is the single source of truth for models; this table repeats it for convenience and must match it and each agent's front matter. Opus is reserved for the Security Engineer to protect plan limits; Developer, QA Engineer and Code Reviewer must keep mutually distinct models. Other roles may share a model.
 
 | Role | Model ID | Turns per invocation | Exclusive responsibility | Main recipients |
 |---|---|---:|---|---|
-| Production Director | `claude-sonnet-5-5` | 20 | Routing, evidence ledger, conflict resolution | Selected specialists |
+| Production Director | `claude-sonnet-5-5` | 12 | Routing, evidence ledger, conflict resolution | Selected specialists |
 | Product Manager | `claude-haiku-4-5` | 8 | User problem, value and measurable outcome | Product Owner |
 | Product Owner | `claude-haiku-5-5` | 8 | Scope, priority, observable AC IDs | Developer, QA, planning roles |
 | Project Manager | `claude-sonnet-4-6` | 8 | Dependency order, task ownership and delivery status | Director |
-| Solution Architect | `claude-opus-5` | 16 | Interfaces, boundaries, failure and migration design | Developer, QA, Security, DevOps |
-| Developer | `claude-sonnet-5` | 16 | Production implementation and focused tests | QA, Code Reviewer |
-| QA Engineer | `claude-opus-4-7` | 16 | Independent AC verification and defect evidence | Developer, Release Manager |
-| Security Engineer | `claude-opus-5-5` | 16 | Trust-boundary findings and security verdict | Developer, Release Manager |
-| DevOps Engineer | `claude-opus-4-6` | 16 | CI/runtime/configuration changes and operational evidence | Developer, Release Manager |
-| Code Reviewer | `claude-opus-4-8` | 16 | Independent read-only diff review | Developer, Release Manager |
+| Solution Architect | `claude-sonnet-5-5` | 10 | Interfaces, boundaries, failure and migration design | Developer, QA, Security, DevOps |
+| Developer | `claude-sonnet-5` | 10 | Production implementation and focused tests | QA, Code Reviewer |
+| QA Engineer | `claude-sonnet-4-5` | 10 | Independent AC verification and defect evidence | Developer, Release Manager |
+| Security Engineer | `claude-opus-5-5` | 10 | Trust-boundary findings and security verdict | Developer, Release Manager |
+| DevOps Engineer | `claude-sonnet-4-5` | 10 | CI/runtime/configuration changes and operational evidence | Developer, Release Manager |
+| Code Reviewer | `claude-sonnet-4-6` | 10 | Independent read-only diff review | Developer, Release Manager |
 | Technical Writer | `claude-haiku-4-5` | 8 | Documentation of verified behavior | Code Reviewer, Release Manager |
 | Release Manager | `claude-sonnet-4-6` | 8 | Evidence-based readiness decision | Director / human owner |
 

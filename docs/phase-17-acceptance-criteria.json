@@ -429,7 +429,7 @@
         },
         {
           "file": "tests/regression/p17-governance.check.cjs",
-          "name": "AC15: exactly two reuse pairs, other six distinct"
+          "name": "AC15: Opus only for security; developer/QA/reviewer mutually distinct"
         },
         {
           "file": "tests/regression/p17-governance.check.cjs",
