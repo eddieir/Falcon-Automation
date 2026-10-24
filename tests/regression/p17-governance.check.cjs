@@ -1,7 +1,7 @@
 /**
  * P17 governance consistency test (AC15).
  * Validates:
- *  - exactly 12 agent files;
+ *  - all 12 required production-cycle agent files are present; optional specialist agents are permitted;
  *  - each agent's front-matter model matches CLAUDE.md routing table AND
  *    docs/CLAUDE_CODE_PRODUCTION_HOUSE.md house-doc table;
  *  - every model id is version-specific (claude-(haiku|sonnet|opus)-\d);
@@ -66,12 +66,20 @@ function parseMarkdownTableRows(md) {
   return out;
 }
 
-test("AC15: exactly 12 agent files", () => {
+test("AC15: all required production-cycle agents exist; optional specialists allowed", () => {
   const files = fs
     .readdirSync(AGENTS_DIR)
     .filter((f) => f.endsWith(".md"))
     .sort();
-  assert.equal(files.length, 12, JSON.stringify(files));
+  const required = Object.keys(ROLE_KEYS).map((key) => key + ".md").sort();
+  for (const name of required) assert.ok(files.includes(name), "missing required agent: " + name);
+  for (const name of files) {
+    const fm = parseAgentFrontMatter(path.join(AGENTS_DIR, name));
+    assert.ok(fm.model, "missing model: " + name);
+    assert.match(fm.model, MODEL_RE, "non-versioned model: " + name);
+    assert.notEqual(fm.model, "inherit", "model inheritance: " + name);
+    assert.ok(!/^claude-opus-/.test(fm.model) || name === "security-engineer.md", "Opus reserved for Security Engineer: " + name);
+  }
 });
 
 test("AC15: each agent model is version-specific and non-aliased", () => {
