@@ -64,4 +64,5 @@ The fields `product`, `productVersion`, `lastVerified`, and `unknownClaims` are 
 
 ## Tranche log
 
-- 2026-10-24: added Playwright Test Agents (S-20, official docs) and QA Wolf (S-21, vendor marketing). Both entries cover only the cells the single page supports; all other cells are `UNKNOWN`. Not yet researched from the shortlist: Cypress, the Selenium ecosystem and open-source browser agents. Issue #74 remains open pending those tranches.
+- 2026-10-24: added Playwright Test Agents (S-20, official docs) and QA Wolf (S-21, vendor marketing). Both entries cover only the cells the single page supports; all other cells are `UNKNOWN`.
+- 2026-10-25: added Cypress (S-22 vendor page, S-23 vendor blog), Selenium (S-24, a Sauce Labs blog, not the Selenium project's own docs), browser-use (S-25, README) and Stagehand (S-26, docs). 4 searches, 5 pages opened. Only the cells those pages support carry a status; every other cell is `UNKNOWN`. Not covered: Selenium project documentation, other open-source browser agents, Cypress approval and rollback behavior. S-24 backs no cell; read the official Selenium docs before recording any Selenium claim. Stagehand and browser-use licence claims need the GitHub repository as a source (only browser-use is recorded).
