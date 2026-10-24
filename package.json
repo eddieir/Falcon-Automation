@@ -11,7 +11,7 @@
   },
   "scripts": {
     "start": "node falcon.js",
-    "test:unit": "node tests/unit/ReportManagerExitCode.check.js && node tests/unit/DBConfigBehavior.check.js && node tests/unit/DashboardAuth.check.js",
+    "test:unit": "node tests/unit/ReportManagerExitCode.check.js && node tests/unit/DBConfigBehavior.check.js && node tests/unit/DashboardAuth.check.js && node tests/unit/CiWait.check.js",
     "test:login": "node tests/ui/LoginTest.js",
     "test:checkout": "node tests/ui/CheckoutTest.js",
     "test:search": "node tests/ui/GoogleSearchTest.js",
@@ -47,6 +47,7 @@
     "bench:parallel": "node scripts/benchmark/parallel.js",
     "production:event": "node scripts/production-cycle/append-event.js",
     "production:checkpoint": "node scripts/production-cycle/checkpoint.js",
+    "production:ci-wait": "node scripts/production-cycle/ci-wait.js",
     "production:dashboard": "node scripts/production-cycle/dashboard.js",
     "llm:profile:list": "node scripts/llm/profile.js list",
     "llm:profile:show": "node scripts/llm/profile.js show",
