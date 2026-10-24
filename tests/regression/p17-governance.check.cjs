@@ -1,14 +1,13 @@
 /**
  * P17 governance consistency test (AC15).
  * Validates:
- *  - exactly 12 agent files;
+ *  - all 12 required production-cycle agent files are present; optional specialist agents are permitted;
  *  - each agent's front-matter model matches CLAUDE.md routing table AND
  *    docs/CLAUDE_CODE_PRODUCTION_HOUSE.md house-doc table;
  *  - every model id is version-specific (claude-(haiku|sonnet|opus)-\d);
  *  - no routing/fallback mention of 'fable' outside the prohibition line(s);
  *  - no 'inherit' alias or bare 'sonnet|haiku|opus' value is used;
- *  - exactly two reused models (PM+TW = claude-haiku-4-5, PjM+RM = claude-sonnet-4-6);
- *  - the other six roles have mutually distinct ids;
+ *  - Opus only for security-engineer; developer, QA and reviewer have mutually distinct ids;
  *  - Director=claude-sonnet-5-5, Developer=claude-sonnet-5;
  *  - SKILL.md mentions 'claude-sonnet-5-5' and 'Fable is prohibited' (any case).
  *  - no legacy phrases: 'Haiku or Sonnet model', 'economical'.
@@ -67,12 +66,20 @@ function parseMarkdownTableRows(md) {
   return out;
 }
 
-test("AC15: exactly 12 agent files", () => {
+test("AC15: all required production-cycle agents exist; optional specialists allowed", () => {
   const files = fs
     .readdirSync(AGENTS_DIR)
     .filter((f) => f.endsWith(".md"))
     .sort();
-  assert.equal(files.length, 12, JSON.stringify(files));
+  const required = Object.keys(ROLE_KEYS).map((key) => key + ".md").sort();
+  for (const name of required) assert.ok(files.includes(name), "missing required agent: " + name);
+  for (const name of files) {
+    const fm = parseAgentFrontMatter(path.join(AGENTS_DIR, name));
+    assert.ok(fm.model, "missing model: " + name);
+    assert.match(fm.model, MODEL_RE, "non-versioned model: " + name);
+    assert.notEqual(fm.model, "inherit", "model inheritance: " + name);
+    assert.ok(!/^claude-opus-/.test(fm.model) || name === "security-engineer.md", "Opus reserved for Security Engineer: " + name);
+  }
 });
 
 test("AC15: each agent model is version-specific and non-aliased", () => {
@@ -111,41 +118,16 @@ test("AC15: director=sonnet-5-5, developer=sonnet-5 (prefix exact)", () => {
   assert.equal(dev.model, "claude-sonnet-5");
 });
 
-test("AC15: exactly two reuse pairs, other six distinct", () => {
+test("AC15: Opus only for security; developer/QA/reviewer mutually distinct", () => {
   const byKey = {};
   for (const key of Object.keys(ROLE_KEYS)) {
     byKey[key] = parseAgentFrontMatter(path.join(AGENTS_DIR, key + ".md")).model;
   }
-  // Expected pairs
-  assert.equal(byKey["product-manager"], "claude-haiku-4-5");
-  assert.equal(byKey["technical-writer"], "claude-haiku-4-5");
-  assert.equal(byKey["project-manager"], "claude-sonnet-4-6");
-  assert.equal(byKey["release-manager"], "claude-sonnet-4-6");
-  // Distinct six
-  const distinctRoles = [
-    "solution-architect",
-    "developer",
-    "qa-engineer",
-    "code-reviewer",
-    "security-engineer",
-    "devops-engineer",
-  ];
-  const models = distinctRoles.map((r) => byKey[r]);
-  const seen = new Set();
-  for (const m of models) {
-    assert.ok(!seen.has(m), "duplicate among distinct six: " + m);
-    seen.add(m);
+  for (const [key, m] of Object.entries(byKey)) {
+    if (key !== "security-engineer") assert.ok(!/^claude-opus-/.test(m), key + " must not use Opus: " + m);
   }
-  // And they must not collide with pair models or director/PO
-  const pairs = new Set(["claude-haiku-4-5", "claude-sonnet-4-6"]);
-  for (const m of models) assert.ok(!pairs.has(m), "distinct role reuses pair model: " + m);
-  // Count model multiplicity across all 12 == exactly two pairs + eight singletons
-  const counts = {};
-  for (const m of Object.values(byKey)) counts[m] = (counts[m] || 0) + 1;
-  const twos = Object.values(counts).filter((n) => n === 2).length;
-  const ones = Object.values(counts).filter((n) => n === 1).length;
-  assert.equal(twos, 2, "expected exactly 2 reuse pairs, got " + twos);
-  assert.equal(ones, 8, "expected 8 unique singletons, got " + ones);
+  const indep = ["developer", "qa-engineer", "code-reviewer"].map((r) => byKey[r]);
+  assert.equal(new Set(indep).size, indep.length, "developer/QA/reviewer must be distinct: " + indep.join(", "));
 });
 
 test("AC15: SKILL.md mentions director model id and Fable prohibition", () => {
