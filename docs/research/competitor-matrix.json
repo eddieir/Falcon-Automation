@@ -10747,8 +10747,8 @@
           "evidenceScope": "Reviewed one public page only; behavior not exercised in an account."
         },
         "B.manual_invocation": {
-          "status": "VERIFIED",
-          "value": "Agents are commanded by the user through an AI coding tool.",
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
           "sourceIds": [
             "S-20"
           ],
@@ -11594,8 +11594,8 @@
           "evidenceScope": "Reviewed one public page only; behavior not exercised in an account."
         },
         "B.proactive_healing": {
-          "status": "UNKNOWN",
-          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "status": "MARKETING_CLAIM",
+          "value": "Vendor states: self-heals broken tests automatically.",
           "sourceIds": [
             "S-21"
           ],

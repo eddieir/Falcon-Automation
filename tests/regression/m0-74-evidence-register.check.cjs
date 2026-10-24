@@ -89,3 +89,22 @@ test("AC74-02 negative: a source without access date or locator is rejected", ()
   assert.ok(p.some((x) => x.includes("missing accessDate")));
   assert.ok(p.some((x) => x.includes("missing locator")));
 });
+
+test("AC74-06: the historical open-source survey stays in the register, marked and never independent", () => {
+  const m = load();
+  const s = m.sources.find((x) => x.id === "S-14");
+  assert.ok(s, "historical source S-14 must not be deleted");
+  assert.equal(s.accessStatus, "HISTORICAL_NOT_REPRODUCED");
+  assert.equal(s.independentlyVerified, false);
+  for (const [vendor, entry] of Object.entries(m.competitors)) {
+    for (const [feature, cell] of Object.entries(entry.cells)) {
+      if (cell.status === "VERIFIED") assert.ok(!cell.sourceIds.includes("S-14"), vendor + "/" + feature + " reuses a historical figure as VERIFIED");
+    }
+  }
+});
+
+test("AC74-06 negative: deleting the historical source is detected", () => {
+  const m = load();
+  m.sources = m.sources.filter((x) => x.id !== "S-14");
+  assert.equal(m.sources.find((x) => x.id === "S-14"), undefined);
+});
