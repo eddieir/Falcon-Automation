@@ -24,19 +24,19 @@ function validate(r, index) {
     if (!OUTCOMES.includes(r.outcome)) throw new InvalidRecordError(`${at} unknown outcome ${r.outcome}`);
     if (!MODES.includes(r.mode)) throw new InvalidRecordError(`${at} mode must be automated or assisted`);
     if (!Number.isInteger(r.run) || r.run < 1) throw new InvalidRecordError(`${at} run must be an integer >= 1`);
-    if (r.outcome === 'NOT_TESTED' || r.outcome === 'MISSING_EVIDENCE') return;
-    for (const k of FLAGS) {
-        if (typeof r[k] !== 'boolean') throw new InvalidRecordError(`${at} ${k} must be a boolean`);
-    }
-    for (const k of ['operatorMinutes', 'costUsd']) {
-        if (!Number.isFinite(r[k]) || r[k] < 0) throw new InvalidRecordError(`${at} ${k} must be a number >= 0`);
-    }
     if (r.ci !== undefined) {
         if (!r.ci || typeof r.ci !== 'object' || Array.isArray(r.ci)) throw new InvalidRecordError(`${at} ci must be an object`);
         for (const [k, v] of Object.entries(r.ci)) {
             if (!Object.hasOwn(CI_FIELDS, k)) throw new InvalidRecordError(`${at} unknown ci field ${k}`);
             if (!Number.isFinite(v) || v < 0 || (CI_FIELDS[k] && !Number.isInteger(v))) throw new InvalidRecordError(`${at} ci.${k} must be a ${CI_FIELDS[k] ? 'non-negative integer' : 'number >= 0'}`);
         }
+    }
+    if (r.outcome === 'NOT_TESTED' || r.outcome === 'MISSING_EVIDENCE') return;
+    for (const k of FLAGS) {
+        if (typeof r[k] !== 'boolean') throw new InvalidRecordError(`${at} ${k} must be a boolean`);
+    }
+    for (const k of ['operatorMinutes', 'costUsd']) {
+        if (!Number.isFinite(r[k]) || r[k] < 0) throw new InvalidRecordError(`${at} ${k} must be a number >= 0`);
     }
     if (r.repairCorrect && !r.repairAttempted) throw new InvalidRecordError(`${at} repairCorrect without repairAttempted`);
     if (r.wrongAction && !r.repairAttempted) throw new InvalidRecordError(`${at} wrongAction without repairAttempted`);

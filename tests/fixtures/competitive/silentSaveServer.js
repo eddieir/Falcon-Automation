@@ -5,6 +5,7 @@
 const http = require('node:http');
 
 const HOST = '127.0.0.1';
+const MAX_BODY = 1024;
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Silent save</title></head>
 <body><main>
@@ -29,6 +30,10 @@ async function start(opts = {}) {
     const { pathname } = new URL(req.url, 'http://localhost');
     if (req.method === 'GET' && pathname === '/') return send(200, 'text/html; charset=utf-8', PAGE);
     if (req.method === 'POST' && pathname === '/api/save') {
+      if (Number(req.headers['content-length'] || 0) > MAX_BODY) {
+        send(413, 'application/json', JSON.stringify({ ok: false }));
+        return req.destroy();
+      }
       req.resume();
       if (mode === 'ok') {
         state = { saved: true, value: 'benchmark' };

@@ -122,6 +122,22 @@ test("W6 failure: malformed CI fields are rejected", () => {
   bad(null);
 });
 
+test("W6: a malformed ci object is rejected even on a MISSING_EVIDENCE record", () => {
+  const miss = (ci) => ({ workloadId: "W6-ci-economics", tool: "ToolA", toolVersion: "1.0.0", mode: "automated", run: 1, outcome: "MISSING_EVIDENCE", ci });
+  assert.throws(() => score([miss({ speed: 1 })]), InvalidRecordError);
+  assert.equal(score([miss({ retries: 1 })])[0].missingEvidence, 1);
+});
+
+test("W5 boundary: an oversize save body is refused without changing state", async () => {
+  const app = await silent.start();
+  try {
+    app.setMode("ok");
+    const r = await fetch(app.url + "/api/save", { method: "POST", body: "x".repeat(5000) }).catch(() => ({ status: 413 }));
+    assert.equal(r.status, 413);
+    assert.equal(app.getState().saved, false);
+  } finally { await app.close(); }
+});
+
 test("W6: CI fields on NOT_TESTED or MISSING_EVIDENCE records never reach the totals", () => {
   const miss = { workloadId: "W6-ci-economics", tool: "ToolA", toolVersion: "1.0.0", mode: "automated", run: 2, outcome: "MISSING_EVIDENCE", ci: { timeToGreenSec: 9999 } };
   assert.equal(score([rec({ ci: { timeToGreenSec: 10 } }), miss])[0].ciEconomics.timeToGreenSec.total, 10);
