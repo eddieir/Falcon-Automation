@@ -153,7 +153,7 @@ test("published results markdown is exactly what the data renders to", () => {
   assert.equal(md, `${render(run)}\n`);
 });
 
-const { pinFor } = require(path.join(H, "install-cypress.js"));
+const { pinFor, sha256File } = require(path.join(H, "install-cypress.js"));
 const PINS = JSON.parse(fs.readFileSync(path.join(H, "cypress-binary.sha256.json"), "utf8"));
 const HASH = "a".repeat(64);
 const pins = (o = {}) => ({ version: "1.2.3", binaries: { "linux-x64": { url: "https://cdn.cypress.io/x.zip", sha256: HASH, ...o } } });
@@ -175,6 +175,20 @@ test("cypress pin: fails closed on an unknown platform, a version mismatch or a 
   assert.throws(() => pinFor(pins({ sha256: "abc" }), "1.2.3", "linux-x64"), /malformed pin/);
   assert.throws(() => pinFor(pins({ url: "http://cdn.cypress.io/x.zip" }), "1.2.3", "linux-x64"), /malformed pin/);
   assert.throws(() => pinFor(pins({ url: "https://evil.example/x.zip" }), "1.2.3", "linux-x64"), /malformed pin/);
+});
+
+test("cypress pin: re-hashing detects a file changed after the first check, and the installer never uses npx", async () => {
+  const dir = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "falcon-pin-"));
+  try {
+    const f = path.join(dir, "a.zip");
+    fs.writeFileSync(f, "abc");
+    const before = await sha256File(f);
+    assert.equal(before, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    fs.writeFileSync(f, "abd");
+    assert.notEqual(await sha256File(f), before);
+    await assert.rejects(sha256File(path.join(dir, "missing.zip")));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  assert.ok(!/npx/.test(fs.readFileSync(path.join(H, "install-cypress.js"), "utf8").replace(/\/\/.*$/gm, "")), "no npx in executable code");
 });
 
 test("isolation: Selenium and Cypress stay out of the main package", () => {

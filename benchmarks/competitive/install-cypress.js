@@ -48,6 +48,13 @@ function download(url, file, redirects = 0) {
   });
 }
 
+function sha256File(file) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    fs.createReadStream(file).on('data', (c) => hash.update(c)).on('error', reject).on('end', () => resolve(hash.digest('hex')));
+  });
+}
+
 async function main() {
   const pins = JSON.parse(fs.readFileSync(path.join(__dirname, 'cypress-binary.sha256.json'), 'utf8'));
   const version = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).dependencies.cypress;
@@ -57,10 +64,13 @@ async function main() {
   try {
     const actual = await download(pin.url, file);
     if (actual !== pin.sha256) throw new Error(`checksum mismatch: expected ${pin.sha256}, got ${actual}; nothing installed`);
-    const res = spawnSync('npx', ['cypress', 'install'], { cwd: __dirname, stdio: 'inherit', env: { ...process.env, CYPRESS_INSTALL_BINARY: file, CYPRESS_CRASH_REPORTS: '0' } });
+    // Hash the file again right before use, so a swap between download and install is caught.
+    if ((await sha256File(file)) !== pin.sha256) throw new Error('archive changed on disk after verification; nothing installed');
+    // The locally installed, lockfile-pinned CLI, never npx, so nothing unpinned can be fetched.
+    const res = spawnSync(process.execPath, [path.join(__dirname, 'node_modules', 'cypress', 'bin', 'cypress'), 'install'], { cwd: __dirname, stdio: 'inherit', env: { ...process.env, CYPRESS_INSTALL_BINARY: file, CYPRESS_CRASH_REPORTS: '0' } });
     if (res.status !== 0) throw new Error('cypress install failed');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
-module.exports = { pinFor };
+module.exports = { pinFor, sha256File };
 if (require.main === module) main().catch((err) => { process.stderr.write(`${err.message}\n`); process.exitCode = 1; });
