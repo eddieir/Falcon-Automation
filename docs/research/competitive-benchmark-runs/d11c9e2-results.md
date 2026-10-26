@@ -1,17 +1,17 @@
 # Local competitive benchmark results
 
-Generated from `587a52a-local.json` by `benchmarks/competitive/report.js`. Protocol: [competitive-benchmark-protocol.md](../competitive-benchmark-protocol.md). Read the limitations there before citing any number.
+Generated from `d11c9e2-local.json` by `benchmarks/competitive/report.js`. Protocol: [competitive-benchmark-protocol.md](../competitive-benchmark-protocol.md). Read the limitations there before citing any number.
 
 ## Environment
 
-- Revision: `587a52a267fc4d979f3d2fc9420a5e60eeec0236` (relevant tree clean: yes)
+- Revision: `d11c9e23b4d2528b181ec6b7386e8cae7fc96569` (relevant tree clean: yes)
 - Node v22.19.0; darwin 25.5.0 arm64; 3 runs per tool; automated mode only
-- Cost: $0; AI calls: 0; no accounts, keys or network beyond loopback
+- Cost: $0; AI calls: 0; no accounts or keys; pages and flows on loopback only; vendor telemetry switched off (SE_AVOID_STATS, CYPRESS_CRASH_REPORTS)
 
 | Tool | Version / browser |
 |---|---|
 | Cypress | 16.2.0 / electron 146.0.7680.216 |
-| Falcon | 1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4 |
+| Falcon | 1.0.0 (d11c9e2) / 1.64.0 / Chromium 156.0.8078.4 |
 | Playwright | 1.64.0 / Chromium 156.0.8078.4 |
 | Selenium | 4.51.0 / Chrome 155.0.8059.85 |
 
@@ -27,7 +27,7 @@ Each cell is `numerator/denominator` pooled over all runs, so divide by the run 
 | Correct refusals (refused / refusal expected) | 0/36 | 24/36 | 0/36 | 0/36 |
 | Unnecessary refusals (refused / repair expected) | 0/57 | 0/57 | 0/57 | 0/57 |
 | Evidence completeness | 93/93 | 93/93 | 93/93 | 93/93 |
-| Median time for one full pass (s) | 19.75 | 15.27 | 13.6 | 6.91 |
+| Median time for one full pass (s) | 19.43 | 14.32 | 13.66 | 7.23 |
 
 ## Outcome per workload
 
