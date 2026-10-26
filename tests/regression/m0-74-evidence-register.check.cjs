@@ -24,6 +24,7 @@ function problems(m) {
     for (const k of ["vendor", "url", "kind", "accessDate", "accessStatus", "freshness", "locator"]) {
       if (!s[k]) out.push(s.id + " missing " + k);
     }
+    if (s.accessDate && Number.isNaN(Date.parse(s.accessDate))) out.push(s.id + " accessDate not a valid ISO date");
     if (VENDOR_KINDS.has(s.kind) && s.independentlyVerified === true) out.push(s.id + " vendor source marked independent");
     if (s.accessStatus === "HISTORICAL_NOT_REPRODUCED" && s.independentlyVerified === true) out.push(s.id + " historical source marked independent");
     if (typeof s.product !== "string" || s.product.trim() === "") out.push(s.id + " missing product");
@@ -40,6 +41,7 @@ function problems(m) {
       out.push(s.id + " covers a single page but lists no unknownClaims");
     }
   }
+  if (!byId.has("S-14")) out.push("historical source S-14 is missing from the register");
   for (const [vendor, entry] of Object.entries(m.competitors)) {
     for (const [feature, cell] of Object.entries(entry.cells)) {
       const where = vendor + "/" + feature;
@@ -119,7 +121,13 @@ test("AC74-06: the historical open-source survey stays in the register, marked a
 test("AC74-06 negative: deleting the historical source is detected", () => {
   const m = load();
   m.sources = m.sources.filter((x) => x.id !== "S-14");
-  assert.equal(m.sources.find((x) => x.id === "S-14"), undefined);
+  assert.ok(problems(m).some((x) => x.includes("S-14 is missing")));
+});
+
+test("accessDate negative: a malformed accessDate is flagged", () => {
+  const m = load();
+  m.sources[0].accessDate = "25-10-2026x";
+  assert.ok(problems(m).some((x) => x.includes("accessDate not a valid ISO date")));
 });
 
 test("AC74-07 positive: every committed source carries product, productVersion, lastVerified and unknownClaims", () => {
