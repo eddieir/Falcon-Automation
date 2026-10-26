@@ -22,17 +22,23 @@ async function read(page, url, gt) {
 
 const css = (tag, attr, value) => (attr === 'data-testid' || attr === 'id' ? `[${attr}=${JSON.stringify(value)}]` : `${tag}[${attr}=${JSON.stringify(value)}]`);
 
+/** Pure choice of the neutral locator from the ground-truth element's facts before and after the mutation. */
+function choose(id, pre, post) {
+  if (!pre) throw new Error(`fixture ${id}: pre.html has no ground-truth element`);
+  const changed = HOOKS.find(([a]) => pre.attrs[a] && (!post || post.attrs[a] !== pre.attrs[a]));
+  const stable = changed || HOOKS.find(([a]) => pre.attrs[a]);
+  if (stable) return { selector: css(pre.tag, stable[0], pre.attrs[stable[0]]), basis: `${stable[0]}${changed ? ' (changed by the mutation)' : ''}` };
+  return { selector: pre.path, basis: 'css-path' };
+}
+
 async function derive(page, fixtures, baseUrl) {
   const out = new Map();
   for (const f of fixtures) {
     const pre = await read(page, `${baseUrl}/f/${f.id}/pre.html`, f.groundTruthId);
     const post = await read(page, `${baseUrl}/f/${f.id}/post.html`, f.groundTruthId);
-    const changed = HOOKS.find(([a]) => pre.attrs[a] && (!post || post.attrs[a] !== pre.attrs[a]));
-    const stable = changed || HOOKS.find(([a]) => pre.attrs[a]);
-    if (stable) out.set(f.id, { selector: css(pre.tag, stable[0], pre.attrs[stable[0]]), basis: `${stable[0]}${changed ? ' (changed by the mutation)' : ''}` });
-    else out.set(f.id, { selector: pre.path, basis: 'css-path' });
+    out.set(f.id, choose(f.id, pre, post));
   }
   return out;
 }
 
-module.exports = { derive };
+module.exports = { derive, choose };

@@ -12,6 +12,7 @@ const ROOT = path.join(__dirname, "..", "..");
 const H = path.join(ROOT, "benchmarks", "competitive");
 const { baseRecord, failed, classifyLanding, classifyHeal } = require(path.join(H, "lib", "classify.js"));
 const { render } = require(path.join(H, "report.js"));
+const { choose } = require(path.join(H, "lib", "locators.js"));
 const { score } = require(path.join(ROOT, "scripts", "benchmark", "competitive-score.js"));
 
 const RUNS = path.join(ROOT, "docs", "research", "competitive-benchmark-runs");
@@ -69,6 +70,7 @@ test("run file: clean tree, four tools scored, no hidden gaps, free of cost", ()
   assert.deepEqual(run.meta.tools.slice().sort(), ["cypress", "falcon", "playwright", "selenium"]);
   assert.equal(run.meta.costUsd, 0);
   assert.equal(run.meta.aiCalls, 0);
+  assert.equal(typeof run.meta.credentialVariablesRemovedFromEnvironment, "number", "the zero-AI-call claim must come from a run that stripped credentials");
   assert.ok(run.meta.runs >= 3);
   for (const s of run.scores) assert.equal(s.status, "SCORED", s.tool);
   for (const r of run.records) if (r.outcome === "NOT_TESTED") assert.ok(r.note, "NOT_TESTED must say why");
@@ -93,6 +95,32 @@ test("run file: primary locators are neutral, one per fixture, never the ground-
     assert.ok(l.selector && !/benchmark-ground-truth/.test(l.selector), l.id);
     assert.match(l.basis, /^(data-testid|id|name|aria-label|css-path)/);
   }
+});
+
+const facts = (attrs, tag = "button") => ({ tag, attrs: { "data-testid": null, id: null, name: null, "aria-label": null, ...attrs }, path: "html > body:nth-of-type(1) > button:nth-of-type(1)" });
+
+test("locator rule: the hook the mutation changes wins, in a fixed precedence", () => {
+  const pre = facts({ "data-testid": "go", id: "a", name: "n" });
+  assert.deepEqual(choose("f", pre, facts({ "data-testid": "go", id: "b", name: "n" })), { selector: '[id="a"]', basis: "id (changed by the mutation)" });
+  assert.equal(choose("f", pre, facts({ "data-testid": "x", id: "b", name: "n" })).basis, "data-testid (changed by the mutation)");
+  assert.equal(choose("f", pre, null).basis, "data-testid (changed by the mutation)", "a removed element changes every hook");
+});
+
+test("locator rule: no changed hook falls back to best-practice order, then a structural path", () => {
+  assert.deepEqual(choose("f", facts({ "data-testid": "go", id: "a" }), facts({ "data-testid": "go", id: "a" })), { selector: '[data-testid="go"]', basis: "data-testid" });
+  assert.equal(choose("f", facts({ name: "n" }), facts({ name: "n" })).selector, 'button[name="n"]');
+  assert.deepEqual(choose("f", facts({}), facts({})), { selector: "html > body:nth-of-type(1) > button:nth-of-type(1)", basis: "css-path" });
+});
+
+test("locator rule: a fixture without its ground-truth element fails loudly", () => {
+  assert.throws(() => choose("broken-f1", null, facts({})), /broken-f1.*no ground-truth element/);
+});
+
+test("run.js refuses unknown tool names before doing any work", () => {
+  const { spawnSync } = require("node:child_process");
+  const out = spawnSync(process.execPath, [path.join(H, "run.js"), "--tools=falcon,nope", "--runs=1"], { encoding: "utf8" });
+  assert.equal(out.status, 1);
+  assert.match(out.stderr, /unknown tool\(s\): nope/);
 });
 
 test("published results markdown is exactly what the data renders to", () => {
