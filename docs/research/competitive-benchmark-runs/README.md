@@ -1,9 +1,13 @@
 # Competitive benchmark runs
 
-No cross-product runs have been recorded. This directory is reserved for run manifests produced under the [protocol](../competitive-benchmark-protocol.md).
+Run files produced under the [protocol](../competitive-benchmark-protocol.md). Each `<revision>-local.json` holds the run metadata, the neutral locators, every scored record and the scores; `<revision>-results.md` is rendered from it by `benchmarks/competitive/report.js` and checked by a regression test.
 
-Each run file is a JSON array of records accepted by `scripts/benchmark/competitive-score.js`, named `<fixture-revision>-<tool>-<tool-version>.json`.
+| Revision | Tools | Runs | Mode | Cost |
+|---|---|---|---|---|
+| `f6c0d0d` | Falcon, Playwright, Selenium, Cypress | 3 | automated, local | $0, no AI calls |
 
-A run manifest must state, per tool: exact version, provider and model settings, browser and OS, local or CI, fixture git revision, seeds, number of distinct runs, assisted versus automated mode, cost with the date and plan it applies to, and where raw evidence (reports, screenshots) is kept.
+Reproduce: `npm ci` and `npx cypress install` in `benchmarks/competitive/`, then `node benchmarks/competitive/run.js` from the repository root. Publish only runs made on a clean relevant tree (`meta.dirtyRelevantTree` is `false`).
 
-Retention: keep evidence outside the repository unless it is deliberately committed as a fixture. Never commit credentials, customer data or generated reports.
+Not covered, and not claimed: SaaS vendors, LLM-driven agents (browser-use, Stagehand), Healenium and any assisted run. They need accounts, spend or infrastructure that has not been approved.
+
+Retention: keep raw evidence outside the repository unless deliberately committed as a fixture. Never commit credentials, customer data or generated reports.
