@@ -24,7 +24,9 @@ Related: [workloads](competitive-benchmark-workloads.json), [scorer](../../scrip
 | `failure-reporting` | Missing target, unasserted step | The run is reported as failed, never green |
 | `ci-economics` | Time-to-green, retries, triage, browser minutes, AI calls, setup effort | Measured from the run manifest |
 
-Each workload in the workloads file is `IMPLEMENTED` (fixtures exist in `tests/fixtures/benchmark/`) or `PLANNED` (design only). Planned workloads must not be scored or cited as measured.
+Each workload in the workloads file is `IMPLEMENTED` (a fixture or harness exists and its objective oracle is stated) or `PLANNED` (design only). Planned workloads must not be scored or cited as measured. All workloads are currently `IMPLEMENTED`.
+
+Fixtures are tool-neutral servers on `127.0.0.1`: the healing corpus in `tests/fixtures/benchmark/`, the checkout app (W3), `tests/fixtures/competitive/authServer.js` (W4, two seeded users, no passwords) and `tests/fixtures/competitive/silentSaveServer.js` (W5, a page that never shows its result). Each has a server-side oracle, so a result is judged by state, not by what a tool reports. No tool adapter exists: a comparison still needs each tool's flow written and run by the owner of that tool's setup.
 
 ## Metrics
 
@@ -60,5 +62,6 @@ node --test tests/regression/m0-75-benchmark-protocol.check.cjs
 ## Limits and review
 
 - The scorer is generic and names no winner. It has been exercised only with synthetic records in the regression test.
-- Falcon's own healing corpus (`tests/fixtures/benchmark/`, `npm run test:regression`) covers `locator-change`, `ambiguous-candidate` and one `failure-reporting` case. The other workloads need fixtures that do not exist yet.
+- The regression suite proves the fixtures behave as documented (reference driver over HTTP) and that the scorer follows these rules. It does not run any product through them.
+- CI economics (`ci` object on each record: `timeToGreenSec`, `retries`, `triageMinutes`, `browserMinutes`, `aiCalls`, `setupMinutes`) is reported per field as `n`, `total` and `median`, and is N/A when no record reports it. Costs from vendors need dated plan terms in the run manifest.
 - This protocol and the scoring rubric must pass independent review before any external comparison is announced.

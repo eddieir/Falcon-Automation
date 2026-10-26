@@ -31,8 +31,12 @@ test("AC75-01: workloads are versioned, unique, cover six families and reference
   for (const w of workloads.workloads) {
     assert.ok(["PASS", "FAIL", "REFUSE"].includes(w.expectedOutcome), w.id + " expectedOutcome");
     assert.ok(["IMPLEMENTED", "PLANNED"].includes(w.status), w.id + " status");
-    if (w.status === "IMPLEMENTED") assert.ok(w.fixtureRefs.length > 0, w.id + " implemented without fixtures");
-    else assert.ok(w.note, w.id + " planned workloads must say what is missing");
+    if (w.status === "IMPLEMENTED") {
+      const refs = w.harnessRefs || [];
+      assert.ok(w.fixtureRefs.length + refs.length > 0, w.id + " implemented without fixtures or harness");
+      for (const r of refs) assert.ok(fs.existsSync(path.join(ROOT, r)), w.id + " harness ref missing: " + r);
+      if (refs.length) assert.ok(w.oracle, w.id + " harness workloads must state their objective oracle");
+    } else assert.ok(w.note, w.id + " planned workloads must say what is missing");
     for (const ref of w.fixtureRefs) {
       const f = fixtureIds.get(ref);
       assert.ok(f, w.id + " references missing fixture " + ref);

@@ -103,8 +103,11 @@
       "mustRefuse": false,
       "objectivelyFailing": false,
       "fixtureRefs": [],
-      "status": "PLANNED",
-      "note": "tests/fixtures/customer-demo/checkoutServer.js serves the page and POST /api/order; no tool-neutral driver exists yet."
+      "status": "IMPLEMENTED",
+      "harnessRefs": [
+        "tests/fixtures/customer-demo/checkoutServer.js"
+      ],
+      "oracle": "Oracle: checkoutServer.orderCount() is 1 after one submit; the page also shows an order confirmation."
     },
     {
       "id": "W4-role-denied",
@@ -114,8 +117,11 @@
       "mustRefuse": false,
       "objectivelyFailing": false,
       "fixtureRefs": [],
-      "status": "PLANNED",
-      "note": "Needs a disposable auth fixture with seeded non-secret users; none exists."
+      "status": "IMPLEMENTED",
+      "harnessRefs": [
+        "tests/fixtures/competitive/authServer.js"
+      ],
+      "oracle": "Oracle: GET /admin returns 200 for alice (admin) and 403 for bob (member) in separate cookie jars; no cookie returns 401."
     },
     {
       "id": "W5-element-removed",
@@ -137,8 +143,11 @@
       "mustRefuse": false,
       "objectivelyFailing": true,
       "fixtureRefs": [],
-      "status": "PLANNED",
-      "note": "Needs a fixture flow that completes without asserting."
+      "status": "IMPLEMENTED",
+      "harnessRefs": [
+        "tests/fixtures/competitive/silentSaveServer.js"
+      ],
+      "oracle": "Oracle: GET /api/state stays saved:false after Save; the page shows no result, so a flow with no assertion reports green."
     },
     {
       "id": "W6-ci-economics",
@@ -148,8 +157,11 @@
       "mustRefuse": false,
       "objectivelyFailing": false,
       "fixtureRefs": [],
-      "status": "PLANNED",
-      "note": "Measured from run manifests, not from a fixture."
+      "status": "IMPLEMENTED",
+      "harnessRefs": [
+        "scripts/benchmark/competitive-score.js"
+      ],
+      "oracle": "Measured from the optional per-record ci object: timeToGreenSec, retries, triageMinutes, browserMinutes, aiCalls, setupMinutes. Reported as n, total and median; N/A when absent."
     }
   ]
 }
