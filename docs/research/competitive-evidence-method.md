@@ -27,8 +27,8 @@ Every source entry in `sources` includes:
 | `url` | string | yes | Source URL (unique) |
 | `kind` | enum | yes | `official_docs`, `marketing`, `press_release`, `vendor_article`, `historical_measurement` |
 | `accessDate` | ISO date | yes | When the source was retrieved |
-| `publicationDate` | ISO date / null | yes | When the source was published (if stated) |
-| `lastUpdated` | ISO date / null | yes | Last-updated marker from the page (if stated) |
+| `publicationDate` | ISO date / null | yes (null allowed) | When the source was published (if stated) |
+| `lastUpdated` | ISO date / null | yes (null allowed) | Last-updated marker from the page (if stated) |
 | `accessStatus` | enum | yes | `RETRIEVED`, `HISTORICAL_NOT_REPRODUCED`, `ACCOUNT_ACCESS_REQUIRED`, `FETCH_BLOCKED` |
 | `freshness` | string | yes | Context on how current the retrieved page is |
 | `locator` | string | yes | Heading or phrase to find on the page for rechecking |
