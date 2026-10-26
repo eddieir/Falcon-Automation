@@ -27,6 +27,7 @@ async function start(opts = {}) {
       let body = '';
       let size = 0;
       req.on('data', (c) => {
+        if (res.writableEnded) return;
         size += c.length;
         if (size > MAX_BODY) {
           json(413, { error: 'too large' });

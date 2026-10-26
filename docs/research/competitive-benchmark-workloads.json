@@ -107,7 +107,7 @@
       "harnessRefs": [
         "tests/fixtures/customer-demo/checkoutServer.js"
       ],
-      "oracle": "Oracle: checkoutServer.orderCount() is 1 after one submit; the page also shows an order confirmation."
+      "oracle": "Oracle: checkoutServer.orderCount() is 1 after one submit; the order confirmation is rendered by page JavaScript, so it is judged by a tool's own browser step, not by this oracle."
     },
     {
       "id": "W4-role-denied",
