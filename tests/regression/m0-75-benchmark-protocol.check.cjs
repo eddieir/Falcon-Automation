@@ -100,6 +100,8 @@ test("AC75-10: intervals need 3 distinct runs; boundary at exactly 3", () => {
   assert.equal(one([rec(), rec({ workloadId: "W1-class-rename" })]).passRate.interval, null);
   const three = one([1, 2, 3].map((run) => rec({ run })));
   assert.ok(three.passRate.interval.low > 0 && three.passRate.interval.high === 1);
+  const unobserved = { workloadId: "W1-class-rename", tool: "ToolA", toolVersion: "1.0.0", mode: "automated", run: 3, outcome: "MISSING_EVIDENCE" };
+  assert.equal(one([rec(), rec({ run: 2 }), unobserved]).passRate.interval, null, "an unobserved run must not unlock an interval");
   assert.equal(wilson(0, 0, 5), null);
   const iv = wilson(5, 10, 5);
   assert.ok(iv.low < 0.5 && iv.high > 0.5);

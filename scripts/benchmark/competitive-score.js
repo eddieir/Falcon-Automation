@@ -58,7 +58,7 @@ function scoreGroup(rows) {
     const attempts = scored.filter((r) => r.repairAttempted);
     const failed = scored.filter((r) => r.objectivelyFailed);
     const mustRefuse = scored.filter((r) => r.expectedRefusal);
-    const runs = new Set(tested.map((r) => r.run)).size;
+    const runs = new Set(scored.map((r) => r.run)).size;
     const passed = scored.filter((r) => r.outcome === 'PASS' && !r.objectivelyFailed).length;
     return {
         status: 'SCORED',
