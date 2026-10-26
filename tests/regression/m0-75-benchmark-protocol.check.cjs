@@ -31,8 +31,12 @@ test("AC75-01: workloads are versioned, unique, cover six families and reference
   for (const w of workloads.workloads) {
     assert.ok(["PASS", "FAIL", "REFUSE"].includes(w.expectedOutcome), w.id + " expectedOutcome");
     assert.ok(["IMPLEMENTED", "PLANNED"].includes(w.status), w.id + " status");
-    if (w.status === "IMPLEMENTED") assert.ok(w.fixtureRefs.length > 0, w.id + " implemented without fixtures");
-    else assert.ok(w.note, w.id + " planned workloads must say what is missing");
+    if (w.status === "IMPLEMENTED") {
+      const refs = w.harnessRefs || [];
+      assert.ok(w.fixtureRefs.length + refs.length > 0, w.id + " implemented without fixtures or harness");
+      for (const r of refs) assert.ok(fs.existsSync(path.join(ROOT, r)), w.id + " harness ref missing: " + r);
+      if (refs.length) assert.ok(w.oracle, w.id + " harness workloads must state their objective oracle");
+    } else assert.ok(w.note, w.id + " planned workloads must say what is missing");
     for (const ref of w.fixtureRefs) {
       const f = fixtureIds.get(ref);
       assert.ok(f, w.id + " references missing fixture " + ref);
@@ -161,9 +165,10 @@ test("AC75-07/08: CLI scores a file, exits 2 on bad input, and reads no network 
   assert.ok(!/require\(['"](node:)?(http|https|net|child_process)['"]\)|process\.env|fetch\(/.test(src));
 });
 
-test("AC75-09: the protocol states that no cross-product results exist and requires review first", () => {
+test("AC75-09: the protocol states its coverage limits and requires review first", () => {
   const doc = fs.readFileSync(path.join(ROOT, "docs", "research", "competitive-benchmark-protocol.md"), "utf8");
-  assert.match(doc, /no cross-product results exist/i);
+  assert.match(doc, /SaaS vendors, LLM-driven agents and Healenium are not covered/i);
+  assert.match(doc, /not an independent or neutral test set/i);
   assert.match(doc, /independent review before any external comparison/i);
   assert.match(doc, /NOT_TESTED/);
 });

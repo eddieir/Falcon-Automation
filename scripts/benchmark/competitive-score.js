@@ -10,6 +10,8 @@ const OUTCOMES = Object.freeze(['PASS', 'FAIL', 'REFUSE', 'PARTIAL', 'TIMEOUT', 
 const MODES = Object.freeze(['automated', 'assisted']);
 const FLAGS = ['repairAttempted', 'repairCorrect', 'wrongAction', 'objectivelyFailed', 'reportedPassed', 'expectedRefusal'];
 const MIN_RUNS_FOR_INTERVAL = 3;
+// W6 CI-economics fields, all optional per record. Counts must be integers, durations any non-negative number.
+const CI_FIELDS = Object.freeze({ timeToGreenSec: false, retries: true, triageMinutes: false, browserMinutes: false, aiCalls: true, setupMinutes: false });
 
 class InvalidRecordError extends Error {}
 
@@ -22,6 +24,13 @@ function validate(r, index) {
     if (!OUTCOMES.includes(r.outcome)) throw new InvalidRecordError(`${at} unknown outcome ${r.outcome}`);
     if (!MODES.includes(r.mode)) throw new InvalidRecordError(`${at} mode must be automated or assisted`);
     if (!Number.isInteger(r.run) || r.run < 1) throw new InvalidRecordError(`${at} run must be an integer >= 1`);
+    if (r.ci !== undefined) {
+        if (!r.ci || typeof r.ci !== 'object' || Array.isArray(r.ci)) throw new InvalidRecordError(`${at} ci must be an object`);
+        for (const [k, v] of Object.entries(r.ci)) {
+            if (!Object.hasOwn(CI_FIELDS, k)) throw new InvalidRecordError(`${at} unknown ci field ${k}`);
+            if (!Number.isFinite(v) || v < 0 || (CI_FIELDS[k] && !Number.isInteger(v))) throw new InvalidRecordError(`${at} ci.${k} must be a ${CI_FIELDS[k] ? 'non-negative integer' : 'number >= 0'}`);
+        }
+    }
     if (r.outcome === 'NOT_TESTED' || r.outcome === 'MISSING_EVIDENCE') return;
     for (const k of FLAGS) {
         if (typeof r[k] !== 'boolean') throw new InvalidRecordError(`${at} ${k} must be a boolean`);
@@ -51,6 +60,22 @@ function wilson(numerator, denominator, runs) {
     return { low: Math.max(0, centre - half), high: Math.min(1, centre + half) };
 }
 
+function median(values) {
+    const v = [...values].sort((a, b) => a - b);
+    const mid = v.length >> 1;
+    return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+}
+
+// Per-field sum and median over the scored records that report the field; null when none do (N/A, never 0).
+function ciEconomics(scored) {
+    const out = {};
+    for (const k of Object.keys(CI_FIELDS)) {
+        const vals = scored.filter((r) => r.ci && r.ci[k] !== undefined).map((r) => r.ci[k]);
+        out[k] = vals.length ? { n: vals.length, total: vals.reduce((a, b) => a + b, 0), median: median(vals) } : null;
+    }
+    return out;
+}
+
 function scoreGroup(rows) {
     const tested = rows.filter((r) => r.outcome !== 'NOT_TESTED');
     if (tested.length === 0) return { status: 'NOT_TESTED', records: rows.length };
@@ -76,6 +101,7 @@ function scoreGroup(rows) {
         passRate: { ...ratio(passed, scored.length), interval: wilson(passed, scored.length, runs) },
         operatorMinutes: scored.reduce((a, r) => a + r.operatorMinutes, 0),
         costUsd: scored.reduce((a, r) => a + r.costUsd, 0),
+        ciEconomics: ciEconomics(scored),
     };
 }
 
@@ -136,7 +162,7 @@ function main(argv) {
         process.stdout.write(JSON.stringify(score(records, { weights: input.weights }), null, 2) + '\n');
         return 0;
     } catch (err) {
-        process.stderr.write(`invalid benchmark input: ${err.message}\n`);
+        process.stderr.write(`invalid benchmark input: ${String(err.message).replace(/[^\x20-\x7E]/g, '?').slice(0, 200)}\n`);
         return 2;
     }
 }

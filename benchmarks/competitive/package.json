@@ -1,0 +1,11 @@
+{
+  "name": "falcon-competitive-benchmark",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Isolated harness for the competitive benchmark. Dev-only; not part of the Falcon package.",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "cypress": "16.2.0",
+    "selenium-webdriver": "4.51.0"
+  }
+}
