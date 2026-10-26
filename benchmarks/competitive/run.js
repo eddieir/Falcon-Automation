@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 // Runs the competitive benchmark: the same workloads, fixtures and oracles for every tool, then scores
-// the records with scripts/benchmark/competitive-score.js. Local, loopback only, no accounts, keys or spend.
+// the records with scripts/benchmark/competitive-score.js. Every page and flow is on loopback; no accounts, keys or spend.
+// Tool installers may download browser drivers or binaries; vendor telemetry is switched off below.
 //   node benchmarks/competitive/run.js [--tools=falcon,playwright,selenium,cypress] [--runs=3] [--out=dir]
 const fs = require('node:fs/promises');
 const os = require('node:os');
@@ -29,6 +30,9 @@ async function main() {
   const toolNames = arg('tools', 'falcon,playwright,selenium,cypress').split(',');
   const unknown = toolNames.filter((n) => !Object.hasOwn(ADAPTERS, n));
   if (unknown.length) throw new Error(`unknown tool(s): ${unknown.join(', ')}; choose from ${Object.keys(ADAPTERS).join(', ')}`);
+  // Vendor telemetry off: Selenium Manager usage stats and Cypress crash reports.
+  process.env.SE_AVOID_STATS = 'true';
+  process.env.CYPRESS_CRASH_REPORTS = '0';
   // No provider credential can reach any tool, so the AI-call count of 0 holds by construction, not by assumption.
   const stripped = Object.keys(process.env).filter((k) => /(_API_KEY|_TOKEN|_SECRET)$/.test(k));
   for (const k of stripped) delete process.env[k];
@@ -114,7 +118,7 @@ async function main() {
     meta: {
       revision, dirtyRelevantTree: git('status', '--porcelain', '--', 'src', 'scripts', 'tests', 'benchmarks').length > 0,
       date: new Date().toISOString(), node: process.version, os: `${os.platform()} ${os.release()} ${os.arch()}`,
-      runs, tools: toolNames, versions: environment, costUsd: 0, aiCalls: 0, credentialVariablesRemovedFromEnvironment: stripped.length, mode: 'automated',
+      runs, tools: toolNames, versions: environment, costUsd: 0, aiCalls: 0, credentialVariablesRemovedFromEnvironment: stripped.length, telemetryDisabled: ['SE_AVOID_STATS', 'CYPRESS_CRASH_REPORTS'], mode: 'automated',
     },
     locators: plan.map(({ id, selector, basis }) => ({ id, selector, basis })),
     scores: score(records),
