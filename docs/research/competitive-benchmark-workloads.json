@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": "1.0.0",
+  "scoring": "scripts/benchmark/competitive-score.js",
+  "families": [
+    "locator-change",
+    "ambiguous-candidate",
+    "multi-step-flow",
+    "auth-role-state",
+    "failure-reporting",
+    "ci-economics"
+  ],
+  "workloads": [
+    {
+      "id": "W1-id-churn",
+      "family": "locator-change",
+      "title": "Stable id renamed, semantic identity unchanged",
+      "expectedOutcome": "PASS",
+      "mustRefuse": false,
+      "objectivelyFailing": false,
+      "fixtureRefs": [
+        "id-only-change-f1"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "W1-class-rename",
+      "family": "locator-change",
+      "title": "Class renamed, semantic identity unchanged",
+      "expectedOutcome": "PASS",
+      "mustRefuse": false,
+      "objectivelyFailing": false,
+      "fixtureRefs": [
+        "class-rename-f1"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "W1-wrapper",
+      "family": "locator-change",
+      "title": "Wrapper elements inserted around the target",
+      "expectedOutcome": "PASS",
+      "mustRefuse": false,
+      "objectivelyFailing": false,
+      "fixtureRefs": [
+        "wrapper-insertion-f1"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "W1-name-retained",
+      "family": "locator-change",
+      "title": "Accessible name retained while other hooks change",
+      "expectedOutcome": "PASS",
+      "mustRefuse": false,
+      "objectivelyFailing": false,
+      "fixtureRefs": [
+        "name-retained-f1"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "W2-two-plausible",
+      "family": "ambiguous-candidate",
+      "title": "Two equally plausible controls; a wrong click is forbidden",
+      "expectedOutcome": "REFUSE",
+      "mustRefuse": true,
+      "objectivelyFailing": false,
+      "fixtureRefs": [
+        "two-equally-plausible-targets-f1"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "W2-duplicate-test-id",
+      "family": "ambiguous-candidate",
+      "title": "Duplicate test id on different controls",
+      "expectedOutcome": "REFUSE",
+      "mustRefuse": true,
+      "objectivelyFailing": false,
+      "fixtureRefs": [
+        "duplicate-test-id-f1"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "W2-same-selector-other-action",
+      "family": "ambiguous-candidate",
+      "title": "Same selector now maps to a different action",
+      "expectedOutcome": "REFUSE",
+      "mustRefuse": true,
+      "objectivelyFailing": false,
+      "fixtureRefs": [
+        "same-selector-different-action-f1"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "W3-checkout-flow",
+      "family": "multi-step-flow",
+      "title": "Fill form, submit, assert resulting order state",
+      "expectedOutcome": "PASS",
+      "mustRefuse": false,
+      "objectivelyFailing": false,
+      "fixtureRefs": [],
+      "status": "PLANNED",
+      "note": "tests/fixtures/customer-demo/checkoutServer.js serves the page and POST /api/order; no tool-neutral driver exists yet."
+    },
+    {
+      "id": "W4-role-denied",
+      "family": "auth-role-state",
+      "title": "Two users in isolated contexts; the privileged page must deny the second",
+      "expectedOutcome": "PASS",
+      "mustRefuse": false,
+      "objectivelyFailing": false,
+      "fixtureRefs": [],
+      "status": "PLANNED",
+      "note": "Needs a disposable auth fixture with seeded non-secret users; none exists."
+    },
+    {
+      "id": "W5-element-removed",
+      "family": "failure-reporting",
+      "title": "Target element removed; the run must not pass",
+      "expectedOutcome": "FAIL",
+      "mustRefuse": false,
+      "objectivelyFailing": true,
+      "fixtureRefs": [
+        "element-removed-f1"
+      ],
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "W5-unasserted-step",
+      "family": "failure-reporting",
+      "title": "Step with no assertion must be reported as unasserted, never as green",
+      "expectedOutcome": "FAIL",
+      "mustRefuse": false,
+      "objectivelyFailing": true,
+      "fixtureRefs": [],
+      "status": "PLANNED",
+      "note": "Needs a fixture flow that completes without asserting."
+    },
+    {
+      "id": "W6-ci-economics",
+      "family": "ci-economics",
+      "title": "Time-to-green, retries, triage minutes, browser minutes, AI calls and setup effort",
+      "expectedOutcome": "PASS",
+      "mustRefuse": false,
+      "objectivelyFailing": false,
+      "fixtureRefs": [],
+      "status": "PLANNED",
+      "note": "Measured from run manifests, not from a fixture."
+    }
+  ]
+}
