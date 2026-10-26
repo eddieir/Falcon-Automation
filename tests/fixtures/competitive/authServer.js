@@ -17,12 +17,25 @@ async function start(opts = {}) {
       res.end(body);
     };
     const json = (code, obj, headers) => send(code, 'application/json', JSON.stringify(obj), headers);
+    const wantsHtml = (req.headers.accept || '').includes('text/html');
+    const denied = (code, error) => (wantsHtml
+      ? send(code, 'text/html; charset=utf-8', `<!doctype html><title>${code}</title><body><p data-testid="denied">${error}</p></body>`)
+      : json(code, { error }));
     const sid = /(?:^|;\s*)sid=([A-Za-z0-9]+)/.exec(req.headers.cookie || '')?.[1];
     const user = sessions.get(sid);
     const { pathname } = new URL(req.url, 'http://localhost');
 
     if (req.method === 'GET' && pathname === '/') {
       return send(200, 'text/html; charset=utf-8', '<!doctype html><title>Benchmark auth</title><main><h1>Sign in</h1><a href="/admin">Admin console</a></main>');
+    }
+    if (req.method === 'GET' && pathname.startsWith('/signin/')) {
+      const name = decodeURIComponent(pathname.slice('/signin/'.length));
+      if (!Object.hasOwn(USERS, name)) return denied(401, 'unknown user');
+      if (sessions.size >= MAX_SESSIONS) return denied(503, 'session limit');
+      counter += 1;
+      const token = `s${counter}`;
+      sessions.set(token, name);
+      return send(302, 'text/plain; charset=utf-8', 'redirecting', { location: '/admin', 'set-cookie': `sid=${token}; Path=/; HttpOnly; SameSite=Strict` });
     }
     if (req.method === 'POST' && pathname === '/login') {
       let body = '';
@@ -58,8 +71,8 @@ async function start(opts = {}) {
       return user ? json(200, { user, role: USERS[user] }) : json(401, { error: 'not signed in' });
     }
     if (req.method === 'GET' && pathname === '/admin') {
-      if (!user) return json(401, { error: 'not signed in' });
-      if (USERS[user] !== 'admin') return json(403, { error: 'forbidden' });
+      if (!user) return denied(401, 'not signed in');
+      if (USERS[user] !== 'admin') return denied(403, 'forbidden');
       return send(200, 'text/html; charset=utf-8', '<!doctype html><title>Admin</title><h1 data-testid="admin-console">Admin console</h1>');
     }
     return send(404, 'text/plain; charset=utf-8', 'Not found');
