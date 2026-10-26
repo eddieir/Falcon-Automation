@@ -1,0 +1,10 @@
+{
+  "version": "16.2.0",
+  "note": "SHA-256 of the official Cypress binary archive, recorded from cdn.cypress.io (Cypress publishes no checksum, so this pin is trust-on-first-use and was confirmed by a second independent download). A platform not listed here is refused; add it by downloading once, comparing two downloads, and committing the hash in a reviewed change.",
+  "binaries": {
+    "darwin-arm64": {
+      "url": "https://cdn.cypress.io/desktop/16.2.0/darwin-arm64/cypress.zip",
+      "sha256": "6b901472c896508dccf9a6961c9c4ff8accb3b4791f84d7051934b3f151d3186"
+    }
+  }
+}

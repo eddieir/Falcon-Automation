@@ -52,7 +52,7 @@ Dimension results are the primary output. A weighted composite is computed only 
 
 ## Local comparison run (implemented)
 
-`node benchmarks/competitive/run.js` runs Falcon, plain Playwright, plain Selenium (Chrome) and plain Cypress (Electron) over the same fixtures and oracles on one machine, then scores the records. It needs no account or key and costs nothing; every page and flow is on loopback, vendor telemetry is switched off, and installing the tools downloads Selenium's browser driver and Cypress's binary. Selenium and Cypress are installed only under `benchmarks/competitive/` (exact versions, own lockfile); run `npm ci --ignore-scripts` there, then `npx cypress install`. Results: [run files](competitive-benchmark-runs/README.md).
+`node benchmarks/competitive/run.js` runs Falcon, plain Playwright, plain Selenium (Chrome) and plain Cypress (Electron) over the same fixtures and oracles on one machine, then scores the records. It needs no account or key and costs nothing; every page and flow is on loopback, vendor telemetry is switched off, and installing downloads Cypress's binary (checksum-pinned) and, on first use, a chromedriver chosen by Selenium Manager (not pinned). Selenium and Cypress are installed only under `benchmarks/competitive/` (exact versions, own lockfile); run `npm ci --ignore-scripts` there, then `node install-cypress.js`, which installs the Cypress binary only if it matches a pinned SHA-256. Results: [run files](competitive-benchmark-runs/README.md).
 
 How a locator workload is judged:
 
