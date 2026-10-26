@@ -27,6 +27,11 @@ const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' }).tr
 
 async function main() {
   const toolNames = arg('tools', 'falcon,playwright,selenium,cypress').split(',');
+  const unknown = toolNames.filter((n) => !Object.hasOwn(ADAPTERS, n));
+  if (unknown.length) throw new Error(`unknown tool(s): ${unknown.join(', ')}; choose from ${Object.keys(ADAPTERS).join(', ')}`);
+  // No provider credential can reach any tool, so the AI-call count of 0 holds by construction, not by assumption.
+  const stripped = Object.keys(process.env).filter((k) => /(_API_KEY|_TOKEN|_SECRET)$/.test(k));
+  for (const k of stripped) delete process.env[k];
   const runs = Number(arg('runs', '3'));
   const outDir = path.resolve(arg('out', path.join(ROOT, 'docs', 'research', 'competitive-benchmark-runs')));
   const workloads = JSON.parse(await fs.readFile(path.join(ROOT, 'docs', 'research', 'competitive-benchmark-workloads.json'), 'utf8')).workloads;
@@ -109,7 +114,7 @@ async function main() {
     meta: {
       revision, dirtyRelevantTree: git('status', '--porcelain', '--', 'src', 'scripts', 'tests', 'benchmarks').length > 0,
       date: new Date().toISOString(), node: process.version, os: `${os.platform()} ${os.release()} ${os.arch()}`,
-      runs, tools: toolNames, versions: environment, costUsd: 0, aiCalls: 0, mode: 'automated',
+      runs, tools: toolNames, versions: environment, costUsd: 0, aiCalls: 0, credentialVariablesRemovedFromEnvironment: stripped.length, mode: 'automated',
     },
     locators: plan.map(({ id, selector, basis }) => ({ id, selector, basis })),
     scores: score(records),
