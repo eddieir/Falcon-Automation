@@ -153,6 +153,30 @@ test("published results markdown is exactly what the data renders to", () => {
   assert.equal(md, `${render(run)}\n`);
 });
 
+const { pinFor } = require(path.join(H, "install-cypress.js"));
+const PINS = JSON.parse(fs.readFileSync(path.join(H, "cypress-binary.sha256.json"), "utf8"));
+const HASH = "a".repeat(64);
+const pins = (o = {}) => ({ version: "1.2.3", binaries: { "linux-x64": { url: "https://cdn.cypress.io/x.zip", sha256: HASH, ...o } } });
+
+test("cypress pin: the committed pin matches the pinned package version and is well formed", () => {
+  const h = JSON.parse(fs.readFileSync(path.join(H, "package.json"), "utf8"));
+  assert.equal(PINS.version, h.dependencies.cypress);
+  for (const [platform, pin] of Object.entries(PINS.binaries)) {
+    assert.match(pin.sha256, /^[0-9a-f]{64}$/, platform);
+    assert.match(pin.url, /^https:\/\/cdn\.cypress\.io\//, platform);
+  }
+  assert.ok(PINS.binaries["darwin-arm64"]);
+});
+
+test("cypress pin: fails closed on an unknown platform, a version mismatch or a malformed pin", () => {
+  assert.equal(pinFor(pins(), "1.2.3", "linux-x64").sha256, HASH);
+  assert.throws(() => pinFor(pins(), "1.2.3", "win32-x64"), /no pinned checksum for win32-x64/);
+  assert.throws(() => pinFor(pins(), "9.9.9", "linux-x64"), /does not match package.json/);
+  assert.throws(() => pinFor(pins({ sha256: "abc" }), "1.2.3", "linux-x64"), /malformed pin/);
+  assert.throws(() => pinFor(pins({ url: "http://cdn.cypress.io/x.zip" }), "1.2.3", "linux-x64"), /malformed pin/);
+  assert.throws(() => pinFor(pins({ url: "https://evil.example/x.zip" }), "1.2.3", "linux-x64"), /malformed pin/);
+});
+
 test("isolation: Selenium and Cypress stay out of the main package", () => {
   const root = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   const all = { ...root.dependencies, ...root.devDependencies };
