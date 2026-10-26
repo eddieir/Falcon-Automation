@@ -60,6 +60,8 @@ The architecture guide explains:
 
 ## Capabilities at a glance
 
+Every row below is audited, with its status and executable evidence, in the [capability truth table](docs/CAPABILITY-TRUTH-TABLE.md). Anything that table marks `PLANNED` or `UNVERIFIED` is not a shipped feature.
+
 | Capability | Available today | Evaluation boundary |
 | --- | --- | --- |
 | Browser automation | Playwright-based UI execution | Chromium is exercised in CI; Firefox and WebKit are available through `BrowserManager` but are not CI-validated. |
@@ -232,6 +234,7 @@ The current review audit records decision channels such as CLI and dashboard, no
 | [Provider architecture](docs/architecture/maintenance-byok-invocation-scoped-providers.md) | Provider context and isolation design. |
 | [Parallel execution operations](docs/phase-16-operations.md) | Workers, shards, merge behavior, and constraints. |
 | [Historical technical reference](docs/technical-reference.md) | The previous detailed README, including demo walkthroughs, operational background, and phase history. |
+| [Capability truth table](docs/CAPABILITY-TRUTH-TABLE.md) | Every promised capability tagged SHIPPED, PARTIAL, PLANNED or UNVERIFIED, with evidence, limits and open gaps. |
 | [Competitive evidence register](docs/research/competitive-evidence-method.md) | How competitor claims are sourced, dated and graded; unknown is not the same as absent. |
 | [Competitive benchmark protocol](docs/research/competitive-benchmark-protocol.md) | Neutral workloads, scoring rules, the scorer and a local run against Playwright, Selenium and Cypress, with its limits. |
 | [Release history](CHANGELOG.md) | Delivered changes and fixes. |
