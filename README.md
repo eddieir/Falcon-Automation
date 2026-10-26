@@ -232,6 +232,7 @@ The current review audit records decision channels such as CLI and dashboard, no
 | [Provider architecture](docs/architecture/maintenance-byok-invocation-scoped-providers.md) | Provider context and isolation design. |
 | [Parallel execution operations](docs/phase-16-operations.md) | Workers, shards, merge behavior, and constraints. |
 | [Historical technical reference](docs/technical-reference.md) | The previous detailed README, including demo walkthroughs, operational background, and phase history. |
+| [Competitive evidence register](docs/research/competitive-evidence-method.md) | How competitor claims are sourced, dated and graded; unknown is not the same as absent. |
 | [Release history](CHANGELOG.md) | Delivered changes and fixes. |
 | [Development plans](docs/PHASE-PLANS.md) | Phase plans and implementation context. |
 | [Contributing](CONTRIBUTING.md) | Development and contribution guidance. |

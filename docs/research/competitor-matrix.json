@@ -37,7 +37,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "How Self-Healing works; Fix your script; Prerequisites; limitations",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "BrowserStack",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: elementHistoryCapture, playwrightSupport, runScopedVsPersistedSplit, A.cloud_execution, A.playwright_support, B.failed_locator, C.hierarchy, G.reason_for_repair, I.pr_generation, I.source_code_locator_update, J.plan_restrictions (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-02",
@@ -51,7 +57,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "Successful test; Healing; Generating a Report",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "Healenium",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: elementHistoryCapture, B.failed_locator, C.alternative_locators, G.screenshot_evidence (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-03",
@@ -65,7 +77,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "Classic self-healing; Approve suggestions; Configure AI self-healing",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "Katalon",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: elementHistoryCapture, approvalBeforePersistence, B.failed_locator, C.alternative_locators, D.llm, E.suggestion_only, E.human_approval_before_reuse, G.screenshot_evidence, J.plan_restrictions (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-04",
@@ -79,7 +97,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "End the Toil of Test Maintenance",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "mabl",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "No feature cell is established by this source (undocumented here, not absent)"
+      ]
     },
     {
       "id": "L-01",
@@ -93,7 +117,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "Building an element history; Finding a strong match; Auto-heal outcomes",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "mabl",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: elementHistoryCapture, refusalOnLowConfidence, runScopedVsPersistedSplit, C.element_model, C.hierarchy, C.run_history, D.llm, D.low_confidence_refusal, E.automatically_updates_model, E.disable_per_step, H.multi_run_persistence, I.failure_behavior (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-05",
@@ -107,7 +137,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "Review the Heal; Autoheal Details; Locator Trace",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "Testsigma",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: elementHistoryCapture, approvalBeforePersistence, E.human_approval_before_reuse, E.human_review_after_reuse, G.reason_for_repair, G.screenshot_evidence (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-06",
@@ -121,7 +157,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "Vision AI opt-in; fixed-by-ai labels; UI differences and rollback",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "testRigor",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: elementHistoryCapture, rollbackCapability, E.human_review_after_reuse, E.rollback, G.changed_field_explanation (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-07",
@@ -135,7 +177,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "Locators: Auto Improve; Revision History Panel",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "Tricentis Testim",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: B.weak_locator, D.confidence_score, E.automatically_updates_model, E.version_history, I.branch_isolation (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-08",
@@ -149,7 +197,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "The 5D Element Model; uncertainty validation",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "Functionize",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: elementHistoryCapture, numericConfidenceExposed, refusalOnLowConfidence, D.low_confidence_refusal (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-09",
@@ -163,7 +217,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "Locator auto-healing; AI triage; Patch delivery",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "Momentic",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: runScopedVsPersistedSplit, E.automatically_updates_test, G.reason_for_repair, I.parallel_execution, I.pr_generation (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-10",
@@ -177,7 +237,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "Challenges and Limitations",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "Autify",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: approvalBeforePersistence, E.suggestion_only, E.human_approval_before_reuse (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-13",
@@ -191,7 +257,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "How to review healing; When is healing automatically applied",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "Virtuoso QA",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: elementHistoryCapture, refusalOnLowConfidence, rollbackCapability, D.low_confidence_refusal, E.automatically_updates_model, E.disable_per_step, E.rollback (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-14",
@@ -206,7 +278,11 @@
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "Historical survey not reproducible from committed snapshot",
       "independentlyVerified": false,
-      "reproducibility": "No committed response snapshot; numeric/adoption conclusions withdrawn."
+      "reproducibility": "No committed response snapshot; numeric/adoption conclusions withdrawn.",
+      "product": "open-source survey",
+      "productVersion": null,
+      "lastVerified": "2026-09-29T00:00:00Z",
+      "unknownClaims": []
     },
     {
       "id": "S-15",
@@ -220,7 +296,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "Vendor press release, reduction claim",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "BrowserStack",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "No feature cell is established by this source (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-16",
@@ -234,7 +316,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page reopened; undated unless specified.",
       "locator": "Overview; services",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "Healenium",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: elementHistoryCapture, localSelfHosted, A.open_source, A.local_library, A.selenium_support, H.postgresql, H.customer_hosted (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-17",
@@ -248,7 +336,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Live page reopened; no date supplied beyond lastUpdated.",
       "locator": "Architecture; How Healenium Playwright Proxy works",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "Healenium",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: playwrightSupport, A.playwright_support, J.paid_only_features (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-18",
@@ -262,7 +356,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Live page reopened; no date supplied beyond lastUpdated.",
       "locator": "Review changes; Roll back element history",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "mabl",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: rollbackCapability, C.geometry, E.rollback, E.version_history, G.changed_field_explanation (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-19",
@@ -276,7 +376,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Live page reopened; no date supplied beyond lastUpdated.",
       "locator": "Auto-healed a test",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "mabl",
+      "productVersion": null,
+      "lastVerified": "2026-10-05T00:00:00Z",
+      "unknownClaims": [
+        "No feature cell is established by this source (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-20",
@@ -290,7 +396,13 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page opened once on 2026-10-24; undated; product version not stated on the page.",
       "locator": "Healer; Planner; Generator",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "Playwright Test Agents",
+      "productVersion": null,
+      "lastVerified": "2026-10-24T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: playwrightSupport, A.playwright_support, B.failed_locator, B.timeout, I.failure_behavior (undocumented here, not absent)"
+      ]
     },
     {
       "id": "S-21",
@@ -304,7 +416,113 @@
       "accessStatus": "RETRIEVED",
       "freshness": "Current live page opened once on 2026-10-24; undated.",
       "locator": "Self-heals broken tests; Stores all test code in your GitHub repo",
-      "independentlyVerified": false
+      "independentlyVerified": false,
+      "product": "QA Wolf",
+      "productVersion": null,
+      "lastVerified": "2026-10-24T00:00:00Z",
+      "unknownClaims": [
+        "Every feature cell except: playwrightSupport, A.playwright_support, B.failed_locator, B.timeout, B.proactive_healing, E.automatically_updates_test, H.portability (undocumented here, not absent)"
+      ]
+    },
+    {
+      "id": "S-22",
+      "vendor": "Cypress",
+      "title": "Cypress AI",
+      "url": "https://www.cypress.io/ai",
+      "kind": "marketing",
+      "accessDate": "2026-10-25",
+      "publicationDate": null,
+      "lastUpdated": null,
+      "accessStatus": "RETRIEVED",
+      "freshness": "Live vendor page, undated.",
+      "locator": "AI test creation; self-healing",
+      "independentlyVerified": false,
+      "lastVerified": "2026-10-25T00:00:00Z",
+      "productVersion": null,
+      "product": "Cypress",
+      "unknownClaims": [
+        "No feature cell is established by this source (undocumented here, not absent)"
+      ]
+    },
+    {
+      "id": "S-23",
+      "vendor": "Cypress",
+      "title": "Now Available to Everyone: Write Cypress Tests in Natural Language with cy.prompt()",
+      "url": "https://www.cypress.io/blog/cy-prompt-experimental-launch",
+      "kind": "vendor_article",
+      "accessDate": "2026-10-25",
+      "publicationDate": "2025-10-21",
+      "lastUpdated": null,
+      "accessStatus": "RETRIEVED",
+      "freshness": "Vendor blog post from 2025-10-21; feature described as experimental, may have changed.",
+      "locator": "cy.prompt() self-healing; eject versus keep",
+      "independentlyVerified": false,
+      "lastVerified": "2026-10-25T00:00:00Z",
+      "productVersion": "v15.4.0",
+      "product": "Cypress",
+      "unknownClaims": [
+        "Every feature cell except: runScopedVsPersistedSplit (undocumented here, not absent)"
+      ]
+    },
+    {
+      "id": "S-24",
+      "vendor": "Selenium",
+      "title": "Selenium 4 relative locators",
+      "url": "https://saucelabs.com/resources/blog/selenium-4-relative-locators",
+      "kind": "vendor_article",
+      "accessDate": "2026-10-25",
+      "publicationDate": null,
+      "lastUpdated": null,
+      "accessStatus": "RETRIEVED",
+      "freshness": "Third-party vendor blog (Sauce Labs), undated; not the Selenium project's own docs.",
+      "locator": "above, below, toLeftOf, toRightOf, near",
+      "independentlyVerified": false,
+      "lastVerified": "2026-10-25T00:00:00Z",
+      "productVersion": "4",
+      "product": "Selenium",
+      "unknownClaims": [
+        "No feature cell is established by this source (undocumented here, not absent)"
+      ]
+    },
+    {
+      "id": "S-25",
+      "vendor": "browser-use",
+      "title": "browser-use: AI browser agent",
+      "url": "https://github.com/browser-use/browser-use",
+      "kind": "official_docs",
+      "accessDate": "2026-10-25",
+      "publicationDate": null,
+      "lastUpdated": null,
+      "accessStatus": "RETRIEVED",
+      "freshness": "Live GitHub README, undated.",
+      "locator": "Open-source Python library; supported LLMs",
+      "independentlyVerified": false,
+      "lastVerified": "2026-10-25T00:00:00Z",
+      "productVersion": null,
+      "product": "browser-use",
+      "unknownClaims": [
+        "Every feature cell except: A.open_source, A.local_library, D.llm (undocumented here, not absent)"
+      ]
+    },
+    {
+      "id": "S-26",
+      "vendor": "Stagehand",
+      "title": "Stagehand documentation",
+      "url": "https://docs.stagehand.dev/",
+      "kind": "official_docs",
+      "accessDate": "2026-10-25",
+      "publicationDate": null,
+      "lastUpdated": null,
+      "accessStatus": "RETRIEVED",
+      "freshness": "Live documentation, undated.",
+      "locator": "act, extract, observe; license; self-hosting",
+      "independentlyVerified": false,
+      "lastVerified": "2026-10-25T00:00:00Z",
+      "productVersion": null,
+      "product": "Stagehand",
+      "unknownClaims": [
+        "Every feature cell except: A.local_library (undocumented here, not absent; licence not stated on this page)"
+      ]
     }
   ],
   "features": [
@@ -12232,6 +12450,3466 @@
             "S-21"
           ],
           "evidenceScope": "Reviewed one public page only; behavior not exercised in an account."
+        }
+      }
+    },
+    "Cypress": {
+      "sourceIds": [
+        "S-22",
+        "S-23"
+      ],
+      "cells": {
+        "elementHistoryCapture": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "numericConfidenceExposed": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "refusalOnLowConfidence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "approvalBeforePersistence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "rollbackCapability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "localSelfHosted": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "playwrightSupport": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "runScopedVsPersistedSplit": {
+          "status": "MARKETING_CLAIM",
+          "value": "Vendor blog describes ejecting generated code versus keeping cy.prompt() for continued self-healing.",
+          "sourceIds": [
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.commercial_saas": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.commercial_self_hosted": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.open_source": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.local_library": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.cloud_execution": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.supported_frameworks": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.playwright_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.selenium_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.mobile_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.ci_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.failed_locator": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.weak_locator": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.timeout": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.visual_difference": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.semantic_intent_failure": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.manual_invocation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.proactive_healing": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.alternative_locators": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.element_model": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.previous_dom": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.accessibility_tree": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.screenshots": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.element_screenshots": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.nearby_text": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.hierarchy": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.geometry": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.interaction_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.run_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.application_page_action_scoping": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.deterministic_rules": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.machine_learning": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.llm": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.computer_vision": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.accessibility_tree_comparison": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.attribute_comparison": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.text_similarity": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.dom_path_comparison": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.geometry": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.confidence_score": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.winner_runner_up_margin": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.ambiguity_refusal": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.low_confidence_refusal": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.automatically_updates_model": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.automatically_updates_test": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.suggestion_only": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.human_approval_before_reuse": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.human_review_after_reuse": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.disable_per_step": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.rejection_memory": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.attribution": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.audit_ledger": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.rollback": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.version_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.uniqueness_check": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.action_compatibility": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.post_action_assertion": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.business_outcome_validation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.protected_regression_replay": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.cross_browser_validation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.false_heal_detection": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.false_heal_metrics": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.reason_for_repair": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.confidence_factors": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.before_after_attributes": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.screenshot_evidence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.element_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.changed_field_explanation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.exportable_evidence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.vendor_cloud": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.local_json": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.sqlite": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.postgresql": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.customer_hosted": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.data_leaving_customer_network": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.configurable_retention": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.multi_run_persistence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.cross_machine_sharing": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.concurrent_write_safety": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.portability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.export": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.parallel_execution": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.sharding": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.branch_isolation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.ci_persistence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.pr_generation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.source_code_locator_update": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.rollback_mechanism": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.migration_behavior": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.failure_behavior": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.plan_restrictions": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.paid_only_features": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.usage_limits": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.self_hosting_availability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.public_benchmark_availability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.publicly_stated_maintenance_reduction_claims": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.whether_those_claims_are_independently_verifiable": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-22",
+            "S-23"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        }
+      }
+    },
+    "Selenium": {
+      "sourceIds": [
+        "S-24"
+      ],
+      "cells": {
+        "elementHistoryCapture": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "numericConfidenceExposed": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "refusalOnLowConfidence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "approvalBeforePersistence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "rollbackCapability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "localSelfHosted": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "playwrightSupport": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "runScopedVsPersistedSplit": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.commercial_saas": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.commercial_self_hosted": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.open_source": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.local_library": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.cloud_execution": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.supported_frameworks": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.playwright_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.selenium_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.mobile_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.ci_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.failed_locator": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.weak_locator": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.timeout": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.visual_difference": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.semantic_intent_failure": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.manual_invocation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.proactive_healing": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.alternative_locators": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.element_model": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.previous_dom": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.accessibility_tree": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.screenshots": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.element_screenshots": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.nearby_text": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.hierarchy": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.geometry": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.interaction_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.run_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.application_page_action_scoping": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.deterministic_rules": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.machine_learning": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.llm": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.computer_vision": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.accessibility_tree_comparison": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.attribute_comparison": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.text_similarity": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.dom_path_comparison": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.geometry": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.confidence_score": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.winner_runner_up_margin": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.ambiguity_refusal": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.low_confidence_refusal": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.automatically_updates_model": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.automatically_updates_test": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.suggestion_only": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.human_approval_before_reuse": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.human_review_after_reuse": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.disable_per_step": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.rejection_memory": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.attribution": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.audit_ledger": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.rollback": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.version_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.uniqueness_check": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.action_compatibility": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.post_action_assertion": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.business_outcome_validation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.protected_regression_replay": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.cross_browser_validation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.false_heal_detection": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.false_heal_metrics": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.reason_for_repair": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.confidence_factors": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.before_after_attributes": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.screenshot_evidence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.element_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.changed_field_explanation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.exportable_evidence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.vendor_cloud": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.local_json": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.sqlite": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.postgresql": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.customer_hosted": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.data_leaving_customer_network": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.configurable_retention": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.multi_run_persistence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.cross_machine_sharing": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.concurrent_write_safety": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.portability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.export": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.parallel_execution": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.sharding": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.branch_isolation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.ci_persistence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.pr_generation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.source_code_locator_update": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.rollback_mechanism": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.migration_behavior": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.failure_behavior": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.plan_restrictions": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.paid_only_features": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.usage_limits": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.self_hosting_availability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.public_benchmark_availability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.publicly_stated_maintenance_reduction_claims": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.whether_those_claims_are_independently_verifiable": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-24"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        }
+      }
+    },
+    "browser-use": {
+      "sourceIds": [
+        "S-25"
+      ],
+      "cells": {
+        "elementHistoryCapture": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "numericConfidenceExposed": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "refusalOnLowConfidence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "approvalBeforePersistence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "rollbackCapability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "localSelfHosted": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "playwrightSupport": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "runScopedVsPersistedSplit": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.commercial_saas": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.commercial_self_hosted": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.open_source": {
+          "status": "VERIFIED",
+          "value": "README describes an open-source Python library.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.local_library": {
+          "status": "VERIFIED",
+          "value": "README describes use as a local Python library.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.cloud_execution": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.supported_frameworks": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.playwright_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.selenium_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.mobile_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.ci_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.failed_locator": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.weak_locator": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.timeout": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.visual_difference": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.semantic_intent_failure": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.manual_invocation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.proactive_healing": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.alternative_locators": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.element_model": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.previous_dom": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.accessibility_tree": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.screenshots": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.element_screenshots": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.nearby_text": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.hierarchy": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.geometry": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.interaction_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.run_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.application_page_action_scoping": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.deterministic_rules": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.machine_learning": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.llm": {
+          "status": "VERIFIED",
+          "value": "README lists OpenAI, Anthropic, Google and Ollama among supported models.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.computer_vision": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.accessibility_tree_comparison": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.attribute_comparison": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.text_similarity": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.dom_path_comparison": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.geometry": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.confidence_score": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.winner_runner_up_margin": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.ambiguity_refusal": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.low_confidence_refusal": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.automatically_updates_model": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.automatically_updates_test": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.suggestion_only": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.human_approval_before_reuse": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.human_review_after_reuse": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.disable_per_step": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.rejection_memory": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.attribution": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.audit_ledger": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.rollback": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.version_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.uniqueness_check": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.action_compatibility": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.post_action_assertion": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.business_outcome_validation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.protected_regression_replay": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.cross_browser_validation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.false_heal_detection": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.false_heal_metrics": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.reason_for_repair": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.confidence_factors": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.before_after_attributes": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.screenshot_evidence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.element_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.changed_field_explanation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.exportable_evidence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.vendor_cloud": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.local_json": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.sqlite": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.postgresql": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.customer_hosted": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.data_leaving_customer_network": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.configurable_retention": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.multi_run_persistence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.cross_machine_sharing": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.concurrent_write_safety": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.portability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.export": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.parallel_execution": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.sharding": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.branch_isolation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.ci_persistence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.pr_generation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.source_code_locator_update": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.rollback_mechanism": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.migration_behavior": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.failure_behavior": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.plan_restrictions": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.paid_only_features": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.usage_limits": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.self_hosting_availability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.public_benchmark_availability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.publicly_stated_maintenance_reduction_claims": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.whether_those_claims_are_independently_verifiable": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-25"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        }
+      }
+    },
+    "Stagehand": {
+      "sourceIds": [
+        "S-26"
+      ],
+      "cells": {
+        "elementHistoryCapture": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "numericConfidenceExposed": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "refusalOnLowConfidence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "approvalBeforePersistence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "rollbackCapability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "localSelfHosted": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "playwrightSupport": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "runScopedVsPersistedSplit": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.commercial_saas": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.commercial_self_hosted": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.open_source": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.local_library": {
+          "status": "VERIFIED",
+          "value": "Documentation describes running locally against a Chromium browser.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.cloud_execution": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.supported_frameworks": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.playwright_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.selenium_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.mobile_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "A.ci_support": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.failed_locator": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.weak_locator": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.timeout": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.visual_difference": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.semantic_intent_failure": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.manual_invocation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "B.proactive_healing": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.alternative_locators": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.element_model": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.previous_dom": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.accessibility_tree": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.screenshots": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.element_screenshots": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.nearby_text": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.hierarchy": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.geometry": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.interaction_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.run_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "C.application_page_action_scoping": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.deterministic_rules": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.machine_learning": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.llm": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.computer_vision": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.accessibility_tree_comparison": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.attribute_comparison": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.text_similarity": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.dom_path_comparison": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.geometry": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.confidence_score": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.winner_runner_up_margin": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.ambiguity_refusal": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "D.low_confidence_refusal": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.automatically_updates_model": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.automatically_updates_test": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.suggestion_only": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.human_approval_before_reuse": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.human_review_after_reuse": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.disable_per_step": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.rejection_memory": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.attribution": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.audit_ledger": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.rollback": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "E.version_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.uniqueness_check": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.action_compatibility": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.post_action_assertion": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.business_outcome_validation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.protected_regression_replay": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.cross_browser_validation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.false_heal_detection": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "F.false_heal_metrics": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.reason_for_repair": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.confidence_factors": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.before_after_attributes": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.screenshot_evidence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.element_history": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.changed_field_explanation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "G.exportable_evidence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.vendor_cloud": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.local_json": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.sqlite": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.postgresql": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.customer_hosted": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.data_leaving_customer_network": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.configurable_retention": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.multi_run_persistence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.cross_machine_sharing": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.concurrent_write_safety": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.portability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "H.export": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.parallel_execution": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.sharding": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.branch_isolation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.ci_persistence": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.pr_generation": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.source_code_locator_update": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.rollback_mechanism": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.migration_behavior": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "I.failure_behavior": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.plan_restrictions": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.paid_only_features": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.usage_limits": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.self_hosting_availability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.public_benchmark_availability": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.publicly_stated_maintenance_reduction_claims": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
+        },
+        "J.whether_those_claims_are_independently_verifiable": {
+          "status": "UNKNOWN",
+          "value": "Reviewed sources do not establish this precise capability; no absence is inferred.",
+          "sourceIds": [
+            "S-26"
+          ],
+          "evidenceScope": "Reviewed one or two public pages; behavior not exercised."
         }
       }
     }
