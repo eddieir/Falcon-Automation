@@ -67,6 +67,7 @@ A click on any unintended element, or any click where refusing is required or th
 
 - The healing corpus was written by Falcon's maintainers, and Falcon's matcher was developed against it. It is not an independent or neutral test set. Falcon's results here show behaviour on these cases only and say nothing about real applications.
 - Falcon is evaluated through its healing library path on static pages, not through its CLI pipeline or an LLM provider. Selenium and Cypress are evaluated in their default configuration, without their healing add-ons or any AI plugin.
+- Data staying on the machine was checked by sampling connections once per second during the recorded run; sub-second connections could be missed and no packet capture was taken.
 - The three tools run different browser engines (Chromium, Chrome, Electron). Timing is not comparable across engines.
 - The cases are deterministic, so repeats were identical in every run. Pooled counts are not independent samples, and the Wilson intervals the scorer emits are therefore too narrow to quote. No significance claim is made.
 - Cases where the original locator still resolves (to the right or wrong element) never trigger Falcon's healing, so Falcon behaves like the plain tools there, including silent wrong clicks.
