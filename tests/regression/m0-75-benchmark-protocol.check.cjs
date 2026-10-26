@@ -146,6 +146,9 @@ test("AC75-07/08: CLI scores a file, exits 2 on bad input, and reads no network 
     const ok = spawnSync(process.execPath, [SCORER, good], { encoding: "utf8" });
     assert.equal(ok.status, 0);
     assert.equal(JSON.parse(ok.stdout)[0].healingPrecision.value, 1);
+    const bom = path.join(dir, "bom.json");
+    fs.writeFileSync(bom, "\uFEFF" + JSON.stringify([rec()]));
+    assert.equal(spawnSync(process.execPath, [SCORER, bom], { encoding: "utf8" }).status, 0, "UTF-8 BOM input must score");
     const badFile = path.join(dir, "bad.json");
     fs.writeFileSync(badFile, JSON.stringify([rec({ outcome: "WIN" })]));
     assert.equal(spawnSync(process.execPath, [SCORER, badFile], { encoding: "utf8" }).status, 2);

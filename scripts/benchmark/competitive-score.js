@@ -131,7 +131,7 @@ function main(argv) {
         return 2;
     }
     try {
-        const input = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const input = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
         const records = Array.isArray(input) ? input : input.records;
         process.stdout.write(JSON.stringify(score(records, { weights: input.weights }), null, 2) + '\n');
         return 0;
