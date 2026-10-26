@@ -6,7 +6,7 @@ Run files produced under the [protocol](../competitive-benchmark-protocol.md). E
 |---|---|---|---|---|
 | `587a52a` | Falcon, Playwright, Selenium, Cypress | 3 | automated, local | $0, no AI calls |
 
-Reproduce: `npm ci` and `npx cypress install` in `benchmarks/competitive/`, then `node benchmarks/competitive/run.js` from the repository root. Publish only runs made on a clean relevant tree (`meta.dirtyRelevantTree` is `false`).
+Reproduce: `npm ci --ignore-scripts` and `npx cypress install` in `benchmarks/competitive/`, then `node benchmarks/competitive/run.js` from the repository root. Publish only runs made on a clean relevant tree (`meta.dirtyRelevantTree` is `false`).
 
 Not covered, and not claimed: SaaS vendors, LLM-driven agents (browser-use, Stagehand), Healenium and any assisted run. They need accounts, spend or infrastructure that has not been approved.
 

@@ -13,7 +13,7 @@ function render(run) {
   const lines = [];
   lines.push('# Local competitive benchmark results', '');
   lines.push(`Generated from \`${meta.revision.slice(0, 7)}-local.json\` by \`benchmarks/competitive/report.js\`. Protocol: [competitive-benchmark-protocol.md](../competitive-benchmark-protocol.md). Read the limitations there before citing any number.`, '');
-  lines.push('## Environment', '', `- Revision: \`${meta.revision}\` (relevant tree clean: ${meta.dirtyRelevantTree ? 'no' : 'yes'})`, `- Node ${meta.node}; ${meta.os}; ${meta.runs} runs per tool; automated mode only`, `- Cost: $${meta.costUsd}; AI calls: ${meta.aiCalls}; no accounts, keys or network beyond loopback`, '');
+  lines.push('## Environment', '', `- Revision: \`${meta.revision}\` (relevant tree clean: ${meta.dirtyRelevantTree ? 'no' : 'yes'})`, `- Node ${meta.node}; ${meta.os}; ${meta.runs} runs per tool; automated mode only`, `- Cost: $${meta.costUsd}; AI calls: ${meta.aiCalls}; no accounts or keys; pages and flows on loopback only; vendor telemetry switched off (${meta.telemetryDisabled.join(', ')})`, '');
   lines.push('| Tool | Version / browser |', '|---|---|', ...Object.entries(meta.versions).sort().map(([t, v]) => `| ${t} | ${v} |`), '');
   lines.push('## Metrics', '', 'Each cell is `numerator/denominator` pooled over all runs, so divide by the run count for distinct cases. `N/A` means a zero denominator, not zero. Runs repeat identical deterministic fixtures, so repeats add no independent evidence about variance (see the limitations in the protocol).', '');
   lines.push('| Metric | ' + tools.join(' | ') + ' |', '|---|' + tools.map(() => '---').join('|') + '|');

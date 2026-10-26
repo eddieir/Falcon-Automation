@@ -5,6 +5,9 @@
 const http = require('node:http');
 
 const HOST = '127.0.0.1';
+const MAX_EVENTS_PER_FIXTURE = 100;
+const MAX_OBSERVATIONS = 50;
+const MAX_BODY = 4096;
 const PROBE = `<script>(function(){var id=location.pathname.split('/')[2];function r(e){var t=e.target&&e.target.closest?e.target.closest('[data-benchmark-ground-truth-id]'):null;navigator.sendBeacon('/__event?f='+encodeURIComponent(id),JSON.stringify({kind:e.type,gt:t?t.getAttribute('data-benchmark-ground-truth-id'):'other'}));}['click','input','change'].forEach(function(k){document.addEventListener(k,r,true);});})();</script>`;
 
 async function start({ fixtures, apps }) {
@@ -14,7 +17,13 @@ async function start({ fixtures, apps }) {
   const server = http.createServer(async (req, res) => {
     const send = (code, type, body) => { res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' }); res.end(body); };
     const url = new URL(req.url, 'http://localhost');
-    const body = () => new Promise((resolve) => { let b = ''; req.on('data', (c) => { if (b.length < 4096) b += c; }); req.on('end', () => resolve(b)); });
+    const body = () => new Promise((resolve) => {
+      let b = '';
+      req.on('data', (c) => { b += c; if (b.length > MAX_BODY) { req.destroy(); resolve(b.slice(0, MAX_BODY)); } });
+      req.on('end', () => resolve(b));
+    });
+    // Rejects DNS-rebinding and cross-site calls: only this exact loopback origin may talk to the harness.
+    if (req.headers.host !== `${HOST}:${server.address().port}`) return send(403, 'text/plain', 'Forbidden');
     try {
       const page = /^\/f\/([^/]+)\/(pre|post)\.html$/.exec(url.pathname);
       if (req.method === 'GET' && page) {
@@ -29,7 +38,7 @@ async function start({ fixtures, apps }) {
         let ev;
         try { ev = JSON.parse(await body()); } catch { return send(400, 'text/plain', 'bad'); }
         if (!events.has(id)) events.set(id, []);
-        events.get(id).push({ kind: String(ev.kind), gt: String(ev.gt) });
+        if (events.get(id).length < MAX_EVENTS_PER_FIXTURE) events.get(id).push({ kind: String(ev.kind), gt: String(ev.gt) });
         return send(204, 'text/plain', '');
       }
       if (req.method === 'POST' && url.pathname === '/__ctl/reset') {
@@ -37,7 +46,8 @@ async function start({ fixtures, apps }) {
         return send(204, 'text/plain', '');
       }
       if (req.method === 'POST' && url.pathname === '/__ctl/obs') {
-        observations.set(url.searchParams.get('k'), (await body()).slice(0, 500));
+        const key = String(url.searchParams.get('k')).slice(0, 40);
+        if (observations.has(key) || observations.size < MAX_OBSERVATIONS) observations.set(key, (await body()).slice(0, 500));
         return send(204, 'text/plain', '');
       }
       return send(404, 'text/plain', 'Not found');

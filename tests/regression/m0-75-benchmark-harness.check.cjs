@@ -70,6 +70,7 @@ test("run file: clean tree, four tools scored, no hidden gaps, free of cost", ()
   assert.deepEqual(run.meta.tools.slice().sort(), ["cypress", "falcon", "playwright", "selenium"]);
   assert.equal(run.meta.costUsd, 0);
   assert.equal(run.meta.aiCalls, 0);
+  assert.deepEqual(run.meta.telemetryDisabled, ["SE_AVOID_STATS", "CYPRESS_CRASH_REPORTS"]);
   assert.equal(typeof run.meta.credentialVariablesRemovedFromEnvironment, "number", "the zero-AI-call claim must come from a run that stripped credentials");
   assert.ok(run.meta.runs >= 3);
   for (const s of run.scores) assert.equal(s.status, "SCORED", s.tool);
@@ -121,6 +122,30 @@ test("run.js refuses unknown tool names before doing any work", () => {
   const out = spawnSync(process.execPath, [path.join(H, "run.js"), "--tools=falcon,nope", "--runs=1"], { encoding: "utf8" });
   assert.equal(out.status, 1);
   assert.match(out.stderr, /unknown tool\(s\): nope/);
+});
+
+test("control server: wrong Host is refused, event and observation memory is capped", async () => {
+  const http = require("node:http");
+  const { start } = require(path.join(H, "lib", "server.js"));
+  const app = await start({ fixtures: [{ id: "f1", preHtml: "<body></body>", postHtml: "<body></body>" }], apps: {} });
+  const call = (method, p, { host, body } = {}) => new Promise((resolve, reject) => {
+    const u = new URL(app.url);
+    const req = http.request({ host: u.hostname, port: u.port, path: p, method, headers: { host: host || u.host } }, (res) => { res.resume(); res.on("end", () => resolve(res.statusCode)); });
+    req.on("error", reject);
+    req.end(body);
+  });
+  try {
+    assert.equal(await call("POST", "/__ctl/reset", { host: "evil.example" }), 403);
+    assert.equal(await call("POST", "/__ctl/reset"), 204);
+    for (let i = 0; i < 150; i += 1) await call("POST", "/__event?f=f1", { body: JSON.stringify({ kind: "click", gt: "x" }) });
+    assert.equal(app.eventsFor("f1").length, 100);
+    assert.equal(await call("POST", "/__event?f=nope", { body: "{}" }), 404);
+    assert.equal(await call("GET", "/f/f1/post.html"), 200);
+    assert.equal(await call("GET", "/f/..%2f..%2fpackage/post.html"), 404);
+    for (let i = 0; i < 60; i += 1) await call("POST", `/__ctl/obs?k=k${i}`, { body: "v" });
+    assert.equal(app.observation("k49"), "v");
+    assert.equal(app.observation("k55"), null);
+  } finally { await app.close(); }
 });
 
 test("published results markdown is exactly what the data renders to", () => {
