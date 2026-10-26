@@ -84,7 +84,7 @@ test("AC76-01 boundary: UNVERIFIED rows may cite no file; every README capabilit
   assert.ok(rowsOf(md, "| ID |").some((r) => r[3] === "UNVERIFIED" && r[4] === "none"));
   const readme = read("README.md");
   const labels = rowsOf(readme, "| Capability | Available today").map((r) => r[0]);
-  assert.ok(labels.length >= 8);
+  assert.equal(labels.length, 8, "README capability table changed; update the truth table and this count");
   const claimed = rowsOf(md, "| ID |").map((r) => r[2]).join("\n");
   for (const l of labels) assert.ok(claimed.includes("README: " + l), "no truth-table row for README capability: " + l);
 });
@@ -106,6 +106,7 @@ test("AC76-01,03: misleading comparative claims stay corrected", () => {
     "Every competitor requires per-test authorship",
     "It is a different offer",
     "it should be in a different category",
+    "reports tests that pass on retry as flaky",
   ]) assert.ok(!plans.includes(bad), "reintroduced claim: " + bad);
   assert.match(plans, /CAPABILITY-TRUTH-TABLE\.md/);
 });

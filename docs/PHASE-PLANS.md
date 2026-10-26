@@ -22,11 +22,11 @@ The landscape, by category and without capability verdicts the register does not
 
 | Tool | Category |
 |---|---|
-| Testim, Mabl, Autify, Functionize, Katalon, Testsigma | Commercial platforms with their own self-healing; some document an approval step. |
+| Testim, Mabl, Autify, Functionize, Katalon, Testsigma | Commercial platforms with their own self-healing; some describe an approval step (vendor page text, not scored in the register). |
 | Applitools | Visual testing. |
 | QA Wolf | Managed service that writes and maintains tests. |
 | Meticulous | Session-recording based test generation. |
-| Playwright, Cypress, Selenium | Execution layer. Playwright also ships Test Agents (planner, generator, healer) and reports tests that pass on retry as flaky. |
+| Playwright, Cypress, Selenium | Execution layer. Playwright also ships Test Agents (planner, generator, healer). |
 
 Falcon's structural advantages, which every phase must compound rather than dilute:
 

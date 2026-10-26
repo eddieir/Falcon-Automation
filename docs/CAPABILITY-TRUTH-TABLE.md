@@ -64,8 +64,8 @@ Gaps are tracked here until they are filed as issues. A gap is closed only when 
 
 | Where | Was | Now |
 | --- | --- | --- |
-| `docs/PHASE-PLANS.md` section 0 | Playwright, Cypress and Selenium: "No generation, no healing, no flake intelligence." | Describes them as the execution layer and points to the evidence register. Playwright ships Test Agents with a Healer, and Playwright reports flaky tests after retries. |
-| `docs/PHASE-PLANS.md` section 0 | Testim, Autify, Mabl and others: healing is "silent and proprietary", "trusted with no human ever seeing it". | Removed. The competitor evidence register does not establish this, and it records that Katalon and Testsigma document an approval step. |
+| `docs/PHASE-PLANS.md` section 0 | Playwright, Cypress and Selenium: "No generation, no healing, no flake intelligence." | Describes them as the execution layer and points to the evidence register. Playwright ships Test Agents with a Healer (registered source S-20). |
+| `docs/PHASE-PLANS.md` section 0 | Testim, Autify, Mabl and others: healing is "silent and proprietary", "trusted with no human ever seeing it". | Removed. The competitor evidence register does not establish this, and its Katalon and Testsigma entries cite approval wording in page text, not as a scored capability. |
 | `docs/PHASE-PLANS.md` section 0 | "Falcon ... should be in a different category" and "is not an incremental improvement on any of them. It is a different offer." | Stated as a design aim. Comparative claims are limited to what `docs/research/competitor-matrix.json` verifies. |
 
 An absence of evidence about a competitor is not evidence of absence. See the [evidence method](research/competitive-evidence-method.md).
