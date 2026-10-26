@@ -4,7 +4,7 @@ Run files produced under the [protocol](../competitive-benchmark-protocol.md). E
 
 | Revision | Tools | Runs | Mode | Cost |
 |---|---|---|---|---|
-| `f6c0d0d` | Falcon, Playwright, Selenium, Cypress | 3 | automated, local | $0, no AI calls |
+| `587a52a` | Falcon, Playwright, Selenium, Cypress | 3 | automated, local | $0, no AI calls |
 
 Reproduce: `npm ci` and `npx cypress install` in `benchmarks/competitive/`, then `node benchmarks/competitive/run.js` from the repository root. Publish only runs made on a clean relevant tree (`meta.dirtyRelevantTree` is `false`).
 

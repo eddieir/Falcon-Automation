@@ -1,8 +1,8 @@
 {
   "meta": {
-    "revision": "f6c0d0d0837f57e99926868a4d93800dd29daa0b",
+    "revision": "587a52a267fc4d979f3d2fc9420a5e60eeec0236",
     "dirtyRelevantTree": false,
-    "date": "2026-10-26T11:24:22.401Z",
+    "date": "2026-10-26T11:36:28.323Z",
     "node": "v22.19.0",
     "os": "darwin 25.5.0 arm64",
     "runs": 3,
@@ -13,13 +13,14 @@
       "cypress"
     ],
     "versions": {
-      "Falcon": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "Falcon": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "Playwright": "1.64.0 / Chromium 156.0.8078.4",
       "Selenium": "4.51.0 / Chrome 155.0.8059.85",
       "Cypress": "16.2.0 / electron 146.0.7680.216"
     },
     "costUsd": 0,
     "aiCalls": 0,
+    "credentialVariablesRemovedFromEnvironment": 3,
     "mode": "automated"
   },
   "locators": [
@@ -214,8 +215,8 @@
       "ciEconomics": {
         "timeToGreenSec": {
           "n": 3,
-          "total": 58.120000000000005,
-          "median": 19.49
+          "total": 61.56,
+          "median": 19.75
         },
         "retries": {
           "n": 3,
@@ -225,8 +226,8 @@
         "triageMinutes": null,
         "browserMinutes": {
           "n": 3,
-          "total": 0.9690000000000001,
-          "median": 0.325
+          "total": 1.026,
+          "median": 0.329
         },
         "aiCalls": {
           "n": 3,
@@ -239,7 +240,7 @@
     },
     {
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "status": "SCORED",
       "records": 93,
@@ -291,8 +292,8 @@
       "ciEconomics": {
         "timeToGreenSec": {
           "n": 3,
-          "total": 41.79,
-          "median": 13.97
+          "total": 45.79,
+          "median": 15.27
         },
         "retries": {
           "n": 3,
@@ -302,8 +303,8 @@
         "triageMinutes": null,
         "browserMinutes": {
           "n": 3,
-          "total": 0.6970000000000001,
-          "median": 0.233
+          "total": 0.763,
+          "median": 0.254
         },
         "aiCalls": {
           "n": 3,
@@ -368,8 +369,8 @@
       "ciEconomics": {
         "timeToGreenSec": {
           "n": 3,
-          "total": 40.53,
-          "median": 13.43
+          "total": 41.09,
+          "median": 13.6
         },
         "retries": {
           "n": 3,
@@ -379,8 +380,8 @@
         "triageMinutes": null,
         "browserMinutes": {
           "n": 3,
-          "total": 0.676,
-          "median": 0.224
+          "total": 0.685,
+          "median": 0.227
         },
         "aiCalls": {
           "n": 3,
@@ -445,8 +446,8 @@
       "ciEconomics": {
         "timeToGreenSec": {
           "n": 3,
-          "total": 19.72,
-          "median": 6.47
+          "total": 21.560000000000002,
+          "median": 6.91
         },
         "retries": {
           "n": 3,
@@ -456,8 +457,8 @@
         "triageMinutes": null,
         "browserMinutes": {
           "n": 3,
-          "total": 0.329,
-          "median": 0.108
+          "total": 0.359,
+          "median": 0.115
         },
         "aiCalls": {
           "n": 3,
@@ -473,7 +474,7 @@
     {
       "workloadId": "corpus/ambiguous-redesign-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "REFUSE",
@@ -489,7 +490,7 @@
     {
       "workloadId": "corpus/ancestor-change-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -505,7 +506,7 @@
     {
       "workloadId": "W1-class-rename",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -521,7 +522,7 @@
     {
       "workloadId": "corpus/contradictory-role-action-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -537,7 +538,7 @@
     {
       "workloadId": "corpus/controlled-text-change-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -553,7 +554,7 @@
     {
       "workloadId": "corpus/disabled-decoy-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -569,7 +570,7 @@
     {
       "workloadId": "corpus/duplicate-test-id-asymmetric-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "REFUSE",
@@ -585,7 +586,7 @@
     {
       "workloadId": "W2-duplicate-test-id",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "REFUSE",
@@ -601,7 +602,7 @@
     {
       "workloadId": "corpus/element-movement-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -617,7 +618,7 @@
     {
       "workloadId": "W5-element-removed",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "FAIL",
@@ -633,7 +634,7 @@
     {
       "workloadId": "corpus/geometry-only-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "REFUSE",
@@ -649,7 +650,7 @@
     {
       "workloadId": "corpus/hidden-decoy-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -665,7 +666,7 @@
     {
       "workloadId": "corpus/hostile-attributes-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -681,7 +682,7 @@
     {
       "workloadId": "W1-id-churn",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -697,7 +698,7 @@
     {
       "workloadId": "corpus/implicit-role-change-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -713,7 +714,7 @@
     {
       "workloadId": "corpus/large-dom-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -729,7 +730,7 @@
     {
       "workloadId": "corpus/name-changed-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -745,7 +746,7 @@
     {
       "workloadId": "W1-name-retained",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -761,7 +762,7 @@
     {
       "workloadId": "W2-same-selector-other-action",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "REFUSE",
@@ -777,7 +778,7 @@
     {
       "workloadId": "corpus/select-option-missing-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "REFUSE",
@@ -793,7 +794,7 @@
     {
       "workloadId": "corpus/sibling-insertion-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -809,7 +810,7 @@
     {
       "workloadId": "corpus/stable-key-absent-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -825,7 +826,7 @@
     {
       "workloadId": "corpus/test-id-changed-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "REFUSE",
@@ -841,7 +842,7 @@
     {
       "workloadId": "corpus/test-id-retained-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -857,7 +858,7 @@
     {
       "workloadId": "W2-two-plausible",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "REFUSE",
@@ -873,7 +874,7 @@
     {
       "workloadId": "corpus/weak-text-only-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -889,7 +890,7 @@
     {
       "workloadId": "W1-wrapper",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -905,7 +906,7 @@
     {
       "workloadId": "W3-checkout-flow",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -921,7 +922,7 @@
     {
       "workloadId": "W4-role-denied",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -937,7 +938,7 @@
     {
       "workloadId": "W5-unasserted-step",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -953,7 +954,7 @@
     {
       "workloadId": "W6-ci-economics",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 1,
       "outcome": "PASS",
@@ -966,9 +967,9 @@
       "operatorMinutes": 0,
       "costUsd": 0,
       "ci": {
-        "timeToGreenSec": 13.97,
+        "timeToGreenSec": 16.12,
         "retries": 0,
-        "browserMinutes": 0.233,
+        "browserMinutes": 0.269,
         "aiCalls": 0
       }
     },
@@ -1468,9 +1469,9 @@
       "operatorMinutes": 0,
       "costUsd": 0,
       "ci": {
-        "timeToGreenSec": 13.86,
+        "timeToGreenSec": 14.05,
         "retries": 0,
-        "browserMinutes": 0.231,
+        "browserMinutes": 0.234,
         "aiCalls": 0
       }
     },
@@ -1970,9 +1971,9 @@
       "operatorMinutes": 0,
       "costUsd": 0,
       "ci": {
-        "timeToGreenSec": 6.81,
+        "timeToGreenSec": 8.05,
         "retries": 0,
-        "browserMinutes": 0.114,
+        "browserMinutes": 0.134,
         "aiCalls": 0
       }
     },
@@ -2472,16 +2473,16 @@
       "operatorMinutes": 0,
       "costUsd": 0,
       "ci": {
-        "timeToGreenSec": 19.49,
+        "timeToGreenSec": 22.3,
         "retries": 0,
-        "browserMinutes": 0.325,
+        "browserMinutes": 0.372,
         "aiCalls": 0
       }
     },
     {
       "workloadId": "corpus/ambiguous-redesign-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "REFUSE",
@@ -2497,7 +2498,7 @@
     {
       "workloadId": "corpus/ancestor-change-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2513,7 +2514,7 @@
     {
       "workloadId": "W1-class-rename",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2529,7 +2530,7 @@
     {
       "workloadId": "corpus/contradictory-role-action-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2545,7 +2546,7 @@
     {
       "workloadId": "corpus/controlled-text-change-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2561,7 +2562,7 @@
     {
       "workloadId": "corpus/disabled-decoy-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2577,7 +2578,7 @@
     {
       "workloadId": "corpus/duplicate-test-id-asymmetric-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "REFUSE",
@@ -2593,7 +2594,7 @@
     {
       "workloadId": "W2-duplicate-test-id",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "REFUSE",
@@ -2609,7 +2610,7 @@
     {
       "workloadId": "corpus/element-movement-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2625,7 +2626,7 @@
     {
       "workloadId": "W5-element-removed",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "FAIL",
@@ -2641,7 +2642,7 @@
     {
       "workloadId": "corpus/geometry-only-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "REFUSE",
@@ -2657,7 +2658,7 @@
     {
       "workloadId": "corpus/hidden-decoy-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2673,7 +2674,7 @@
     {
       "workloadId": "corpus/hostile-attributes-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2689,7 +2690,7 @@
     {
       "workloadId": "W1-id-churn",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2705,7 +2706,7 @@
     {
       "workloadId": "corpus/implicit-role-change-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2721,7 +2722,7 @@
     {
       "workloadId": "corpus/large-dom-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2737,7 +2738,7 @@
     {
       "workloadId": "corpus/name-changed-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2753,7 +2754,7 @@
     {
       "workloadId": "W1-name-retained",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2769,7 +2770,7 @@
     {
       "workloadId": "W2-same-selector-other-action",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "REFUSE",
@@ -2785,7 +2786,7 @@
     {
       "workloadId": "corpus/select-option-missing-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "REFUSE",
@@ -2801,7 +2802,7 @@
     {
       "workloadId": "corpus/sibling-insertion-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2817,7 +2818,7 @@
     {
       "workloadId": "corpus/stable-key-absent-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2833,7 +2834,7 @@
     {
       "workloadId": "corpus/test-id-changed-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "REFUSE",
@@ -2849,7 +2850,7 @@
     {
       "workloadId": "corpus/test-id-retained-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2865,7 +2866,7 @@
     {
       "workloadId": "W2-two-plausible",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "REFUSE",
@@ -2881,7 +2882,7 @@
     {
       "workloadId": "corpus/weak-text-only-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2897,7 +2898,7 @@
     {
       "workloadId": "W1-wrapper",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2913,7 +2914,7 @@
     {
       "workloadId": "W3-checkout-flow",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2929,7 +2930,7 @@
     {
       "workloadId": "W4-role-denied",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2945,7 +2946,7 @@
     {
       "workloadId": "W5-unasserted-step",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2961,7 +2962,7 @@
     {
       "workloadId": "W6-ci-economics",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 2,
       "outcome": "PASS",
@@ -2974,9 +2975,9 @@
       "operatorMinutes": 0,
       "costUsd": 0,
       "ci": {
-        "timeToGreenSec": 13.85,
+        "timeToGreenSec": 15.27,
         "retries": 0,
-        "browserMinutes": 0.231,
+        "browserMinutes": 0.254,
         "aiCalls": 0
       }
     },
@@ -3476,7 +3477,7 @@
       "operatorMinutes": 0,
       "costUsd": 0,
       "ci": {
-        "timeToGreenSec": 13.43,
+        "timeToGreenSec": 13.44,
         "retries": 0,
         "browserMinutes": 0.224,
         "aiCalls": 0
@@ -3978,9 +3979,9 @@
       "operatorMinutes": 0,
       "costUsd": 0,
       "ci": {
-        "timeToGreenSec": 6.44,
+        "timeToGreenSec": 6.91,
         "retries": 0,
-        "browserMinutes": 0.107,
+        "browserMinutes": 0.115,
         "aiCalls": 0
       }
     },
@@ -4480,16 +4481,16 @@
       "operatorMinutes": 0,
       "costUsd": 0,
       "ci": {
-        "timeToGreenSec": 19.94,
+        "timeToGreenSec": 19.75,
         "retries": 0,
-        "browserMinutes": 0.332,
+        "browserMinutes": 0.329,
         "aiCalls": 0
       }
     },
     {
       "workloadId": "corpus/ambiguous-redesign-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "REFUSE",
@@ -4505,7 +4506,7 @@
     {
       "workloadId": "corpus/ancestor-change-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4521,7 +4522,7 @@
     {
       "workloadId": "W1-class-rename",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4537,7 +4538,7 @@
     {
       "workloadId": "corpus/contradictory-role-action-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4553,7 +4554,7 @@
     {
       "workloadId": "corpus/controlled-text-change-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4569,7 +4570,7 @@
     {
       "workloadId": "corpus/disabled-decoy-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4585,7 +4586,7 @@
     {
       "workloadId": "corpus/duplicate-test-id-asymmetric-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "REFUSE",
@@ -4601,7 +4602,7 @@
     {
       "workloadId": "W2-duplicate-test-id",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "REFUSE",
@@ -4617,7 +4618,7 @@
     {
       "workloadId": "corpus/element-movement-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4633,7 +4634,7 @@
     {
       "workloadId": "W5-element-removed",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "FAIL",
@@ -4649,7 +4650,7 @@
     {
       "workloadId": "corpus/geometry-only-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "REFUSE",
@@ -4665,7 +4666,7 @@
     {
       "workloadId": "corpus/hidden-decoy-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4681,7 +4682,7 @@
     {
       "workloadId": "corpus/hostile-attributes-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4697,7 +4698,7 @@
     {
       "workloadId": "W1-id-churn",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4713,7 +4714,7 @@
     {
       "workloadId": "corpus/implicit-role-change-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4729,7 +4730,7 @@
     {
       "workloadId": "corpus/large-dom-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4745,7 +4746,7 @@
     {
       "workloadId": "corpus/name-changed-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4761,7 +4762,7 @@
     {
       "workloadId": "W1-name-retained",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4777,7 +4778,7 @@
     {
       "workloadId": "W2-same-selector-other-action",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "REFUSE",
@@ -4793,7 +4794,7 @@
     {
       "workloadId": "corpus/select-option-missing-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "REFUSE",
@@ -4809,7 +4810,7 @@
     {
       "workloadId": "corpus/sibling-insertion-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4825,7 +4826,7 @@
     {
       "workloadId": "corpus/stable-key-absent-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4841,7 +4842,7 @@
     {
       "workloadId": "corpus/test-id-changed-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "REFUSE",
@@ -4857,7 +4858,7 @@
     {
       "workloadId": "corpus/test-id-retained-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4873,7 +4874,7 @@
     {
       "workloadId": "W2-two-plausible",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "REFUSE",
@@ -4889,7 +4890,7 @@
     {
       "workloadId": "corpus/weak-text-only-f1",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4905,7 +4906,7 @@
     {
       "workloadId": "W1-wrapper",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4921,7 +4922,7 @@
     {
       "workloadId": "W3-checkout-flow",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4937,7 +4938,7 @@
     {
       "workloadId": "W4-role-denied",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4953,7 +4954,7 @@
     {
       "workloadId": "W5-unasserted-step",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4969,7 +4970,7 @@
     {
       "workloadId": "W6-ci-economics",
       "tool": "Falcon",
-      "toolVersion": "1.0.0 (f6c0d0d) / 1.64.0 / Chromium 156.0.8078.4",
+      "toolVersion": "1.0.0 (587a52a) / 1.64.0 / Chromium 156.0.8078.4",
       "mode": "automated",
       "run": 3,
       "outcome": "PASS",
@@ -4982,9 +4983,9 @@
       "operatorMinutes": 0,
       "costUsd": 0,
       "ci": {
-        "timeToGreenSec": 13.97,
+        "timeToGreenSec": 14.4,
         "retries": 0,
-        "browserMinutes": 0.233,
+        "browserMinutes": 0.24,
         "aiCalls": 0
       }
     },
@@ -5484,9 +5485,9 @@
       "operatorMinutes": 0,
       "costUsd": 0,
       "ci": {
-        "timeToGreenSec": 13.24,
+        "timeToGreenSec": 13.6,
         "retries": 0,
-        "browserMinutes": 0.221,
+        "browserMinutes": 0.227,
         "aiCalls": 0
       }
     },
@@ -5986,9 +5987,9 @@
       "operatorMinutes": 0,
       "costUsd": 0,
       "ci": {
-        "timeToGreenSec": 6.47,
+        "timeToGreenSec": 6.6,
         "retries": 0,
-        "browserMinutes": 0.108,
+        "browserMinutes": 0.11,
         "aiCalls": 0
       }
     },
@@ -6488,9 +6489,9 @@
       "operatorMinutes": 0,
       "costUsd": 0,
       "ci": {
-        "timeToGreenSec": 18.69,
+        "timeToGreenSec": 19.51,
         "retries": 0,
-        "browserMinutes": 0.312,
+        "browserMinutes": 0.325,
         "aiCalls": 0
       }
     }
