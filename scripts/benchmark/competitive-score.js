@@ -162,7 +162,7 @@ function main(argv) {
         process.stdout.write(JSON.stringify(score(records, { weights: input.weights }), null, 2) + '\n');
         return 0;
     } catch (err) {
-        process.stderr.write(`invalid benchmark input: ${err.message}\n`);
+        process.stderr.write(`invalid benchmark input: ${String(err.message).replace(/[^\x20-\x7E]/g, '?').slice(0, 200)}\n`);
         return 2;
     }
 }

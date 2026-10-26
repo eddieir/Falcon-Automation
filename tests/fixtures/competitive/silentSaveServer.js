@@ -30,16 +30,25 @@ async function start(opts = {}) {
     const { pathname } = new URL(req.url, 'http://localhost');
     if (req.method === 'GET' && pathname === '/') return send(200, 'text/html; charset=utf-8', PAGE);
     if (req.method === 'POST' && pathname === '/api/save') {
-      if (Number(req.headers['content-length'] || 0) > MAX_BODY) {
-        send(413, 'application/json', JSON.stringify({ ok: false }));
-        return req.destroy();
-      }
-      req.resume();
-      if (mode === 'ok') {
-        state = { saved: true, value: 'benchmark' };
-        return send(200, 'application/json', JSON.stringify({ ok: true }));
-      }
-      return send(500, 'application/json', JSON.stringify({ ok: false }));
+      let size = 0;
+      let refused = false;
+      req.on('data', (c) => {
+        size += c.length;
+        if (size > MAX_BODY && !refused) {
+          refused = true;
+          send(413, 'application/json', JSON.stringify({ ok: false }));
+          req.destroy();
+        }
+      });
+      req.on('end', () => {
+        if (refused || res.writableEnded) return;
+        if (mode === 'ok') {
+          state = { saved: true, value: 'benchmark' };
+          return send(200, 'application/json', JSON.stringify({ ok: true }));
+        }
+        return send(500, 'application/json', JSON.stringify({ ok: false }));
+      });
+      return undefined;
     }
     if (req.method === 'GET' && pathname === '/api/state') return send(200, 'application/json', JSON.stringify(state));
     return send(404, 'text/plain; charset=utf-8', 'Not found');

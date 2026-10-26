@@ -138,6 +138,42 @@ test("W5 boundary: an oversize save body is refused without changing state", asy
   } finally { await app.close(); }
 });
 
+test("W5: a chunked body past the cap is refused too", async () => {
+  const app = await silent.start();
+  try {
+    app.setMode("ok");
+    const r = await fetch(app.url + "/api/save", { method: "POST", body: new Blob(["x".repeat(5000)]).stream(), duplex: "half" }).catch(() => ({ status: 413 }));
+    assert.equal(r.status, 413);
+    assert.equal(app.getState().saved, false);
+  } finally { await app.close(); }
+});
+
+test("W4: the session table is bounded", async () => {
+  const app = await auth.start();
+  try {
+    let last;
+    for (let i = 0; i < 257; i += 1) last = await login(app, "alice");
+    assert.equal(last.status, 503);
+    assert.equal(app.sessionCount(), 256);
+    app.reset();
+    assert.equal((await login(app, "alice")).status, 200);
+  } finally { await app.close(); }
+});
+
+test("CLI: control characters in a bad record never reach stderr and the message is bounded", () => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const { spawnSync } = require("node:child_process");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-m075-"));
+  try {
+    const f = path.join(dir, "r.json");
+    fs.writeFileSync(f, JSON.stringify([rec({ outcome: "\u001b[31m" + "A".repeat(500) })]));
+    const out = spawnSync(process.execPath, [path.join(__dirname, "..", "..", "scripts", "benchmark", "competitive-score.js"), f], { encoding: "utf8" });
+    assert.equal(out.status, 2);
+    assert.ok(!/[\u0000-\u0009\u000b-\u001f]/.test(out.stderr), "no control characters");
+    assert.ok(out.stderr.length < 300);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("W6: CI fields on NOT_TESTED or MISSING_EVIDENCE records never reach the totals", () => {
   const miss = { workloadId: "W6-ci-economics", tool: "ToolA", toolVersion: "1.0.0", mode: "automated", run: 2, outcome: "MISSING_EVIDENCE", ci: { timeToGreenSec: 9999 } };
   assert.equal(score([rec({ ci: { timeToGreenSec: 10 } }), miss])[0].ciEconomics.timeToGreenSec.total, 10);

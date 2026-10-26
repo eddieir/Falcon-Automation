@@ -6,6 +6,7 @@ const http = require('node:http');
 const HOST = '127.0.0.1';
 const USERS = Object.freeze({ alice: 'admin', bob: 'member' });
 const MAX_BODY = 1024;
+const MAX_SESSIONS = 256;
 
 async function start(opts = {}) {
   let counter = 0;
@@ -41,6 +42,7 @@ async function start(opts = {}) {
         let name;
         try { name = JSON.parse(body).user; } catch { return json(400, { error: 'bad json' }); }
         if (!Object.hasOwn(USERS, name)) return json(401, { error: 'unknown user' });
+        if (sessions.size >= MAX_SESSIONS) return json(503, { error: 'session limit' });
         counter += 1;
         const token = `s${counter}`;
         sessions.set(token, name);
