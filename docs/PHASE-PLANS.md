@@ -12,19 +12,21 @@
 
 ## 0. The bar
 
-Every phase below is designed against one standard: **Falcon should not be marginally better than the
-alternatives in the space it competes in — it should be in a different category.**
+Every phase is designed against one aim: **make Falcon's recovery decisions scoped, explainable and
+reviewable.** That is a design target, not a measured result. Which capabilities exist today is
+recorded in the [capability truth table](CAPABILITY-TRUTH-TABLE.md). What other tools document is
+recorded, dated and graded in the [competitor evidence register](research/competitor-matrix.json); a
+capability not found there is unknown, not absent.
 
-The competitive landscape as it actually stands:
+The landscape, by category and without capability verdicts the register does not support:
 
-| Tool | What it does | Where it stops |
-|---|---|---|
-| Testim, Mabl, Autify | ML-weighted "smart locators", automatic self-healing | Healing is silent and proprietary. A rewritten locator is trusted with no human ever seeing it. Closed SaaS. |
-| Functionize | NLP-authored tests, self-healing | Same silent-healing trust model; tests still authored one at a time. |
-| Applitools | Visual AI, excellent at rendering diffs | Visual only. No functional generation, no healing of interaction logic. |
-| QA Wolf | Managed service: humans write and triage your tests | Fundamentally headcount, billed monthly. Not a capability you own. |
-| Meticulous | Records real sessions, auto-generates visual assertions | Needs real production traffic first. No coverage for what nobody has used yet. |
-| Playwright / Cypress / Selenium | The execution layer | No generation, no healing, no flake intelligence. You write and maintain everything. |
+| Tool | Category |
+|---|---|
+| Testim, Mabl, Autify, Functionize, Katalon, Testsigma | Commercial platforms with their own self-healing; some describe an approval step (vendor page text, not scored in the register). |
+| Applitools | Visual testing. |
+| QA Wolf | Managed service that writes and maintains tests. |
+| Meticulous | Session-recording based test generation. |
+| Playwright, Cypress, Selenium | Execution layer. Playwright also ships Test Agents (planner, generator, healer). |
 
 Falcon's structural advantages, which every phase must compound rather than dilute:
 
@@ -106,11 +108,10 @@ manually. The mechanism is proven; it simply is not in the product.
 
 ### Competitive angle
 
-Every competitor requires per-test authorship: you record a session (Testim, Autify), you write it
-(Playwright, Cypress), you wait for production traffic (Meticulous), or you pay someone (QA Wolf).
-Pointing a tool at a URL and receiving a bounded, deduplicated, self-healing suite covering the whole
-application — with a coverage map of what it reached and what it deliberately didn't — is not an
-incremental improvement on any of them. It is a different offer.
+Falcon's offer is narrower than "no authorship": pointing it at a URL yields a bounded, deduplicated
+suite plus a coverage map of what it reached and what it deliberately did not. Other tools document
+their own generation features (see the evidence register), so this is a difference in approach to be
+measured by the benchmark protocol, not a claim of superiority.
 
 ### Implementation specification
 
