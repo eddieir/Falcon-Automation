@@ -165,9 +165,10 @@ test("AC75-07/08: CLI scores a file, exits 2 on bad input, and reads no network 
   assert.ok(!/require\(['"](node:)?(http|https|net|child_process)['"]\)|process\.env|fetch\(/.test(src));
 });
 
-test("AC75-09: the protocol states that no cross-product results exist and requires review first", () => {
+test("AC75-09: the protocol states its coverage limits and requires review first", () => {
   const doc = fs.readFileSync(path.join(ROOT, "docs", "research", "competitive-benchmark-protocol.md"), "utf8");
-  assert.match(doc, /no cross-product results exist/i);
+  assert.match(doc, /SaaS vendors, LLM-driven agents and Healenium are not covered/i);
+  assert.match(doc, /not an independent or neutral test set/i);
   assert.match(doc, /independent review before any external comparison/i);
   assert.match(doc, /NOT_TESTED/);
 });
