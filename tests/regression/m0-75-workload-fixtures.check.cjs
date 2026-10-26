@@ -44,6 +44,20 @@ test("W4: admin is allowed, member is denied, anonymous is unauthenticated", asy
   } finally { await app.close(); }
 });
 
+test("W4: browser navigations get HTML and a signin route sets the session", async () => {
+  const app = await auth.start();
+  try {
+    const r = await fetch(app.url + "/signin/bob", { redirect: "manual" });
+    assert.equal(r.status, 302);
+    const cookie = r.headers.get("set-cookie").split(";")[0];
+    const denied = await fetch(app.url + "/admin", { headers: { cookie, accept: "text/html" } });
+    assert.equal(denied.status, 403);
+    assert.match(denied.headers.get("content-type"), /text\/html/);
+    assert.match(await denied.text(), /forbidden/);
+    assert.equal((await fetch(app.url + "/signin/mallory", { redirect: "manual" })).status, 401);
+  } finally { await app.close(); }
+});
+
 test("W4 negative: unknown user, bad JSON, oversize body and forged cookie never get a session", async () => {
   const app = await auth.start();
   try {
