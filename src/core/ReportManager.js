@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const Verification = require("./outcome/Verification");
 
 /**
  * ReportManager — produces an accurate, structured test-run summary.
@@ -214,6 +215,10 @@ class ReportManager {
             healingEvents,
             coverage,
             pages,
+            // WP-79a: additive verification classification block, a pure
+            // function of `tests` only. Does not change `summary`, `result`
+            // or any existing key; legacy callers are unaffected.
+            verification: Verification.aggregateRun(tests),
         };
 
         // VOLATILE, parallel/shard runs only: stage wall times in ms. Strip
