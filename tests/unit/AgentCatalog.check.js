@@ -128,10 +128,19 @@ assert.deepStrictEqual(holders('Edit'), ['developer', 'devops-engineer', 'qa-eng
 assert.deepStrictEqual(holders('Write'), ['developer', 'devops-engineer', 'qa-engineer', 'technical-writer']);
 assert.deepStrictEqual(holders('Bash'), ['benchmark-evaluation-engineer', 'code-reviewer', 'developer', 'developer-experience-engineer', 'devops-engineer',
   'performance-reliability-engineer', 'production-director', 'qa-engineer', 'release-manager', 'security-engineer', 'solution-architect', 'technical-writer']);
+// The three new Bash roles must be exactly the roles the enforced hook allowlist covers, and say so in their body.
+const { PROFILES } = require('../../.claude/hooks/subagent-guard.js');
+assert.deepStrictEqual(Object.keys(PROFILES).sort(), ['benchmark-evaluation-engineer', 'developer-experience-engineer', 'performance-reliability-engineer']);
+for (const n of Object.keys(PROFILES)) {
+  assert(holders('Bash').includes(n), `${n}: allowlist profile without Bash tool`);
+  assert(parse(path.join(agentsDir, n + '.md')).body.includes('.claude/hooks/subagent-guard.js'), `${n}: body must state the shell allowlist`);
+}
 for (const n of ['chief-of-staff', 'chief-architect', 'product-director', 'solution-designer', 'ux-product-designer', 'ai-agentic-systems-engineer',
   'data-analytics-engineer', 'privacy-compliance-specialist', 'site-reliability-engineer', 'customer-validation-strategist', 'technical-product-marketing']) {
   assert(!/Bash|Edit|Write/.test(agents[n].tools), `${n}: must stay without shell or write tools`);
 }
+const notices = fs.readFileSync(path.join(root, 'THIRD_PARTY_NOTICES.md'), 'utf8');
+for (const needle of ['differential-review', 'CC BY-SA 4.0', 'MIT', 'Trail of Bits', 'Apache-2.0', 'Open point for the human CTO']) assert(notices.includes(needle), `THIRD_PARTY_NOTICES.md: missing ${needle}`);
 const registry = fs.readFileSync(path.join(root, 'docs/organization/SKILLS-REGISTRY.md'), 'utf8');
 for (const s of fs.readdirSync(skillsDir)) assert(registry.includes('`' + s + '`'), `skill ${s}: not in registry`);
 
