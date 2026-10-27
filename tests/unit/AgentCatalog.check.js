@@ -19,6 +19,7 @@ function parse(file) {
   assert(m, `${file}: missing front matter`);
   const meta = {};
   for (const line of m[1].split('\n')) {
+    if (!line.trim()) continue;
     const k = line.match(/^([A-Za-z-]+): ?(.*)$/);
     assert(k, `${file}: bad front-matter line "${line}"`);
     meta[k[1]] = k[2].replace(/^"(.*)"$/, '$1');
