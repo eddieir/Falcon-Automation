@@ -14,6 +14,12 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/ledger-guard.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/subagent-guard.js\"",
+            "timeout": 10,
+            "onFailure": "block"
           }
         ]
       }

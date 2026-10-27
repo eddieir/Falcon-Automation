@@ -1,0 +1,144 @@
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const HOOK = path.join(__dirname, '..', '..', '.claude', 'hooks', 'subagent-guard.js');
+const { decide, PROFILES } = require(HOOK);
+
+const sub = (command, extra) => ({ agent_id: 'a1', agent_type: 'qa-engineer', tool_input: { command }, ...extra });
+const as = (agentType, command, toolInput) => ({ agent_id: 'a1', agent_type: agentType, tool_input: { command, ...toolInput } });
+const run = (stdin) => spawnSync(process.execPath, [HOOK], { input: stdin, encoding: 'utf8' });
+
+// --- Best-effort denylist for ordinary subagents (advisory; bypassable) ---
+for (const cmd of [
+  'claude -p "hi"', 'cd x && claude --print --agent developer hi', '/usr/local/bin/claude -p hi',
+  'FOO=1 claude -p hi', 'bash -c "claude -p x"', 'timeout 60 claude -p x', 'sudo -u root claude -p x', 'claude --print=x',
+  'npx @anthropic-ai/claude-code -p x', 'npm i --location=global foo', 'npx -y @playwright/cli@latest open', 'xargs claude -p',
+  'gh pr comment 1 --body x --attach ./a.png', 'gh pr create --attach=./v.webm',
+  'npm install -g @playwright/cli@latest', 'npm i --global foo', 'pnpm add -g foo', 'yarn global add foo',
+  'gh issue comment 1 --body "x" --attach ./f.png', 'playwright-cli attach --extension=chrome',
+  'npx playwright cli attach --cdp=http://localhost:9222'
+]) assert(decide(sub(cmd)), `should deny: ${cmd}`);
+
+for (const cmd of [
+  'npx --no-install playwright cli open http://127.0.0.1:3000', 'npm install --no-save left-pad', 'npm run test:unit',
+  'gh pr view 120 --json state', 'git diff origin/main --stat', 'git commit -m "feat: claude -p support"',
+  'echo "run claude --print later"', 'node tests/unit/AgentCatalog.check.js'
+]) assert.strictEqual(decide(sub(cmd)), null, `should allow: ${cmd}`);
+
+// Nesting is capped: deep `bash -c` chains are denied instead of recursing without bound.
+assert(decide(sub('bash -c '.repeat(50) + 'ls')), 'deeply nested shells must be denied');
+
+// --- Enforced allowlist for the three Bash roles (deny by default) ---
+assert.deepStrictEqual(Object.keys(PROFILES).sort(),
+  ['benchmark-evaluation-engineer', 'developer-experience-engineer', 'performance-reliability-engineer']);
+
+const bench = 'benchmark-evaluation-engineer', dx = 'developer-experience-engineer', perf = 'performance-reliability-engineer';
+const allowed = [
+  [bench, 'git status --short'], [bench, 'git diff origin/main --stat'], [bench, 'git diff main..HEAD --stat'], [bench, 'git log main...HEAD --oneline'], [bench, 'git diff origin/main..HEAD --stat'], [bench, 'git show HEAD:package.json'], [bench, 'git log --oneline -5'],
+  [bench, 'node scripts/benchmark/competitive-score.js --in docs/research/x.json'], [bench, 'node tests/unit/CiWait.check.js'], [bench, 'npm run test:unit'],
+  [dx, 'npx --no-install playwright --version'], [dx, 'npx --no-install playwright cli open http://127.0.0.1:3000'], [dx, 'npx --no-install playwright cli -s=a snapshot'], [dx, 'npx --no-install playwright cli goto http://localhost:3000/login'], [dx, 'npx --no-install playwright cli open about:blank'], [bench, 'git log --oneline -5'], [bench, 'git diff --stat HEAD~1'], [bench, 'git blame -L1,2 package.json'], [bench, 'git log --pretty=oneline -n3'], [dx, 'npx --no-install playwright cli screenshot'], [dx, 'git show HEAD'],
+  [perf, 'npx --no-install playwright trace actions test-results/trace.zip'], [perf, 'node scripts/benchmark/parallel.js'], [perf, 'git rev-parse HEAD']
+];
+for (const [a, c] of allowed) assert.strictEqual(decide(as(a, c)), null, `${a} should allow: ${c}`);
+
+const denied = [
+  [bench, 'echo hi > /tmp/x'], [bench, 'git status; rm -rf x'], [bench, 'git status | tee f'], [bench, 'git status $(id)'], [bench, 'node -e "1"'],
+  [bench, 'node scripts/benchmark/../../x.js'], [bench, 'node scripts/other/x.js'], [bench, 'git diff --output=out.txt'], [bench, 'git -c core.pager=x log'],
+  [bench, 'git push origin main'], [bench, 'git commit -m x'], [bench, 'npm run test:regression'], [bench, 'npm install -g foo'], [bench, 'curl http://x'],
+  [bench, 'claude -p hi'], [bench, 'bash -c ls'], [bench, 'ls'], [bench, ''], [bench, 'git status\nls'], [bench, 'FOO=1 git status'],
+  [dx, 'npx --no-install playwright cli attach --cdp=chrome'], [dx, 'npx --no-install playwright cli cookie-get a'], [dx, 'npx --no-install playwright cli eval 1'],
+  [dx, 'npx --no-install playwright cli run-code x'], [dx, 'npx playwright cli open'], [dx, 'npx --no-install other-pkg'], [dx, 'node scripts/benchmark/competitive-score.js'],
+  [perf, 'npx --no-install playwright trace attachment 1 -o out.png'], [perf, 'npx --no-install playwright test'],
+  // Findings from the final security review (SEC-E): code execution via another repo's config, reads outside the project,
+  // file/network reach through the Playwright CLI, case tricks.
+  [bench, 'git -C /tmp/scratch status'], [bench, 'git -C . status'], [bench, 'git diff --no-index /etc/passwd x'], [bench, 'git blame --contents /etc/passwd f'],
+  [bench, 'git ls-files --others /'], [bench, 'git log -p --ext-diff'], [bench, 'git show --output=x'], [bench, 'git --upload-pack=x status'], [bench, 'git -c core.pager=x log'],
+  [bench, 'node scripts/benchmark/competitive-score.js /etc/passwd'], [bench, 'npm run test:unit extra'],
+  [dx, 'npx --no-install playwright cli screenshot --filename=/tmp/x'], [dx, 'npx --no-install playwright cli pdf'], [dx, 'npx --no-install playwright cli goto https://example.com'],
+  [dx, 'npx --no-install playwright cli open file:///etc/passwd'], [dx, 'npx --no-install playwright cli open javascript:alert(1)'], [dx, 'npx --no-install playwright cli --config=/tmp/x open'],
+  [dx, 'npx --no-install playwright cli install-browser'], [dx, 'npx --no-install playwright cli Eval 1'], [dx, 'npx --no-install playwright cli state-save a.json'],
+  [dx, 'npx --no-install playwright cli open --profile=x'], [dx, 'npx --no-install playwright cli upload f'], [dx, 'npx --no-install playwright cli drag e1 e2'],
+  [perf, 'npx --no-install playwright trace screenshot trace.zip'], [perf, 'npx --no-install playwright trace actions /etc/trace.zip'],
+  [bench, 'git diff ../x'], [bench, 'git show HEAD:../x'], [bench, 'git diff a/../../b'], [bench, 'git diff ..'],
+  [bench, 'node scripts/benchmark/x.js --a=x=/etc'], [bench, 'node scripts/benchmark/x.js --a=x,/etc/passwd'], [bench, 'node scripts/benchmark/x.js --a:/etc'],
+  [bench, 'node scripts/benchmark/x.js http://evil.com'], [perf, 'npx --no-install playwright trace snapshot t.zip --port=9'],
+  [bench, 'git blame --cont=/etc/passwd f'], [bench, 'git diff --no-ind a b'], [bench, 'git diff --outp=x'], [bench, 'git show --textc HEAD'], [bench, 'git diff ~/.ssh'],
+  [bench, 'git log --exec-p=x'], [bench, 'git log --format=%H'], [bench, 'node scripts/benchmark/x.js ~/x'], [bench, 'node scripts/benchmark/x.js --out=/tmp/x'], [bench, 'node scripts/benchmark/x.js --out=%2e%2e/x'],
+  [dx, 'npx --no-install playwright cli open evil.com'], [dx, 'npx --no-install playwright cli open 127.0.0.1@evil.com'], [dx, 'npx --no-install playwright cli open .env'],
+  [dx, 'npx --no-install playwright cli open ~/x.html'], [dx, 'npx --no-install playwright cli open --user-data-dir=x'], [dx, 'npx --no-install playwright cli open --browser=chrome'],
+  [dx, 'npx --no-install playwright cli goto http://127.0.0.1@evil.com'], [dx, 'npx --no-install playwright cli goto http://localhost.evil.com'], [dx, 'npx --no-install playwright cli tab-new evil.com'],
+  [perf, 'npx --no-install playwright trace actions ~/x.zip'], [perf, 'npx --no-install playwright trace actions t.zip%2e%2e'],
+  [bench, 'git\u00a0status'], [bench, 'git status\0'], [bench, 'GIT_EXTERNAL_DIFF=x git diff']
+];
+for (const [a, c] of denied) assert(decide(as(a, c)), `${a} should deny: ${JSON.stringify(c)}`);
+assert(decide(as(bench, 'git status --short', { dangerouslyDisableSandbox: true })), 'sandbox bypass flag must be denied');
+// A plugin-namespaced agent_type is judged by its bare name, so the allowlist cannot be skipped that way.
+assert(decide(as('falcon:' + bench, 'ls')), 'namespaced role must still be allowlisted');
+// The allowlist is keyed by agent_type: other roles are not narrowed by it (they keep the Bash tool as granted).
+assert.strictEqual(decide(as('qa-engineer', 'node -e "1"')), null);
+// A subagent call without agent_type cannot be matched to a role, so it is denied (fail closed).
+assert(decide({ agent_id: 'a1', tool_input: { command: 'ls' } }), 'missing agent_type must be denied');
+assert(decide({ agent_id: 'a1', agent_type: '', tool_input: { command: 'ls' } }), 'empty agent_type must be denied');
+assert(decide(as('Benchmark-Evaluation-Engineer', 'ls')), 'case variants of a profile role must still be allowlisted');
+
+// --- Main session is never restricted by this hook ---
+// Verified payload shapes (Claude Code 2.1.311): plain main session has no agent_id/agent_type keys; a session started
+// with --agent has agent_type only; a subagent has both as non-empty strings.
+for (const p of [
+  { tool_input: { command: 'claude -p hi' } },
+  { tool_input: { command: 'npm install -g foo' } },
+  { agent_type: bench, tool_input: { command: 'ls' } } // --agent main session: agent_type without agent_id
+]) assert.strictEqual(decide(p), null, JSON.stringify(p));
+
+// --- Identity handling is fail-safe: a PRESENT agent_id that is not a non-blank string is denied, never trusted as main ---
+// NaN exercises the in-process path only; over JSON it serializes to null, which the process-level checks cover.
+for (const bad of [null, '', ' ', '\t\n', 0, 5, 1, -1, true, false, {}, { id: 'a' }, [], ['a'], NaN]) {
+  for (const command of ['ls', 'claude -p hi', 'git status']) {
+    for (const agent_type of [undefined, bench, 'qa-engineer']) {
+      const p = { agent_id: bad, tool_input: { command } };
+      if (agent_type) p.agent_type = agent_type;
+      assert(decide(p), `agent_id ${JSON.stringify(bad)} must be denied (command ${command}, type ${agent_type})`);
+    }
+  }
+}
+// A valid agent_id is a non-blank string and is then judged by role.
+assert.strictEqual(decide({ agent_id: 'a747b07fa19a3a043', agent_type: bench, tool_input: { command: 'git status --short' } }), null);
+assert(decide({ agent_id: 'a747b07fa19a3a043', agent_type: bench, tool_input: { command: 'ls' } }), 'valid id, off-allowlist command');
+assert.strictEqual(decide({ agent_id: 'a747b07fa19a3a043', agent_type: 'qa-engineer', tool_input: { command: 'echo sub-call' } }), null);
+// Missing or non-string agent_type with a valid agent_id is denied.
+for (const t of [undefined, null, '', ' ', '\t', 5, {}, []]) {
+  const p = { agent_id: 'a1', tool_input: { command: 'ls' } };
+  if (t !== undefined) p.agent_type = t;
+  assert(decide(p), `agent_type ${JSON.stringify(t)} must be denied`);
+}
+// A non-object payload is not a caller at all.
+for (const p of [null, undefined, 0, 'x', true, []]) assert(decide(p), `payload ${JSON.stringify(p)} must be denied`);
+
+// --- Fail-closed policy for the actual process (exit code 2 = block) ---
+for (const bad of ['', 'not json', '{', 'null', '42', '"str"', '[]x', '[]', '[{"agent_id":"a"}]']) {
+  const r = run(bad);
+  assert.strictEqual(r.status, 2, `malformed input ${JSON.stringify(bad)} must block (exit 2), got ${r.status}`);
+  assert(/blocked/.test(r.stderr), 'a reason must be written to stderr');
+}
+assert.strictEqual(run(JSON.stringify({ tool_input: { command: 'ls' } })).status, 0, 'valid main-session input must pass');
+assert.strictEqual(run(JSON.stringify({ agent_type: 'qa-engineer', tool_input: { command: 'ls' } })).status, 0, '--agent main session must pass');
+for (const id of ['null', '""', '5', 'true', '{}', '[]', '" "']) {
+  const r = run('{"agent_id":' + id + ',"agent_type":"qa-engineer","tool_input":{"command":"ls"}}');
+  assert.strictEqual(r.status, 2, 'agent_id ' + id + ' must block (exit 2)');
+  assert(/Unrecognized caller identity/.test(r.stderr), 'reason must be written to stderr');
+}
+assert.strictEqual(run(JSON.stringify(sub('git status'))).status, 0, 'allowed subagent command must pass');
+assert.strictEqual(run(JSON.stringify(sub('claude -p x'))).status, 2, 'denied subagent command must block');
+assert.strictEqual(run(JSON.stringify(as(bench, 'ls'))).status, 2, 'off-allowlist command must block');
+
+// --- Registration: second Bash hook, fail-closed on crash/timeout, with a short timeout ---
+const settings = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '.claude', 'settings.json'), 'utf8'));
+const entry = settings.hooks.PreToolUse.find((h) => h.matcher === 'Bash');
+const hook = entry && entry.hooks.find((h) => /subagent-guard\.js/.test(h.command));
+assert(hook, 'hook must be registered');
+assert.strictEqual(hook.onFailure, 'block', 'hook must fail closed on crash or timeout');
+assert(hook.timeout > 0 && hook.timeout <= 30, 'hook needs a bounded timeout');
+console.log('SubagentGuard.check: OK');

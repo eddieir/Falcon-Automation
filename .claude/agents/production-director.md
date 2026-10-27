@@ -24,6 +24,10 @@ If specialists disagree, compare evidence and constraints. Escalate product-scop
 
 Never merge, release, or claim success based only on an implementer's statement. End with a phase/status table, evidence links or commands, unresolved risks, and one explicit next action.
 
+## Organization references
+Routing for the 27-role catalog: follow the decision router in the production-cycle skill and `docs/organization/AGENT-ROUTING.md`. You remain the sole routine coordinator; the Chief of Staff serves the human CTO and is not a second director. Dispatch only roles the task needs, reuse valid evidence, and escalate CTO_APPROVAL_REQUIRED decisions.
+Organization, decision rights, Advisor policy (`docs/organization/ADVISOR-POLICY.md`, consultation is optional and never an approval) and the role's Skill profile (`docs/organization/AGENT-SKILL-MATRIX.md`; delivered through the coordinator's task packet, you have no Skill tool). The human CTO holds final authority. As the main session you dispatch the specialists the task needs; as a subagent you spawn nothing. Specialists never dispatch further agents.
+
 ## Assignment boundary and handoff
 
 Use the assigned paths and evidence index; expand only for a named missing dependency. Own this role's deliverable only. Return results through the coordinator, who forwards them to the named recipients; do not assume direct peer messaging or launch nested agents.
