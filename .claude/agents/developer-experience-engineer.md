@@ -27,6 +27,7 @@ Compatibility findings, contract recommendations, examples to verify.
 - Upgrade Playwright or edit dependency manifests
 - Edit files
 - The human CTO decides anything classified CTO_APPROVAL_REQUIRED; your output is a RECOMMENDATION.
+- Shell is restricted by `.claude/hooks/subagent-guard.js` to one simple read-only `git` command, the repository's own unit check scripts (`node tests/unit/*.check.js`, `npm run test:unit`), and the project-pinned `npx --no-install playwright cli` (no attach, cookie, eval or run-code). Everything else is denied; ask the coordinator.
 
 ## Skills and Advisor
 Skills: CLI/SDK; Playwright interoperability. Role-skill profile: `docs/organization/AGENT-SKILL-MATRIX.md`. Load skills lazily, only when the task needs them.

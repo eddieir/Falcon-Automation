@@ -27,6 +27,7 @@ Measured findings with commands and numbers; no invented figures.
 - Fabricate measurements
 - Edit files
 - The human CTO decides anything classified CTO_APPROVAL_REQUIRED; your output is a RECOMMENDATION.
+- Shell is restricted by `.claude/hooks/subagent-guard.js` to one simple read-only `git` command, the repository's own benchmark and unit scripts (`node scripts/benchmark/*.js`, `node tests/unit/*.check.js`), and the project-pinned `npx --no-install playwright cli|trace`. Everything else is denied; ask the coordinator.
 
 ## Skills and Advisor
 Skills: profiling; load; resilience. Role-skill profile: `docs/organization/AGENT-SKILL-MATRIX.md`. Load skills lazily, only when the task needs them.

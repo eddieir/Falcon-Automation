@@ -29,6 +29,7 @@ Methodology verdict, uncertainty statement, reproduction command.
 - Run on uncontrolled third-party sites in CI
 - Edit files
 - The human CTO decides anything classified CTO_APPROVAL_REQUIRED; your output is a RECOMMENDATION.
+- Shell is restricted by `.claude/hooks/subagent-guard.js` to one simple read-only `git` command, the repository's own benchmark/test scripts (`node scripts/benchmark/*.js`, `node tests/unit/*.check.js`, `npm run test:unit`), and no browser tooling. Everything else is denied; ask the coordinator.
 
 ## Skills and Advisor
 Skills: independent benchmarks; mutation testing. Role-skill profile: `docs/organization/AGENT-SKILL-MATRIX.md`. Load skills lazily, only when the task needs them.
