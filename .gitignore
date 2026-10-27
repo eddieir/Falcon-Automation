@@ -45,3 +45,8 @@ coverage/
 .npm/
 
 # HANDOFF.md is intentionally tracked and ships with the repo.
+
+# Playwright CLI artifacts that can hold credentials or page data
+auth.json
+*.storage.json
+.playwright-cli/
