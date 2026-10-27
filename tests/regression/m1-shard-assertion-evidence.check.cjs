@@ -154,7 +154,7 @@ test("A6d cutting a long locator never leaks a split secret or empties the evide
     const secret = "S3cr3tTokenValue0123456789abcdefXYZ";
     const split = fragmentFor(0, 2, [{ name: "a", status: "passed", assertion: { check: "visible", locator: "Z".repeat(1170) + " " + secret + " tail" + "x ".repeat(200) } }]);
     assert.ok(!JSON.stringify(split).includes(secret.slice(0, 20)));
-    const cutAtBoundary = fragmentFor(0, 2, [{ name: "a", status: "passed", assertion: { check: "visible", locator: "a b ".repeat(290) + secret } }]);
+    const cutAtBoundary = fragmentFor(0, 2, [{ name: "a", status: "passed", assertion: { check: "visible", locator: "a ".repeat(585) + " " + secret } }]);
     assert.ok(!JSON.stringify(cutAtBoundary).includes(secret.slice(0, 20)));
     const oneToken = fragmentFor(0, 2, [{ name: "a", status: "passed", assertion: { check: "visible", locator: "q".repeat(5000) } }]);
     assert.ok(oneToken.results[0].assertion.locator.length > 0);
