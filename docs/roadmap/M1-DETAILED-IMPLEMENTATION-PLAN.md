@@ -23,6 +23,8 @@ Sizes are relative (S/M/L), not durations: the repository has no data to convert
 
 Added after Architect review S3-ARCH-1: `ShardMerge` rebuilds rows keeping only name, status, duration, page, scn, rep, error and description, and the shard row schema is a strict allowed-key list, so the `assertion` object is dropped today. A verification block computed at merge cannot equal the unsharded one until WP-79s lands; that is why it precedes WP-79b.
 
+WP-79s status: implemented. Shard rows optionally carry `assertion` (`{check, locator}`, or `null` for a malformed source record), `journeyId` and `required`; fragment version stays 1 and legacy bundles load unchanged. Only `check` and `locator` are persisted (not `expected`/`actual`/timing). Invalid `journeyId`/`required` are dropped; `required` and `journeyId` are carried but not yet interpreted by the classifier. A quarantined status is still mapped to `skipped` by the shard bundle, so a quarantined assertion reads NOT_TESTED (never verified) after merge; assertion rows are not quarantinable in `TestRunner` today. Fragment integrity remains unkeyed SHA-256 (unchanged).
+
 Parallelism (at most two concurrent tasks, disjoint paths): WP-77a ∥ WP-78a after WP-79a; WP-77c ∥ WP-79b after WP-77b.
 
 ## 2. #79 — truthful execution

@@ -26,6 +26,31 @@ function shardOrSingle(shard) {
     return shard && Number.isInteger(shard.index) ? { index: shard.index, total: shard.total } : { index: 1, total: 1 };
 }
 
+const CHECK_UNSAFE = /[^A-Za-z0-9._-]/g;
+const isObj = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * WP-79s: reduce an executed assertion record to the evidence Verification.classifyRow reads
+ * (`check`, `locator`). A field is kept only when the source had a non-empty string, so
+ * normalisation can never turn missing evidence into present evidence. `null` marks a malformed
+ * record. `expected`/`actual` page text and timing are deliberately not persisted.
+ */
+function toAssertion(a) {
+    if (!isObj(a)) return null;
+    const out = {};
+    try {
+        if (typeof a.check === "string" && a.check !== "") out.check = clean(a.check, 40).replace(CHECK_UNSAFE, "-");
+        if (typeof a.locator === "string" && a.locator !== "") {
+            const cap = 4 * Limits.SELECTOR_MAX;
+            let src = a.locator;
+            // Cutting at the cap could split a secret below the redaction length; drop the cut token. Never empties evidence.
+            if (src.length > cap) src = src.slice(0, cap).replace(/[A-Za-z0-9+\/_=-]+$/, "") || "[redacted]";
+            out.locator = clean(Schemas.redactText(Schemas.stripUrlQueries(src)), Limits.SELECTOR_MAX);
+        }
+    } catch { return null; }
+    return out;
+}
+
 /** Map one executed/derived result row to the strict fragment row shape. */
 function toRow(r, scnByName, fallbackRep) {
     const raw = r && r.status;
@@ -38,11 +63,21 @@ function toRow(r, scnByName, fallbackRep) {
     if (status === "deduped" && r.firstRunOn) error = clean(`firstRunOn ${r.firstRunOn}`, Limits.FRAGMENT_MAX_ERROR);
     const scn = scnByName && scnByName.has(name) ? scnByName.get(name) : null;
     const rep = Number.isInteger(r && r.repetition) ? r.repetition : status === "deduped" ? null : fallbackRep;
-    return {
+    const row = {
         scenario: name, scn, rep, status,
         durationMs: dur(r && (r.durationMs !== undefined ? r.durationMs : r.duration)),
         errorType, error,
     };
+    // Deduped rows never executed and contribute nothing to verification (and the schema rejects an assertion on them).
+    if (status === "deduped" || !r) return row;
+    // Invalid optional metadata is dropped; it never changes the assertion outcome, so a failure stays a failure.
+    const journeyOk = r.journeyId !== undefined && Schemas.isJourneyId(r.journeyId);
+    if (Object.prototype.hasOwnProperty.call(r, "assertion")) {
+        row.assertion = toAssertion(r.assertion);
+        if (typeof r.required === "boolean") row.required = r.required;
+    }
+    if (journeyOk) row.journeyId = r.journeyId;
+    return row;
 }
 
 function toIssue(u) {

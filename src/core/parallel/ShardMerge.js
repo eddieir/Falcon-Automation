@@ -237,6 +237,9 @@ function buildRows(rows) {
         name: r.scenario, status: r.status, duration: r.durationMs, page: t.url, pageOrdinal: t.ordinal,
         scn: r.scn, rep: r.rep, ...(r.error ? { error: Schemas.redactText(r.error) } : {}), ...(r.errorType ? { errorType: r.errorType } : {}),
         ...(r.description ? { description: r.description } : {}),
+        ...(r.assertion !== undefined ? { assertion: r.assertion && typeof r.assertion.locator === "string" ? { ...r.assertion, locator: Schemas.redactText(r.assertion.locator) } : r.assertion } : {}),
+        ...(r.journeyId !== undefined ? { journeyId: r.journeyId } : {}),
+        ...(r.required !== undefined ? { required: r.required } : {}),
     }));
 }
 

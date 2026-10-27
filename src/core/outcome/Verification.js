@@ -11,15 +11,11 @@
  * docs/roadmap/M1-DETAILED-IMPLEMENTATION-PLAN.md section 2 (WP-79a) for the
  * design this implements.
  *
- * WP-79a rows carry only legacy fields (no `journeyId`, no `required`); the
- * whole run is treated as one implicit journey. `journeyId`/`required`
- * arrive with WP-79s.
- *
- * KNOWN LIMIT until WP-79s: `ShardMerge.buildRows` drops the `assertion`
- * object, so a shard-merged report classifies assertion rows as plain
- * interactions and reports INTERACTION_ONLY. That understates verification
- * and can never overclaim BUSINESS_VERIFIED. Do not gate on
- * `verification.level` for merged/parallel runs before WP-79s.
+ * WP-79a rows carry only legacy fields. Since WP-79s, shard-merged rows also
+ * carry the normalised `assertion` ({ check, locator } or null when the source
+ * record was malformed) and optional `journeyId`/`required`. This classifier
+ * still ignores `journeyId`/`required`: the whole run is one implicit journey
+ * and every assertion row counts as required until the approval model lands.
  */
 
 const REASON_CODES = Object.freeze({
