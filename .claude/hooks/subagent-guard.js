@@ -94,21 +94,24 @@ const CLI_COMMANDS = new Set([
   "go-back", "go-forward", "reload", "resize", "close", "tab-list", "tab-new", "tab-close", "tab-select", "screenshot",
   "mousemove", "mousedown", "mouseup", "mousewheel", "dialog-accept", "dialog-dismiss"
 ]);
-const CLI_FORBIDDEN_OPTION = /^--(filename|config|profile|persistent|extension|cdp|path|data|output|headed=)/;
 const TRACE_COMMANDS = new Set(["actions", "requests", "request", "console", "errors", "snapshot", "attachments"]);
 
-// A path-like argument must stay inside the project: no absolute paths, no "..".
-const outside = (x) => x.startsWith("/") || x.includes("..");
+// A path-like argument must stay inside the project: no absolute paths, no "~", no "..", no encoded dots.
+// For "--opt=value" both the whole token and the value are checked.
+const outsideOne = (x) => x.startsWith("/") || x.startsWith("~") || x.includes("..") || /%2e/i.test(x);
+const outside = (x) => outsideOne(x) || (x.includes("=") && outsideOne(x.slice(x.indexOf("=") + 1)));
 // Any URL-like argument must be a local http(s) address (no file:, data:, javascript:, remote hosts).
-const badUrl = (x) => (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(x) && !/^about:blank$/.test(x) && !LOCAL_URL.test(x)) && !/^[A-Za-z0-9_-]+=/.test(x);
+const badUrl = (x) => (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(x) && x !== "about:blank" && !LOCAL_URL.test(x)) && !/^[A-Za-z0-9_-]+=/.test(x);
 
-// Plain `git <subcommand>`: no `-C` (it would honor another repository's config, which can run programs),
-// no `-c`, no out-of-project paths, no `--no-index`/`--contents`, no output-file options. The project's own
-// git config still applies.
-const allowGit = (t) => GIT_SUBCOMMANDS.has(t[1]) && !t.slice(2).some((x) =>
-  outside(x) || /^--(output|ext-diff|textconv|exec|no-index|contents)/.test(x) || (x.startsWith("-") && /^-[A-Za-z]*[CcO][A-Za-z]*$/.test(x)));
+// git: only these option forms are accepted (an allowlist, so abbreviations such as --cont= or --no-ind do not
+// match anything). No -C/-c (another repository's config can run programs), no out-of-project paths, no output
+// options. The project's own git config still applies.
+const GIT_OPTION = /^(--(stat|shortstat|numstat|name-only|name-status|oneline|short|porcelain|no-color|no-merges|graph|abbrev-commit|cached|staged|summary|patch|first-parent|reverse|root)|-[0-9]+|-n[0-9]*|-[spLU][0-9,]*|--(pretty|date)=[a-z]+|--)$/;
+const allowGit = (t) => GIT_SUBCOMMANDS.has(t[1]) && t.slice(2).every((x) => (x.startsWith("-") ? GIT_OPTION.test(x) : !outside(x)));
 const allowNodeScript = (re) => (t) => re.test(t[1] || "") && !t.slice(2).some(outside);
 const allowUnit = (t) => t[1] === "run" && t[2] === "test:unit" && t.length === 3;
+const CLI_URL_COMMANDS = new Set(["open", "goto", "tab-new"]);
+const CLI_OPTION = /^(-s=[A-Za-z0-9_-]+|--headed)$/;
 const allowPlaywright = (subs) => (t) => {
   if (t[1] !== "--no-install") return false; // plain npx may download and run a missing package
   if (t[2] !== "playwright") return false;
@@ -116,9 +119,13 @@ const allowPlaywright = (subs) => (t) => {
   if (!subs.includes(t[3])) return false;
   const rest = t.slice(4);
   if (t[3] === "cli") {
-    const args = rest.filter((x) => !/^-s=[A-Za-z0-9_-]+$/.test(x));
-    const first = args.find((x) => !x.startsWith("-"));
-    return CLI_COMMANDS.has(first) && !args.some((x) => CLI_FORBIDDEN_OPTION.test(x) || badUrl(x) || outside(x));
+    const options = rest.filter((x) => x.startsWith("-"));
+    const args = rest.filter((x) => !x.startsWith("-"));
+    if (!options.every((x) => CLI_OPTION.test(x))) return false;
+    if (!CLI_COMMANDS.has(args[0]) || args.some(outside)) return false;
+    // Navigation commands take only a local http(s) URL or about:blank; nothing else may be a URL.
+    if (CLI_URL_COMMANDS.has(args[0])) return args.slice(1).every((x) => x === "about:blank" || LOCAL_URL.test(x));
+    return !args.some(badUrl);
   }
   // trace
   return TRACE_COMMANDS.has(rest[0]) && !rest.some((x) => x === "-o" || x.startsWith("--output") || outside(x));
@@ -149,8 +156,10 @@ function allowlistReason(profile, input) {
 // Returns a deny reason, or null to allow. Throws only on programmer error.
 function decide(input) {
   if (!input || typeof input.agent_id !== "string" || input.agent_id.length === 0) return null; // main session
-  // agent_type may be namespaced (plugin:name); judge the bare name.
-  const roleName = typeof input.agent_type === "string" ? input.agent_type.replace(/^.*:/, "") : "";
+  // Claude Code sends agent_type for every subagent call. If it is missing the role is unknown, so deny.
+  if (typeof input.agent_type !== "string" || input.agent_type.length === 0) return "Subagent call without agent_type cannot be matched to a role policy.";
+  // agent_type may be namespaced (plugin:name) or differently cased; judge the bare lower-case name.
+  const roleName = input.agent_type.replace(/^.*:/, "").toLowerCase();
   const profile = Object.prototype.hasOwnProperty.call(PROFILES, roleName) ? PROFILES[roleName] : null;
   if (profile) return allowlistReason(profile, input);
   const command = input.tool_input && typeof input.tool_input.command === "string" ? input.tool_input.command : "";

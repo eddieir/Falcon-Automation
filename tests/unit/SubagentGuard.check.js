@@ -39,7 +39,7 @@ const bench = 'benchmark-evaluation-engineer', dx = 'developer-experience-engine
 const allowed = [
   [bench, 'git status --short'], [bench, 'git diff origin/main --stat'], [bench, 'git show HEAD:package.json'], [bench, 'git log --oneline -5'],
   [bench, 'node scripts/benchmark/competitive-score.js --in docs/research/x.json'], [bench, 'node tests/unit/CiWait.check.js'], [bench, 'npm run test:unit'],
-  [dx, 'npx --no-install playwright --version'], [dx, 'npx --no-install playwright cli open http://127.0.0.1:3000'], [dx, 'npx --no-install playwright cli -s=a snapshot'], [dx, 'npx --no-install playwright cli screenshot'], [dx, 'git show HEAD'],
+  [dx, 'npx --no-install playwright --version'], [dx, 'npx --no-install playwright cli open http://127.0.0.1:3000'], [dx, 'npx --no-install playwright cli -s=a snapshot'], [dx, 'npx --no-install playwright cli goto http://localhost:3000/login'], [dx, 'npx --no-install playwright cli open about:blank'], [bench, 'git log --oneline -5'], [bench, 'git diff --stat HEAD~1'], [bench, 'git blame -L1,2 package.json'], [bench, 'git log --pretty=oneline -n3'], [dx, 'npx --no-install playwright cli screenshot'], [dx, 'git show HEAD'],
   [perf, 'npx --no-install playwright trace actions test-results/trace.zip'], [perf, 'node scripts/benchmark/parallel.js'], [perf, 'git rev-parse HEAD']
 ];
 for (const [a, c] of allowed) assert.strictEqual(decide(as(a, c)), null, `${a} should allow: ${c}`);
@@ -62,6 +62,12 @@ const denied = [
   [dx, 'npx --no-install playwright cli install-browser'], [dx, 'npx --no-install playwright cli Eval 1'], [dx, 'npx --no-install playwright cli state-save a.json'],
   [dx, 'npx --no-install playwright cli open --profile=x'], [dx, 'npx --no-install playwright cli upload f'], [dx, 'npx --no-install playwright cli drag e1 e2'],
   [perf, 'npx --no-install playwright trace screenshot trace.zip'], [perf, 'npx --no-install playwright trace actions /etc/trace.zip'],
+  [bench, 'git blame --cont=/etc/passwd f'], [bench, 'git diff --no-ind a b'], [bench, 'git diff --outp=x'], [bench, 'git show --textc HEAD'], [bench, 'git diff ~/.ssh'],
+  [bench, 'git log --exec-p=x'], [bench, 'git log --format=%H'], [bench, 'node scripts/benchmark/x.js ~/x'], [bench, 'node scripts/benchmark/x.js --out=/tmp/x'], [bench, 'node scripts/benchmark/x.js --out=%2e%2e/x'],
+  [dx, 'npx --no-install playwright cli open evil.com'], [dx, 'npx --no-install playwright cli open 127.0.0.1@evil.com'], [dx, 'npx --no-install playwright cli open .env'],
+  [dx, 'npx --no-install playwright cli open ~/x.html'], [dx, 'npx --no-install playwright cli open --user-data-dir=x'], [dx, 'npx --no-install playwright cli open --browser=chrome'],
+  [dx, 'npx --no-install playwright cli goto http://127.0.0.1@evil.com'], [dx, 'npx --no-install playwright cli goto http://localhost.evil.com'], [dx, 'npx --no-install playwright cli tab-new evil.com'],
+  [perf, 'npx --no-install playwright trace actions ~/x.zip'], [perf, 'npx --no-install playwright trace actions t.zip%2e%2e'],
   [bench, 'git\u00a0status'], [bench, 'git status\0'], [bench, 'GIT_EXTERNAL_DIFF=x git diff']
 ];
 for (const [a, c] of denied) assert(decide(as(a, c)), `${a} should deny: ${JSON.stringify(c)}`);
@@ -70,8 +76,10 @@ assert(decide(as(bench, 'git status --short', { dangerouslyDisableSandbox: true 
 assert(decide(as('falcon:' + bench, 'ls')), 'namespaced role must still be allowlisted');
 // The allowlist is keyed by agent_type: other roles are not narrowed by it (they keep the Bash tool as granted).
 assert.strictEqual(decide(as('qa-engineer', 'node -e "1"')), null);
-// A subagent call without agent_type cannot be matched to a profile; it falls back to the denylist only.
-assert.strictEqual(decide({ agent_id: 'a1', tool_input: { command: 'ls' } }), null);
+// A subagent call without agent_type cannot be matched to a role, so it is denied (fail closed).
+assert(decide({ agent_id: 'a1', tool_input: { command: 'ls' } }), 'missing agent_type must be denied');
+assert(decide({ agent_id: 'a1', agent_type: '', tool_input: { command: 'ls' } }), 'empty agent_type must be denied');
+assert(decide(as('Benchmark-Evaluation-Engineer', 'ls')), 'case variants of a profile role must still be allowlisted');
 
 // --- Main session is never restricted by this hook ---
 for (const p of [{ tool_input: { command: 'claude -p hi' } }, { tool_input: { command: 'npm install -g foo' } }, { agent_id: '', agent_type: bench, tool_input: { command: 'ls' } }]) {
