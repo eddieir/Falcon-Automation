@@ -161,3 +161,15 @@ Plans and reports from before this change load unchanged. A report without `veri
 ## 11. Open questions for the owner
 
 Q1 non-quarantinable business FAIL (recommended yes). Q2 whether optional-assertion failures may ever block (recommended: only with explicit `severity: "blocking"`). Q3 default flip timing (D8). Q4 contract placement: Architect review recommends beside the plan, bound by `journeyId` and `digest` (owner to confirm).
+
+## WP-77a implementation status
+
+`src/core/outcome/Contract.js` (strict parse, canonical digest) and `src/core/outcome/ContractStore.js` (hash-chained approval log) are implemented. Nothing executes assertions yet and no plan, runner or report path reads them.
+
+Known limitations, recorded from the WP-77a security review and not yet fixed:
+
+- The store's write queue is in-process only. Two processes approving and rejecting at once can lose an event (P2). Treat the store as single-process.
+- Cutting the log at a line boundary, or restoring an older valid copy, is not detected. No identity is authenticated; `channel` and `at` are labels.
+- Approving an older never-approved revision supersedes a newer approved one (revision order is enforced at propose only). Approvals on the `test` channel count in `isApproved`. Error text for internal failures can include a raw exception message. For in-memory object input, validation and digest read the object at different times.
+
+Conditions for WP-77b: the store must not be committed to the repository (a committed self-consistent chain would be a forged approval); the executor must recompute the digest from the contract it actually runs, with that contract's own `journeyId`.

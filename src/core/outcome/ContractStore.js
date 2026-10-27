@@ -3,8 +3,12 @@
 /**
  * ContractStore.js — WP-77a auditable approval-lifecycle store for business
  * assertion contracts (Contract.js). One append-only JSONL event log per
- * journeyId, hash-chained so accidental or partial tampering (edited,
- * reordered, replayed, truncated or oversized files) is detected on read.
+ * journeyId, hash-chained so edited, reordered, replayed, mid-line-truncated
+ * or oversized files are detected on read. NOT detected: cutting the file at
+ * a line boundary or restoring an earlier valid copy of the whole store (no
+ * external anchor), and concurrent writers in different processes (the write
+ * queue is in-process only, so a cross-process approve/reject race can lose
+ * an event). Treat the store as single-process until that is addressed.
  *
  * Security note (read before relying on this for anything beyond operator
  * mistakes): the hash chain proves *internal consistency* of one file. It
