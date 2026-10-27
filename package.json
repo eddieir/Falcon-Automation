@@ -11,7 +11,7 @@
   },
   "scripts": {
     "start": "node falcon.js",
-    "test:unit": "node tests/unit/ReportManagerExitCode.check.js && node tests/unit/DBConfigBehavior.check.js && node tests/unit/DashboardAuth.check.js && node tests/unit/CiWait.check.js && node tests/unit/Verification.check.js && node tests/unit/AgentCatalog.check.js",
+    "test:unit": "node tests/unit/ReportManagerExitCode.check.js && node tests/unit/DBConfigBehavior.check.js && node tests/unit/DashboardAuth.check.js && node tests/unit/CiWait.check.js && node tests/unit/Verification.check.js && node tests/unit/AgentCatalog.check.js && node tests/unit/SubagentGuard.check.js",
     "test:login": "node tests/ui/LoginTest.js",
     "test:checkout": "node tests/ui/CheckoutTest.js",
     "test:search": "node tests/ui/GoogleSearchTest.js",

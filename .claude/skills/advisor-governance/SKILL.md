@@ -16,7 +16,7 @@ The single decision, evidence paths, constraints, 2-3 options, and the level.
 ## Steps
 1. Check the ledger for valid prior advice on the same decision and revision; reuse it.
 2. Write a request of at most 150 words: question, evidence paths, options, what a good answer must cover.
-3. Route it to the already-assigned specialist best placed to answer (Solution Architect, Security Engineer, Chief Architect), who answers at their own model, or to the CTO as a brief if Level 3 and unsupported.
+3. Route it to the already-assigned specialist best placed to answer (Solution Architect or Chief Architect; the Security Engineer, who runs on Opus, only for security-boundary questions, since extra Opus use is a CTO decision), who answers at their own model, or to the CTO as a brief if Level 3 and unsupported.
 4. Record in the ledger: question, answerer, level, outcome, revision.
 
 ## Output

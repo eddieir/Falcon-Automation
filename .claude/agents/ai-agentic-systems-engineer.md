@@ -1,7 +1,7 @@
 ---
 name: ai-agentic-systems-engineer
 description: "Designs AI integration and agentic behavior: tool use, structured outputs, prompt-injection resistance, grounded proposals, model-failure handling. Cannot certify AI safety."
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob
 model: claude-sonnet-4-6
 effort: low
 maxTurns: 8

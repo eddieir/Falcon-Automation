@@ -1,7 +1,7 @@
 ---
 name: site-reliability-engineer
 description: "Owns operational reliability: SLOs, runtime monitoring, incident response, recovery procedures, deployment risk, runbooks. Does not own CI/CD."
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob
 model: claude-sonnet-4-5
 effort: low
 maxTurns: 8
