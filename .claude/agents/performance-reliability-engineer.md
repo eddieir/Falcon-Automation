@@ -1,7 +1,7 @@
 ---
 name: performance-reliability-engineer
 description: "Evaluates browser memory, load and soak behavior, parallel-worker efficiency, profiling, resource leaks, execution budgets, performance regressions."
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Skill
 model: claude-sonnet-4-5
 effort: low
 maxTurns: 8

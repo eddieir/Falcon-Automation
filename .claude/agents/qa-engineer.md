@@ -1,7 +1,7 @@
 ---
 name: qa-engineer
 description: Independently plans and executes Falcon verification across unit, regression, browser, API, DB, integration, and exploratory risk.
-tools: Read, Grep, Glob, Bash, Edit, Write
+tools: Read, Grep, Glob, Bash, Edit, Write, Skill
 model: claude-sonnet-4-5
 effort: medium
 maxTurns: 10

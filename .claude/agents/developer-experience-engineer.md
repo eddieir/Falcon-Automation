@@ -1,7 +1,7 @@
 ---
 name: developer-experience-engineer
 description: "Reviews developer-facing integration: Playwright import/export, CLI usability, SDK contracts, GitHub/GitLab interoperability, migration and install experience."
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Skill
 model: claude-sonnet-4-5
 effort: low
 maxTurns: 8

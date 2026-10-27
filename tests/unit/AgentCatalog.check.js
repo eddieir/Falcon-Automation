@@ -7,7 +7,7 @@ const path = require('path');
 const root = path.join(__dirname, '..', '..');
 const agentsDir = path.join(root, '.claude', 'agents');
 const allowedKeys = new Set(['name', 'description', 'tools', 'model', 'effort', 'maxTurns']);
-const allowedTools = new Set(['Read', 'Grep', 'Glob', 'Bash', 'Edit', 'Write', 'WebSearch', 'WebFetch', 'Agent']);
+const allowedTools = new Set(['Read', 'Grep', 'Glob', 'Bash', 'Edit', 'Write', 'WebSearch', 'WebFetch', 'Agent', 'Skill']);
 const modelIds = new Set([
   'claude-haiku-4-5', 'claude-haiku-5-5', 'claude-sonnet-4-5', 'claude-sonnet-4-6',
   'claude-sonnet-5', 'claude-sonnet-5-5', 'claude-opus-5-5'
@@ -103,7 +103,14 @@ for (const s of fs.readdirSync(skillsDir)) {
   assert.strictEqual(meta.name, s, `skill ${s}: name must match directory`);
   assert(meta.description, `skill ${s}: description required`);
   assert(!fs.existsSync(path.join(skillsDir, s, 'scripts')), `skill ${s}: scripts need security review`);
+  assert(!('allowed-tools' in meta) && !('hooks' in meta), `skill ${s}: tool pre-approvals and hooks are not allowed`);
+  if (/^(playwright-|differential-review)/.test(s)) assert(fs.existsSync(path.join(skillsDir, s, 'UPSTREAM.md')), `skill ${s}: UPSTREAM.md (source, pin, patch, rollback) required`);
 }
+
+// Only the roles that need installed skills may hold the Skill tool (lazy loading; no preload via `skills:`).
+const skillHolders = Object.keys(agents).filter(n => agents[n].tools.split(',').map(x => x.trim()).includes('Skill')).sort();
+assert.deepStrictEqual(skillHolders, ['code-reviewer', 'developer', 'developer-experience-engineer', 'performance-reliability-engineer', 'qa-engineer', 'security-engineer']);
+for (const n of names) assert(!('skills' in agents[n]), `${n}: do not preload skills`);
 const registry = fs.readFileSync(path.join(root, 'docs/organization/SKILLS-REGISTRY.md'), 'utf8');
 for (const s of fs.readdirSync(skillsDir)) assert(registry.includes('`' + s + '`'), `skill ${s}: not in registry`);
 

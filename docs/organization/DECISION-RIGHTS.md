@@ -22,6 +22,6 @@
 | Release recommendation | Release Manager |
 | Release authorization | Human CTO |
 
-Always CTO-only: spending and subscriptions, model/provider policy (including any extra Opus use), public capability claims, external customer contact, licensing and IP, agent permissions, organizational policy changes, installing third-party skills that need new dependencies or carry share-alike licenses.
+Always CTO-only: spending and subscriptions, model/provider policy (including any extra Opus use), public capability claims, external customer contact, licensing and IP, agent permissions, organizational policy changes, installing third-party skills (granted for the PR #120 set only; every further install needs a new decision), and anything that needs a new dependency, global install, credential access or paid service.
 
 Rules: no agent approves its own implementation; an agent review is not an independent human review; a title (Chief, Director, Owner, Manager) confers no CTO authority; Advisor output is never an approval ([ADVISOR-POLICY](ADVISOR-POLICY.md)).
