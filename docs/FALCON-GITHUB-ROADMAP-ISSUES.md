@@ -2,11 +2,11 @@
 
 **Prepared:** 2026-10-23. **Repository:** https://github.com/eddieir/Falcon-Automation
 
- > GitHub milestone setup is pending execution of `scripts/roadmap/setup-github-milestones.sh`. The setup performs authenticated milestone creation and issue assignment; this documentation alone does not create GitHub milestone objects.
+ > The ten GitHub milestones exist and issues #74–#104 are assigned (links in [FALCON-MILESTONE-LINKS.md](FALCON-MILESTONE-LINKS.md)). This file is the issue register; for execution order and open proposals see [roadmap/EXECUTION-STRATEGY.md](roadmap/EXECUTION-STRATEGY.md).
 
 ## Milestones ordered by provisional delivery target
 
-**Important:** These are planning targets, not promised releases. Actual GitHub milestone URLs appear in [FALCON-MILESTONE-LINKS.md](FALCON-MILESTONE-LINKS.md) **after** the setup script has been executed and the generated file committed. Until then the links do not exist.
+**Important:** These are planning targets, not promised releases. Milestone URLs are in [FALCON-MILESTONE-LINKS.md](FALCON-MILESTONE-LINKS.md).
 
 | Delivery order | Milestone | Target date | GitHub issues |
 |---|---|---|---|
@@ -21,7 +21,7 @@
 | M8 | Advanced QA | 2027-12-03 | [#99](https://github.com/eddieir/Falcon-Automation/issues/99)–[#101](https://github.com/eddieir/Falcon-Automation/issues/101) |
 | M9 | Independent Competitive Release | 2028-01-14 | [#102](https://github.com/eddieir/Falcon-Automation/issues/102)–[#104](https://github.com/eddieir/Falcon-Automation/issues/104) |
 
-Run `bash scripts/roadmap/setup-github-milestones.sh` after authenticating `gh` with Issues write permissions. The script creates/reuses all 10 milestone objects, assigns issues #74–#104, prints the exact milestone URLs, and creates `docs/FALCON-MILESTONE-LINKS.md` for review and commit to this PR. It checks for unexpected issue titles and existing conflicting milestone assignments rather than overwriting them.
+`scripts/roadmap/setup-github-milestones.sh` created the milestone objects and assigned the issues; it is kept for reference and refuses to overwrite conflicting assignments.
 
 ## Release and review policy
 
@@ -33,7 +33,7 @@ Run `bash scripts/roadmap/setup-github-milestones.sh` after authenticating `gh` 
 
 ## GitHub issues — original descriptions
 
-### [#undefined — [M9] Publish evidence-backed release readiness dossier](https://github.com/eddieir/Falcon-Automation/issues/104)
+### [#104 — [M9] Publish evidence-backed release readiness dossier](https://github.com/eddieir/Falcon-Automation/issues/104)
 
 ## Objective
 Consolidate benchmark, ROI, security, quality, interoperability, adoption and limits into versioned release documentation.
@@ -59,7 +59,7 @@ Acceptance evidence bound to exact revision; all mandatory CI checks green; revi
 
 ---
 
-### [#undefined — [M9] Commission independent security and quality review](https://github.com/eddieir/Falcon-Automation/issues/103)
+### [#103 — [M9] Commission independent security and quality review](https://github.com/eddieir/Falcon-Automation/issues/103)
 
 ## Objective
 Obtain qualifying human independent review of security boundaries, evidence integrity and real customer failure modes.
@@ -85,7 +85,7 @@ Acceptance evidence bound to exact revision; all mandatory CI checks green; revi
 
 ---
 
-### [#undefined — [M9] Run cross-product reproducible benchmarks](https://github.com/eddieir/Falcon-Automation/issues/102)
+### [#102 — [M9] Run cross-product reproducible benchmarks](https://github.com/eddieir/Falcon-Automation/issues/102)
 
 ## Objective
 Evaluate Falcon and available competitors against common fixtures with version/date, cost and environment disclosed.
@@ -111,7 +111,7 @@ Acceptance evidence bound to exact revision; all mandatory CI checks green; revi
 
 ---
 
-### [#undefined — [M8] Add API/UI correlation for customer journeys](https://github.com/eddieir/Falcon-Automation/issues/101)
+### [#101 — [M8] Add API/UI correlation for customer journeys](https://github.com/eddieir/Falcon-Automation/issues/101)
 
 ## Objective
 Relate browser interactions to authorized API/network observations with privacy-safe redaction.
@@ -137,7 +137,7 @@ Acceptance evidence bound to exact revision; all mandatory CI checks green; revi
 
 ---
 
-### [#undefined — [M8] Advance visual regression baselines and change triage](https://github.com/eddieir/Falcon-Automation/issues/100)
+### [#100 — [M8] Advance visual regression baselines and change triage](https://github.com/eddieir/Falcon-Automation/issues/100)
 
 ## Objective
 Establish approval workflow for screenshot baselines, deterministic viewports and explainable diffs.
@@ -163,7 +163,7 @@ Acceptance evidence bound to exact revision; all mandatory CI checks green; revi
 
 ---
 
-### [#undefined — [M8] Integrate accessibility audits with functional journeys](https://github.com/eddieir/Falcon-Automation/issues/99)
+### [#99 — [M8] Integrate accessibility audits with functional journeys](https://github.com/eddieir/Falcon-Automation/issues/99)
 
 ## Objective
 Use accessibility checks alongside discovered browser states and distinguish automated findings from human evaluation.
@@ -189,7 +189,7 @@ Acceptance evidence bound to exact revision; all mandatory CI checks green; revi
 
 ---
 
-### [#undefined — [M7] Prepare sustainable product packaging and support policies](https://github.com/eddieir/Falcon-Automation/issues/98)
+### [#98 — [M7] Prepare sustainable product packaging and support policies](https://github.com/eddieir/Falcon-Automation/issues/98)
 
 ## Objective
 Compare open-source plus commercial support and other packaging approaches; define support expectations and IP/license review.
@@ -215,7 +215,7 @@ Acceptance evidence bound to exact revision; all mandatory CI checks green; revi
 
 ---
 
-### [#undefined — [M7] Build customer ROI and TCO calculator](https://github.com/eddieir/Falcon-Automation/issues/97)
+### [#97 — [M7] Build customer ROI and TCO calculator](https://github.com/eddieir/Falcon-Automation/issues/97)
 
 ## Objective
 Estimate time-to-value, setup, maintenance, compute, LLM calls, false repairs, review time and support.
@@ -241,7 +241,7 @@ Acceptance evidence bound to exact revision; all mandatory CI checks green; revi
 
 ---
 
-### [#undefined — [M7] Run three scoped design-partner evaluations](https://github.com/eddieir/Falcon-Automation/issues/96)
+### [#96 — [M7] Run three scoped design-partner evaluations](https://github.com/eddieir/Falcon-Automation/issues/96)
 
 ## Objective
 Prepare informed-consent pilots with representative journeys, disposable test data, baselines and measurable acceptance.
@@ -267,7 +267,7 @@ Acceptance evidence bound to exact revision; all mandatory CI checks green; revi
 
 ---
 
-### [#undefined — [M6] Harden CI integrations and multi-project operation](https://github.com/eddieir/Falcon-Automation/issues/95)
+### [#95 — [M6] Harden CI integrations and multi-project operation](https://github.com/eddieir/Falcon-Automation/issues/95)
 
 ## Objective
 Design GitHub/GitLab CI integration, least-privilege tokens, fork safety, artifact publishing and project isolation.
@@ -293,7 +293,7 @@ Acceptance evidence bound to exact revision; all mandatory CI checks green; revi
 
 ---
 
-### [#undefined — [M6] Implement retention, audit export and secret-safe artifacts](https://github.com/eddieir/Falcon-Automation/issues/94)
+### [#94 — [M6] Implement retention, audit export and secret-safe artifacts](https://github.com/eddieir/Falcon-Automation/issues/94)
 
 ## Objective
 Document storage classes, minimization, configurable retention, audit export integrity, and deletion lifecycle.
@@ -319,7 +319,7 @@ Acceptance evidence bound to exact revision; all mandatory CI checks green; revi
 
 ---
 
-### [#undefined — [M6] Implement retention, audit export and secret-safe artifacts](https://github.com/eddieir/Falcon-Automation/issues/93)
+### [#93 — [M6] Implement retention, audit export and secret-safe artifacts](https://github.com/eddieir/Falcon-Automation/issues/93)
 
 ## Objective
 Document storage classes, privacy minimization, retention policies, signed/exportable audit records and deletion lifecycle.
@@ -352,7 +352,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M6] Design enterprise RBAC and actor-attributed review workflow](https://github.com/eddieir/Falcon-Automation/issues/92)
+### [#92 — [M6] Design enterprise RBAC and actor-attributed review workflow](https://github.com/eddieir/Falcon-Automation/issues/92)
 
 ## Objective
 Define team/workspace ownership, authentication, reviewer permissions, separation of duties and decision provenance.
@@ -385,7 +385,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M5] Introduce explicit execution and AI-cost budgets](https://github.com/eddieir/Falcon-Automation/issues/91)
+### [#91 — [M5] Introduce explicit execution and AI-cost budgets](https://github.com/eddieir/Falcon-Automation/issues/91)
 
 ## Objective
 Limit browsers, duration, pages, provider calls, per-step tokens and repeated failing work; show budget spend.
@@ -418,7 +418,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M5] Implement failure clustering and automated triage notes](https://github.com/eddieir/Falcon-Automation/issues/90)
+### [#90 — [M5] Implement failure clustering and automated triage notes](https://github.com/eddieir/Falcon-Automation/issues/90)
 
 ## Objective
 Group related selectors, network errors, infrastructure instability and assertion failures without flattening root causes.
@@ -451,7 +451,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M5] Build deterministic change-impact test selection](https://github.com/eddieir/Falcon-Automation/issues/89)
+### [#89 — [M5] Build deterministic change-impact test selection](https://github.com/eddieir/Falcon-Automation/issues/89)
 
 ## Objective
 Map tested pages/journeys to code/path changes; explain selection and ensure conservative fallback.
@@ -484,7 +484,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M4] Deliver five-minute onboarding and troubleshooting experience](https://github.com/eddieir/Falcon-Automation/issues/88)
+### [#88 — [M4] Deliver five-minute onboarding and troubleshooting experience](https://github.com/eddieir/Falcon-Automation/issues/88)
 
 ## Objective
 One-command fixture demo, setup validation, actionable failures, migration quickstart and container examples.
@@ -517,7 +517,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M4] Export maintainable Playwright tests and migration proofs](https://github.com/eddieir/Falcon-Automation/issues/87)
+### [#87 — [M4] Export maintainable Playwright tests and migration proofs](https://github.com/eddieir/Falcon-Automation/issues/87)
 
 ## Objective
 Emit idiomatic TS tests with stable assertions, locators, scoped human-approved repairs and CI-ready structure.
@@ -550,7 +550,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M4] Design Playwright TypeScript import with compatibility inventory](https://github.com/eddieir/Falcon-Automation/issues/86)
+### [#86 — [M4] Design Playwright TypeScript import with compatibility inventory](https://github.com/eddieir/Falcon-Automation/issues/86)
 
 ## Objective
 Parse/import supported tests/fixtures/locators via AST, define unsupported syntax behavior and deterministic mapping.
@@ -583,7 +583,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M3] Improve repair explainability and rollback UX](https://github.com/eddieir/Falcon-Automation/issues/85)
+### [#85 — [M3] Improve repair explainability and rollback UX](https://github.com/eddieir/Falcon-Automation/issues/85)
 
 ## Objective
 Surface candidate evidence, original/current selector, refusal reasons, prior revisions, approval scope and undo in CLI/dashboard.
@@ -616,7 +616,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M3] Strengthen candidate matching and replay invariants](https://github.com/eddieir/Falcon-Automation/issues/84)
+### [#84 — [M3] Strengthen candidate matching and replay invariants](https://github.com/eddieir/Falcon-Automation/issues/84)
 
 ## Objective
 Test action/URL/origin/path semantics, accessibility signals, confidence margins, drift expiry and ambiguous candidate rejection.
@@ -649,7 +649,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M3] Create healing precision and refusal benchmark corpus](https://github.com/eddieir/Falcon-Automation/issues/83)
+### [#83 — [M3] Create healing precision and refusal benchmark corpus](https://github.com/eddieir/Falcon-Automation/issues/83)
 
 ## Objective
 Curate labeled selector-drift cases: benign changes, ambiguous candidates, lookalikes, hidden targets, wrong destinations and hostile markup.
@@ -682,7 +682,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M2] Implement isolated authenticated test journeys](https://github.com/eddieir/Falcon-Automation/issues/82)
+### [#82 — [M2] Implement isolated authenticated test journeys](https://github.com/eddieir/Falcon-Automation/issues/82)
 
 ## Objective
 Support secret-free identity references and fixtures for multiple roles with short-lived isolated browser contexts; prevent state leakage.
@@ -715,7 +715,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M2] Introduce safe autonomous action policy and refusal evidence](https://github.com/eddieir/Falcon-Automation/issues/81)
+### [#81 — [M2] Introduce safe autonomous action policy and refusal evidence](https://github.com/eddieir/Falcon-Automation/issues/81)
 
 ## Objective
 Classify navigation, read, write, delete, payment, external domain and sensitive controls; require allowlist and hard budgets.
@@ -748,7 +748,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M2] Resolve Phase 18 security gates and independent review prerequisites](https://github.com/eddieir/Falcon-Automation/issues/80)
+### [#80 — [M2] Resolve Phase 18 security gates and independent review prerequisites](https://github.com/eddieir/Falcon-Automation/issues/80)
 
 ## Objective
 Map C1–C5 implementation status and C2 independent human approval, T1–T3 and open findings to owner-approved remediation steps.
@@ -781,7 +781,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M1] Formalize truthful coverage and false-green contract](https://github.com/eddieir/Falcon-Automation/issues/79)
+### [#79 — [M1] Formalize truthful coverage and false-green contract](https://github.com/eddieir/Falcon-Automation/issues/79)
 
 ## Objective
 Track verified business assertions separately from interactions, skips, quarantine and generated scenarios; define CI exit policy.
@@ -814,7 +814,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M1] Implement state-aware multi-step journey discovery](https://github.com/eddieir/Falcon-Automation/issues/78)
+### [#78 — [M1] Implement state-aware multi-step journey discovery](https://github.com/eddieir/Falcon-Automation/issues/78)
 
 ## Objective
 Design bounded state graph over browser actions, navigation, form state and auth context, with dedupe and destructive action guard.
@@ -847,7 +847,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M1] Generate business assertions with human confirmation](https://github.com/eddieir/Falcon-Automation/issues/77)
+### [#77 — [M1] Generate business assertions with human confirmation](https://github.com/eddieir/Falcon-Automation/issues/77)
 
 ## Objective
 Design assertion suggestions for navigation outcomes, data values, permissions and side effects; do not conflate successful interaction with business correctness.
@@ -880,7 +880,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M0] Publish Falcon capability truth table and claim audit](https://github.com/eddieir/Falcon-Automation/issues/76)
+### [#76 — [M0] Publish Falcon capability truth table and claim audit](https://github.com/eddieir/Falcon-Automation/issues/76)
 
 ## Objective
 Audit README, ARCHITECTURE and phase plans against tests and current implementation; tag every promised capability SHIPPED, PARTIAL, PLANNED or UNVERIFIED.
@@ -913,7 +913,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M0] Create neutral competitive benchmark harness and fixtures](https://github.com/eddieir/Falcon-Automation/issues/75)
+### [#75 — [M0] Create neutral competitive benchmark harness and fixtures](https://github.com/eddieir/Falcon-Automation/issues/75)
 
 ## Objective
 Specify equivalent workflows for locator churn, multi-step assertions, auth/navigation, refusal, flake reporting and CI runtime; build local deterministic test applications and standardized measures.
@@ -946,7 +946,7 @@ All acceptance boxes evidenced; repository regression/CI checks pass; user-facin
 
 ---
 
-### [#undefined — [M0] Build versioned competitor evidence register](https://github.com/eddieir/Falcon-Automation/issues/74)
+### [#74 — [M0] Build versioned competitor evidence register](https://github.com/eddieir/Falcon-Automation/issues/74)
 
 ## Objective
 Research direct and adjacent competitors: Playwright Agents, Momentic, mabl, Testim, testRigor, Testsigma, Katalon, Healenium, Autify, Functionize, QA Wolf, BrowserStack and open-source browser agents.
