@@ -7,7 +7,8 @@
 // CLI to a real browser profile (`attach --extension` / `--cdp`). The main
 // session (no agent_id) is unaffected.
 //
-// Defense in depth, not a sandbox: a command built indirectly (variables,
+// Known over-blocking: any `gh` command with an `--attach` token is denied, even
+// inside quoted body text; the coordinator can run it. Defense in depth, not a sandbox: a command built indirectly (variables,
 // scripts) is not detected. Linear token scan, no backtracking regexes.
 
 const WORD_SPLIT = /[|;&\n`()]+/;
