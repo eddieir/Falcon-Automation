@@ -22,6 +22,7 @@
 const fs = require("fs");
 const path = require("path");
 const SafeFs = require("../parallel/SafeFs");
+const Limits = require("../parallel/Limits");
 const { canonicalJson, sha256 } = require("../parallel/Schemas");
 const Contract = require("./Contract");
 
@@ -45,7 +46,6 @@ function isPlainObj(v) {
 }
 
 function checkJourneyId(v) {
-    const Limits = require("../parallel/Limits");
     return typeof v === "string" && Limits.NAME_PATTERN.test(v) && !/^\.+$/.test(v);
 }
 
@@ -159,7 +159,7 @@ async function readStoreFile(file) {
         try {
             fh = await fs.promises.open(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
         } catch (e) {
-            return { status: e && (e.code === "ELOOP" || e.code === "EACCES") ? "broken" : "broken" };
+            return { status: "broken" };
         }
         const st = await fh.stat();
         if (!st.isFile()) return { status: "broken" };
@@ -270,7 +270,7 @@ async function propose(root, contract, opts) {
             const events = fresh.events || [];
             const existing = events.find((e) => e.digest === digest);
             if (existing) {
-                const status = fresh.state ? fresh.state.get(digest) : "PROPOSED";
+                const status = fresh.state.get(digest);
                 return ok({ idempotent: true, status: status || "PROPOSED", digest, journeyId });
             }
 
