@@ -49,7 +49,7 @@ Precedence for combining required assertions: `FAIL` > `REFUSED` > `INCONCLUSIVE
 | `passed`, no assertion | interaction counted; contributes `INTERACTION_ONLY` |
 | `failed` with `assertion` | assertion `FAIL` |
 | `failed` without `assertion` | technical failure; journey `FAILED`; no assertion outcome |
-| `unavailable` | `INCONCLUSIVE` (target not found) |
+| `unavailable` | with an `assertion`: `INCONCLUSIVE` (target not found). Without one: a technical step failure, so the journey is `FAILED` (WP-79a) |
 | `skipped` | `NOT_TESTED` |
 | `quarantined` | technical instability only. **A `FAIL` of a required business assertion is not quarantinable** (decision Q1) |
 | `deduped` | excluded; never contributes to coverage |
@@ -128,7 +128,7 @@ Lifecycle: `proposed → approved | rejected`; `approved → superseded` (new re
 | Locator matches more than one element and the check needs one | `INCONCLUSIVE` (`AMBIGUOUS_TARGET`) |
 | Evaluator throws or the page closed | `INCONCLUSIVE` (`EVALUATION_ERROR`) |
 | Earlier step in the journey failed | later assertions `NOT_TESTED` |
-| Evidence object absent on a `PASS` record | record invalid |
+| Evidence object absent or lacking `check`/`locator` on a `PASS` record | `INCONCLUSIVE` (`MALFORMED_ASSERTION`); never PASS (WP-79a) |
 
 ## 8. Fixtures (extends M0 harness; oracle is server-side, never the tool's report)
 

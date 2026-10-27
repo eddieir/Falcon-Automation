@@ -18,11 +18,11 @@ const Verification = require(path.join(__dirname, "..", "..", "src/core/outcome/
 const FIXTURES = {
     empty: {},
     allPassedNoAssertions: { tests: [{ name: "a", status: "passed" }, { name: "b", status: "passed" }] },
-    businessVerified: { tests: [{ name: "a", status: "passed", assertion: { check: "visible" } }] },
-    failedAssertion: { tests: [{ name: "a", status: "passed" }, { name: "b", status: "failed", assertion: { check: "visible" } }] },
-    quarantinedAssertionFail: { tests: [{ name: "a", status: "quarantined", assertion: { check: "visible" } }] },
-    skippedAssertion: { tests: [{ name: "a", status: "skipped", assertion: { check: "visible" } }] },
-    unavailableAssertion: { tests: [{ name: "a", status: "unavailable", assertion: { check: "visible" } }] },
+    businessVerified: { tests: [{ name: "a", status: "passed", assertion: { check: "visible", locator: "#x" } }] },
+    failedAssertion: { tests: [{ name: "a", status: "passed" }, { name: "b", status: "failed", assertion: { check: "visible", locator: "#x" } }] },
+    quarantinedAssertionFail: { tests: [{ name: "a", status: "quarantined", assertion: { check: "visible", locator: "#x" } }] },
+    skippedAssertion: { tests: [{ name: "a", status: "skipped", assertion: { check: "visible", locator: "#x" } }] },
+    unavailableAssertion: { tests: [{ name: "a", status: "unavailable", assertion: { check: "visible", locator: "#x" } }] },
     malformedAssertion: { tests: [{ name: "a", status: "passed", assertion: "nope" }] },
     dedupedMixed: { tests: [{ name: "a", status: "passed" }, { name: "b", status: "deduped" }] },
     skippedOnly: { tests: [{ name: "a", status: "skipped" }] },
@@ -82,8 +82,8 @@ test("result value driving the exit code is untouched by the new key", () => {
 
 test("verification is order-independent at the report level, same as the pure Verification module", () => {
     const rows = [
-        { name: "a", status: "passed", assertion: { check: "visible" } },
-        { name: "b", status: "failed", assertion: { check: "visible" } },
+        { name: "a", status: "passed", assertion: { check: "visible", locator: "#x" } },
+        { name: "b", status: "failed", assertion: { check: "visible", locator: "#x" } },
         { name: "c", status: "deduped" },
     ];
     const r1 = ReportManager.buildReport({ tests: rows, runId: "R", duration: "0s" });

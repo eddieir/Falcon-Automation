@@ -14,6 +14,12 @@
  * WP-79a rows carry only legacy fields (no `journeyId`, no `required`); the
  * whole run is treated as one implicit journey. `journeyId`/`required`
  * arrive with WP-79s.
+ *
+ * KNOWN LIMIT until WP-79s: `ShardMerge.buildRows` drops the `assertion`
+ * object, so a shard-merged report classifies assertion rows as plain
+ * interactions and reports INTERACTION_ONLY. That understates verification
+ * and can never overclaim BUSINESS_VERIFIED. Do not gate on
+ * `verification.level` for merged/parallel runs before WP-79s.
  */
 
 const REASON_CODES = Object.freeze({
@@ -56,6 +62,22 @@ function classifyRow(row) {
         if (!isPlainObject(row.assertion)) {
             // A malformed assertion record can never be trusted enough to
             // report PASS/FAIL; it is INCONCLUSIVE regardless of `status`.
+            return {
+                ignored: false,
+                assertionOutcome: "INCONCLUSIVE",
+                interaction: false,
+                technicalFailure: false,
+                reasonCodes: [REASON_CODES.MALFORMED_ASSERTION],
+            };
+        }
+
+        // A PASS needs evidence: the `expect` runner always records the check
+        // and the locator. An assertion object without them cannot support a
+        // business-verified claim, so it is INCONCLUSIVE, never PASS. FAIL is
+        // deliberately not subject to this rule: a failure is never reduced.
+        const hasEvidence = typeof row.assertion.check === "string" && row.assertion.check !== ""
+            && typeof row.assertion.locator === "string" && row.assertion.locator !== "";
+        if (status === "passed" && !hasEvidence) {
             return {
                 ignored: false,
                 assertionOutcome: "INCONCLUSIVE",
