@@ -22,7 +22,10 @@
 | Code Review CR-F, Security SEC-G | `ce5c54b` | ACCEPT WITH RISKS (range over-block fixed), NON-BLOCKING (P3s fixed or accepted) |
 | Code Review CR-G, Security SEC-H (last hook revision; all code and agent files final) | `890a41c` | ACCEPT WITH RISKS (no findings of substance); NON-BLOCKING (no P0-P2; N1, N2 resolved, N3, N4 documented) |
 
-The commit after `890a41c` changes only this record. Every code, agent and skill file is as reviewed at `890a41c`.
+| Caller-identity fix (SEC-H P3): payload shapes verified live; Security SEC-I, Code Review CR-H | `b323846` | NON-BLOCKING (SEC-H P3 resolved; two new P3s); ACCEPT WITH RISKS |
+| Delta closing SEC-I's P3s (whitespace `agent_type`, `--agent` caveat): Security SEC-J, Code Review CR-I | `6efc0aa` | NON-BLOCKING; ACCEPT |
+
+The commit after `6efc0aa` changes only this record. Every code, agent and skill file is as reviewed at `6efc0aa` (agent and skill files as at `890a41c`/`21f7f32`, unchanged since).
 
 Never covered by a single reviewer: a one-pass review of the whole diff at the final SHA. Coverage is the union of the rows above.
 
@@ -30,6 +33,7 @@ Never covered by a single reviewer: a one-pass review of the whole diff at the f
 - The `Skill` tool has no per-skill scope; the matrix lists intended skills only.
 - The denylist for other subagents is advisory; the allowlist covers only the three Bash roles and only calls routed through `Bash`.
 - Fail-closed needs Claude Code >= 2.1.295; older versions ignore `onFailure`.
+- `claude --agent <role>` run by a human is the main session, so the per-role allowlist does not apply to it.
 - If Claude Code changes the main-session payload shape (a present but null/empty `agent_id`), the hook blocks the coordinator's Bash until updated (fail-safe, loud). SEC-H P3 (non-string `agent_id` trusted as main) is fixed.
 - Allowlisted roles can reach any local port, read committed secrets with `git show`, and run repo scripts that may write files.
 - Bash is still held by Developer, QA, Code Reviewer, Security, DevOps, Release Manager, Solution Architect, Technical Writer and Production Director (pre-existing), plus Benchmark, Developer Experience and Performance & Reliability (new, allowlisted).
