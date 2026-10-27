@@ -94,6 +94,7 @@ for (const p of [
 ]) assert.strictEqual(decide(p), null, JSON.stringify(p));
 
 // --- Identity handling is fail-safe: a PRESENT agent_id that is not a non-blank string is denied, never trusted as main ---
+// NaN exercises the in-process path only; over JSON it serializes to null, which the process-level checks cover.
 for (const bad of [null, '', ' ', '\t\n', 0, 5, 1, -1, true, false, {}, { id: 'a' }, [], ['a'], NaN]) {
   for (const command of ['ls', 'claude -p hi', 'git status']) {
     for (const agent_type of [undefined, bench, 'qa-engineer']) {
@@ -108,7 +109,7 @@ assert.strictEqual(decide({ agent_id: 'a747b07fa19a3a043', agent_type: bench, to
 assert(decide({ agent_id: 'a747b07fa19a3a043', agent_type: bench, tool_input: { command: 'ls' } }), 'valid id, off-allowlist command');
 assert.strictEqual(decide({ agent_id: 'a747b07fa19a3a043', agent_type: 'qa-engineer', tool_input: { command: 'echo sub-call' } }), null);
 // Missing or non-string agent_type with a valid agent_id is denied.
-for (const t of [undefined, null, '', 5, {}, []]) {
+for (const t of [undefined, null, '', ' ', '\t', 5, {}, []]) {
   const p = { agent_id: 'a1', tool_input: { command: 'ls' } };
   if (t !== undefined) p.agent_type = t;
   assert(decide(p), `agent_type ${JSON.stringify(t)} must be denied`);
