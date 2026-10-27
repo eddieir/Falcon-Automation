@@ -85,9 +85,36 @@ assert(decide({ agent_id: 'a1', agent_type: '', tool_input: { command: 'ls' } })
 assert(decide(as('Benchmark-Evaluation-Engineer', 'ls')), 'case variants of a profile role must still be allowlisted');
 
 // --- Main session is never restricted by this hook ---
-for (const p of [{ tool_input: { command: 'claude -p hi' } }, { tool_input: { command: 'npm install -g foo' } }, { agent_id: '', agent_type: bench, tool_input: { command: 'ls' } }]) {
-  assert.strictEqual(decide(p), null);
+// Verified payload shapes (Claude Code 2.1.311): plain main session has no agent_id/agent_type keys; a session started
+// with --agent has agent_type only; a subagent has both as non-empty strings.
+for (const p of [
+  { tool_input: { command: 'claude -p hi' } },
+  { tool_input: { command: 'npm install -g foo' } },
+  { agent_type: bench, tool_input: { command: 'ls' } } // --agent main session: agent_type without agent_id
+]) assert.strictEqual(decide(p), null, JSON.stringify(p));
+
+// --- Identity handling is fail-safe: a PRESENT agent_id that is not a non-blank string is denied, never trusted as main ---
+for (const bad of [null, '', ' ', '\t\n', 0, 5, 1, -1, true, false, {}, { id: 'a' }, [], ['a'], NaN]) {
+  for (const command of ['ls', 'claude -p hi', 'git status']) {
+    for (const agent_type of [undefined, bench, 'qa-engineer']) {
+      const p = { agent_id: bad, tool_input: { command } };
+      if (agent_type) p.agent_type = agent_type;
+      assert(decide(p), `agent_id ${JSON.stringify(bad)} must be denied (command ${command}, type ${agent_type})`);
+    }
+  }
 }
+// A valid agent_id is a non-blank string and is then judged by role.
+assert.strictEqual(decide({ agent_id: 'a747b07fa19a3a043', agent_type: bench, tool_input: { command: 'git status --short' } }), null);
+assert(decide({ agent_id: 'a747b07fa19a3a043', agent_type: bench, tool_input: { command: 'ls' } }), 'valid id, off-allowlist command');
+assert.strictEqual(decide({ agent_id: 'a747b07fa19a3a043', agent_type: 'qa-engineer', tool_input: { command: 'echo sub-call' } }), null);
+// Missing or non-string agent_type with a valid agent_id is denied.
+for (const t of [undefined, null, '', 5, {}, []]) {
+  const p = { agent_id: 'a1', tool_input: { command: 'ls' } };
+  if (t !== undefined) p.agent_type = t;
+  assert(decide(p), `agent_type ${JSON.stringify(t)} must be denied`);
+}
+// A non-object payload is not a caller at all.
+for (const p of [null, undefined, 0, 'x', true, []]) assert(decide(p), `payload ${JSON.stringify(p)} must be denied`);
 
 // --- Fail-closed policy for the actual process (exit code 2 = block) ---
 for (const bad of ['', 'not json', '{', 'null', '42', '"str"', '[]x', '[]', '[{"agent_id":"a"}]']) {
@@ -96,6 +123,12 @@ for (const bad of ['', 'not json', '{', 'null', '42', '"str"', '[]x', '[]', '[{"
   assert(/blocked/.test(r.stderr), 'a reason must be written to stderr');
 }
 assert.strictEqual(run(JSON.stringify({ tool_input: { command: 'ls' } })).status, 0, 'valid main-session input must pass');
+assert.strictEqual(run(JSON.stringify({ agent_type: 'qa-engineer', tool_input: { command: 'ls' } })).status, 0, '--agent main session must pass');
+for (const id of ['null', '""', '5', 'true', '{}', '[]', '" "']) {
+  const r = run('{"agent_id":' + id + ',"agent_type":"qa-engineer","tool_input":{"command":"ls"}}');
+  assert.strictEqual(r.status, 2, 'agent_id ' + id + ' must block (exit 2)');
+  assert(/Unrecognized caller identity/.test(r.stderr), 'reason must be written to stderr');
+}
 assert.strictEqual(run(JSON.stringify(sub('git status'))).status, 0, 'allowed subagent command must pass');
 assert.strictEqual(run(JSON.stringify(sub('claude -p x'))).status, 2, 'denied subagent command must block');
 assert.strictEqual(run(JSON.stringify(as(bench, 'ls'))).status, 2, 'off-allowlist command must block');

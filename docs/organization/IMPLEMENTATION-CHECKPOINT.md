@@ -30,7 +30,7 @@ Never covered by a single reviewer: a one-pass review of the whole diff at the f
 - The `Skill` tool has no per-skill scope; the matrix lists intended skills only.
 - The denylist for other subagents is advisory; the allowlist covers only the three Bash roles and only calls routed through `Bash`.
 - Fail-closed needs Claude Code >= 2.1.295; older versions ignore `onFailure`.
-- A hook payload whose `agent_id` is present but not a string is treated as the main session (SEC-H P3; the harness sends strings, checked live).
+- If Claude Code changes the main-session payload shape (a present but null/empty `agent_id`), the hook blocks the coordinator's Bash until updated (fail-safe, loud). SEC-H P3 (non-string `agent_id` trusted as main) is fixed.
 - Allowlisted roles can reach any local port, read committed secrets with `git show`, and run repo scripts that may write files.
 - Bash is still held by Developer, QA, Code Reviewer, Security, DevOps, Release Manager, Solution Architect, Technical Writer and Production Director (pre-existing), plus Benchmark, Developer Experience and Performance & Reliability (new, allowlisted).
 - `differential-review` stays CC BY-SA 4.0 (see `THIRD_PARTY_NOTICES.md`); counsel should confirm before redistribution.
