@@ -155,6 +155,24 @@ function shardOf(v, path) {
 }
 const commitOf = (v, p) => { if (v !== "unknown") str(v, p, 40, { pattern: /^[0-9a-f]{40}$/ }); };
 
+// WP-79s: bounded assertion-evidence metadata carried on shard rows.
+const CHECK_NAME = /^[A-Za-z0-9._-]+$/;
+const JOURNEY_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const isJourneyId = (v) => typeof v === "string" && JOURNEY_ID.test(v) && !FORBIDDEN_KEYS.has(v);
+
+function journeyId(v, p) {
+    str(v, p, 64, { min: 1, pattern: JOURNEY_ID });
+    if (FORBIDDEN_KEYS.has(v)) rej("FORBIDDEN_VALUE", p);
+}
+
+/** `null` marks a source assertion record that was malformed; it can only ever classify as INCONCLUSIVE. */
+function rowAssertion(v, p) {
+    if (v === null) return;
+    obj(v, p, [], ["check", "locator"]);
+    if (v.check !== undefined) str(v.check, p + ".check", 40, { min: 1, pattern: CHECK_NAME });
+    if (v.locator !== undefined) selector(v.locator, p + ".locator");
+}
+
 function checkSize(o, max, code = "TOO_LARGE") {
     if (byteLen(o) > max) rej(code, "$");
 }
@@ -246,7 +264,7 @@ function _fragment(f) {
     if (f.error !== undefined) nullable(f.error, "$.error", (v, p) => str(v, p, Limits.FRAGMENT_MAX_ERROR));
     arr(f.results, "$.results", Limits.FRAGMENT_MAX_ROWS).forEach((r, i) => {
         const p = `$.results[${i}]`;
-        obj(r, p, ["scenario", "scn", "rep", "status", "durationMs", "errorType", "error"], ["description"]);
+        obj(r, p, ["scenario", "scn", "rep", "status", "durationMs", "errorType", "error"], ["description", "assertion", "journeyId", "required"]);
         str(r.scenario, p + ".scenario", 200, { min: 1 });
         nullable(r.scn, p + ".scn", (v, q) => int(v, q, 0, 100000));
         nullable(r.rep, p + ".rep", (v, q) => int(v, q, 0, 1000));
@@ -255,6 +273,16 @@ function _fragment(f) {
         nullable(r.errorType, p + ".errorType", (v, q) => str(v, q, 40, { pattern: ERROR_TYPE }));
         nullable(r.error, p + ".error", (v, q) => str(v, q, Limits.FRAGMENT_MAX_ERROR));
         if (r.description !== undefined) description(r.description, p + ".description");
+        const hasAssertion = r.assertion !== undefined;
+        if (hasAssertion) {
+            if (r.status === "deduped") rej("CONTRADICTION", p + ".assertion");
+            rowAssertion(r.assertion, p + ".assertion");
+        }
+        if (r.journeyId !== undefined) journeyId(r.journeyId, p + ".journeyId");
+        if (r.required !== undefined) {
+            bool(r.required, p + ".required");
+            if (!hasAssertion) rej("CONTRADICTION", p + ".required");
+        }
     });
     arr(f.uiIssues, "$.uiIssues", Limits.FRAGMENT_MAX_UI_ISSUES).forEach((u, i) => {
         const p = `$.uiIssues[${i}]`;
@@ -399,5 +427,5 @@ const validateEventPayload = (type, p) => wrap((x) => _payload(type, x))(p);
 module.exports = {
     validateManifest, validateFragment, validateJournal, validateEventPayload,
     canonicalJson, sha256, eventId, EVENT_TYPES, HEALING_TIERS, DISPOSITIONS,
-    PAYLOAD_MAX_BYTES, redactText, stripUrlQueries, storedUrl, urlId,
+    PAYLOAD_MAX_BYTES, isJourneyId, redactText, stripUrlQueries, storedUrl, urlId,
 };
