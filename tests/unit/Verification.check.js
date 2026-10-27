@@ -39,28 +39,28 @@ function row(status, assertion) {
 // ---------------------------------------------------------------------
 
 test("classifyRow: passed + assertion -> PASS", () => {
-    const c = classifyRow(row("passed", { check: "visible" }));
+    const c = classifyRow(row("passed", { check: "visible", locator: "#x" }));
     assert.strictEqual(c.assertionOutcome, "PASS");
     assert.strictEqual(c.ignored, false);
 });
 
 test("classifyRow: failed + assertion -> FAIL", () => {
-    const c = classifyRow(row("failed", { check: "visible" }));
+    const c = classifyRow(row("failed", { check: "visible", locator: "#x" }));
     assert.strictEqual(c.assertionOutcome, "FAIL");
 });
 
 test("classifyRow: unavailable + assertion -> INCONCLUSIVE", () => {
-    const c = classifyRow(row("unavailable", { check: "visible" }));
+    const c = classifyRow(row("unavailable", { check: "visible", locator: "#x" }));
     assert.strictEqual(c.assertionOutcome, "INCONCLUSIVE");
 });
 
 test("classifyRow: skipped + assertion -> NOT_TESTED", () => {
-    const c = classifyRow(row("skipped", { check: "visible" }));
+    const c = classifyRow(row("skipped", { check: "visible", locator: "#x" }));
     assert.strictEqual(c.assertionOutcome, "NOT_TESTED");
 });
 
 test("classifyRow: quarantined + assertion -> FAIL (Q1, never hidden)", () => {
-    const c = classifyRow(row("quarantined", { check: "visible" }));
+    const c = classifyRow(row("quarantined", { check: "visible", locator: "#x" }));
     assert.strictEqual(c.assertionOutcome, "FAIL");
 });
 
@@ -82,7 +82,7 @@ test("classifyRow: malformed assertion (string/number/null) -> INCONCLUSIVE + MA
 
 test("classifyRow: deduped -> ignored entirely, even with an assertion present", () => {
     const c1 = classifyRow(row("deduped"));
-    const c2 = classifyRow(row("deduped", { check: "visible" }));
+    const c2 = classifyRow(row("deduped", { check: "visible", locator: "#x" }));
     assert.strictEqual(c1.ignored, true);
     assert.strictEqual(c2.ignored, true);
 });
@@ -114,7 +114,7 @@ test("classifyRow: skipped/quarantined without assertion -> no contribution", ()
 // ---------------------------------------------------------------------
 
 test("N1: all required assertions pass -> BUSINESS_VERIFIED", () => {
-    const r = aggregateRun([row("passed", { check: "visible" }), row("passed", { check: "visible" })]);
+    const r = aggregateRun([row("passed", { check: "visible", locator: "#x" }), row("passed", { check: "visible", locator: "#x" })]);
     assert.strictEqual(r.level, "BUSINESS_VERIFIED");
     assert.strictEqual(r.assertions.required, 2);
     assert.strictEqual(r.assertions.pass, 2);
@@ -124,19 +124,19 @@ test("N1: all required assertions pass -> BUSINESS_VERIFIED", () => {
 });
 
 test("N2: one required assertion fails -> FAILED", () => {
-    const r = aggregateRun([row("passed", { check: "visible" }), row("failed", { check: "visible" })]);
+    const r = aggregateRun([row("passed", { check: "visible", locator: "#x" }), row("failed", { check: "visible", locator: "#x" })]);
     assert.strictEqual(r.level, "FAILED");
     assert.strictEqual(r.journeys.failed, 1);
 });
 
 test("N3: required assertion never runs (earlier step failed) -> UNVERIFIED", () => {
-    const r = aggregateRun([row("skipped", { check: "visible" })]);
+    const r = aggregateRun([row("skipped", { check: "visible", locator: "#x" })]);
     assert.strictEqual(r.level, "UNVERIFIED");
     assert.strictEqual(r.assertions.notTested, 1);
 });
 
 test("N4: required evidence missing (target absent) -> UNVERIFIED", () => {
-    const r = aggregateRun([row("unavailable", { check: "visible" })]);
+    const r = aggregateRun([row("unavailable", { check: "visible", locator: "#x" })]);
     assert.strictEqual(r.level, "UNVERIFIED");
     assert.strictEqual(r.assertions.inconclusive, 1);
 });
@@ -147,7 +147,7 @@ test("N4: required evidence missing (target absent) -> UNVERIFIED", () => {
 
 test("N11: quarantined technical instability never turns a business FAIL into PASS", () => {
     const r = aggregateRun([
-        row("failed", { check: "visible" }),
+        row("failed", { check: "visible", locator: "#x" }),
         row("quarantined"), // no assertion: pure technical instability
     ]);
     assert.strictEqual(r.level, "FAILED");
@@ -192,17 +192,17 @@ test("malformed assertion row surfaces MALFORMED_ASSERTION in the run block", ()
 });
 
 test("deduped rows change nothing (invariant 2, part 1)", () => {
-    const base = [row("passed", { check: "visible" }), row("failed", { check: "visible" })];
-    const withDupes = [...base, row("deduped"), row("deduped", { check: "visible" })];
+    const base = [row("passed", { check: "visible", locator: "#x" }), row("failed", { check: "visible", locator: "#x" })];
+    const withDupes = [...base, row("deduped"), row("deduped", { check: "visible", locator: "#x" })];
     assert.deepStrictEqual(aggregateRun(withDupes), aggregateRun(base));
 });
 
 test("order independence (invariant 2, part 2): shuffled rows produce the identical block", () => {
     const rows = [
-        row("passed", { check: "visible" }),
-        row("failed", { check: "visible" }),
-        row("skipped", { check: "visible" }),
-        row("unavailable", { check: "visible" }),
+        row("passed", { check: "visible", locator: "#x" }),
+        row("failed", { check: "visible", locator: "#x" }),
+        row("skipped", { check: "visible", locator: "#x" }),
+        row("unavailable", { check: "visible", locator: "#x" }),
         row("quarantined"),
         row("deduped"),
     ];
@@ -216,19 +216,19 @@ test("order independence (invariant 2, part 2): shuffled rows produce the identi
 });
 
 test("invariant 3: a FAIL is never reduced by adding passing rows", () => {
-    const failing = aggregateRun([row("failed", { check: "visible" })]);
+    const failing = aggregateRun([row("failed", { check: "visible", locator: "#x" })]);
     assert.strictEqual(failing.level, "FAILED");
     const withMorePasses = aggregateRun([
-        row("failed", { check: "visible" }),
-        row("passed", { check: "visible" }),
-        row("passed", { check: "visible" }),
+        row("failed", { check: "visible", locator: "#x" }),
+        row("passed", { check: "visible", locator: "#x" }),
+        row("passed", { check: "visible", locator: "#x" }),
         row("passed"),
     ]);
     assert.strictEqual(withMorePasses.level, "FAILED");
 });
 
 test("block shape matches the contract's illustrative schema", () => {
-    const r = aggregateRun([row("passed", { check: "visible" })]);
+    const r = aggregateRun([row("passed", { check: "visible", locator: "#x" })]);
     assert.deepStrictEqual(Object.keys(r).sort(), ["assertions", "journeys", "level", "reasonCodes", "schemaVersion"].sort());
     assert.strictEqual(r.schemaVersion, 1);
     assert.deepStrictEqual(Object.keys(r.journeys).sort(), ["businessVerified", "failed", "interactionOnly", "total", "unverified"].sort());
@@ -245,7 +245,7 @@ test("aggregateRun never copies locator/value text into the block", () => {
 });
 
 test("aggregateRun is deterministic: same input, same output, no clock/ids", () => {
-    const rows = [row("passed", { check: "visible" }), row("failed")];
+    const rows = [row("passed", { check: "visible", locator: "#x" }), row("failed")];
     assert.deepStrictEqual(aggregateRun(rows), aggregateRun(rows));
 });
 
