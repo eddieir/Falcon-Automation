@@ -78,9 +78,7 @@ playwright-cli cookie-list --path=/api
 
 ### Get Specific Cookie
 
-```bash
-playwright-cli cookie-get session_id
-```
+Removed by Falcon: `cookie-get` prints cookie values and is forbidden for agents.
 
 ### Set a Cookie
 

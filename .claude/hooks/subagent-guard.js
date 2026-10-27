@@ -8,26 +8,44 @@
 // session (no agent_id) is unaffected.
 //
 // Known over-blocking: any `gh` command with an `--attach` token is denied, even
-// inside quoted body text; the coordinator can run it. Defense in depth, not a sandbox: a command built indirectly (variables,
+// inside quoted body text; the coordinator can run it. Best-effort defense in depth, not a sandbox: a command built indirectly (variables,
 // scripts) is not detected. Linear token scan, no backtracking regexes.
 
 const WORD_SPLIT = /[|;&\n`()]+/;
 const base = (t) => t.replace(/^.*\//, "").toLowerCase();
 
-const WRAPPERS = new Set(["env", "command", "exec", "time", "nohup", "sudo", "nice"]);
+const WRAPPERS = new Set(["env", "command", "exec", "time", "nohup", "sudo", "nice", "timeout", "xargs"]);
+const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
 
 // Index of the command word: skips leading VAR=value assignments and wrapper
 // commands, so a quoted string such as `git commit -m "claude -p"` never counts.
 function commandIndex(words) {
   let i = 0;
-  while (i < words.length && (/^[a-z_][a-z0-9_]*=/.test(words[i]) || WRAPPERS.has(words[i]))) i += 1;
+  while (i < words.length && (/^[a-z_][a-z0-9_]*=/.test(words[i]) || WRAPPERS.has(words[i]))) {
+    i += 1;
+    // Skip the wrapper's own options and simple operands (-u root, 60, 10s).
+    while (i < words.length && (/^-/.test(words[i]) || /^[0-9]+[smhd]?$/.test(words[i]) || words[i] === "root")) i += 1;
+  }
   return i;
 }
 
 function reasonFor(tokens) {
   const words = tokens.map(base);
   const first = commandIndex(words);
-  if (words[first] === "claude" && tokens.slice(first + 1).some((t) => t === "-p" || t === "--print" || /^-p[^-]/.test(t))) {
+  let cmd = words[first];
+  let argAt = first + 1;
+  if (cmd === "npx" || cmd === "bunx") { // npx [-y] <package>: judge the package that runs
+    let j = first + 1;
+    while (j < words.length && /^-/.test(words[j])) j += 1;
+    if (tokens.some((t) => /@latest$/.test(t))) return "Subagents must not run @latest packages.";
+    cmd = words[j] === "claude-code" ? "claude" : words[j]; // base() drops the @anthropic-ai/ scope
+    argAt = j + 1;
+  }
+  if (SHELLS.has(cmd)) { // bash -c "claude -p x": judge the inner command
+    const c = tokens.indexOf("-c");
+    if (c !== -1) return reasonFor(tokens.slice(c + 1));
+  }
+  if (cmd === "claude" && tokens.slice(argAt).some((t) => t === "-p" || t === "--print" || t.startsWith("--print=") || /^-p[^-]/.test(t))) {
     return "Subagents must not start nested Claude sessions.";
   }
   if (words.includes("gh") && tokens.some((t) => t === "--attach" || t.startsWith("--attach="))) {
@@ -37,7 +55,7 @@ function reasonFor(tokens) {
   if (pm !== -1) {
     const rest = tokens.slice(pm + 1);
     const adds = rest.some((t) => ["install", "i", "add"].includes(t.toLowerCase()));
-    const global = rest.some((t) => t === "-g" || t === "--global" || t === "global");
+    const global = rest.some((t) => t === "-g" || t === "--global" || t === "global" || t === "--location=global");
     if ((adds && global) || (words[pm] === "yarn" && rest[0] === "global")) return "Subagents must not install packages globally.";
   }
   if (tokens.includes("attach") && tokens.some((t) => t.startsWith("--extension") || t.startsWith("--cdp"))) {
