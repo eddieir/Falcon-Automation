@@ -29,7 +29,10 @@ const CASES = {
 
 test("buildReport is byte-identical to the previous implementation", () => {
     for (const [k, o] of Object.entries(CASES)) {
-        assert.strictEqual(JSON.stringify(ReportManager.buildReport({ ...o, runId: "R", duration: "1.00s" }), null, 2),
+        const { verification, ...legacy } = ReportManager.buildReport({ ...o, runId: "R", duration: "1.00s" });
+        // WP-79a: `verification` is the one additive key; every legacy key stays byte-identical.
+        assert.ok(verification && verification.schemaVersion === 1, `${k}: verification block present`);
+        assert.strictEqual(JSON.stringify(legacy, null, 2),
             JSON.stringify(oldReport(o, "R", "1.00s"), null, 2), k);
     }
 });
@@ -44,9 +47,11 @@ test("generateReport writes the same bytes as the previous implementation (volat
             const rep = rm.generateReport(o);
             const written = JSON.parse(fs.readFileSync(path.join(dir, "reports", "test-report.json"), "utf8"));
             assert.deepStrictEqual(written, JSON.parse(JSON.stringify(rep)));
-            const norm = { ...written, runId: "R", duration: "D" };
+            const { verification, ...writtenLegacy } = written;
+            assert.ok(verification && verification.schemaVersion === 1, `${k}: verification written`);
+            const norm = { ...writtenLegacy, runId: "R", duration: "D" };
             assert.strictEqual(JSON.stringify(norm, null, 2), JSON.stringify(oldReport(o, "R", "D"), null, 2), k);
-            assert.deepStrictEqual(Object.keys(written), Object.keys(oldReport(o, "R", "D")));
+            assert.deepStrictEqual(Object.keys(writtenLegacy), Object.keys(oldReport(o, "R", "D")));
             assert.strictEqual(process.exitCode, written.result === "PASSED" ? 0 : 1);
         }
     } finally { process.chdir(cwd); console.log = log; process.exitCode = code; }
