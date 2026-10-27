@@ -173,7 +173,7 @@ function decide(input) {
   if (kind === "main") return null;
   if (kind === "invalid") return "Unrecognized caller identity (agent_id is present but is not a non-empty string); blocked as a precaution.";
   // Claude Code sends agent_type for every subagent call. If it is missing the role is unknown, so deny.
-  if (typeof input.agent_type !== "string" || input.agent_type.length === 0) return "Subagent call without agent_type cannot be matched to a role policy.";
+  if (typeof input.agent_type !== "string" || input.agent_type.trim().length === 0) return "Subagent call without agent_type cannot be matched to a role policy.";
   // agent_type may be namespaced (plugin:name) or differently cased; judge the bare lower-case name.
   const roleName = input.agent_type.replace(/^.*:/, "").toLowerCase();
   const profile = Object.prototype.hasOwnProperty.call(PROFILES, roleName) ? PROFILES[roleName] : null;
