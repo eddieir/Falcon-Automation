@@ -11,12 +11,12 @@ for (const cmd of [
   'claude -p "hi"', 'cd x && claude --print --agent developer hi', '/usr/local/bin/claude -p hi',
   'gh pr comment 1 --body x --attach ./a.png', 'gh pr create --attach=./v.webm',
   'npm install -g @playwright/cli@latest', 'npm i --global foo', 'pnpm add -g foo', 'yarn global add foo',
-  'playwright-cli attach --extension=chrome', 'npx playwright cli attach --cdp=http://localhost:9222'
+  'FOO=1 claude -p hi', 'env claude --print x', 'playwright-cli attach --extension=chrome', 'npx playwright cli attach --cdp=http://localhost:9222'
 ]) assert(decide(sub(cmd)), `should deny: ${cmd}`);
 
 for (const cmd of [
   'npx --no-install playwright cli open http://127.0.0.1:3000', 'npm install --no-save left-pad', 'npm run test:unit',
-  'gh pr view 120 --json state', 'git diff origin/main --stat', 'node tests/unit/AgentCatalog.check.js'
+  'gh pr view 120 --json state', 'git diff origin/main --stat', 'git commit -m "feat: claude -p support"', 'echo "run claude --print later"', 'gh issue comment 1 --body "mentions --attach"', 'node tests/unit/AgentCatalog.check.js'
 ]) assert.strictEqual(decide(sub(cmd)), null, `should allow: ${cmd}`);
 
 // The main session is never blocked by this hook.

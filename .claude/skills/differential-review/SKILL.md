@@ -15,7 +15,7 @@ Security-focused code review for PRs, commits, and diffs.
 2. **Evidence-Based**: Every finding backed by git history, line numbers, attack scenarios
 3. **Adaptive**: Scale to codebase size (SMALL/MEDIUM/LARGE)
 4. **Honest**: Explicitly state coverage limits and confidence level
-5. **Output-Driven**: Always generate comprehensive markdown report file
+5. **Output-Driven**: Produce a comprehensive markdown report (return it in the handoff; write a file only to a path the task assigns)
 
 ---
 
@@ -191,7 +191,7 @@ These patterns require adversarial analysis even in quick triage.
 - Generate concrete attack scenarios
 - Reference specific line numbers and commits
 - Be honest about coverage limitations
-- Always generate the output file
+- Always produce the report (file only at an assigned path)
 
 **Don't:**
 - Skip git history analysis

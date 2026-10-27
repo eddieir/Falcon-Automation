@@ -13,10 +13,20 @@
 const WORD_SPLIT = /[|;&\n`()]+/;
 const base = (t) => t.replace(/^.*\//, "").toLowerCase();
 
+const WRAPPERS = new Set(["env", "command", "exec", "time", "nohup", "sudo", "nice"]);
+
+// Index of the command word: skips leading VAR=value assignments and wrapper
+// commands, so a quoted string such as `git commit -m "claude -p"` never counts.
+function commandIndex(words) {
+  let i = 0;
+  while (i < words.length && (/^[a-z_][a-z0-9_]*=/.test(words[i]) || WRAPPERS.has(words[i]))) i += 1;
+  return i;
+}
+
 function reasonFor(tokens) {
   const words = tokens.map(base);
-  const first = words.indexOf("claude");
-  if (first !== -1 && tokens.slice(first + 1).some((t) => t === "-p" || t === "--print" || /^-p[^-]/.test(t))) {
+  const first = commandIndex(words);
+  if (words[first] === "claude" && tokens.slice(first + 1).some((t) => t === "-p" || t === "--print" || /^-p[^-]/.test(t))) {
     return "Subagents must not start nested Claude sessions.";
   }
   if (words.includes("gh") && tokens.some((t) => t === "--attach" || t.startsWith("--attach="))) {
@@ -36,7 +46,7 @@ function reasonFor(tokens) {
 }
 
 function decide(input) {
-  if (!input || !input.agent_id) return null; // main session: no opinion
+  if (!input || typeof input.agent_id !== "string" || input.agent_id.length === 0) return null; // main session: no opinion
   const command = input.tool_input && typeof input.tool_input.command === "string" ? input.tool_input.command : "";
   for (const segment of command.replace(/\\\n/g, " ").replace(/\$\(/g, ";").split(WORD_SPLIT)) {
     const tokens = segment.split(/\s+/).map((t) => t.replace(/^["']+|["']+$/g, "")).filter(Boolean);
