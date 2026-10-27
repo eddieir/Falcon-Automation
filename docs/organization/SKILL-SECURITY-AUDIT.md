@@ -38,7 +38,7 @@ Checked against the Claude Code docs on 2026-10-27 (permissions, hooks, sub-agen
 
 Bash was removed from Chief Architect, AI/Agentic, Data & Analytics and Site Reliability Engineer, which can read code with Read/Grep/Glob. The narrowest supported restriction is this hook-based allowlist; Claude Code has no per-subagent Bash pattern rules.
 
-Accepted residual risks (CTO to confirm): the advisory denylist is bypassable; the allowlist protects only the three roles; the `Skill` tool has no per-skill scope; fail-closed on a malformed payload would also stop the coordinator's Bash call if the harness ever sent one (it always sends valid JSON, and the failure is one blocked call, not a crash).
+Accepted residual risks (CTO to confirm): the allowlist lets the three roles reach any local port (`localhost:22` included); `git show`/`git diff` can read secrets that are committed to git; the benchmark and unit scripts they may run parse their own arguments and can write files (for example `--out=`); `cli screenshot` writes under `.playwright-cli/`; the advisory denylist is bypassable; the allowlist protects only the three roles; the `Skill` tool has no per-skill scope; fail-closed on a malformed payload would also stop the coordinator's Bash call if the harness ever sent one (it always sends valid JSON, and the failure is one blocked call, not a crash).
 
 The installed directories have no hooks and no `scripts/` (the validator enforces the latter). Prompt-injection and governance-override text was looked for by reading and keyword search; none found, which is not proof of absence. The Security Engineer review of the final revision is recorded in [IMPLEMENTATION-CHECKPOINT](IMPLEMENTATION-CHECKPOINT.md).
 
