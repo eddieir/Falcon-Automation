@@ -153,9 +153,25 @@ function allowlistReason(profile, input) {
   return null;
 }
 
+// Caller identity, verified against real Claude Code 2.1.311 PreToolUse payloads:
+//   main session:               no `agent_id` and no `agent_type` key
+//   main session with --agent:  `agent_type` only, still no `agent_id`
+//   subagent:                   `agent_id` and `agent_type`, both non-empty strings
+// So an ABSENT `agent_id` key is the main session. A key that is present but is not a non-blank string
+// (null, "", whitespace, number, boolean, object, array) is not something Claude Code sends; it is treated as
+// an unrecognized identity and denied rather than trusted as the coordinator. If a future Claude Code changes
+// the main-session shape, this blocks the coordinator's Bash loudly (see the message) instead of skipping checks.
+function callerKind(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return "invalid";
+  if (!Object.prototype.hasOwnProperty.call(input, "agent_id")) return "main";
+  return typeof input.agent_id === "string" && input.agent_id.trim().length > 0 ? "subagent" : "invalid";
+}
+
 // Returns a deny reason, or null to allow. Throws only on programmer error.
 function decide(input) {
-  if (!input || typeof input.agent_id !== "string" || input.agent_id.length === 0) return null; // main session
+  const kind = callerKind(input);
+  if (kind === "main") return null;
+  if (kind === "invalid") return "Unrecognized caller identity (agent_id is present but is not a non-empty string); blocked as a precaution.";
   // Claude Code sends agent_type for every subagent call. If it is missing the role is unknown, so deny.
   if (typeof input.agent_type !== "string" || input.agent_type.length === 0) return "Subagent call without agent_type cannot be matched to a role policy.";
   // agent_type may be namespaced (plugin:name) or differently cased; judge the bare lower-case name.
