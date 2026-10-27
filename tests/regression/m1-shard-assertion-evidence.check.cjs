@@ -134,12 +134,20 @@ test("A6 malformed source assertion is never a valid PASS", () => {
     assert.ok(!("check" in f.results[0].assertion));
 });
 
-test("A6b invalid journeyId/required on an assertion row fails closed to a malformed assertion", () => {
+test("A6b invalid journeyId/required are dropped without changing the assertion outcome", () => {
     for (const extra of [{ journeyId: "__proto__" }, { journeyId: "a b" }, { journeyId: "x".repeat(65) }, { required: "yes" }]) {
-        const f = fragmentFor(0, 2, [{ ...exec("passed"), ...extra }]);
-        assert.strictEqual(f.results[0].assertion, null, JSON.stringify(extra));
+        const f = fragmentFor(0, 2, [{ ...exec("failed"), ...extra }]);
+        assert.deepStrictEqual(f.results[0].assertion, EV, JSON.stringify(extra));
         assert.ok(!("journeyId" in f.results[0]) && !("required" in f.results[0]));
+        assert.ok(Schemas.validateFragment(f).ok);
     }
+});
+
+test("A6c a long hostile locator is bounded before redaction", () => {
+    const t0 = Date.now();
+    const f = fragmentFor(0, 2, [{ name: "a", status: "passed", assertion: { check: "visible", locator: "http://".repeat(40000) } }]);
+    assert.ok(Date.now() - t0 < 500);
+    assert.ok(f.results[0].assertion.locator.length <= Limits.SELECTOR_MAX);
 });
 
 test("A7 oversize metadata stays within existing limits (locator truncated, fragment cap still enforced)", () => {

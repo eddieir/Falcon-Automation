@@ -40,7 +40,7 @@ function toAssertion(a) {
     const out = {};
     try {
         if (typeof a.check === "string" && a.check !== "") out.check = clean(a.check, 40).replace(CHECK_UNSAFE, "-");
-        if (typeof a.locator === "string" && a.locator !== "") out.locator = clean(Schemas.redactText(Schemas.stripUrlQueries(a.locator)), Limits.SELECTOR_MAX);
+        if (typeof a.locator === "string" && a.locator !== "") out.locator = clean(Schemas.redactText(Schemas.stripUrlQueries(a.locator.slice(0, 4 * Limits.SELECTOR_MAX))), Limits.SELECTOR_MAX);
     } catch { return null; }
     return out;
 }
@@ -64,16 +64,13 @@ function toRow(r, scnByName, fallbackRep) {
     };
     // Deduped rows never executed and contribute nothing to verification (and the schema rejects an assertion on them).
     if (status === "deduped" || !r) return row;
-    const journeyOk = r.journeyId === undefined || Schemas.isJourneyId(r.journeyId);
-    const requiredOk = r.required === undefined || typeof r.required === "boolean";
+    // Invalid optional metadata is dropped; it never changes the assertion outcome, so a failure stays a failure.
+    const journeyOk = r.journeyId !== undefined && Schemas.isJourneyId(r.journeyId);
     if (Object.prototype.hasOwnProperty.call(r, "assertion")) {
-        // Invalid metadata on an assertion row fails closed: the row becomes a malformed assertion (INCONCLUSIVE).
-        if (journeyOk && requiredOk) {
-            row.assertion = toAssertion(r.assertion);
-            if (r.required !== undefined) row.required = r.required;
-            if (r.journeyId !== undefined) row.journeyId = r.journeyId;
-        } else row.assertion = null;
-    } else if (r.journeyId !== undefined && journeyOk) row.journeyId = r.journeyId;
+        row.assertion = toAssertion(r.assertion);
+        if (typeof r.required === "boolean") row.required = r.required;
+    }
+    if (journeyOk) row.journeyId = r.journeyId;
     return row;
 }
 
