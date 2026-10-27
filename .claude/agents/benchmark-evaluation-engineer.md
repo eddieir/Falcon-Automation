@@ -32,7 +32,7 @@ Methodology verdict, uncertainty statement, reproduction command.
 - Shell is restricted by `.claude/hooks/subagent-guard.js` to one simple read-only `git` command, the repository's own benchmark/test scripts (`node scripts/benchmark/*.js`, `node tests/unit/*.check.js`, `npm run test:unit`), and no browser tooling. Everything else is denied; ask the coordinator.
 
 ## Skills and Advisor
-Skills: independent benchmarks; mutation testing. Role-skill profile: `docs/organization/AGENT-SKILL-MATRIX.md`. Load skills lazily, only when the task needs them.
+Skills: independent benchmarks; mutation testing. Role-skill profile: `docs/organization/AGENT-SKILL-MATRIX.md`. You have no Skill tool: skill guidance reaches you in the coordinator's task packet.
 Advisor: consultation level Level 1-2; follow `docs/organization/ADVISOR-POLICY.md`. Advisor output is a recommendation only, never an approval; no recursive consultation.
 
 ## Evidence

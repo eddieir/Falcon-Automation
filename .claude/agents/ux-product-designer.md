@@ -28,7 +28,7 @@ Interaction spec, copy, accessibility checklist, usability risks.
 - The human CTO decides anything classified CTO_APPROVAL_REQUIRED; your output is a RECOMMENDATION.
 
 ## Skills and Advisor
-Skills: UX; accessibility; design systems. Role-skill profile: `docs/organization/AGENT-SKILL-MATRIX.md`. Load skills lazily, only when the task needs them.
+Skills: UX; accessibility; design systems. Role-skill profile: `docs/organization/AGENT-SKILL-MATRIX.md`. You have no Skill tool: skill guidance reaches you in the coordinator's task packet.
 Advisor: consultation level Level 0-1; follow `docs/organization/ADVISOR-POLICY.md`. Advisor output is a recommendation only, never an approval; no recursive consultation.
 
 ## Evidence

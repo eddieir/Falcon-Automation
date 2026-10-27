@@ -37,10 +37,10 @@ assert.deepStrictEqual(Object.keys(PROFILES).sort(),
 
 const bench = 'benchmark-evaluation-engineer', dx = 'developer-experience-engineer', perf = 'performance-reliability-engineer';
 const allowed = [
-  [bench, 'git status --short'], [bench, 'git -C /Users/x/Falcon-Org diff origin/main --stat'], [bench, 'git log --oneline -5'],
+  [bench, 'git status --short'], [bench, 'git diff origin/main --stat'], [bench, 'git show HEAD:package.json'], [bench, 'git log --oneline -5'],
   [bench, 'node scripts/benchmark/competitive-score.js --in docs/research/x.json'], [bench, 'node tests/unit/CiWait.check.js'], [bench, 'npm run test:unit'],
-  [dx, 'npx --no-install playwright --version'], [dx, 'npx --no-install playwright cli open http://127.0.0.1:3000'], [dx, 'git show HEAD'],
-  [perf, 'npx --no-install playwright trace actions trace.zip'], [perf, 'node scripts/benchmark/parallel.js'], [perf, 'git rev-parse HEAD']
+  [dx, 'npx --no-install playwright --version'], [dx, 'npx --no-install playwright cli open http://127.0.0.1:3000'], [dx, 'npx --no-install playwright cli -s=a snapshot'], [dx, 'npx --no-install playwright cli screenshot'], [dx, 'git show HEAD'],
+  [perf, 'npx --no-install playwright trace actions test-results/trace.zip'], [perf, 'node scripts/benchmark/parallel.js'], [perf, 'git rev-parse HEAD']
 ];
 for (const [a, c] of allowed) assert.strictEqual(decide(as(a, c)), null, `${a} should allow: ${c}`);
 
@@ -51,10 +51,23 @@ const denied = [
   [bench, 'claude -p hi'], [bench, 'bash -c ls'], [bench, 'ls'], [bench, ''], [bench, 'git status\nls'], [bench, 'FOO=1 git status'],
   [dx, 'npx --no-install playwright cli attach --cdp=chrome'], [dx, 'npx --no-install playwright cli cookie-get a'], [dx, 'npx --no-install playwright cli eval 1'],
   [dx, 'npx --no-install playwright cli run-code x'], [dx, 'npx playwright cli open'], [dx, 'npx --no-install other-pkg'], [dx, 'node scripts/benchmark/competitive-score.js'],
-  [perf, 'npx --no-install playwright trace attachment 1 -o out.png'], [perf, 'npx --no-install playwright test']
+  [perf, 'npx --no-install playwright trace attachment 1 -o out.png'], [perf, 'npx --no-install playwright test'],
+  // Findings from the final security review (SEC-E): code execution via another repo's config, reads outside the project,
+  // file/network reach through the Playwright CLI, case tricks.
+  [bench, 'git -C /tmp/scratch status'], [bench, 'git -C . status'], [bench, 'git diff --no-index /etc/passwd x'], [bench, 'git blame --contents /etc/passwd f'],
+  [bench, 'git ls-files --others /'], [bench, 'git log -p --ext-diff'], [bench, 'git show --output=x'], [bench, 'git --upload-pack=x status'], [bench, 'git -c core.pager=x log'],
+  [bench, 'node scripts/benchmark/competitive-score.js /etc/passwd'], [bench, 'npm run test:unit extra'],
+  [dx, 'npx --no-install playwright cli screenshot --filename=/tmp/x'], [dx, 'npx --no-install playwright cli pdf'], [dx, 'npx --no-install playwright cli goto https://example.com'],
+  [dx, 'npx --no-install playwright cli open file:///etc/passwd'], [dx, 'npx --no-install playwright cli open javascript:alert(1)'], [dx, 'npx --no-install playwright cli --config=/tmp/x open'],
+  [dx, 'npx --no-install playwright cli install-browser'], [dx, 'npx --no-install playwright cli Eval 1'], [dx, 'npx --no-install playwright cli state-save a.json'],
+  [dx, 'npx --no-install playwright cli open --profile=x'], [dx, 'npx --no-install playwright cli upload f'], [dx, 'npx --no-install playwright cli drag e1 e2'],
+  [perf, 'npx --no-install playwright trace screenshot trace.zip'], [perf, 'npx --no-install playwright trace actions /etc/trace.zip'],
+  [bench, 'git\u00a0status'], [bench, 'git status\0'], [bench, 'GIT_EXTERNAL_DIFF=x git diff']
 ];
 for (const [a, c] of denied) assert(decide(as(a, c)), `${a} should deny: ${JSON.stringify(c)}`);
 assert(decide(as(bench, 'git status --short', { dangerouslyDisableSandbox: true })), 'sandbox bypass flag must be denied');
+// A plugin-namespaced agent_type is judged by its bare name, so the allowlist cannot be skipped that way.
+assert(decide(as('falcon:' + bench, 'ls')), 'namespaced role must still be allowlisted');
 // The allowlist is keyed by agent_type: other roles are not narrowed by it (they keep the Bash tool as granted).
 assert.strictEqual(decide(as('qa-engineer', 'node -e "1"')), null);
 // A subagent call without agent_type cannot be matched to a profile; it falls back to the denylist only.
@@ -66,7 +79,7 @@ for (const p of [{ tool_input: { command: 'claude -p hi' } }, { tool_input: { co
 }
 
 // --- Fail-closed policy for the actual process (exit code 2 = block) ---
-for (const bad of ['', 'not json', '{', 'null', '42', '"str"', '[]x']) {
+for (const bad of ['', 'not json', '{', 'null', '42', '"str"', '[]x', '[]', '[{"agent_id":"a"}]']) {
   const r = run(bad);
   assert.strictEqual(r.status, 2, `malformed input ${JSON.stringify(bad)} must block (exit 2), got ${r.status}`);
   assert(/blocked/.test(r.stderr), 'a reason must be written to stderr');

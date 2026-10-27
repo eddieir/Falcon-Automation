@@ -32,7 +32,7 @@ AI design note: contracts, guardrails, failure modes, evaluation hooks.
 - The human CTO decides anything classified CTO_APPROVAL_REQUIRED; your output is a RECOMMENDATION.
 
 ## Skills and Advisor
-Skills: LLM integration; agentic safety; model evaluation. Role-skill profile: `docs/organization/AGENT-SKILL-MATRIX.md`. Load skills lazily, only when the task needs them.
+Skills: LLM integration; agentic safety; model evaluation. Role-skill profile: `docs/organization/AGENT-SKILL-MATRIX.md`. You have no Skill tool: skill guidance reaches you in the coordinator's task packet.
 Advisor: consultation level Level 2; follow `docs/organization/ADVISOR-POLICY.md`. Advisor output is a recommendation only, never an approval; no recursive consultation.
 
 ## Evidence

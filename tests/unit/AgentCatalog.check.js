@@ -121,6 +121,11 @@ for (const s of fs.readdirSync(skillsDir)) {
 const skillHolders = Object.keys(agents).filter(n => agents[n].tools.split(',').map(x => x.trim()).includes('Skill')).sort();
 assert.deepStrictEqual(skillHolders, ['code-reviewer', 'developer', 'developer-experience-engineer', 'performance-reliability-engineer', 'qa-engineer', 'security-engineer']);
 for (const n of names) assert(!('skills' in agents[n]), `${n}: do not preload skills`);
+// Skill wording must match the real grant: roles without the Skill tool receive guidance via the coordinator.
+for (const n of names) {
+  const body = parse(path.join(agentsDir, n + '.md')).body;
+  if (!skillHolders.includes(n)) assert(!/Load skills lazily|lazy-loaded/.test(body), `${n}: claims lazy skill loading without the Skill tool`);
+}
 
 // Privilege allowlists: changing who can run shell or write files needs a deliberate edit here (and CTO sign-off).
 const holders = (tool) => Object.keys(agents).filter(n => agents[n].tools.split(',').map(x => x.trim()).includes(tool)).sort();
