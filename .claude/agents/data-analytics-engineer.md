@@ -1,7 +1,7 @@
 ---
 name: data-analytics-engineer
 description: "Reviews telemetry schemas, report aggregation integrity, metric definitions, dashboard data quality, and retention-aware analytics."
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob
 model: claude-haiku-5-5
 maxTurns: 8
 ---

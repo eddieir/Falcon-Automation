@@ -1,7 +1,7 @@
 ---
 name: chief-architect
 description: "Governs platform-wide architecture principles, ADRs, integration standards, and architectural exceptions. Not a reviewer on routine PRs."
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob
 model: claude-sonnet-5-5
 effort: low
 maxTurns: 8

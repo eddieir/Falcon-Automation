@@ -189,17 +189,10 @@ Embrace creativity, overlays are powerful.
 | `page.screencast.showActions({ cursor, duration, position, style })` | Cursor, click point, target highlight and action title |
 | `page.screencast.hideActions()` | Stop annotating actions and hide the cursor |
 
-### 3. Attach the recording to the pull request
+### 3. Attaching the recording
 
-A hero script recording is the best proof of work for a user-facing change. GitHub accepts WebM as is, so once the recording looks right, attach it with `gh` 2.99+ instead of describing the flow in words:
+Removed by Falcon: `gh --attach` uploads are forbidden for agents; keep the recording local and ask the coordinator.
 
-```bash
-gh pr create --title "feat(todo): add items inline" --body-file body.md --attach ./demo.webm
-gh pr comment 123 --body "Walkthrough of the new flow." --attach ./demo.webm
-gh issue comment 456 --body "Recording of the repro steps." --attach ./repro.webm
-```
-
-`gh` appends unreferenced attachments to the end of the body, which is the right place for a walkthrough. Videos are limited to 10 MB on free plans and 100 MB on paid plans, so keep the script focused, record at a modest size such as 1280x800 and drop chapters that do not add to the story. See [pr-attachments.md](pr-attachments.md) for the full set of commands, including attaching test artifacts from CI.
 
 ## Tracing vs Video
 

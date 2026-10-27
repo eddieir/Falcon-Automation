@@ -153,11 +153,7 @@ test -f playwright.config.ts || test -f playwright.config.js
 npx --no-install playwright --version
 ```
 
-If there is no Playwright install, bootstrap one and let the user pick the defaults:
-
-```bash
-npm init playwright@latest
-```
+Falcon already pins Playwright; do not bootstrap another install (no `@latest`).
 
 ### 1.2 Prerequisite: seed test
 

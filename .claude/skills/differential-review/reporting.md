@@ -341,22 +341,13 @@ Summary:
 Next steps:
 - Review findings in detail
 - Address CRITICAL/HIGH issues before merge
-- Consider chaining with issue-writer for stakeholder report
 ```
 
 ---
 
 ## Integration with issue-writer
 
-After generating differential review, transform into audit report:
-
-```bash
-issue-writer --input DIFFERENTIAL_REVIEW_REPORT.md --format audit-report
-```
-
-This creates polished documentation for non-technical stakeholders.
-
----
+Not applicable in Falcon (the issue-writer skill is not installed).
 
 ## Error Handling
 

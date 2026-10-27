@@ -104,13 +104,33 @@ for (const s of fs.readdirSync(skillsDir)) {
   assert(meta.description, `skill ${s}: description required`);
   assert(!fs.existsSync(path.join(skillsDir, s, 'scripts')), `skill ${s}: scripts need security review`);
   assert(!('allowed-tools' in meta) && !('hooks' in meta), `skill ${s}: tool pre-approvals and hooks are not allowed`);
-  if (/^(playwright-|differential-review)/.test(s)) assert(fs.existsSync(path.join(skillsDir, s, 'UPSTREAM.md')), `skill ${s}: UPSTREAM.md (source, pin, patch, rollback) required`);
+  if (/^(playwright-|differential-review)/.test(s)) {
+    assert(fs.existsSync(path.join(skillsDir, s, 'UPSTREAM.md')), `skill ${s}: UPSTREAM.md (source, pin, patch, rollback) required`);
+    assert(fs.readFileSync(path.join(skillsDir, s, 'SKILL.md'), 'utf8').includes('Falcon governance overlay'), `skill ${s}: Falcon governance overlay missing`);
+    assert(fs.existsSync(path.join(skillsDir, s, 'LICENSE')), `skill ${s}: LICENSE required`);
+  }
+  if (/^playwright-/.test(s)) {
+    const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8')).packages['node_modules/playwright-core'];
+    const up = fs.readFileSync(path.join(skillsDir, s, 'UPSTREAM.md'), 'utf8');
+    assert(up.includes('playwright-core@' + lock.version), `skill ${s}: pinned Playwright skill does not match lockfile playwright-core ${lock.version}`);
+  }
 }
 
 // Only the roles that need installed skills may hold the Skill tool (lazy loading; no preload via `skills:`).
 const skillHolders = Object.keys(agents).filter(n => agents[n].tools.split(',').map(x => x.trim()).includes('Skill')).sort();
 assert.deepStrictEqual(skillHolders, ['code-reviewer', 'developer', 'developer-experience-engineer', 'performance-reliability-engineer', 'qa-engineer', 'security-engineer']);
 for (const n of names) assert(!('skills' in agents[n]), `${n}: do not preload skills`);
+
+// Privilege allowlists: changing who can run shell or write files needs a deliberate edit here (and CTO sign-off).
+const holders = (tool) => Object.keys(agents).filter(n => agents[n].tools.split(',').map(x => x.trim()).includes(tool)).sort();
+assert.deepStrictEqual(holders('Edit'), ['developer', 'devops-engineer', 'qa-engineer', 'technical-writer']);
+assert.deepStrictEqual(holders('Write'), ['developer', 'devops-engineer', 'qa-engineer', 'technical-writer']);
+assert.deepStrictEqual(holders('Bash'), ['benchmark-evaluation-engineer', 'code-reviewer', 'developer', 'developer-experience-engineer', 'devops-engineer',
+  'performance-reliability-engineer', 'production-director', 'qa-engineer', 'release-manager', 'security-engineer', 'solution-architect', 'technical-writer']);
+for (const n of ['chief-of-staff', 'chief-architect', 'product-director', 'solution-designer', 'ux-product-designer', 'ai-agentic-systems-engineer',
+  'data-analytics-engineer', 'privacy-compliance-specialist', 'site-reliability-engineer', 'customer-validation-strategist', 'technical-product-marketing']) {
+  assert(!/Bash|Edit|Write/.test(agents[n].tools), `${n}: must stay without shell or write tools`);
+}
 const registry = fs.readFileSync(path.join(root, 'docs/organization/SKILLS-REGISTRY.md'), 'utf8');
 for (const s of fs.readdirSync(skillsDir)) assert(registry.includes('`' + s + '`'), `skill ${s}: not in registry`);
 

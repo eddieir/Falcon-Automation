@@ -29,7 +29,7 @@ Security-focused code review for PRs, commits, and diffs.
 | "Blast radius is obvious" | You'll miss transitive callers | Calculate quantitatively |
 | "No tests = not my problem" | Missing tests = elevated risk rating | Flag in report, elevate severity |
 | "Just a refactor, no security impact" | Refactors break invariants | Analyze as HIGH until proven LOW |
-| "I'll explain verbally" | No artifact = findings lost | Always write report |
+| "I'll explain verbally" | No artifact = findings lost | Return the report in the handoff; persist it only to a path the task assigns |
 
 ---
 
@@ -117,9 +117,7 @@ Before delivering:
 - Pre-Analysis: Build baseline context
 - Phase 4: Deep context on HIGH RISK changes
 
-**issue-writer skill:**
-- Transform findings into formal audit reports
-- Command: `issue-writer --input DIFFERENTIAL_REVIEW_REPORT.md --format audit-report`
+**issue-writer skill:** not installed in Falcon; not applicable.
 
 ---
 

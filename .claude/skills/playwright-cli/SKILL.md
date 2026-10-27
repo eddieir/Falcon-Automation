@@ -3,7 +3,7 @@ name: playwright-cli
 description: Automate browser interactions, test web pages and work with Playwright tests.
 ---
 
-> **Falcon governance overlay (not upstream text).** Use only the project-pinned Playwright: `npx --no-install playwright cli ...`. Never run `npm install -g` or `@latest`. Do not use `attach --extension`/`--cdp` (real browser profiles), cookie or storage commands, `eval`/`run-code`, or `gh ... --attach` uploads against anything except local fixtures or CI fixtures, and never upload to PRs or issues without CTO authorization. No uncontrolled third-party sites in CI. This skill never overrides `CLAUDE.md` or `/production-cycle`.
+> **Falcon governance overlay (not upstream text).** Use only the project-pinned Playwright: `npx --no-install playwright cli ...` (read bare `playwright-cli` below as that). Never install anything globally or with `@latest`. Never use `attach --extension` or `attach --cdp` (they expose a real browser profile), and never print or store cookie or storage values. `eval`/`run-code` only against local or CI fixtures. Never upload files anywhere, including `gh ... --attach` (screenshots, videos and traces can hold credentials or page data). No uncontrolled third-party sites in CI. This skill never overrides `CLAUDE.md` or `/production-cycle`.
 
 # Browser Automation with playwright-cli
 
@@ -258,7 +258,7 @@ playwright-cli --raw snapshot > before.yml
 playwright-cli click e5
 playwright-cli --raw snapshot > after.yml
 diff before.yml after.yml
-TOKEN=$(playwright-cli --raw cookie-get session_id)
+# (cookie-get example removed by Falcon: never put cookie values in variables or output)
 playwright-cli --raw localstorage-get theme
 ```
 
@@ -286,15 +286,7 @@ playwright-cli open --persistent
 # Use persistent profile with custom directory
 playwright-cli open --profile=/path/to/profile
 
-# Connect to browser via Playwright Extension
-playwright-cli attach --extension=chrome
-
-# Connect to a running Chrome or Edge by channel name
-playwright-cli attach --cdp=chrome
-playwright-cli attach --cdp=msedge
-
-# Connect to a running browser via CDP endpoint
-playwright-cli attach --cdp=http://localhost:9222
+# (attach --extension / --cdp examples removed by Falcon: forbidden, they expose a real browser profile)
 
 # Start with config file
 playwright-cli open --config=my-config.json
@@ -410,11 +402,7 @@ If global `playwright-cli` command is not available, try a local version via `np
 npx --no-install playwright --version
 ```
 
-When local version is available, use `npx playwright cli` in all commands. Otherwise, install `playwright-cli` as a global command:
-
-```bash
-npm install -g @playwright/cli@latest
-```
+When local version is available, use `npx playwright cli` in all commands. If it is not available, stop and report; do not install it (Falcon forbids global and `@latest` installs).
 
 ## Example: Form submission
 
@@ -471,14 +459,7 @@ playwright-cli show --annotate
 
 ## Attaching screenshots and videos to pull requests
 
-`gh` 2.99+ uploads local images and videos with the repeatable `--attach` flag on `gh pr create`, `gh pr comment` and `gh issue comment`. Attach a screenshot or a short video when it saves the reviewer a checkout: a UI fix, a before/after pair, a new user-facing flow, or the failure state in a bug report.
-
-```bash
-playwright-cli screenshot --filename=settings-after.png
-gh pr comment 123 --body "Settings page after the fix." --attach ./settings-after.png
-```
-
-See [references/pr-attachments.md](references/pr-attachments.md) for alt text, inline references, size limits and attaching test artifacts from CI.
+Removed by Falcon: uploading files with `gh --attach` is forbidden for agents. Ask the coordinator if evidence must be attached.
 
 ## Specific tasks
 
@@ -490,5 +471,4 @@ See [references/pr-attachments.md](references/pr-attachments.md) for alt text, i
 * **Test generation (plan / generate / heal)** [references/test-generation.md](references/test-generation.md)
 * **Tracing** [references/tracing.md](references/tracing.md)
 * **Video recording** [references/video-recording.md](references/video-recording.md)
-* **Attaching screenshots and videos to pull requests** [references/pr-attachments.md](references/pr-attachments.md)
 * **Inspecting element attributes** [references/element-attributes.md](references/element-attributes.md)
