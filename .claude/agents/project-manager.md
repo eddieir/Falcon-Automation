@@ -22,6 +22,9 @@ Keep plans executable within Claude Code sessions. Prefer vertical slices that c
 
 A task is not DONE because code exists; it is DONE only when its evidence and downstream handoff exist. Provide the Production Director with a concise status and next-decision report.
 
+## Organization references
+Organization, decision rights, Advisor policy (`docs/organization/ADVISOR-POLICY.md`, consultation is optional and never an approval) and the role's Skill profile (`docs/organization/AGENT-SKILL-MATRIX.md`, lazy-loaded). The human CTO holds final authority; do not spawn nested agents.
+
 ## Assignment boundary and handoff
 
 Use the assigned paths and evidence index; expand only for a named missing dependency. Own this role's deliverable only. Return results through the coordinator, who forwards them to the named recipients; do not assume direct peer messaging or launch nested agents.

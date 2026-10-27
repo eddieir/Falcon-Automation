@@ -26,6 +26,23 @@ Each agent has an explicit, version-specific model ID in its front matter and a 
 | DevOps Engineer | `claude-sonnet-4-5` |
 | Technical Writer | `claude-haiku-4-5` |
 | Release Manager | `claude-sonnet-4-6` |
+| Market Competitive Intelligence | `claude-haiku-4-5` |
+| Chief of Staff | `claude-sonnet-4-6` |
+| Product Director | `claude-sonnet-4-6` |
+| Chief Architect | `claude-sonnet-5-5` |
+| Solution Designer | `claude-sonnet-4-6` |
+| UX / Product Designer | `claude-haiku-5-5` |
+| AI / Agentic Systems Engineer | `claude-sonnet-4-6` |
+| Developer Experience Engineer | `claude-sonnet-4-5` |
+| Data & Analytics Engineer | `claude-haiku-5-5` |
+| Benchmark & Evaluation Engineer | `claude-sonnet-4-6` |
+| Privacy & Compliance Specialist | `claude-haiku-5-5` |
+| Performance & Reliability Engineer | `claude-sonnet-4-5` |
+| Site Reliability Engineer | `claude-sonnet-4-5` |
+| Customer Validation Strategist | `claude-haiku-4-5` |
+| Technical Product Marketing | `claude-haiku-4-5` |
+
+The human CTO holds final authority; there is no AI CTO. The catalog has 27 on-demand roles (see `docs/organization/`), but the Production Director remains the sole routine delivery coordinator and the default dispatch ceilings below do not grow with the catalog.
 
 Fable models are prohibited: never select, invoke, probe, or fall back to one. Never use `inherit`, aliases, extended-context variants, or a premium fallback for a role. Cost policy (Pro plan): Opus is reserved for Security Engineer; all other roles run on Sonnet or Haiku. Model reuse is allowed, but Developer, QA Engineer, and Code Reviewer must keep mutually distinct models so verification stays independent. Verify each role's effective model from runtime metadata at its first real dispatch and record it in the ledger. If a model is unsupported, remapped, or unverifiable, stop before accepting that agent's output and report the exact error; never substitute silently. Check effective session/provider overrides before dispatch. This is a routing policy, not a billing cap.
 

@@ -24,6 +24,10 @@ Keep optional values blank in .env.example. Never place real secrets in workflow
 
 Run local validation where possible; GitHub Actions status remains authoritative for hosted behavior. Report READY, READY WITH CONDITIONS, or NOT READY with exact evidence and remediation.
 
+## Organization references
+You own delivery automation (CI/CD, build, artifacts). The Site Reliability Engineer owns operational reliability, SLOs and recovery.
+Organization, decision rights, Advisor policy (`docs/organization/ADVISOR-POLICY.md`, consultation is optional and never an approval) and the role's Skill profile (`docs/organization/AGENT-SKILL-MATRIX.md`, lazy-loaded). The human CTO holds final authority; do not spawn nested agents.
+
 ## Assignment boundary and handoff
 
 Use the assigned paths and evidence index; expand only for a named missing dependency. Own this role's deliverable only. Return results through the coordinator, who forwards them to the named recipients; do not assume direct peer messaging or launch nested agents.
