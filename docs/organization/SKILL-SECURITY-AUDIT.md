@@ -1,13 +1,17 @@
 # Skill security audit
 
-Date 2026-10-27. Scope: what was actually checked. Nothing external was installed, executed, or downloaded; only GitHub API metadata and file listings were read.
+Date 2026-10-27. Method: pinned upstream trees were fetched into scratch directories and read (SKILL.md, scripts, manifests). Nothing external was executed, installed globally or piped to a shell. This is an agent audit, not an independent human security review.
 
-| Item | Checked | Result |
-|---|---|---|
-| Publisher/repo ownership | GitHub org and repo names via API | Microsoft, Anthropic, Trail of Bits, Vercel, Sentry, obra, nextlevelbuilder resolve as listed; authenticity beyond that not independently verified |
-| License | API license field | ToB CC-BY-SA-4.0 (share-alike); Apache-2.0/MIT others; anthropics/skills and vercel report none at repo level |
-| Install scripts / hooks | File listings | ToB insecure-defaults has `tests/harness.js` and `run_seeds.sh`; skill-creator has Python scripts; playwright-cli requires an npm tool. SKILL.md bodies and script contents **not read** |
-| Network/credential/FS access, prompt-injection content | Not assessed | Unknown for all external candidates |
-| Paid services | Not found in metadata | Unverified |
+| Candidate | Executable code | Network / credentials | License | Verdict |
+|---|---|---|---|---|
+| playwright-cli, playwright-trace (from `playwright-core@1.64.1`) | None (markdown); drive the project's own `playwright` | Upstream text suggests `npm install -g ... @latest`, real-browser `attach`, cookie/`eval` commands and `gh --attach` uploads | Apache-2.0 | APPROVED_FOR_PROJECT_INSTALL with patch: pre-approval removed; overlay forbids global install, attach, cookie/storage, eval against non-fixtures and uploads |
+| differential-review | None (markdown); plugin also has an agent and a command, not copied | Read-only `git`/`gh pr view`; upstream pre-approved `Write` and `Bash` | CC-BY-SA-4.0 | APPROVED_FOR_PROJECT_INSTALL with patch: pre-approval and nested-agent delegation removed; attribution and share-alike notice added |
+| skill-creator | 7 Python scripts, local HTTP server, nested `claude -p` | Google Fonts; opens browser | Apache-2.0 | DEFERRED |
+| insecure-defaults | JS workflow, shell test runner, parallel sweeps | none seen | CC-BY-SA-4.0 | DEFERRED |
+| supply-chain-risk-auditor | Stdlib Python, `gh auth token`, `pip-audit` | Sends GitHub token to api.github.com; five external APIs | CC-BY-SA-4.0 | DEFERRED |
+| mutation-testing | External binaries | n/a | CC-BY-SA-4.0 | DEFERRED |
+| web-design-guidelines | None | Fetches unpinned remote instructions | not reported | DEFERRED |
 
-Verdict: no external skill meets "source-verified, security-reviewed" yet, so none is `APPROVED_FOR_PROJECT_INSTALL`. The three Falcon-authored skills contain only Markdown, run no scripts, request no tools beyond defaults, and set no hooks. Agent privilege changes: 14 new agents are read-only (several without Bash); no new write-capable agent. Recommended before any install: Security Engineer reviews the pinned tree line by line, CTO answers the license/dependency question.
+The installed directories have no hooks and no `scripts/` (the validator enforces the latter). Prompt-injection and governance-override text was looked for by reading and keyword search; none found, which is not proof of absence. The Security Engineer review of the final revision is recorded in [IMPLEMENTATION-CHECKPOINT](IMPLEMENTATION-CHECKPOINT.md).
+
+License note for the CTO: the three `differential-review` files stay CC-BY-SA-4.0 wherever the repo is redistributed. Falcon is MIT; share-alike applies to those adapted files, not Falcon's code. Confirm this suits your commercial plans.

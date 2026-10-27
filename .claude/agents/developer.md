@@ -1,7 +1,7 @@
 ---
 name: developer
 description: Implements approved Falcon stories and bug fixes with focused tests. Use only after acceptance criteria and technical direction are clear.
-tools: Read, Grep, Glob, Bash, Edit, Write
+tools: Read, Grep, Glob, Bash, Edit, Write, Skill
 model: claude-sonnet-5
 effort: medium
 maxTurns: 10

@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: Independently reviews Falcon diffs for correctness, regressions, maintainability, security, and test quality.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Skill
 model: claude-sonnet-4-6
 effort: medium
 maxTurns: 10
