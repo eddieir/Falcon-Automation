@@ -10,5 +10,13 @@
 | Deferred | See SKILLS-REGISTRY (skill-creator, insecure-defaults, supply-chain-risk-auditor, mutation-testing, property-based-testing, web-design-guidelines, others) |
 | Resume | Read this file and the PR; run `npm run test:unit`; do not start further work without CTO authorization |
 
-## Review gates
-Pending.
+## Review gates (agent reviews, not independent human review)
+| Gate | Reviewed revision | Verdict |
+|---|---|---|
+| Code Review CR-A (docs, CLAUDE.md, production-cycle) | `80e8cfc` | ACCEPT WITH RISKS: 1 minor doc fix, `npx` gap judged out of scope |
+| Code Review CR-B (validator, hook, skills) | `80e8cfc` | ACCEPT WITH RISKS: MAJOR hook false positive on quoted text, fixed |
+| Security SEC-A (agents, governance) and SEC-B (skills, supply chain) | `287be8e` | NON-BLOCKING; P2 findings fixed or documented |
+| Security SEC-C (fix verification) | `c1acd94` | NON-BLOCKING; leftover `cookie-get` examples and hook bypasses fixed afterwards |
+| Final delta review (CR-C retry, SEC-D) | final PR head | see the PR description for the final SHA and verdicts |
+
+Accepted residual risks, for CTO confirmation: the `Skill` tool is not scoped per skill; the `subagent-guard.js` hook is best-effort and fails open; Bash is held by Benchmark, Developer Experience and Performance & Reliability engineers; differential-review files stay CC-BY-SA-4.0. Two local regression tests fail only because the main checkout's `node_modules` has Playwright 1.64.0 against the pinned 1.64.1 (same result on `main`); CI is the authority.

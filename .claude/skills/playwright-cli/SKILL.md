@@ -130,7 +130,7 @@ playwright-cli state-load auth.json
 # Cookies
 playwright-cli cookie-list
 playwright-cli cookie-list --domain=example.com
-playwright-cli cookie-get session_id
+# (cookie-get removed by Falcon: never print cookie values)
 playwright-cli cookie-set session_id abc123
 playwright-cli cookie-set session_id abc123 --domain=example.com --httpOnly --secure
 playwright-cli cookie-delete session_id

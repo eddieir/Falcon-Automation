@@ -11,7 +11,7 @@ for (const cmd of [
   'claude -p "hi"', 'cd x && claude --print --agent developer hi', '/usr/local/bin/claude -p hi',
   'gh pr comment 1 --body x --attach ./a.png', 'gh pr create --attach=./v.webm',
   'npm install -g @playwright/cli@latest', 'npm i --global foo', 'pnpm add -g foo', 'yarn global add foo',
-  'FOO=1 claude -p hi', 'env claude --print x', 'gh issue comment 1 --body "x" --attach ./f.png', 'playwright-cli attach --extension=chrome', 'npx playwright cli attach --cdp=http://localhost:9222'
+  'FOO=1 claude -p hi', 'bash -c "claude -p x"', 'timeout 60 claude -p x', 'sudo -u root claude -p x', 'claude --print=x', 'npx @anthropic-ai/claude-code -p x', 'npm i --location=global foo', 'npx -y @playwright/cli@latest open', 'xargs claude -p', 'env claude --print x', 'gh issue comment 1 --body "x" --attach ./f.png', 'playwright-cli attach --extension=chrome', 'npx playwright cli attach --cdp=http://localhost:9222'
 ]) assert(decide(sub(cmd)), `should deny: ${cmd}`);
 
 for (const cmd of [
