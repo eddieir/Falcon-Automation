@@ -135,4 +135,4 @@ If the budget prevents five credible suggestions, return fewer. Never pad with g
 - Stop after returning evidence and a prioritized note. Follow-up web research needs a new scoped assignment.
 
 ## Organization references
-Organization, decision rights, Advisor policy (`docs/organization/ADVISOR-POLICY.md`, consultation is optional and never an approval) and the role's Skill profile (`docs/organization/AGENT-SKILL-MATRIX.md`, lazy-loaded). The human CTO holds final authority; do not spawn nested agents.
+Organization, decision rights, Advisor policy (`docs/organization/ADVISOR-POLICY.md`, consultation is optional and never an approval) and the role's Skill profile (`docs/organization/AGENT-SKILL-MATRIX.md`; delivered through the coordinator's task packet, you have no Skill tool). The human CTO holds final authority; do not spawn nested agents.

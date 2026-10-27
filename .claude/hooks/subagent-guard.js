@@ -88,25 +88,40 @@ function denylistReason(command) {
 // ---- enforced allowlist (PROFILES roles) ---------------------------------
 const ARG = /^[A-Za-z0-9_@%+=:,./~^-]+$/;
 const GIT_SUBCOMMANDS = new Set(["status", "diff", "log", "show", "rev-parse", "ls-files", "blame"]);
-const FORBIDDEN_CLI = /^(attach|detach|cookie-.*|localstorage-.*|sessionstorage-.*|state-save|state-load|run-code|eval|upload|drop|video-.*|show)$/;
+const LOCAL_URL = /^https?:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?(\/[A-Za-z0-9_@%+=:,./~^-]*)?$/;
+const CLI_COMMANDS = new Set([
+  "open", "goto", "snapshot", "find", "click", "dblclick", "fill", "type", "hover", "select", "check", "uncheck", "press",
+  "go-back", "go-forward", "reload", "resize", "close", "tab-list", "tab-new", "tab-close", "tab-select", "screenshot",
+  "mousemove", "mousedown", "mouseup", "mousewheel", "dialog-accept", "dialog-dismiss"
+]);
+const CLI_FORBIDDEN_OPTION = /^--(filename|config|profile|persistent|extension|cdp|path|data|output|headed=)/;
+const TRACE_COMMANDS = new Set(["actions", "requests", "request", "console", "errors", "snapshot", "attachments"]);
 
-const allowGit = (t) => {
-  let i = 1;
-  if (t[i] === "-C") i += 2;
-  return GIT_SUBCOMMANDS.has(t[i]) && !t.slice(i).some((x) => /^--(output|ext-diff|textconv|exec)/.test(x));
-};
-const allowNodeScript = (re) => (t) => re.test(t[1] || "") && !t.slice(2).some((x) => x.includes(".."));
+// A path-like argument must stay inside the project: no absolute paths, no "..".
+const outside = (x) => x.startsWith("/") || x.includes("..");
+// Any URL-like argument must be a local http(s) address (no file:, data:, javascript:, remote hosts).
+const badUrl = (x) => (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(x) && !/^about:blank$/.test(x) && !LOCAL_URL.test(x)) && !/^[A-Za-z0-9_-]+=/.test(x);
+
+// Plain `git <subcommand>`: no `-C` (it would honor another repository's config, which can run programs),
+// no `-c`, no out-of-project paths, no `--no-index`/`--contents`, no output-file options. The project's own
+// git config still applies.
+const allowGit = (t) => GIT_SUBCOMMANDS.has(t[1]) && !t.slice(2).some((x) =>
+  outside(x) || /^--(output|ext-diff|textconv|exec|no-index|contents)/.test(x) || (x.startsWith("-") && /^-[A-Za-z]*[CcO][A-Za-z]*$/.test(x)));
+const allowNodeScript = (re) => (t) => re.test(t[1] || "") && !t.slice(2).some(outside);
 const allowUnit = (t) => t[1] === "run" && t[2] === "test:unit" && t.length === 3;
 const allowPlaywright = (subs) => (t) => {
   if (t[1] !== "--no-install") return false; // plain npx may download and run a missing package
-  let i = 2;
-  if (t[i] !== "playwright") return false;
-  i += 1;
-  if (t[i] === "--version") return t.length === i + 1;
-  if (!subs.includes(t[i])) return false;
-  const rest = t.slice(i + 1);
-  if (t[i] === "cli") return !rest.some((x) => FORBIDDEN_CLI.test(x) || x.startsWith("--extension") || x.startsWith("--cdp"));
-  return !rest.some((x) => x === "-o" || x.startsWith("--output"));
+  if (t[2] !== "playwright") return false;
+  if (t[3] === "--version") return t.length === 4;
+  if (!subs.includes(t[3])) return false;
+  const rest = t.slice(4);
+  if (t[3] === "cli") {
+    const args = rest.filter((x) => !/^-s=[A-Za-z0-9_-]+$/.test(x));
+    const first = args.find((x) => !x.startsWith("-"));
+    return CLI_COMMANDS.has(first) && !args.some((x) => CLI_FORBIDDEN_OPTION.test(x) || badUrl(x) || outside(x));
+  }
+  // trace
+  return TRACE_COMMANDS.has(rest[0]) && !rest.some((x) => x === "-o" || x.startsWith("--output") || outside(x));
 };
 
 const BENCH = allowNodeScript(/^scripts\/benchmark\/[A-Za-z0-9_.-]+\.js$/);
@@ -134,8 +149,9 @@ function allowlistReason(profile, input) {
 // Returns a deny reason, or null to allow. Throws only on programmer error.
 function decide(input) {
   if (!input || typeof input.agent_id !== "string" || input.agent_id.length === 0) return null; // main session
-  const profile = typeof input.agent_type === "string" && Object.prototype.hasOwnProperty.call(PROFILES, input.agent_type)
-    ? PROFILES[input.agent_type] : null;
+  // agent_type may be namespaced (plugin:name); judge the bare name.
+  const roleName = typeof input.agent_type === "string" ? input.agent_type.replace(/^.*:/, "") : "";
+  const profile = Object.prototype.hasOwnProperty.call(PROFILES, roleName) ? PROFILES[roleName] : null;
   if (profile) return allowlistReason(profile, input);
   const command = input.tool_input && typeof input.tool_input.command === "string" ? input.tool_input.command : "";
   return denylistReason(command);
@@ -147,7 +163,7 @@ if (require.main === module) {
   process.stdin.on("end", () => {
     try {
       const input = JSON.parse(raw);
-      if (!input || typeof input !== "object") throw new Error("payload is not an object");
+      if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("payload is not an object");
       const reason = decide(input);
       if (reason) {
         process.stderr.write(reason + "\n");

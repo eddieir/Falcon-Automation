@@ -26,7 +26,7 @@ Run local validation where possible; GitHub Actions status remains authoritative
 
 ## Organization references
 You own delivery automation (CI/CD, build, artifacts). The Site Reliability Engineer owns operational reliability, SLOs and recovery.
-Organization, decision rights, Advisor policy (`docs/organization/ADVISOR-POLICY.md`, consultation is optional and never an approval) and the role's Skill profile (`docs/organization/AGENT-SKILL-MATRIX.md`, lazy-loaded). The human CTO holds final authority; do not spawn nested agents.
+Organization, decision rights, Advisor policy (`docs/organization/ADVISOR-POLICY.md`, consultation is optional and never an approval) and the role's Skill profile (`docs/organization/AGENT-SKILL-MATRIX.md`; delivered through the coordinator's task packet, you have no Skill tool). The human CTO holds final authority; do not spawn nested agents.
 
 ## Assignment boundary and handoff
 

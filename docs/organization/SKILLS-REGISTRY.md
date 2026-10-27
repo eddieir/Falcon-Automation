@@ -11,7 +11,7 @@ Verification date 2026-10-27. **INSTALLED** = committed under `.claude/skills/`,
 | `advisor-governance`, `falcon-executive-decisions`, `falcon-neutral-benchmarking` | Falcon-authored | Falcon's | see matrix | coordinator or assigned agent | Delete the directory |
 | `production-cycle` | Falcon-authored (existing) | Falcon's | Production Director | user runs `/production-cycle` | n/a |
 
-Activation evidence (headless `claude -p --agent <name>` in the PR worktree): QA activated `playwright-cli` and `playwright-trace` and quoted both overlays and the absence of `allowed-tools`; Code Reviewer activated `differential-review` and quoted its overlay and "no agents" section.
+Activation evidence (agent self-report; a human re-run is the CTO's option; headless `claude -p --agent <name>` in the PR worktree): QA activated `playwright-cli` and `playwright-trace` and quoted both overlays and the absence of `allowed-tools`; Code Reviewer activated `differential-review` and quoted its overlay and "no agents" section.
 
 ## Deferred
 | Skill | Exact reason | Prerequisite / follow-up |

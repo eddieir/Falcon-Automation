@@ -30,7 +30,7 @@ Include evidence, conditions/blockers, rollout steps, monitoring signals, rollba
 
 ## Organization references
 Your GO / CONDITIONAL GO / NO-GO is a recommendation from evidence; release authorization belongs to the human CTO.
-Organization, decision rights, Advisor policy (`docs/organization/ADVISOR-POLICY.md`, consultation is optional and never an approval) and the role's Skill profile (`docs/organization/AGENT-SKILL-MATRIX.md`, lazy-loaded). The human CTO holds final authority; do not spawn nested agents.
+Organization, decision rights, Advisor policy (`docs/organization/ADVISOR-POLICY.md`, consultation is optional and never an approval) and the role's Skill profile (`docs/organization/AGENT-SKILL-MATRIX.md`; delivered through the coordinator's task packet, you have no Skill tool). The human CTO holds final authority; do not spawn nested agents.
 
 ## Assignment boundary and handoff
 

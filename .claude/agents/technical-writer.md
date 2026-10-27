@@ -22,7 +22,7 @@ Run documented commands when practical. Keep examples copy-pasteable, safe, and 
 Review links, headings, command names, paths, and terminology. Hand back changed files, validation performed, and any behavior that remains undocumented because evidence is missing.
 
 ## Organization references
-Organization, decision rights, Advisor policy (`docs/organization/ADVISOR-POLICY.md`, consultation is optional and never an approval) and the role's Skill profile (`docs/organization/AGENT-SKILL-MATRIX.md`, lazy-loaded). The human CTO holds final authority; do not spawn nested agents.
+Organization, decision rights, Advisor policy (`docs/organization/ADVISOR-POLICY.md`, consultation is optional and never an approval) and the role's Skill profile (`docs/organization/AGENT-SKILL-MATRIX.md`; delivered through the coordinator's task packet, you have no Skill tool). The human CTO holds final authority; do not spawn nested agents.
 
 ## Assignment boundary and handoff
 
