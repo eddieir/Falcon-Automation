@@ -3,20 +3,39 @@
 | Field | Value |
 |---|---|
 | Baseline | `origin/main` `1801421f817d046f7f2865f5468ae3570e729ef9` |
-| Branch / PR | `feat/ai-organization-27-roles`, Draft PR #120 |
+| Branch / PR | `feat/ai-organization-27-roles`, Draft PR #120 (not merged) |
 | Owner's local work | `.claude/settings.json` (modified) and `falcon-operating-policy.md` (untracked) in the main checkout, untouched |
-| Completed | 27 agents; routing rows; organization docs; Advisor policy; Falcon skills; skills audit and install (playwright-cli, playwright-trace, differential-review); validator; runtime model verification 27/27 |
-| Reviews of the final revision | See the section below (filled in after the gates run) |
-| Deferred | See SKILLS-REGISTRY (skill-creator, insecure-defaults, supply-chain-risk-auditor, mutation-testing, property-based-testing, web-design-guidelines, others) |
-| Resume | Read this file and the PR; run `npm run test:unit`; do not start further work without CTO authorization |
+| Scope | `.claude/`, `docs/organization/`, `CLAUDE.md`, `THIRD_PARTY_NOTICES.md`, `.gitignore`, `package.json` (`test:unit` only), two unit checks. No change to `src/`, `falcon.js`, `scripts/`, `.github/`, `package-lock.json` or M1 work |
+| Runtime model check | 27 of 27 agents match the `CLAUDE.md` table (2026-10-27, `claude -p --agent <name>`, `modelUsage`) |
 
-## Review gates (agent reviews, not independent human review)
+## Review trail (agent reviews, not independent human review)
 | Gate | Reviewed revision | Verdict |
 |---|---|---|
-| Code Review CR-A (docs, CLAUDE.md, production-cycle) | `80e8cfc` | ACCEPT WITH RISKS: 1 minor doc fix, `npx` gap judged out of scope |
-| Code Review CR-B (validator, hook, skills) | `80e8cfc` | ACCEPT WITH RISKS: MAJOR hook false positive on quoted text, fixed |
-| Security SEC-A (agents, governance) and SEC-B (skills, supply chain) | `287be8e` | NON-BLOCKING; P2 findings fixed or documented |
-| Security SEC-C (fix verification) | `c1acd94` | NON-BLOCKING; leftover `cookie-get` examples and hook bypasses fixed afterwards |
-| Final delta review (CR-C retry, SEC-D) | final PR head | see the PR description for the final SHA and verdicts |
+| Code Review CR-A, CR-B | `80e8cfc` | ACCEPT WITH RISKS (hook false positive fixed) |
+| Security SEC-A, SEC-B | `287be8e` | NON-BLOCKING, P2s fixed or documented |
+| Security SEC-C, SEC-D | `c1acd94`, `da2dccd` | NON-BLOCKING |
+| Code Review CR-E1 (all 27 agent files) | `21f7f32` | ACCEPT WITH RISKS (minor wording, fixed) |
+| Code Review CR-E2 (docs, CLAUDE.md, production-cycle, Falcon skills, licensing) | `21f7f32` | ACCEPT WITH RISKS (minor, fixed) |
+| Security SEC-E (hook, allowlist, licensing, secrets) | `21f7f32` | NON-BLOCKING, P2s fixed |
+| Code Review CR-E3 (hook, validator, delta) | `d192e37` | ACCEPT |
+| Security SEC-F | `d192e37` | NON-BLOCKING, P2s fixed |
+| Code Review CR-F, Security SEC-G | `ce5c54b` | ACCEPT WITH RISKS (range over-block fixed), NON-BLOCKING (P3s fixed or accepted) |
+| Final verification of the last hook revision | recorded in the PR description | |
 
-Accepted residual risks, for CTO confirmation: the `Skill` tool is not scoped per skill; the `subagent-guard.js` hook is best-effort and fails open; Bash is held by Benchmark, Developer Experience and Performance & Reliability engineers; differential-review files stay CC-BY-SA-4.0. Two local regression tests fail only because the main checkout's `node_modules` has Playwright 1.64.0 against the pinned 1.64.1 (same result on `main`); CI is the authority.
+Never covered by a single reviewer: a one-pass review of the whole diff at the final SHA. Coverage is the union of the rows above.
+
+## Accepted residual risks, for CTO confirmation
+- The `Skill` tool has no per-skill scope; the matrix lists intended skills only.
+- The denylist for other subagents is advisory; the allowlist covers only the three Bash roles and only calls routed through `Bash`.
+- Fail-closed needs Claude Code >= 2.1.295; older versions ignore `onFailure`.
+- Allowlisted roles can reach any local port, read committed secrets with `git show`, and run repo scripts that may write files.
+- Bash is still held by Developer, QA, Code Reviewer, Security, DevOps, Release Manager, Solution Architect, Technical Writer and Production Director (pre-existing), plus Benchmark, Developer Experience and Performance & Reliability (new, allowlisted).
+- `differential-review` stays CC BY-SA 4.0 (see `THIRD_PARTY_NOTICES.md`); counsel should confirm before redistribution.
+- Two local regression tests fail only because the main checkout's `node_modules` has Playwright 1.64.0 against the pinned 1.64.1; CI is the authority.
+- One CI `regression` job was canceled at its 10-minute limit once and passed on re-run.
+
+## Deferred
+See SKILLS-REGISTRY (skill-creator, insecure-defaults, supply-chain-risk-auditor, mutation-testing, property-based-testing, web-design-guidelines, others).
+
+## Resume
+Read this file and the PR; run `npm run test:unit`; no further work without CTO authorization.

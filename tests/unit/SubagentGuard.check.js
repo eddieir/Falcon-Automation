@@ -37,7 +37,7 @@ assert.deepStrictEqual(Object.keys(PROFILES).sort(),
 
 const bench = 'benchmark-evaluation-engineer', dx = 'developer-experience-engineer', perf = 'performance-reliability-engineer';
 const allowed = [
-  [bench, 'git status --short'], [bench, 'git diff origin/main --stat'], [bench, 'git show HEAD:package.json'], [bench, 'git log --oneline -5'],
+  [bench, 'git status --short'], [bench, 'git diff origin/main --stat'], [bench, 'git diff main..HEAD --stat'], [bench, 'git log main...HEAD --oneline'], [bench, 'git diff origin/main..HEAD --stat'], [bench, 'git show HEAD:package.json'], [bench, 'git log --oneline -5'],
   [bench, 'node scripts/benchmark/competitive-score.js --in docs/research/x.json'], [bench, 'node tests/unit/CiWait.check.js'], [bench, 'npm run test:unit'],
   [dx, 'npx --no-install playwright --version'], [dx, 'npx --no-install playwright cli open http://127.0.0.1:3000'], [dx, 'npx --no-install playwright cli -s=a snapshot'], [dx, 'npx --no-install playwright cli goto http://localhost:3000/login'], [dx, 'npx --no-install playwright cli open about:blank'], [bench, 'git log --oneline -5'], [bench, 'git diff --stat HEAD~1'], [bench, 'git blame -L1,2 package.json'], [bench, 'git log --pretty=oneline -n3'], [dx, 'npx --no-install playwright cli screenshot'], [dx, 'git show HEAD'],
   [perf, 'npx --no-install playwright trace actions test-results/trace.zip'], [perf, 'node scripts/benchmark/parallel.js'], [perf, 'git rev-parse HEAD']
@@ -62,6 +62,9 @@ const denied = [
   [dx, 'npx --no-install playwright cli install-browser'], [dx, 'npx --no-install playwright cli Eval 1'], [dx, 'npx --no-install playwright cli state-save a.json'],
   [dx, 'npx --no-install playwright cli open --profile=x'], [dx, 'npx --no-install playwright cli upload f'], [dx, 'npx --no-install playwright cli drag e1 e2'],
   [perf, 'npx --no-install playwright trace screenshot trace.zip'], [perf, 'npx --no-install playwright trace actions /etc/trace.zip'],
+  [bench, 'git diff ../x'], [bench, 'git show HEAD:../x'], [bench, 'git diff a/../../b'], [bench, 'git diff ..'],
+  [bench, 'node scripts/benchmark/x.js --a=x=/etc'], [bench, 'node scripts/benchmark/x.js --a=x,/etc/passwd'], [bench, 'node scripts/benchmark/x.js --a:/etc'],
+  [bench, 'node scripts/benchmark/x.js http://evil.com'], [perf, 'npx --no-install playwright trace snapshot t.zip --port=9'],
   [bench, 'git blame --cont=/etc/passwd f'], [bench, 'git diff --no-ind a b'], [bench, 'git diff --outp=x'], [bench, 'git show --textc HEAD'], [bench, 'git diff ~/.ssh'],
   [bench, 'git log --exec-p=x'], [bench, 'git log --format=%H'], [bench, 'node scripts/benchmark/x.js ~/x'], [bench, 'node scripts/benchmark/x.js --out=/tmp/x'], [bench, 'node scripts/benchmark/x.js --out=%2e%2e/x'],
   [dx, 'npx --no-install playwright cli open evil.com'], [dx, 'npx --no-install playwright cli open 127.0.0.1@evil.com'], [dx, 'npx --no-install playwright cli open .env'],

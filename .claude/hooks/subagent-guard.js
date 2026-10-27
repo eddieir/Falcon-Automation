@@ -96,10 +96,10 @@ const CLI_COMMANDS = new Set([
 ]);
 const TRACE_COMMANDS = new Set(["actions", "requests", "request", "console", "errors", "snapshot", "attachments"]);
 
-// A path-like argument must stay inside the project: no absolute paths, no "~", no "..", no encoded dots.
-// For "--opt=value" both the whole token and the value are checked.
-const outsideOne = (x) => x.startsWith("/") || x.startsWith("~") || x.includes("..") || /%2e/i.test(x);
-const outside = (x) => outsideOne(x) || (x.includes("=") && outsideOne(x.slice(x.indexOf("=") + 1)));
+// A path-like argument must stay inside the project: no absolute paths, no "~", no ".." path component (git
+// ranges such as main..HEAD are fine), no encoded dots. Every part of "--opt=value", "a,b" and "rev:path" is checked.
+const outsideOne = (x) => x.startsWith("/") || x.startsWith("~") || /(^|[/:])\.\.(\/|$)/.test(x) || /%2e/i.test(x);
+const outside = (x) => outsideOne(x) || x.split(/[=,:]/).some(outsideOne);
 // Any URL-like argument must be a local http(s) address (no file:, data:, javascript:, remote hosts).
 const badUrl = (x) => (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(x) && x !== "about:blank" && !LOCAL_URL.test(x)) && !/^[A-Za-z0-9_-]+=/.test(x);
 
@@ -108,7 +108,7 @@ const badUrl = (x) => (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(x) && x !== "about:blank
 // options. The project's own git config still applies.
 const GIT_OPTION = /^(--(stat|shortstat|numstat|name-only|name-status|oneline|short|porcelain|no-color|no-merges|graph|abbrev-commit|cached|staged|summary|patch|first-parent|reverse|root)|-[0-9]+|-n[0-9]*|-[spLU][0-9,]*|--(pretty|date)=[a-z]+|--)$/;
 const allowGit = (t) => GIT_SUBCOMMANDS.has(t[1]) && t.slice(2).every((x) => (x.startsWith("-") ? GIT_OPTION.test(x) : !outside(x)));
-const allowNodeScript = (re) => (t) => re.test(t[1] || "") && !t.slice(2).some(outside);
+const allowNodeScript = (re) => (t) => re.test(t[1] || "") && !t.slice(2).some((x) => outside(x) || badUrl(x));
 const allowUnit = (t) => t[1] === "run" && t[2] === "test:unit" && t.length === 3;
 const CLI_URL_COMMANDS = new Set(["open", "goto", "tab-new"]);
 const CLI_OPTION = /^(-s=[A-Za-z0-9_-]+|--headed)$/;
@@ -122,13 +122,13 @@ const allowPlaywright = (subs) => (t) => {
     const options = rest.filter((x) => x.startsWith("-"));
     const args = rest.filter((x) => !x.startsWith("-"));
     if (!options.every((x) => CLI_OPTION.test(x))) return false;
-    if (!CLI_COMMANDS.has(args[0]) || args.some(outside)) return false;
-    // Navigation commands take only a local http(s) URL or about:blank; nothing else may be a URL.
-    if (CLI_URL_COMMANDS.has(args[0])) return args.slice(1).every((x) => x === "about:blank" || LOCAL_URL.test(x));
-    return !args.some(badUrl);
+    if (!CLI_COMMANDS.has(args[0])) return false;
+    // Navigation commands take only a local http(s) URL or about:blank; nothing else may be a URL or a path.
+    if (CLI_URL_COMMANDS.has(args[0])) return args.length <= 2 && args.slice(1).every((x) => x === "about:blank" || LOCAL_URL.test(x));
+    return !args.some((x) => outside(x) || badUrl(x));
   }
   // trace
-  return TRACE_COMMANDS.has(rest[0]) && !rest.some((x) => x === "-o" || x.startsWith("--output") || outside(x));
+  return TRACE_COMMANDS.has(rest[0]) && !rest.some((x) => x.startsWith("-") || outside(x));
 };
 
 const BENCH = allowNodeScript(/^scripts\/benchmark\/[A-Za-z0-9_.-]+\.js$/);
