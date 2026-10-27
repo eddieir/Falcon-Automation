@@ -40,7 +40,13 @@ function toAssertion(a) {
     const out = {};
     try {
         if (typeof a.check === "string" && a.check !== "") out.check = clean(a.check, 40).replace(CHECK_UNSAFE, "-");
-        if (typeof a.locator === "string" && a.locator !== "") out.locator = clean(Schemas.redactText(Schemas.stripUrlQueries(a.locator.slice(0, 4 * Limits.SELECTOR_MAX))), Limits.SELECTOR_MAX);
+        if (typeof a.locator === "string" && a.locator !== "") {
+            const cap = 4 * Limits.SELECTOR_MAX;
+            let src = a.locator;
+            // Cutting at the cap could split a secret below the redaction length; drop the cut token. Never empties evidence.
+            if (src.length > cap) src = src.slice(0, cap).replace(/[A-Za-z0-9+\/_=-]+$/, "") || "[redacted]";
+            out.locator = clean(Schemas.redactText(Schemas.stripUrlQueries(src)), Limits.SELECTOR_MAX);
+        }
     } catch { return null; }
     return out;
 }

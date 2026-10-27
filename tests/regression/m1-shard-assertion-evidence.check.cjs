@@ -150,6 +150,17 @@ test("A6c a long hostile locator is bounded before redaction", () => {
     assert.ok(f.results[0].assertion.locator.length <= Limits.SELECTOR_MAX);
 });
 
+test("A6d cutting a long locator never leaks a split secret or empties the evidence", () => {
+    const secret = "S3cr3tTokenValue0123456789abcdefXYZ";
+    const split = fragmentFor(0, 2, [{ name: "a", status: "passed", assertion: { check: "visible", locator: "Z".repeat(1170) + " " + secret + " tail" + "x ".repeat(200) } }]);
+    assert.ok(!JSON.stringify(split).includes(secret.slice(0, 20)));
+    const cutAtBoundary = fragmentFor(0, 2, [{ name: "a", status: "passed", assertion: { check: "visible", locator: "a b ".repeat(290) + secret } }]);
+    assert.ok(!JSON.stringify(cutAtBoundary).includes(secret.slice(0, 20)));
+    const oneToken = fragmentFor(0, 2, [{ name: "a", status: "passed", assertion: { check: "visible", locator: "q".repeat(5000) } }]);
+    assert.ok(oneToken.results[0].assertion.locator.length > 0);
+    assert.ok(Schemas.validateFragment(oneToken).ok);
+});
+
 test("A7 oversize metadata stays within existing limits (locator truncated, fragment cap still enforced)", () => {
     const f = fragmentFor(0, 2, [{ name: "a", status: "passed", assertion: { check: "visible", locator: "#" + "x".repeat(5000) } }]);
     assert.ok(f.results[0].assertion.locator.length <= Limits.SELECTOR_MAX);
