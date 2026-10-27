@@ -20,7 +20,9 @@
 | Code Review CR-E3 (hook, validator, delta) | `d192e37` | ACCEPT |
 | Security SEC-F | `d192e37` | NON-BLOCKING, P2s fixed |
 | Code Review CR-F, Security SEC-G | `ce5c54b` | ACCEPT WITH RISKS (range over-block fixed), NON-BLOCKING (P3s fixed or accepted) |
-| Final verification of the last hook revision | recorded in the PR description | |
+| Code Review CR-G, Security SEC-H (last hook revision; all code and agent files final) | `890a41c` | ACCEPT WITH RISKS (no findings of substance); NON-BLOCKING (no P0-P2; N1, N2 resolved, N3, N4 documented) |
+
+The commit after `890a41c` changes only this record. Every code, agent and skill file is as reviewed at `890a41c`.
 
 Never covered by a single reviewer: a one-pass review of the whole diff at the final SHA. Coverage is the union of the rows above.
 
@@ -28,6 +30,7 @@ Never covered by a single reviewer: a one-pass review of the whole diff at the f
 - The `Skill` tool has no per-skill scope; the matrix lists intended skills only.
 - The denylist for other subagents is advisory; the allowlist covers only the three Bash roles and only calls routed through `Bash`.
 - Fail-closed needs Claude Code >= 2.1.295; older versions ignore `onFailure`.
+- A hook payload whose `agent_id` is present but not a string is treated as the main session (SEC-H P3; the harness sends strings, checked live).
 - Allowlisted roles can reach any local port, read committed secrets with `git show`, and run repo scripts that may write files.
 - Bash is still held by Developer, QA, Code Reviewer, Security, DevOps, Release Manager, Solution Architect, Technical Writer and Production Director (pre-existing), plus Benchmark, Developer Experience and Performance & Reliability (new, allowlisted).
 - `differential-review` stays CC BY-SA 4.0 (see `THIRD_PARTY_NOTICES.md`); counsel should confirm before redistribution.
