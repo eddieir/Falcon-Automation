@@ -30,6 +30,7 @@ const Contract = require("../../src/core/outcome/Contract");
 const SafeFs = require("../../src/core/parallel/SafeFs");
 
 const WORKER = path.join(__dirname, "helpers", "contract-store-worker.js");
+const WORKER_R08 = path.join(__dirname, "helpers", "contract-store-worker-r08.js");
 
 let failures = 0;
 let passed = 0;
@@ -480,14 +481,19 @@ async function main() {
     };
     const approveWith = (s, lockOpts) => Store.approve(s.root, s.c.journeyId, s.digest, Object.assign({ channel: "cli", clock: () => new Date(CLOCK_ISO) }, lockOpts));
 
-    await test("steal mutex left by a dead writer is recovered once older than lockStaleMs", async () => {
+    await test("R1-B: steal mutex left by a dead writer is NEVER recovered -- fails closed, nothing written", async () => {
+        // R1-B (issue #125) retires the old automatic steal-mutex recovery:
+        // no process unlinks a mutex it does not hold, even a dead/stale one.
         const s = await staleSetup();
         await s.put(s.lockFile, 2 ** 30); await s.age(s.lockFile, 100);
         await s.put(s.mutexFile, 2 ** 30 - 1); await s.age(s.mutexFile, 100);
-        const r = await approveWith(s, { lockStaleMs: 50, lockTimeoutMs: 3000, lockRetryMs: 10 });
-        assert.strictEqual(r.ok, true, `expected recovery, got ${JSON.stringify(r)}`);
-        assert.strictEqual(fs.existsSync(s.mutexFile), false, "steal mutex must be released");
-        assert.strictEqual(fs.existsSync(s.lockFile), false, "lock must be released");
+        const r = await approveWith(s, { lockStaleMs: 50, lockTimeoutMs: 300, lockRetryMs: 10 });
+        assert.strictEqual(r.ok, false);
+        assert.strictEqual(r.code, "LOCK_TIMEOUT", `expected fail-closed LOCK_TIMEOUT, got ${JSON.stringify(r)}`);
+        assert.strictEqual(fs.existsSync(s.mutexFile), true, "dead-owner mutex must be left exactly as it was");
+        assert.strictEqual(fs.existsSync(s.lockFile), true, "lock must be left exactly as it was");
+        const st = await Store.status(s.root, s.c.journeyId, s.digest);
+        assert.strictEqual(st.status, "PROPOSED", "nothing may be written while the mutex is stuck");
     });
 
     await test("fresh steal mutex (dead pid, younger than lockStaleMs) is NOT removed: fail closed, nothing written", async () => {
@@ -512,6 +518,117 @@ async function main() {
         assert.strictEqual(fs.existsSync(s.mutexFile), true, "live holder's mutex must not be removed");
         const st = await Store.status(s.root, s.c.journeyId, s.digest);
         assert.strictEqual(st.status, "PROPOSED");
+    });
+
+    // --------------------------------------------------------- R-ID map (issue #125, R1-B regressions)
+    // R04 live-owner contention        -> "old steal mutex held by a LIVE pid is never removed" (above)
+    // R05 dead mutex owner fails closed -> "R1-B: steal mutex left by a dead writer is NEVER recovered" (above)
+    // R06 empty mutex                   -> below
+    // R07 malformed mutex               -> below
+    // R08 delayed contender vs fresh mutex -> below
+    // R09 three competing processes     -> "stale-lock steal race: no lost update..." (above, w1/w2/w3)
+    // R10 crash before/after commit     -> "writer SIGKILLed while holding lock..." / "...lock still fresh..." (above)
+    // R11 failed write never reports success -> "malformed events store with concurrent writers fails closed..." (above)
+    // R12 existing approval history compatibility -> not exercised by this concurrency file; out of scope here.
+
+    await test("R06: empty steal mutex (0 bytes, old mtime) is NEVER removed -- fail closed, nothing written", async () => {
+        const s = await staleSetup();
+        await s.put(s.lockFile, 2 ** 30); await s.age(s.lockFile, 100);
+        await fs.promises.writeFile(s.mutexFile, "", { mode: 0o600 });
+        await s.age(s.mutexFile, 100);
+        const r = await approveWith(s, { lockStaleMs: 50, lockTimeoutMs: 300, lockRetryMs: 10 });
+        assert.strictEqual(r.ok, false);
+        assert.strictEqual(r.code, "LOCK_TIMEOUT", `expected fail-closed LOCK_TIMEOUT, got ${JSON.stringify(r)}`);
+        assert.strictEqual(fs.existsSync(s.mutexFile), true, "empty mutex must be left exactly as it was");
+        const after = await fs.promises.readFile(s.mutexFile, "utf8");
+        assert.strictEqual(after, "", "empty mutex content must be untouched");
+        const st = await Store.status(s.root, s.c.journeyId, s.digest);
+        assert.strictEqual(st.status, "PROPOSED", "nothing may be written while the mutex is stuck");
+    });
+
+    await test("R07: malformed steal mutex (invalid JSON, old mtime) is NEVER removed -- fail closed, nothing written", async () => {
+        const s = await staleSetup();
+        await s.put(s.lockFile, 2 ** 30); await s.age(s.lockFile, 100);
+        await fs.promises.writeFile(s.mutexFile, "{ not valid json", { mode: 0o600 });
+        await s.age(s.mutexFile, 100);
+        const r = await approveWith(s, { lockStaleMs: 50, lockTimeoutMs: 300, lockRetryMs: 10 });
+        assert.strictEqual(r.ok, false);
+        assert.strictEqual(r.code, "LOCK_TIMEOUT", `expected fail-closed LOCK_TIMEOUT, got ${JSON.stringify(r)}`);
+        assert.strictEqual(fs.existsSync(s.mutexFile), true, "malformed mutex must be left exactly as it was");
+        const after = await fs.promises.readFile(s.mutexFile, "utf8");
+        assert.strictEqual(after, "{ not valid json", "malformed mutex content must be untouched");
+        const st = await Store.status(s.root, s.c.journeyId, s.digest);
+        assert.strictEqual(st.status, "PROPOSED", "nothing may be written while the mutex is stuck");
+    });
+
+    // R08: process A observes a dead/stale steal mutex left by a crashed
+    // holder and is delayed (via a deterministic unlink barrier in a child
+    // process -- no production hook, no sleep) at the exact point it would
+    // unlink it. While delayed, the original mutex is removed and replaced
+    // by a FRESH mutex genuinely held by live process B. A must never
+    // unlink a mutex it does not hold: B's fresh mutex must still be exactly
+    // as B left it once A finishes, however A's own attempt resolves.
+    await test("R08: process A delayed before unlinking a dead mutex must never remove B's fresh mutex", async () => {
+        const s = await staleSetup();
+        await s.put(s.lockFile, 2 ** 30); await s.age(s.lockFile, 100);
+        await s.put(s.mutexFile, 2 ** 30 - 1); await s.age(s.mutexFile, 100);
+
+        // A genuinely live, separate process to own B's fresh mutex -- not
+        // just this test process's own pid.
+        const liveB = spawn(process.execPath, ["-e", "setInterval(() => {}, 1e6)"], { stdio: "ignore" });
+
+        const readyFile = path.join(s.root, "a-ready");
+        const goFile = path.join(s.root, "a-go");
+        const cfg = {
+            root: s.root, journeyId: s.c.journeyId, digest: s.digest, action: "approve", channel: "cli",
+            clockISO: CLOCK_ISO, lockOpts: { lockStaleMs: 50, lockTimeoutMs: 1500, lockRetryMs: 10 },
+            barrierPath: s.mutexFile, readyFile, goFile,
+        };
+        const child = spawn(process.execPath, [WORKER_R08, JSON.stringify(cfg)], { stdio: ["ignore", "pipe", "pipe"] });
+        let out = ""; let err = "";
+        child.stdout.on("data", (d) => { out += d; });
+        child.stderr.on("data", (d) => { err += d; });
+        const closed = new Promise((resolve) => {
+            const killer = setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* gone */ } }, 10000);
+            child.on("close", (code) => { clearTimeout(killer); resolve(code); });
+        });
+
+        let barrierHit = false;
+        const deadline = Date.now() + 2000;
+        while (Date.now() < deadline) {
+            if (fs.existsSync(readyFile)) { barrierHit = true; break; }
+            const code = await Promise.race([closed, new Promise((r) => setTimeout(() => r(null), 10))]);
+            if (code !== null && code !== undefined) break; // worker already finished without ever hitting the barrier (fixed code)
+        }
+
+        let freshPayload = null;
+        if (barrierHit) {
+            // Simulate the original mutex being freed and immediately
+            // replaced by B's genuinely fresh, live-owned mutex -- strictly
+            // after A's recheck (which already happened before the barrier
+            // fired) and strictly before A's delayed unlink executes.
+            await fs.promises.unlink(s.mutexFile).catch(() => {});
+            freshPayload = JSON.stringify({ pid: liveB.pid, token: "fresh-b-".padEnd(32, "0"), at: Date.now() });
+            await fs.promises.writeFile(s.mutexFile, freshPayload, { mode: 0o600 });
+            await fs.promises.writeFile(goFile, "go");
+        }
+
+        const code = await closed;
+        assert.strictEqual(code, 0, `worker A exited nonzero: ${err}`);
+        let result = null;
+        try { result = JSON.parse(out); } catch { /* leave null */ }
+        assert.ok(result, `worker A produced no parseable result: ${out} / ${err}`);
+
+        if (barrierHit) {
+            // The core invariant: A never unlinks a mutex it does not hold.
+            // B's fresh mutex must still be exactly what B wrote, whatever
+            // A's own result was.
+            assert.strictEqual(fs.existsSync(s.mutexFile), true, "B's fresh mutex must still exist -- A must never remove a mutex it does not hold");
+            const after = await fs.promises.readFile(s.mutexFile, "utf8");
+            assert.strictEqual(after, freshPayload, "B's fresh mutex content must be byte-for-byte unchanged");
+        }
+
+        try { liveB.kill("SIGKILL"); } catch { /* already gone */ }
     });
 
     // --------------------------------------------------------- (m) no pause hooks: real racing stealers, many rounds
