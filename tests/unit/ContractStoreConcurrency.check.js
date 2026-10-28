@@ -84,7 +84,10 @@ function runWorker(cfg) {
         let err = "";
         child.stdout.on("data", (d) => { out += d; });
         child.stderr.on("data", (d) => { err += d; });
+        // A worker that never finishes must fail the test, not hang CI.
+        const killer = setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* gone */ } }, 30000);
         child.on("close", (code) => {
+            clearTimeout(killer);
             let parsed = null;
             try { parsed = JSON.parse(out); } catch { /* leave null */ }
             resolve({ code, out, err, result: parsed });
@@ -443,6 +446,10 @@ async function main() {
         const types = lines.map((l) => l.type);
         const seqs = lines.map((l) => l.seq);
 
+        // The legitimate owner must have committed: a regression that made it
+        // fail would otherwise satisfy the invariant below vacuously.
+        assert.ok(r1.result && r1.result.ok === true && r1.result.status === "APPROVED", `W1 (legitimate owner) must commit: ${JSON.stringify(r1.result)}`);
+
         // Invariant, not mechanism: every operation that returned ok:true
         // must have its event present in the final committed chain.
         for (const [label, result] of [["w1-approve", r1.result], ["w2-reject-steal-attempt", r2.result], ["w3-reject", r3.result]]) {
@@ -457,6 +464,80 @@ async function main() {
 
         const finalStatus = await Store.status(root, c.journeyId, digest);
         assert.strictEqual(finalStatus.integrity, "ok", `final chain must still verify: ${JSON.stringify({ finalStatus, types })}`);
+    });
+
+    // --------------------------------------------------------- (j)-(l) steal mutex: recovery rules, in-process callers
+    const staleSetup = async () => {
+        const root = await tmpRoot();
+        const c = contract();
+        const digest = digestOf(c);
+        await proposeSync(root, c);
+        const lockFile = SafeFs.resolveUnder(root, c.journeyId, "events.jsonl.lock");
+        const mutexFile = SafeFs.resolveUnder(root, c.journeyId, "events.jsonl.lock.steal");
+        const age = (f, secs) => fs.promises.utimes(f, Date.now() / 1000 - secs, Date.now() / 1000 - secs);
+        const put = (f, pid) => fs.promises.writeFile(f, JSON.stringify({ pid, token: "d".repeat(32), at: Date.now() - 100000 }), { mode: 0o600 });
+        return { root, c, digest, lockFile, mutexFile, age, put };
+    };
+    const approveWith = (s, lockOpts) => Store.approve(s.root, s.c.journeyId, s.digest, Object.assign({ channel: "cli", clock: () => new Date(CLOCK_ISO) }, lockOpts));
+
+    await test("steal mutex left by a dead writer is recovered once older than lockStaleMs", async () => {
+        const s = await staleSetup();
+        await s.put(s.lockFile, 2 ** 30); await s.age(s.lockFile, 100);
+        await s.put(s.mutexFile, 2 ** 30 - 1); await s.age(s.mutexFile, 100);
+        const r = await approveWith(s, { lockStaleMs: 50, lockTimeoutMs: 3000, lockRetryMs: 10 });
+        assert.strictEqual(r.ok, true, `expected recovery, got ${JSON.stringify(r)}`);
+        assert.strictEqual(fs.existsSync(s.mutexFile), false, "steal mutex must be released");
+        assert.strictEqual(fs.existsSync(s.lockFile), false, "lock must be released");
+    });
+
+    await test("fresh steal mutex (dead pid, younger than lockStaleMs) is NOT removed: fail closed, nothing written", async () => {
+        const s = await staleSetup();
+        await s.put(s.lockFile, 2 ** 30); await s.age(s.lockFile, 100);
+        await s.put(s.mutexFile, 2 ** 30 - 1); // mtime is now
+        const r = await approveWith(s, { lockStaleMs: 5000, lockTimeoutMs: 300, lockRetryMs: 10 });
+        assert.strictEqual(r.ok, false);
+        assert.strictEqual(r.code, "LOCK_TIMEOUT");
+        assert.strictEqual(fs.existsSync(s.mutexFile), true, "fresh mutex must be left alone");
+        const st = await Store.status(s.root, s.c.journeyId, s.digest);
+        assert.strictEqual(st.status, "PROPOSED");
+    });
+
+    await test("old steal mutex held by a LIVE pid is never removed: fail closed, nothing written", async () => {
+        const s = await staleSetup();
+        await s.put(s.lockFile, 2 ** 30); await s.age(s.lockFile, 100);
+        await s.put(s.mutexFile, process.pid); await s.age(s.mutexFile, 100);
+        const r = await approveWith(s, { lockStaleMs: 50, lockTimeoutMs: 400, lockRetryMs: 10 });
+        assert.strictEqual(r.ok, false);
+        assert.strictEqual(r.code, "LOCK_TIMEOUT");
+        assert.strictEqual(fs.existsSync(s.mutexFile), true, "live holder's mutex must not be removed");
+        const st = await Store.status(s.root, s.c.journeyId, s.digest);
+        assert.strictEqual(st.status, "PROPOSED");
+    });
+
+    // --------------------------------------------------------- (m) no pause hooks: real racing stealers, many rounds
+    await test("two writers racing to steal the same stale lock: one winner, no lost event, no leftovers (N=12)", async () => {
+        for (let round = 0; round < 12; round++) {
+            const s = await staleSetup();
+            await s.put(s.lockFile, 2 ** 30); await s.age(s.lockFile, 100);
+            const goFile = path.join(s.root, "go");
+            const lockOpts = { lockStaleMs: 50, lockTimeoutMs: 4000, lockRetryMs: 5 };
+            const base = { root: s.root, journeyId: s.c.journeyId, digest: s.digest, channel: "cli", clockISO: CLOCK_ISO, goFile, lockOpts };
+            const pa = runWorker(Object.assign({ action: "approve" }, base));
+            const pr = runWorker(Object.assign({ action: "reject" }, base));
+            await new Promise((r) => setTimeout(r, 40));
+            await fs.promises.writeFile(goFile, "go");
+            const [ra, rr] = await Promise.all([pa, pr]);
+            assert.strictEqual(ra.code, 0, ra.err);
+            assert.strictEqual(rr.code, 0, rr.err);
+            const winners = [ra.result, rr.result].filter((x) => x && x.ok === true);
+            assert.strictEqual(winners.length, 1, `round ${round}: expected exactly one winner: ${JSON.stringify([ra.result, rr.result])}`);
+            const lines = (await readEventsRaw(s.root, s.c.journeyId)).trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+            assert.ok(lines.map((l) => l.type).includes(winners[0].status), `round ${round}: winner's event missing`);
+            assert.deepStrictEqual(lines.map((l) => l.seq), lines.map((_, i) => i + 1));
+            assert.strictEqual((await Store.status(s.root, s.c.journeyId, s.digest)).integrity, "ok");
+            const leftovers = (await fs.promises.readdir(path.dirname(s.lockFile))).filter((n) => n.includes(".stale-") || n.endsWith(".lock") || n.endsWith(".steal"));
+            assert.deepStrictEqual(leftovers, [], `round ${round}: leftover lock files ${leftovers}`);
+        }
     });
 
     console.log(`\n${passed} passed, ${failures} failed`);
