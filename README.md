@@ -8,7 +8,7 @@ Falcon is an open-source test automation framework built on Playwright. It explo
 
 **Technical preview · Node.js 22+ · Playwright · MIT licensed**
 
-[See the demo](#see-falcon-in-action) · [Try it locally](#quick-start) · [View the architecture](docs/ARCHITECTURE.md) · [Explore the docs](#documentation)
+[See the demo](#see-falcon-in-action) · [Try it locally](#quick-start) · [View the architecture](docs/ARCHITECTURE.md) · [Explore the docs](#documentation) · [View the roadmap](#roadmap)
 
 ---
 
@@ -240,6 +240,24 @@ The current review audit records decision channels such as CLI and dashboard, no
 | [Release history](CHANGELOG.md) | Delivered changes and fixes. |
 | [Development plans](docs/PHASE-PLANS.md) | Phase plans and implementation context. |
 | [Contributing](CONTRIBUTING.md) | Development and contribution guidance. |
+
+
+## Roadmap
+
+Falcon's roadmap is organized into GitHub milestones. Target dates are provisional planning estimates, not release commitments. See the [milestone register](docs/FALCON-MILESTONE-LINKS.md) and [execution strategy](docs/roadmap/EXECUTION-STRATEGY.md) for sequencing, dependencies, and current status.
+
+| Milestone | Target date | Focus |
+| --- | --- | --- |
+| [M0 — Competitive evidence baseline](https://github.com/eddieir/Falcon-Automation/milestone/1) | 2026-11-13 | Competitor evidence, benchmark harness, and capability-claim audit |
+| [M1 — Trustworthy Alpha](https://github.com/eddieir/Falcon-Automation/milestone/2) | 2027-01-08 | Verified business assertions, truthful reporting, and bounded journey discovery |
+| [M2 — Secure Technical Preview](https://github.com/eddieir/Falcon-Automation/milestone/3) | 2027-02-19 | Security gates, safe actions, and isolated authenticated journeys |
+| [M3 — Verified Self-Healing](https://github.com/eddieir/Falcon-Automation/milestone/4) | 2027-03-26 | Matcher and replay guarantees, with external-app healing evidence |
+| [M4 — Developer Beta](https://github.com/eddieir/Falcon-Automation/milestone/5) | 2027-05-07 | Playwright test import/export and compatibility |
+| [M5 — Efficient CI](https://github.com/eddieir/Falcon-Automation/milestone/6) | 2027-06-18 | Test selection, sharding, and cost/runtime controls |
+| [M6 — Enterprise Operations](https://github.com/eddieir/Falcon-Automation/milestone/7) | 2027-08-13 | RBAC, retention, audit export, and CI integrations |
+| [M7 — Customer Pilot](https://github.com/eddieir/Falcon-Automation/milestone/8) | 2027-09-24 | Design-partner evaluations, ROI/TCO evidence, and packaging decisions |
+| [M8 — Advanced QA](https://github.com/eddieir/Falcon-Automation/milestone/9) | 2027-12-03 | Accessibility, visual regression, and UI-to-API journey evidence |
+| [M9 — Independent Competitive Release](https://github.com/eddieir/Falcon-Automation/milestone/10) | 2028-01-14 | Reproducible benchmarks, independent reviews, and release-readiness evidence |
 
 <a id="roadmap"></a>
 
