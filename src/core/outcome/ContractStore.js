@@ -15,6 +15,24 @@
  * within the same process. Lock acquisition retries with a short backoff up
  * to `lockTimeoutMs` (default 5000ms) and fails closed (no write) with
  * `LOCK_TIMEOUT` on contention. A lock is only ever stolen from a dead owner
+ *
+ * G77B-02 (issue #125): the three lock options (`lockTimeoutMs`,
+ * `lockStaleMs`, `lockRetryMs`) are validated and bounds-checked before any
+ * lock or journey I/O is attempted. `lockTimeoutMs` and `lockStaleMs` must
+ * each be a strict integer in [1, 300000] (1ms..5min) — never zero, never
+ * unbounded ("an unlimited wait" is explicitly disallowed). `lockRetryMs`
+ * must be a strict integer in [1, 60000], additionally capped per call at
+ * whichever is smaller of that or the resolved `lockTimeoutMs`, so a retry
+ * interval can never exceed (or default its way past) the timeout it backs
+ * off within. Only `typeof "number"` values passing `Number.isSafeInteger`
+ * are accepted — NaN, Infinity, floats, strings and booleans are all
+ * rejected, never coerced or silently truncated. An omitted option resolves
+ * to its documented default, itself clamped into range. Any out-of-range or
+ * wrong-typed value fails the whole call closed with
+ * `{ ok: false, code: "INVALID_LOCK_OPTION" }` before `acquireLock` creates
+ * the journey directory or attempts a `wx` open — there is no code path
+ * through `propose`/`approve`/`reject` that reaches a write, or that skips
+ * lock acquisition, on invalid lock-option input.
  * (verified via `process.kill(pid, 0)`; a live holder, however old its lock,
  * is never stolen) and only once it is older than `lockStaleMs` (default
  * 30000ms), and only by the process that itself holds the short-lived
@@ -104,6 +122,30 @@ const DEFAULT_LOCK_TIMEOUT_MS = 5000;
 const DEFAULT_LOCK_STALE_MS = 30000;
 const DEFAULT_LOCK_RETRY_MS = 25;
 
+// G77B-02 (issue #125): documented, enforced bounds for the three lock
+// options. `lockTimeoutMs`/`lockStaleMs` share the same [1ms, 5min] range —
+// below 1ms the deadline math degenerates (an immediately-expired wait that
+// cannot distinguish "no contention" from "gave up"), and above 5 minutes a
+// caller would be granting itself what is, in practice, an unlimited wait, the
+// one thing this lock is documented to never do. `lockRetryMs` has a 1ms
+// floor (never a zero/negative busy-spin) and is additionally capped, per
+// call, at whichever is smaller of MAX_LOCK_RETRY_MS or the resolved
+// lockTimeoutMs for that same call — a retry interval may never exceed the
+// timeout it backs off within. Values outside these ranges are rejected
+// fail-closed with `{ ok: false, code: "INVALID_LOCK_OPTION" }` before any
+// lock file is touched (no directory is created, no wx open is attempted);
+// an unset option still resolves to the documented default, clamped into the
+// same range so a default can never itself violate the retry-vs-timeout
+// invariant. Only a strict, non-NaN, non-Infinity, integer `typeof "number"`
+// passing `Number.isSafeInteger` is ever accepted — floats, strings,
+// booleans, NaN and Infinity are all rejected, never coerced.
+const MIN_LOCK_TIMEOUT_MS = 1;
+const MAX_LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const MIN_LOCK_STALE_MS = 1;
+const MAX_LOCK_STALE_MS = 5 * 60 * 1000; // 5 minutes
+const MIN_LOCK_RETRY_MS = 1;
+const MAX_LOCK_RETRY_MS = 60 * 1000; // 1 minute, further capped by lockTimeoutMs per call
+
 function ok(value) { return Object.assign({ ok: true }, value); }
 function bad(code, message) { return { ok: false, code, message: String(message || code).slice(0, 200) }; }
 
@@ -156,12 +198,48 @@ function withFileLock(key, fn) {
 
 // --------------------------------------------------------------- cross-process lock file
 
+function clampToRange(def, min, max) { return Math.min(Math.max(def, min), max); }
+
+/**
+ * Validate and resolve one lock option. `v === undefined` resolves to `def`,
+ * clamped into [min, max] so a caller-unset option can never itself violate
+ * the bound. Any other value must be a strict `typeof "number"` passing
+ * `Number.isSafeInteger` (rejects NaN, Infinity, floats, strings, booleans)
+ * and must fall within [min, max]; otherwise fails closed with
+ * `INVALID_LOCK_OPTION`.
+ */
+function validateBoundedLockOption(name, v, def, min, max) {
+    if (v === undefined) return { ok: true, value: clampToRange(def, min, max) };
+    if (typeof v !== "number" || !Number.isSafeInteger(v)) {
+        return bad("INVALID_LOCK_OPTION", `${name} must be a safe integer`);
+    }
+    if (v < min || v > max) {
+        return bad("INVALID_LOCK_OPTION", `${name} must be between ${min} and ${max}`);
+    }
+    return { ok: true, value: v };
+}
+
+/**
+ * Resolve and validate all three lock options together. Returns
+ * `{ ok: true, lockTimeoutMs, lockStaleMs, lockRetryMs }` or
+ * `{ ok: false, code: "INVALID_LOCK_OPTION", message }`. `lockRetryMs`'s
+ * upper bound is additionally capped at the resolved `lockTimeoutMs` for
+ * this same call, so a retry interval can never exceed (or, via the clamped
+ * default path, silently inherit a default that would exceed) the timeout
+ * it backs off within. Idempotent: calling this again on its own `ok: true`
+ * output (which carries only already-valid values) re-validates to the same
+ * result.
+ */
 function lockOptsOf(opts) {
     const o = opts || {};
-    const lockTimeoutMs = Number.isInteger(o.lockTimeoutMs) && o.lockTimeoutMs >= 0 ? o.lockTimeoutMs : DEFAULT_LOCK_TIMEOUT_MS;
-    const lockStaleMs = Number.isInteger(o.lockStaleMs) && o.lockStaleMs >= 0 ? o.lockStaleMs : DEFAULT_LOCK_STALE_MS;
-    const lockRetryMs = Number.isInteger(o.lockRetryMs) && o.lockRetryMs > 0 ? o.lockRetryMs : DEFAULT_LOCK_RETRY_MS;
-    return { lockTimeoutMs, lockStaleMs, lockRetryMs };
+    const t = validateBoundedLockOption("lockTimeoutMs", o.lockTimeoutMs, DEFAULT_LOCK_TIMEOUT_MS, MIN_LOCK_TIMEOUT_MS, MAX_LOCK_TIMEOUT_MS);
+    if (!t.ok) return t;
+    const s = validateBoundedLockOption("lockStaleMs", o.lockStaleMs, DEFAULT_LOCK_STALE_MS, MIN_LOCK_STALE_MS, MAX_LOCK_STALE_MS);
+    if (!s.ok) return s;
+    const retryMax = Math.min(MAX_LOCK_RETRY_MS, t.value);
+    const r = validateBoundedLockOption("lockRetryMs", o.lockRetryMs, DEFAULT_LOCK_RETRY_MS, MIN_LOCK_RETRY_MS, retryMax);
+    if (!r.ok) return r;
+    return { ok: true, lockTimeoutMs: t.value, lockStaleMs: s.value, lockRetryMs: r.value };
 }
 
 function isPidAlive(pid) {
@@ -287,7 +365,9 @@ async function tryStealUnderMutex(lockFile, stealMutexFile, judgedInfo, lockStal
  * Never writes to the destination (events.jsonl) itself.
  */
 async function acquireLock(lockFile, stealMutexFile, lockOpts) {
-    const { lockTimeoutMs, lockStaleMs, lockRetryMs } = lockOptsOf(lockOpts);
+    const resolved = lockOptsOf(lockOpts);
+    if (!resolved.ok) return resolved; // INVALID_LOCK_OPTION: fail closed, no wx open attempted
+    const { lockTimeoutMs, lockStaleMs, lockRetryMs } = resolved;
     const deadline = Date.now() + lockTimeoutMs;
     const token = crypto.randomBytes(16).toString("hex");
     const payload = JSON.stringify({ pid: process.pid, token, at: Date.now() });
@@ -558,6 +638,7 @@ async function withLock(root, journeyId, opts, fn) {
         return bad("PATH_INVALID", "journeyId invalid");
     }
     const resolvedLockOpts = lockOptsOf(opts);
+    if (!resolvedLockOpts.ok) return resolvedLockOpts; // INVALID_LOCK_OPTION: fail closed before any lock/journey I/O
 
     return await withFileLock(file, async () => {
         // Only mutating operations reach here; read-only status/isApproved
@@ -573,6 +654,7 @@ async function withLock(root, journeyId, opts, fn) {
         if (!acq.ok) {
             if (acq.code === "LOCK_TIMEOUT") return bad("LOCK_TIMEOUT", "lock acquisition timed out");
             if (acq.code === "LOCK_CONTENTION") return bad("LOCK_CONTENTION", "lock contended by another writer");
+            if (acq.code === "INVALID_LOCK_OPTION") return acq;
             return bad("LOCK_IO_ERROR", "lock file could not be created");
         }
         try {
@@ -716,6 +798,16 @@ async function isApproved(root, journeyId, digest) {
 module.exports = {
     propose, approve, reject, status, isApproved,
     EVENT_TYPES, CHANNELS, GENESIS_PREV,
+    // G77B-02 (issue #125): documented lock-option bounds, exposed read-only
+    // so tests can assert against the real constants instead of duplicating
+    // the numbers. lockRetryMs's effective max is additionally capped per
+    // call at the resolved lockTimeoutMs (see lockOptsOf); this is the
+    // absolute ceiling before that per-call cap.
+    LOCK_OPTION_BOUNDS: Object.freeze({
+        lockTimeoutMs: Object.freeze({ min: MIN_LOCK_TIMEOUT_MS, max: MAX_LOCK_TIMEOUT_MS, default: DEFAULT_LOCK_TIMEOUT_MS }),
+        lockStaleMs: Object.freeze({ min: MIN_LOCK_STALE_MS, max: MAX_LOCK_STALE_MS, default: DEFAULT_LOCK_STALE_MS }),
+        lockRetryMs: Object.freeze({ min: MIN_LOCK_RETRY_MS, max: MAX_LOCK_RETRY_MS, default: DEFAULT_LOCK_RETRY_MS }),
+    }),
     // Exposed only for deterministic cross-process lock testing
     // (tests/unit/ContractStoreConcurrency.check.js). Not part of the public
     // contract-lifecycle API and must not be used to bypass lifecycle rules.
