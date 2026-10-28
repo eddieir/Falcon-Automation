@@ -41,10 +41,20 @@ async function main() {
     const clock = () => new Date(cfg.clockISO || "2026-01-01T00:00:00.000Z");
     const opts = Object.assign({ channel: cfg.channel || "cli", clock }, cfg.lockOpts || {});
 
+    if (cfg.pauseAt) {
+        const { point, readyFile, goFile } = cfg.pauseAt;
+        Store.__lockTestHooks.setPause(async (p) => {
+            if (p !== point) return;
+            fs.writeFileSync(readyFile, "1");
+            waitForGo(goFile);
+        });
+    }
+
     if (cfg.action === "hold-lock") {
         const lockFile = SafeFs.resolveUnder(cfg.root, cfg.journeyId, "events.jsonl.lock");
+        const stealMutexFile = SafeFs.resolveUnder(cfg.root, cfg.journeyId, "events.jsonl.lock.steal");
         fs.mkdirSync(path.dirname(lockFile), { recursive: true, mode: 0o700 });
-        const acq = await Store.__lockTestHooks.acquireLock(lockFile, Store.__lockTestHooks.lockOptsOf(cfg.lockOpts || {}));
+        const acq = await Store.__lockTestHooks.acquireLock(lockFile, stealMutexFile, Store.__lockTestHooks.lockOptsOf(cfg.lockOpts || {}));
         fs.writeFileSync(cfg.readyFile, JSON.stringify(acq));
         if (!acq.ok) { process.exit(1); return; }
         await new Promise(() => {}); // idle until SIGKILLed by the parent

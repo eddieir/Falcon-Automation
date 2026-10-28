@@ -17,9 +17,12 @@
  * `LOCK_TIMEOUT` on contention. A lock is only ever stolen from a dead owner
  * (verified via `process.kill(pid, 0)`; a live holder, however old its lock,
  * is never stolen) and only once it is older than `lockStaleMs` (default
- * 30000ms); theft renames the lock aside and re-verifies the renamed file's
- * content matches what was judged stale before trusting it, otherwise it
- * fails closed with `LOCK_CONTENTION`. Immediately before the final rename,
+ * 30000ms). Stealing is serialized by a short-lived mutex file
+ * (`events.jsonl.lock.steal`): under it the stale lock is re-read and
+ * unlinked only if it is still the exact stale content judged earlier
+ * (there is no rename-aside step). While a stale lock file exists nobody can
+ * create a fresh one (wx fails), so only a mutex holder can change it and a
+ * live writer's fresh lock cannot be displaced by a late stealer. Immediately before the final rename,
  * the lock and a content fingerprint of the events file are re-checked
  * against what was read under the lock; any mismatch aborts with `LOCK_LOST`
  * and writes nothing.
@@ -32,7 +35,7 @@
  * filesystem (not across containers with separate pid namespaces).
  *
  * NOT guaranteed / residual limits:
- *  - single host only — this uses local file locks (open 'wx' + rename);
+ *  - single host only — this uses local file locks (open 'wx', unlink, atomic rename);
  *    it is not safe over NFS or any shared filesystem across hosts;
  *  - no external anchor — the hash chain proves internal consistency of one
  *    file, not authenticity; an attacker who can rewrite the whole store
@@ -41,11 +44,18 @@
  *  - cutting the file at a line boundary is undetected;
  *  - no operator identity — `channel` and `at` are operator-supplied labels,
  *    not proof of who recorded an approval;
- *  - a tiny TOCTOU window remains between judging a lock stale and the
- *    rename that steals it (narrowed, not eliminated, by re-verifying
- *    content after the rename); a hung but still-live holder is never
- *    stolen from and yields `LOCK_TIMEOUT` for other writers until it exits
- *    or its process is gone.
+ *  - exclusivity of a live owner (including the gap between its final
+ *    ownership check and the rename in writeChain) rests on: (a) wx being an
+ *    atomic exclusive create; (b) process.kill(pid, 0) reporting liveness
+ *    truthfully within one pid namespace on one host; (c) the steal mutex
+ *    being recovered only when older than lockStaleMs AND its pid is dead —
+ *    a crash inside that micro critical section plus two recoverers racing
+ *    on exactly that file would reintroduce the lost-update window (inherent
+ *    to lock files without kernel locks); (d) nobody with write access to the
+ *    store directory deleting a live lock by hand; writeChain's rename has no
+ *    compare-and-swap, so a live owner wrongly judged dead can lose to a later
+ *    writer. A hung but still-live holder is never stolen from and yields
+ *    `LOCK_TIMEOUT` for other writers until it exits or its process is gone.
  *
  * Security note (read before relying on this for anything beyond operator
  * mistakes): the hash chain proves *internal consistency* of one file. It
@@ -106,6 +116,20 @@ function isoNow(clock) {
 }
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+// --------------------------------------------------------------- test-only pause seam
+//
+// Production code never sets this and the no-op path costs nothing extra.
+// Used exclusively by tests/unit/ContractStoreConcurrency.check.js (via
+// tests/unit/helpers/contract-store-worker.js, a separate process per
+// worker) to deterministically interleave lock acquisition and commit
+// across real cross-process races. There is no env var and no option
+// threaded through any public caller; the only way to install a pause is
+// this module-level hook, which each test worker process sets for itself.
+
+let __pauseHook = null;
+function __setPause(fn) { __pauseHook = typeof fn === "function" ? fn : null; }
+async function __pause(point) { if (__pauseHook) await __pauseHook(point); }
 
 // --------------------------------------------------------------- per-file write queue (in-process guard)
 
@@ -184,15 +208,77 @@ function lockSnapshotKey(info) {
 }
 
 /**
+ * Try to remove a stale lockFile under the short-lived steal mutex
+ * (`events.jsonl.lock.steal`, wx 0600). While that mutex file exists,
+ * nobody else can create a *fresh* lockFile (their own wx create of
+ * lockFile still fails EEXIST against the old stale content, and only a
+ * mutex holder is permitted to unlink it) — so the re-read-then-unlink
+ * done here under the mutex cannot race a concurrent writer's fresh lock
+ * into being removed: by the time we hold the mutex, lockFile is either
+ * still the exact content we judged stale (safe to unlink) or it has
+ * already changed (we back off and let the caller retry from scratch).
+ * Never throws; a failure to acquire the mutex or recover a dead one is
+ * just "did not steal this round" and the caller's own retry loop and
+ * lockTimeoutMs deadline govern how long that is tried for.
+ */
+async function tryStealUnderMutex(lockFile, stealMutexFile, judgedInfo, lockStaleMs) {
+    const mutexToken = crypto.randomBytes(16).toString("hex");
+    const mutexPayload = JSON.stringify({ pid: process.pid, token: mutexToken, at: Date.now() });
+
+    let fh;
+    try {
+        fh = await fs.promises.open(stealMutexFile, "wx", 0o600);
+        try { await fh.writeFile(mutexPayload, "utf8"); } finally { await fh.close(); }
+    } catch (e) {
+        if (!e || e.code !== "EEXIST") return; // unexpected I/O error: fail closed, nothing stolen this round
+        // Someone else holds the steal mutex. Only recover it if it is
+        // itself older than lockStaleMs and its owning pid is provably
+        // dead, and only via a token-checked unlink (never blind).
+        const minfo = await readLockRaw(stealMutexFile);
+        if (minfo.exists && !minfo.symlink && Number.isFinite(minfo.mtimeMs) && minfo.parsed) {
+            const mAge = Date.now() - minfo.mtimeMs;
+            if (mAge > lockStaleMs && !isPidAlive(minfo.parsed.pid)) {
+                try {
+                    const recheck = await readLockRaw(stealMutexFile);
+                    if (recheck.parsed && recheck.parsed.token === minfo.parsed.token) {
+                        await fs.promises.unlink(stealMutexFile);
+                    }
+                } catch { /* best effort; outer loop retries */ }
+            }
+        }
+        return; // did not acquire the mutex this round
+    }
+
+    try {
+        const reInfo = await readLockRaw(lockFile);
+        const ownerAlive = reInfo.parsed ? isPidAlive(reInfo.parsed.pid) : false;
+        const stillSameStaleContent = reInfo.exists && !reInfo.symlink && Number.isFinite(reInfo.mtimeMs)
+            && lockSnapshotKey(reInfo) === lockSnapshotKey(judgedInfo)
+            && (Date.now() - reInfo.mtimeMs) > lockStaleMs
+            && !ownerAlive;
+        if (stillSameStaleContent) {
+            try { await fs.promises.unlink(lockFile); } catch { /* ignore; wx create below retries */ }
+        }
+        // else: lock content changed or is no longer stale -- leave it alone, caller retries.
+    } finally {
+        const minfo = await readLockRaw(stealMutexFile);
+        if (minfo.parsed && minfo.parsed.token === mutexToken) {
+            try { await fs.promises.unlink(stealMutexFile); } catch { /* ignore */ }
+        }
+    }
+}
+
+/**
  * Acquire the per-journey lock file. Bounded retry with backoff up to
- * lockTimeoutMs. A lock older than lockStaleMs whose owning pid is
- * provably dead may be stolen: the lock is renamed aside and the renamed
- * file's content is re-verified against what was judged stale before it is
- * trusted; on mismatch (a fresh lock was grabbed instead) this fails closed
- * with LOCK_CONTENTION rather than destroying someone else's live lock.
+ * lockTimeoutMs (which also bounds any steal-mutex waiting below -- there
+ * is no separate timeout for the steal path). A lock older than
+ * lockStaleMs whose owning pid is provably dead may be stolen, but only by
+ * unlinking it under the short-lived `events.jsonl.lock.steal` mutex after
+ * re-reading and re-confirming staleness there (see tryStealUnderMutex);
+ * there is no rename-aside step and no `.stale-*` file is ever created.
  * Never writes to the destination (events.jsonl) itself.
  */
-async function acquireLock(lockFile, lockOpts) {
+async function acquireLock(lockFile, stealMutexFile, lockOpts) {
     const { lockTimeoutMs, lockStaleMs, lockRetryMs } = lockOptsOf(lockOpts);
     const deadline = Date.now() + lockTimeoutMs;
     const token = crypto.randomBytes(16).toString("hex");
@@ -213,27 +299,12 @@ async function acquireLock(lockFile, lockOpts) {
             if (ageMs > lockStaleMs) {
                 const ownerAlive = info.parsed ? isPidAlive(info.parsed.pid) : false;
                 if (!ownerAlive) {
-                    const beforeKey = lockSnapshotKey(info);
-                    const stolenName = path.join(
-                        path.dirname(lockFile),
-                        `.${path.basename(lockFile)}.stale-${crypto.randomBytes(6).toString("hex")}`
-                    );
-                    let renamed = false;
-                    try { await fs.promises.rename(lockFile, stolenName); renamed = true; } catch { /* lost the race */ }
-                    if (renamed) {
-                        const verify = await readLockRaw(stolenName);
-                        const afterKey = lockSnapshotKey(verify);
-                        if (afterKey === beforeKey) {
-                            try { await fs.promises.unlink(stolenName); } catch { /* ignore */ }
-                            // fall through: lockFile is now free, retry fresh create immediately
-                        } else {
-                            // We moved aside a lock that is not the one judged stale. Its owner will
-                            // fail the pre-write ownership check (LOCK_LOST), so no write can happen
-                            // under it; remove the moved file so it cannot accumulate.
-                            try { await fs.promises.unlink(stolenName); } catch { /* best effort */ }
-                            return { ok: false, code: "LOCK_CONTENTION" };
-                        }
-                    }
+                    await __pause("afterStaleJudged");
+                    await tryStealUnderMutex(lockFile, stealMutexFile, info, lockStaleMs);
+                    // Whether or not this round actually removed lockFile, fall
+                    // through to the deadline/backoff check and retry the wx
+                    // create from the top; tryStealUnderMutex never fails closed
+                    // on its own (no LOCK_CONTENTION short-circuit here).
                 }
             }
         }
@@ -448,10 +519,11 @@ function normalizeOpts(opts) {
  * any mismatch aborts with LOCK_LOST and writes nothing.
  */
 async function withLock(root, journeyId, opts, fn) {
-    let file, lockFile;
+    let file, lockFile, stealMutexFile;
     try {
         file = SafeFs.resolveUnder(root, journeyId, "events.jsonl");
         lockFile = SafeFs.resolveUnder(root, journeyId, "events.jsonl.lock");
+        stealMutexFile = SafeFs.resolveUnder(root, journeyId, "events.jsonl.lock.steal");
     } catch {
         return bad("PATH_INVALID", "journeyId invalid");
     }
@@ -467,7 +539,7 @@ async function withLock(root, journeyId, opts, fn) {
         } catch {
             return bad("LOCK_IO_ERROR", "journey directory could not be created");
         }
-        const acq = await acquireLock(lockFile, resolvedLockOpts);
+        const acq = await acquireLock(lockFile, stealMutexFile, resolvedLockOpts);
         if (!acq.ok) {
             if (acq.code === "LOCK_TIMEOUT") return bad("LOCK_TIMEOUT", "lock acquisition timed out");
             if (acq.code === "LOCK_CONTENTION") return bad("LOCK_CONTENTION", "lock contended by another writer");
@@ -482,6 +554,7 @@ async function withLock(root, journeyId, opts, fn) {
                 if (!stillOurs) return bad("LOCK_LOST", "lock ownership lost before write");
                 const fingerprintAfter = await fileFingerprint(file);
                 if (fingerprintAfter !== fingerprintBefore) return bad("LOCK_LOST", "events file changed unexpectedly under lock");
+                await __pause("beforeCommit");
                 const w = await writeChain(file, result.events);
                 if (!w.ok) return w;
                 return result.response;
@@ -616,5 +689,5 @@ module.exports = {
     // Exposed only for deterministic cross-process lock testing
     // (tests/unit/ContractStoreConcurrency.check.js). Not part of the public
     // contract-lifecycle API and must not be used to bypass lifecycle rules.
-    __lockTestHooks: { acquireLock, releaseLock, lockOptsOf },
+    __lockTestHooks: { acquireLock, releaseLock, lockOptsOf, setPause: __setPause },
 };
