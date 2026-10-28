@@ -4,20 +4,55 @@
  * ContractStore.js — WP-77a auditable approval-lifecycle store for business
  * assertion contracts (Contract.js). One append-only JSONL event log per
  * journeyId, hash-chained so edited, reordered, replayed, mid-line-truncated
- * or oversized files are detected on read. NOT detected: cutting the file at
- * a line boundary or restoring an earlier valid copy of the whole store (no
- * external anchor), and concurrent writers in different processes (the write
- * queue is in-process only, so a cross-process approve/reject race can lose
- * an event). Treat the store as single-process until that is addressed.
+ * or oversized files are detected on read.
+ *
+ * Cross-process coordination: every mutating operation (propose / approve /
+ * reject / supersede) takes a per-journey lock file (`events.jsonl.lock`,
+ * created with `wx` mode 0600, containing `{pid, token, at}`) BEFORE it reads
+ * any chain state, re-reads and re-verifies the whole chain from disk under
+ * that lock, appends, and writes atomically, then releases the lock. An
+ * in-process promise queue is kept as a cheap additional guard for callers
+ * within the same process. Lock acquisition retries with a short backoff up
+ * to `lockTimeoutMs` (default 5000ms) and fails closed (no write) with
+ * `LOCK_TIMEOUT` on contention. A lock is only ever stolen from a dead owner
+ * (verified via `process.kill(pid, 0)`; a live holder, however old its lock,
+ * is never stolen) and only once it is older than `lockStaleMs` (default
+ * 30000ms); theft renames the lock aside and re-verifies the renamed file's
+ * content matches what was judged stale before trusting it, otherwise it
+ * fails closed with `LOCK_CONTENTION`. Immediately before the final rename,
+ * the lock and a content fingerprint of the events file are re-checked
+ * against what was read under the lock; any mismatch aborts with `LOCK_LOST`
+ * and writes nothing.
+ *
+ * Guaranteed by this mechanism: on one host, two processes racing to
+ * approve/reject/propose against the same journey will not both win — one
+ * succeeds, the other observes the committed state (or a clean lock error),
+ * and no event is silently lost.
+ *
+ * NOT guaranteed / residual limits:
+ *  - single host only — this uses local file locks (open 'wx' + rename);
+ *    it is not safe over NFS or any shared filesystem across hosts;
+ *  - no external anchor — the hash chain proves internal consistency of one
+ *    file, not authenticity; an attacker who can rewrite the whole store
+ *    from scratch with a self-consistent chain, or restore an earlier valid
+ *    copy of the whole store, is undetected (whole-store rollback);
+ *  - cutting the file at a line boundary is undetected;
+ *  - no operator identity — `channel` and `at` are operator-supplied labels,
+ *    not proof of who recorded an approval;
+ *  - a tiny TOCTOU window remains between judging a lock stale and the
+ *    rename that steals it (narrowed, not eliminated, by re-verifying
+ *    content after the rename); a hung but still-live holder is never
+ *    stolen from and yields `LOCK_TIMEOUT` for other writers until it exits
+ *    or its process is gone.
  *
  * Security note (read before relying on this for anything beyond operator
  * mistakes): the hash chain proves *internal consistency* of one file. It
  * cannot prove *authenticity* against an attacker capable of rewriting the
  * whole store from scratch with a self-consistent chain — there is no
- * external anchor (no signature, no external log). `channel` and `at` are
- * operator-supplied labels; they identify how an approval was recorded, not
- * who recorded it. Do not treat this store as proof of human identity or of
- * review quality — only as a tamper-evident log of lifecycle transitions.
+ * external anchor (no signature, no external log). Do not treat this store
+ * as proof of human identity or of review quality — only as a tamper-evident
+ * log of lifecycle transitions, now additionally guarded against same-host
+ * cross-process lost-update races.
  *
  * No contract body, locator text or expected values are ever stored here —
  * only digests, revisions and lifecycle metadata.
@@ -25,6 +60,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const SafeFs = require("../parallel/SafeFs");
 const Limits = require("../parallel/Limits");
 const { canonicalJson, sha256 } = require("../parallel/Schemas");
@@ -35,10 +71,16 @@ const CHANNELS = Object.freeze(["cli", "dashboard", "test"]);
 const GENESIS_PREV = "0".repeat(64);
 const MAX_STORE_BYTES = 2 * 1024 * 1024; // 2 MiB
 const MAX_LINE_BYTES = 16 * 1024;
+const MAX_LOCK_BYTES = 1024; // 1 KiB
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
 const ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const LOCK_TOKEN_PATTERN = /^[0-9a-f]{32}$/;
 const EVENT_KEYS = ["seq", "type", "journeyId", "digest", "revision", "channel", "at", "prev", "hash"];
+
+const DEFAULT_LOCK_TIMEOUT_MS = 5000;
+const DEFAULT_LOCK_STALE_MS = 30000;
+const DEFAULT_LOCK_RETRY_MS = 25;
 
 function ok(value) { return Object.assign({ ok: true }, value); }
 function bad(code, message) { return { ok: false, code, message: String(message || code).slice(0, 200) }; }
@@ -61,7 +103,9 @@ function isoNow(clock) {
     return ISO_PATTERN.test(iso) ? iso : new Date().toISOString();
 }
 
-// --------------------------------------------------------------- per-file write queue
+function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+// --------------------------------------------------------------- per-file write queue (in-process guard)
 
 const fileQueues = new Map();
 
@@ -72,6 +116,152 @@ function withFileLock(key, fn) {
     // leak into the map's stored promise chain.
     fileQueues.set(key, run.then(() => {}, () => {}));
     return run;
+}
+
+// --------------------------------------------------------------- cross-process lock file
+
+function lockOptsOf(opts) {
+    const o = opts || {};
+    const lockTimeoutMs = Number.isInteger(o.lockTimeoutMs) && o.lockTimeoutMs >= 0 ? o.lockTimeoutMs : DEFAULT_LOCK_TIMEOUT_MS;
+    const lockStaleMs = Number.isInteger(o.lockStaleMs) && o.lockStaleMs >= 0 ? o.lockStaleMs : DEFAULT_LOCK_STALE_MS;
+    const lockRetryMs = Number.isInteger(o.lockRetryMs) && o.lockRetryMs > 0 ? o.lockRetryMs : DEFAULT_LOCK_RETRY_MS;
+    return { lockTimeoutMs, lockStaleMs, lockRetryMs };
+}
+
+function isPidAlive(pid) {
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (e) {
+        // ESRCH: no such process -> dead. Anything else (e.g. EPERM) counts
+        // as alive: we cannot prove it is dead, so we do not steal.
+        return !(e && e.code === "ESRCH");
+    }
+}
+
+function parseLockBuffer(buf) {
+    if (!buf || buf.length === 0 || buf.length > MAX_LOCK_BYTES) return null;
+    let text;
+    try { text = buf.toString("utf8"); } catch { return null; }
+    let value;
+    try { value = JSON.parse(text); } catch { return null; }
+    if (!isPlainObj(value)) return null;
+    if (typeof value.token !== "string" || !LOCK_TOKEN_PATTERN.test(value.token)) return null;
+    if (!Number.isInteger(value.pid) || value.pid <= 0) return null;
+    if (!Number.isInteger(value.at)) return null;
+    return value;
+}
+
+/** Bounded, symlink-refusing read of a lock file. Never throws. */
+async function readLockRaw(lockFile) {
+    let lst;
+    try { lst = await fs.promises.lstat(lockFile); } catch {
+        return { exists: false };
+    }
+    if (lst.isSymbolicLink()) return { exists: true, symlink: true, mtimeMs: lst.mtimeMs };
+    if (!lst.isFile()) return { exists: true, broken: true, mtimeMs: lst.mtimeMs };
+    let fh = null;
+    try {
+        fh = await fs.promises.open(lockFile, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+        const st = await fh.stat();
+        if (!st.isFile() || st.size > MAX_LOCK_BYTES) return { exists: true, broken: true, mtimeMs: lst.mtimeMs };
+        const buf = await fh.readFile();
+        return { exists: true, mtimeMs: lst.mtimeMs, raw: buf, parsed: parseLockBuffer(buf) };
+    } catch {
+        return { exists: true, broken: true, mtimeMs: lst.mtimeMs };
+    } finally {
+        if (fh) { try { await fh.close(); } catch { /* ignore */ } }
+    }
+}
+
+function lockSnapshotKey(info) {
+    if (info && info.raw) return "r:" + crypto.createHash("sha256").update(info.raw).digest("hex");
+    return "m:" + (info && info.mtimeMs);
+}
+
+/**
+ * Acquire the per-journey lock file. Bounded retry with backoff up to
+ * lockTimeoutMs. A lock older than lockStaleMs whose owning pid is
+ * provably dead may be stolen: the lock is renamed aside and the renamed
+ * file's content is re-verified against what was judged stale before it is
+ * trusted; on mismatch (a fresh lock was grabbed instead) this fails closed
+ * with LOCK_CONTENTION rather than destroying someone else's live lock.
+ * Never writes to the destination (events.jsonl) itself.
+ */
+async function acquireLock(lockFile, lockOpts) {
+    const { lockTimeoutMs, lockStaleMs, lockRetryMs } = lockOptsOf(lockOpts);
+    const deadline = Date.now() + lockTimeoutMs;
+    const token = crypto.randomBytes(16).toString("hex");
+    const payload = JSON.stringify({ pid: process.pid, token, at: Date.now() });
+
+    for (;;) {
+        try {
+            const fh = await fs.promises.open(lockFile, "wx", 0o600);
+            try { await fh.writeFile(payload, "utf8"); } finally { await fh.close(); }
+            return { ok: true, token };
+        } catch (e) {
+            if (!e || e.code !== "EEXIST") return { ok: false, code: "LOCK_IO_ERROR" };
+        }
+
+        const info = await readLockRaw(lockFile);
+        if (info.exists && !info.symlink && Number.isFinite(info.mtimeMs)) {
+            const ageMs = Date.now() - info.mtimeMs;
+            if (ageMs > lockStaleMs) {
+                const ownerAlive = info.parsed ? isPidAlive(info.parsed.pid) : false;
+                if (!ownerAlive) {
+                    const beforeKey = lockSnapshotKey(info);
+                    const stolenName = path.join(
+                        path.dirname(lockFile),
+                        `.${path.basename(lockFile)}.stale-${crypto.randomBytes(6).toString("hex")}`
+                    );
+                    let renamed = false;
+                    try { await fs.promises.rename(lockFile, stolenName); renamed = true; } catch { /* lost the race */ }
+                    if (renamed) {
+                        const verify = await readLockRaw(stolenName);
+                        const afterKey = lockSnapshotKey(verify);
+                        if (afterKey === beforeKey) {
+                            try { await fs.promises.unlink(stolenName); } catch { /* ignore */ }
+                            // fall through: lockFile is now free, retry fresh create immediately
+                        } else {
+                            return { ok: false, code: "LOCK_CONTENTION" };
+                        }
+                    }
+                }
+            }
+        }
+
+        if (Date.now() >= deadline) return { ok: false, code: "LOCK_TIMEOUT" };
+        const wait = Math.min(lockRetryMs, Math.max(1, deadline - Date.now()));
+        await sleep(wait);
+    }
+}
+
+async function lockStillOwnedBy(lockFile, token) {
+    const info = await readLockRaw(lockFile);
+    return !!(info.parsed && info.parsed.token === token);
+}
+
+async function releaseLock(lockFile, token) {
+    const info = await readLockRaw(lockFile);
+    if (info.parsed && info.parsed.token === token) {
+        try { await fs.promises.unlink(lockFile); } catch { /* ignore */ }
+    }
+}
+
+/** Content fingerprint of the events file, symlink-refusing. Never throws. */
+async function fileFingerprint(file) {
+    let fh = null;
+    try {
+        fh = await fs.promises.open(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+        const buf = await fh.readFile();
+        return "h:" + crypto.createHash("sha256").update(buf).digest("hex");
+    } catch (e) {
+        if (e && e.code === "ENOENT") return "missing";
+        return "err:" + ((e && e.code) || "UNKNOWN");
+    } finally {
+        if (fh) { try { await fh.close(); } catch { /* ignore */ } }
+    }
 }
 
 // --------------------------------------------------------------- event hashing
@@ -238,6 +428,64 @@ function normalizeOpts(opts) {
     return { channel, clock };
 }
 
+// --------------------------------------------------------------- lock-guarded mutation wrapper
+
+/**
+ * Resolve the lock and events file paths, take the in-process queue guard,
+ * then the cross-process lock file, then invoke `fn(chain, file)` with a
+ * freshly-loaded (never pre-lock) chain. `fn` must return either a plain
+ * response object (no write — e.g. an error or idempotent result) or
+ * `{ __write: true, events, response }` to append `events` atomically.
+ * Immediately before the write, lock ownership and the events file content
+ * are re-verified against what was observed right after the lock was taken;
+ * any mismatch aborts with LOCK_LOST and writes nothing.
+ */
+async function withLock(root, journeyId, opts, fn) {
+    let file, lockFile;
+    try {
+        file = SafeFs.resolveUnder(root, journeyId, "events.jsonl");
+        lockFile = SafeFs.resolveUnder(root, journeyId, "events.jsonl.lock");
+    } catch {
+        return bad("PATH_INVALID", "journeyId invalid");
+    }
+    const resolvedLockOpts = lockOptsOf(opts);
+
+    return await withFileLock(file, async () => {
+        // Only mutating operations reach here; read-only status/isApproved
+        // calls never create the journey directory, the lock file or
+        // events.jsonl. The lock file lives in the same directory as
+        // events.jsonl, which may not exist yet for a brand-new journey.
+        try {
+            await fs.promises.mkdir(path.dirname(lockFile), { recursive: true, mode: 0o700 });
+        } catch {
+            return bad("LOCK_IO_ERROR", "journey directory could not be created");
+        }
+        const acq = await acquireLock(lockFile, resolvedLockOpts);
+        if (!acq.ok) {
+            if (acq.code === "LOCK_TIMEOUT") return bad("LOCK_TIMEOUT", "lock acquisition timed out");
+            if (acq.code === "LOCK_CONTENTION") return bad("LOCK_CONTENTION", "lock contended by another writer");
+            return bad("LOCK_IO_ERROR", "lock file could not be created");
+        }
+        try {
+            const chain = await loadChain(root, journeyId);
+            const fingerprintBefore = await fileFingerprint(file);
+            const result = await fn(chain, file);
+            if (result && result.__write) {
+                const stillOurs = await lockStillOwnedBy(lockFile, acq.token);
+                if (!stillOurs) return bad("LOCK_LOST", "lock ownership lost before write");
+                const fingerprintAfter = await fileFingerprint(file);
+                if (fingerprintAfter !== fingerprintBefore) return bad("LOCK_LOST", "events file changed unexpectedly under lock");
+                const w = await writeChain(file, result.events);
+                if (!w.ok) return w;
+                return result.response;
+            }
+            return result;
+        } finally {
+            await releaseLock(lockFile, acq.token);
+        }
+    });
+}
+
 // --------------------------------------------------------------- public API
 
 async function propose(root, contract, opts) {
@@ -261,36 +509,26 @@ async function propose(root, contract, opts) {
         const revision = value.revision;
         if (!checkJourneyId(journeyId)) return bad("PATH_INVALID", "journeyId invalid");
 
-        const chain = await loadChain(root, journeyId);
-        if (chain.integrity === "broken") return bad("STORE_BROKEN", "chain failed integrity verification");
+        return await withLock(root, journeyId, opts, async (chain) => {
+            if (chain.integrity === "broken") return bad("STORE_BROKEN", "chain failed integrity verification");
 
-        const key = chain.file || `${root}:${journeyId}`;
-        return await withFileLock(key, async () => {
-            // Always re-load inside the lock: another queued write for this same
-            // journeyId may have landed between the pre-lock check above and now.
-            const fresh = await loadChain(root, journeyId);
-            if (fresh.integrity === "broken") return bad("STORE_BROKEN", "chain failed integrity verification");
-
-            const events = fresh.events || [];
+            const events = chain.events || [];
             const existing = events.find((e) => e.digest === digest);
             if (existing) {
-                const status = fresh.state.get(digest);
-                return ok({ idempotent: true, status: status || "PROPOSED", digest, journeyId });
+                const st = chain.state ? chain.state.get(digest) : undefined;
+                return ok({ idempotent: true, status: st || "PROPOSED", digest, journeyId });
             }
 
             let maxRevision = 0;
-            if (fresh.revisionOf) for (const r of fresh.revisionOf.values()) maxRevision = Math.max(maxRevision, r);
+            if (chain.revisionOf) for (const r of chain.revisionOf.values()) maxRevision = Math.max(maxRevision, r);
             if (events.length > 0 && revision <= maxRevision) return bad("REVISION_NOT_INCREASED", "revision must increase");
 
             const at = isoNow(clock);
-            const prev = fresh.lastHash || GENESIS_PREV;
+            const prev = chain.lastHash || GENESIS_PREV;
             const seq = events.length + 1;
             const event = makeEvent(seq, "PROPOSED", journeyId, digest, revision, channel, at, prev);
             const newEvents = events.concat([event]);
-            const file = fresh.file || SafeFs.resolveUnder(root, journeyId, "events.jsonl");
-            const w = await writeChain(file, newEvents);
-            if (!w.ok) return w;
-            return ok({ idempotent: false, status: "PROPOSED", digest, journeyId });
+            return { __write: true, events: newEvents, response: ok({ idempotent: false, status: "PROPOSED", digest, journeyId }) };
         });
     } catch (e) {
         return bad("INTERNAL", e && e.message);
@@ -312,11 +550,7 @@ async function transition(root, journeyId, digest, type, opts) {
         if (!checkJourneyId(journeyId)) return bad("PATH_INVALID", "journeyId invalid");
         if (typeof digest !== "string" || !DIGEST_PATTERN.test(digest)) return bad("DIGEST_INVALID", "digest malformed");
 
-        let file;
-        try { file = SafeFs.resolveUnder(root, journeyId, "events.jsonl"); } catch { return bad("PATH_INVALID", "journeyId invalid"); }
-
-        return await withFileLock(file, async () => {
-            const chain = await loadChain(root, journeyId);
+        return await withLock(root, journeyId, opts, async (chain, file) => {
             if (chain.integrity === "broken") return bad("STORE_BROKEN", "chain failed integrity verification");
             if (chain.integrity === "missing" || !chain.state || !chain.state.has(digest)) {
                 return bad("NOT_PROPOSED", "digest was never proposed for this journey");
@@ -342,9 +576,7 @@ async function transition(root, journeyId, digest, type, opts) {
             const event = makeEvent(seq, type, journeyId, digest, revision, channel, at, prev);
             events.push(event);
 
-            const w = await writeChain(file, events);
-            if (!w.ok) return w;
-            return ok({ status: type, digest, journeyId });
+            return { __write: true, events, response: ok({ status: type, digest, journeyId }) };
         });
     } catch (e) {
         return bad("INTERNAL", e && e.message);
@@ -374,4 +606,8 @@ async function isApproved(root, journeyId, digest) {
 module.exports = {
     propose, approve, reject, status, isApproved,
     EVENT_TYPES, CHANNELS, GENESIS_PREV,
+    // Exposed only for deterministic cross-process lock testing
+    // (tests/unit/ContractStoreConcurrency.check.js). Not part of the public
+    // contract-lifecycle API and must not be used to bypass lifecycle rules.
+    __lockTestHooks: { acquireLock, releaseLock, lockOptsOf },
 };
