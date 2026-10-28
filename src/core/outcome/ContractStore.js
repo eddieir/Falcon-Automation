@@ -47,11 +47,18 @@
  *  - exclusivity of a live owner (including the gap between its final
  *    ownership check and the rename in writeChain) rests on: (a) wx being an
  *    atomic exclusive create; (b) process.kill(pid, 0) reporting liveness
- *    truthfully within one pid namespace on one host; (c) the steal mutex
- *    being recovered only when older than lockStaleMs AND its pid is dead —
- *    a crash inside that micro critical section plus two recoverers racing
- *    on exactly that file would reintroduce the lost-update window (inherent
- *    to lock files without kernel locks); (d) nobody with write access to the
+ *    truthfully within one pid namespace on one host; (c) recovery of the steal
+ *    mutex itself, allowed only when its pid is dead and it is older than
+ *    lockStaleMs: it needs a crash inside the mutex's few-syscall critical
+ *    section, and if a recoverer is delayed between its token recheck and its
+ *    unlink while a third process creates a fresh mutex, the delayed unlink
+ *    removes that fresh mutex and a fourth process can hold it concurrently
+ *    (reproduced in scratch; a lost update then needs a second sub-millisecond
+ *    race and a writer sitting in its commit gap). Inherent to lock files
+ *    without kernel locks. An empty or unparseable steal mutex (crash between
+ *    create and write) is never recovered: writes to that journey fail closed
+ *    with LOCK_TIMEOUT until an operator removes the file by hand
+ *    (availability only, data stays safe); (d) nobody with write access to the
  *    store directory deleting a live lock by hand; writeChain's rename has no
  *    compare-and-swap, so a live owner wrongly judged dead can lose to a later
  *    writer. A hung but still-live holder is never stolen from and yields
