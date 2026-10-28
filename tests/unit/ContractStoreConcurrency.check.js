@@ -371,6 +371,94 @@ async function main() {
         assert.strictEqual(lines.length, 2); // PROPOSED, APPROVED — chain verifies, nothing lost
     });
 
+    // --------------------------------------------------------- (i) stale-lock steal race: a third writer must not land while a legitimate
+    // stealer (W1) is mid-commit, even though the loser of the steal
+    // attempt (W2) briefly leaves the lock slot vacant.
+    await test("stale-lock steal race: no lost update while a vacated-but-still-owned lock slot is contended", async () => {
+        const root = await tmpRoot();
+        const c = contract();
+        const digest = digestOf(c);
+        await proposeSync(root, c);
+
+        const lockFile = SafeFs.resolveUnder(root, c.journeyId, "events.jsonl.lock");
+        const deadPid = 2 ** 30;
+        await fs.promises.writeFile(lockFile, JSON.stringify({ pid: deadPid, token: "c".repeat(32), at: Date.now() - 100000 }), { mode: 0o600 });
+        const old = Date.now() / 1000 - 100;
+        await fs.promises.utimes(lockFile, old, old);
+
+        const goFile = path.join(root, "go");
+        await fs.promises.writeFile(goFile, "go");
+        const lockOpts = { lockStaleMs: 50, lockTimeoutMs: 3000, lockRetryMs: 10 };
+
+        const waitFile = async (f, ms = 5000) => {
+            const deadline = Date.now() + ms;
+            while (!fs.existsSync(f) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
+            assert.ok(fs.existsSync(f), `timed out waiting for ${f}`);
+        };
+
+        const r2Ready = path.join(root, "r2-ready");
+        const r2Go = path.join(root, "r2-go");
+        const w2 = runWorker({
+            root, journeyId: c.journeyId, digest, action: "reject", channel: "cli", clockISO: CLOCK_ISO, goFile,
+            lockOpts, pauseAt: { point: "afterStaleJudged", readyFile: r2Ready, goFile: r2Go },
+        });
+        await waitFile(r2Ready); // W2 has judged the stale lock stale, paused before stealing it
+
+        const r1Ready = path.join(root, "r1-ready");
+        const r1Go = path.join(root, "r1-go");
+        const w1 = runWorker({
+            root, journeyId: c.journeyId, digest, action: "approve", channel: "cli", clockISO: CLOCK_ISO, goFile,
+            lockOpts, pauseAt: { point: "beforeCommit", readyFile: r1Ready, goFile: r1Go },
+        });
+        await waitFile(r1Ready); // W1 stole the stale lock itself, became owner, passed its pre-write checks
+
+        await fs.promises.writeFile(r2Go, "go"); // release W2: it attempts to steal the (now-live) lock
+        const r2 = await w2;
+        assert.strictEqual(r2.code, 0, `worker2 crashed: ${r2.err}`);
+
+        const r3Ready = path.join(root, "r3-ready");
+        const r3Go = path.join(root, "r3-go");
+        const w3 = runWorker({
+            root, journeyId: c.journeyId, digest, action: "reject", channel: "cli", clockISO: CLOCK_ISO, goFile,
+            lockOpts: Object.assign({}, lockOpts, { lockTimeoutMs: 500 }),
+            pauseAt: { point: "beforeCommit", readyFile: r3Ready, goFile: r3Go },
+        });
+        let r3Reached = false;
+        const r3Deadline = Date.now() + 1200;
+        while (Date.now() < r3Deadline) {
+            if (fs.existsSync(r3Ready)) { r3Reached = true; break; }
+            await new Promise((r) => setTimeout(r, 10));
+        }
+
+        await fs.promises.writeFile(r1Go, "go"); // release W1: it commits
+        const r1 = await w1;
+        assert.strictEqual(r1.code, 0, `worker1 crashed: ${r1.err}`);
+
+        if (r3Reached) await fs.promises.writeFile(r3Go, "go"); // release W3 last
+        const r3 = await w3;
+        assert.strictEqual(r3.code, 0, `worker3 crashed: ${r3.err}`);
+
+        const raw = await readEventsRaw(root, c.journeyId);
+        const lines = raw.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+        const types = lines.map((l) => l.type);
+        const seqs = lines.map((l) => l.seq);
+
+        // Invariant, not mechanism: every operation that returned ok:true
+        // must have its event present in the final committed chain.
+        for (const [label, result] of [["w1-approve", r1.result], ["w2-reject-steal-attempt", r2.result], ["w3-reject", r3.result]]) {
+            if (result && result.ok === true && result.status && result.status !== "PROPOSED") {
+                assert.ok(
+                    types.includes(result.status),
+                    `${label} returned ok:true (${result.status}) but its event is missing from the final chain: ${JSON.stringify({ types, r1: r1.result, r2: r2.result, r3: r3.result })}`
+                );
+            }
+        }
+        assert.deepStrictEqual(seqs, lines.map((_, i) => i + 1), `seq must be contiguous/unique, got ${JSON.stringify(seqs)}`);
+
+        const finalStatus = await Store.status(root, c.journeyId, digest);
+        assert.strictEqual(finalStatus.integrity, "ok", `final chain must still verify: ${JSON.stringify({ finalStatus, types })}`);
+    });
+
     console.log(`\n${passed} passed, ${failures} failed`);
     for (const dir of cleanups) {
         try { await fs.promises.rm(dir, { recursive: true, force: true }); } catch { /* ignore */ }
