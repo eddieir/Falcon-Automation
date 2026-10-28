@@ -26,10 +26,13 @@ const path = require("path");
 const Store = require("../../../src/core/outcome/ContractStore");
 const SafeFs = require("../../../src/core/parallel/SafeFs");
 
+const pause = new Int32Array(new SharedArrayBuffer(4));
+
 function waitForGo(goFile) {
     while (!fs.existsSync(goFile)) {
-        // busy-poll: maximises overlap between racing workers, runtime is
-        // bounded by the test's own timeout.
+        // 1 ms synchronous sleep: tight overlap between racing workers without
+        // pinning a core on small CI runners.
+        Atomics.wait(pause, 0, 0, 1);
     }
 }
 
@@ -40,6 +43,7 @@ async function main() {
 
     if (cfg.action === "hold-lock") {
         const lockFile = SafeFs.resolveUnder(cfg.root, cfg.journeyId, "events.jsonl.lock");
+        fs.mkdirSync(path.dirname(lockFile), { recursive: true, mode: 0o700 });
         const acq = await Store.__lockTestHooks.acquireLock(lockFile, Store.__lockTestHooks.lockOptsOf(cfg.lockOpts || {}));
         fs.writeFileSync(cfg.readyFile, JSON.stringify(acq));
         if (!acq.ok) { process.exit(1); return; }
