@@ -69,7 +69,11 @@ function withDeadline(promise, ms, label) {
 async function tmpRoot() {
     const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "falcon-contractstore-defaultloc-"));
     cleanups.push(dir);
-    return dir;
+    // Resolve through any symlinked ancestor (e.g. macOS's /tmp -> /private/tmp
+    // or /var -> /private/var) so fixtures built on top of this path are not
+    // confounded by a realpath mismatch unrelated to the symlink behaviour
+    // under test.
+    return await fs.promises.realpath(dir);
 }
 
 function contract(overrides = {}) {
@@ -238,6 +242,51 @@ async function main() {
         const r = Store.resolveStoreRoot(undefined, fakeRepoRoot);
         assert.strictEqual(r.ok, false, `expected symlink-escape rejection, got ${JSON.stringify(r)}`);
         assert.strictEqual(r.code, "INVALID_STORE_ROOT", JSON.stringify(r));
+    });
+
+    // --------------------------------------------------------------- GS08b
+    await test("GS08b: symlink at outcome-approvals pointing INSIDE the repo is still rejected", async () => {
+        const fakeRepoRoot = await tmpRoot();
+        const insideTarget = path.join(fakeRepoRoot, "some-tracked-looking-dir");
+        await fs.promises.mkdir(insideTarget, { recursive: true });
+        const dataDir = path.join(fakeRepoRoot, "data");
+        await fs.promises.mkdir(dataDir, { recursive: true });
+        const outcomeLink = path.join(dataDir, "outcome-approvals");
+        try {
+            await fs.promises.symlink(insideTarget, outcomeLink, "dir");
+        } catch (e) {
+            console.log(`⚠️  GS08b could not create a symlink fixture on this platform (${e && e.code}) — treating as skip, not failure`);
+            return;
+        }
+        const r = Store.resolveStoreRoot(undefined, fakeRepoRoot);
+        assert.strictEqual(r.ok, false, `expected in-repo symlink-at-outcome-approvals rejection, got ${JSON.stringify(r)}`);
+        assert.strictEqual(r.code, "INVALID_STORE_ROOT", JSON.stringify(r));
+    });
+
+    await test("GS08c: symlink at data/ pointing INSIDE the repo is still rejected", async () => {
+        const fakeRepoRoot = await tmpRoot();
+        const insideTarget = path.join(fakeRepoRoot, "some-other-tracked-dir");
+        await fs.promises.mkdir(path.join(insideTarget, "outcome-approvals"), { recursive: true });
+        const dataLink = path.join(fakeRepoRoot, "data");
+        try {
+            await fs.promises.symlink(insideTarget, dataLink, "dir");
+        } catch (e) {
+            console.log(`⚠️  GS08c could not create a symlink fixture on this platform (${e && e.code}) — treating as skip, not failure`);
+            return;
+        }
+        const r = Store.resolveStoreRoot(undefined, fakeRepoRoot);
+        assert.strictEqual(r.ok, false, `expected in-repo symlink-at-data rejection, got ${JSON.stringify(r)}`);
+        assert.strictEqual(r.code, "INVALID_STORE_ROOT", JSON.stringify(r));
+    });
+
+    await test("GS08d: regular (non-symlink) data/outcome-approvals ancestry is still accepted", async () => {
+        const fakeRepoRoot = await tmpRoot();
+        const dataDir = path.join(fakeRepoRoot, "data");
+        const outcomeDir = path.join(dataDir, "outcome-approvals");
+        await fs.promises.mkdir(outcomeDir, { recursive: true });
+        const r = Store.resolveStoreRoot(undefined, fakeRepoRoot);
+        assert.strictEqual(r.ok, true, `expected regular dirs to be accepted, got ${JSON.stringify(r)}`);
+        assert.strictEqual(r.root, outcomeDir);
     });
 
     // --------------------------------------------------------------- GS09

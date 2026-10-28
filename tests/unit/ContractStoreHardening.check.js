@@ -19,6 +19,9 @@
  * FH08 a failed op releases the lock           -> no lock/steal file left
  * FH09 valid op succeeds once hazard removed   -> recovers cleanly
  * FH10 history intact after failed attempts    -> byte-for-byte unchanged
+ * FH11 oversized file rejected before any read -> size guard beats read loop
+ * FH12 readStoreFile post-open path swap        -> dev/ino check catches it
+ * FH13 fileFingerprint post-open path swap       -> write aborts LOCK_LOST
  */
 
 const assert = require("assert");
@@ -416,6 +419,140 @@ async function main() {
         const st = await Store.status(root, c1.journeyId, digest1);
         assert.strictEqual(st.integrity, "ok");
         assert.strictEqual(st.status, "APPROVED");
+    });
+
+    // --------------------------------------------------------------- FH11
+    await test("FH11: oversized events file is rejected before any fh.read (size guard beats the read loop)", async () => {
+        const root = await tmpRoot();
+        const c = contract();
+        const digest = digestOf(c);
+        await proposeDirect(root, c);
+        const file = SafeFs.resolveUnder(root, c.journeyId, "events.jsonl");
+        const oversized = Buffer.alloc(MAX_STORE_BYTES + 1024, 0x78); // 'x', well past the cap
+        await fs.promises.writeFile(file, oversized);
+
+        const fsPromises = fs.promises;
+        const origOpen = fsPromises.open;
+        let readCalls = 0;
+        fsPromises.open = async function (...args) {
+            const fh = await origOpen.apply(this, args);
+            if (args[0] === file) {
+                const origRead = fh.read.bind(fh);
+                fh.read = async (...rargs) => { readCalls++; return origRead(...rargs); };
+            }
+            return fh;
+        };
+        let r;
+        try {
+            r = await withDeadline(Store.status(root, c.journeyId, digest), 5000, "FH11 status on oversized file");
+        } finally {
+            fsPromises.open = origOpen;
+        }
+
+        assert.strictEqual(r.ok, true, JSON.stringify(r));
+        assert.strictEqual(r.integrity, "broken", JSON.stringify(r));
+        // The difference from FH05: this proves the size cap rejects BEFORE
+        // the first read attempt, not merely before the read-loop's own
+        // (st.size/MAX_STORE_BYTES) cap further down in the same function.
+        assert.strictEqual(readCalls, 0, `expected the size guard to reject before any fh.read call, but read was called ${readCalls} time(s)`);
+    });
+
+    // --------------------------------------------------------------- FH12
+    await test("FH12: readStoreFile detects the path replaced between open and lstat (dev/ino mismatch)", async () => {
+        const root = await tmpRoot();
+        const c = contract();
+        const digest = digestOf(c);
+        await proposeDirect(root, c);
+        const approved = await Store.approve(root, c.journeyId, digest, { clock });
+        assert.strictEqual(approved.ok, true, JSON.stringify(approved));
+        const file = SafeFs.resolveUnder(root, c.journeyId, "events.jsonl");
+        const swapPath = file + ".fh12-swap-fixture";
+        await fs.promises.writeFile(swapPath, "not a valid events chain\n");
+
+        const fsPromises = fs.promises;
+        const origOpen = fsPromises.open;
+        let swapped = false;
+        fsPromises.open = async function (...args) {
+            const fh = await origOpen.apply(this, args);
+            if (!swapped && args[0] === file) {
+                // Open already returned a handle to the *original* (valid,
+                // approved) inode. Replace the directory entry now, before
+                // readStoreFile's lstat(path) runs, with an unrelated
+                // regular file (different dev/ino, same directory).
+                swapped = true;
+                await fs.promises.rename(swapPath, file);
+            }
+            return fh;
+        };
+        let r;
+        try {
+            r = await withDeadline(Store.status(root, c.journeyId, digest), 5000, "FH12 status after mid-race swap");
+        } finally {
+            fsPromises.open = origOpen;
+        }
+
+        assert.strictEqual(swapped, true, "the open() wrapper never matched the events file path");
+        assert.strictEqual(r.ok, true, JSON.stringify(r));
+        // Without the post-open dev/ino check, the stale handle would still
+        // read the original (now-replaced) valid+approved content and this
+        // would report integrity "ok" / status "APPROVED".
+        assert.strictEqual(r.integrity, "broken", `expected the path swap to be detected, got ${JSON.stringify(r)}`);
+        assert.notStrictEqual(r.status, "APPROVED", "a stale file handle must never be used to report APPROVED after a path replacement");
+    });
+
+    // --------------------------------------------------------------- FH13
+    await test("FH13: fileFingerprint path-swap mid-transition aborts LOCK_LOST and writes nothing", async () => {
+        const root = await tmpRoot();
+        const c = contract();
+        const digest = digestOf(c);
+        await proposeDirect(root, c);
+        const file = SafeFs.resolveUnder(root, c.journeyId, "events.jsonl");
+        const lockFile = SafeFs.resolveUnder(root, c.journeyId, "events.jsonl.lock");
+        const stealFile = SafeFs.resolveUnder(root, c.journeyId, "events.jsonl.lock.steal");
+        const swapPath = file + ".fh13-swap-fixture";
+        await fs.promises.writeFile(swapPath, "unrelated swap content, not JSON\n");
+
+        // withLock's call order against this file is exactly: (1) loadChain's
+        // readStoreFile open, (2) fileFingerprint "before" open, (3)
+        // fileFingerprint "after" open (transition's fn does no I/O of its
+        // own). Swap on the 3rd matching open so fingerprintBefore observes
+        // the real valid content and fingerprintAfter observes the replaced
+        // file -- the dev/ino check must make those two fingerprints differ.
+        const fsPromises = fs.promises;
+        const origOpen = fsPromises.open;
+        let openCount = 0;
+        let swapped = false;
+        fsPromises.open = async function (...args) {
+            const fh = await origOpen.apply(this, args);
+            if (args[0] === file) {
+                openCount++;
+                if (openCount === 3 && !swapped) {
+                    swapped = true;
+                    await fs.promises.rename(swapPath, file);
+                }
+            }
+            return fh;
+        };
+        let r;
+        try {
+            r = await withDeadline(Store.approve(root, c.journeyId, digest, { clock }), 5000, "FH13 approve with mid-transition swap");
+        } finally {
+            fsPromises.open = origOpen;
+        }
+
+        assert.strictEqual(swapped, true, "the open() wrapper never reached the 3rd matching open (fingerprintAfter) -- call sequence assumption is stale");
+        assert.strictEqual(r.ok, false, JSON.stringify(r));
+        // Without the post-open dev/ino check in fileFingerprint, the "after"
+        // fingerprint would be computed from the same stale fd as "before"
+        // (identical hash), LOCK_LOST would never fire, and the approval
+        // would be written on top of the swapped-in file.
+        assert.strictEqual(r.code, "LOCK_LOST", `expected the path swap between fingerprintBefore and fingerprintAfter to be caught, got ${JSON.stringify(r)}`);
+        assert.strictEqual(fs.existsSync(lockFile), false, "lock file must not remain after a failed operation");
+        assert.strictEqual(fs.existsSync(stealFile), false, "steal mutex must not remain after a failed operation");
+        assert.strictEqual(await Store.isApproved(root, c.journeyId, digest), false);
+
+        const finalBytes = await fs.promises.readFile(file);
+        assert.strictEqual(finalBytes.toString("utf8"), "unrelated swap content, not JSON\n", "the swapped-in file must be left untouched -- no approval write may land on top of it");
     });
 
     console.log(`\n${passed} passed, ${failures} failed`);
