@@ -96,6 +96,48 @@
  *
  * No contract body, locator text or expected values are ever stored here —
  * only digests, revisions and lifecycle metadata.
+ *
+ * G77B-03 (issue #125): a deterministic, Git-ignored *default* store
+ * location. `defaultStoreRoot(repoRoot)` resolves to
+ * `<repoRoot>/data/outcome-approvals`, where `repoRoot` defaults to
+ * `path.join(__dirname, '..', '..', '..')` (this file lives at
+ * `src/core/outcome/ContractStore.js`, so three levels up is the repo
+ * root). This is purely additive: `propose`/`approve`/`reject`/`status`/
+ * `isApproved` still take an explicit `root` argument and never consult
+ * this default themselves — nothing here changes their behaviour.
+ * `resolveStoreRoot(overrideRoot, repoRoot)` is the fail-closed gate for any
+ * caller (CLI/config) that wants to turn an optional override into a root:
+ * no override resolves to the default (rejecting it if the default's own
+ * `data`/`outcome-approvals` ancestry has been replaced by a symlink
+ * pointing outside `repoRoot` — a symlink swap that would otherwise defeat
+ * the `.gitignore` rule below); a supplied override must be a non-empty,
+ * NUL-free, absolute string with no literal `..` traversal segment, and is
+ * otherwise used as-is (an explicit root, e.g. a test's tmpdir, is trusted
+ * by the caller and is not required to resolve under any particular base).
+ * Any rejection returns `{ ok: false, code: "INVALID_STORE_ROOT" }`, matching
+ * the shape of every other fail-closed result in this module, before any
+ * directory is created or file touched.
+ *
+ * The default directory is covered by the repo's broad `data/` ignore rule
+ * and additionally by its own narrow, commented `.gitignore` entry (so it
+ * stays ignored even if the broader rule is ever narrowed). A store file
+ * under this path is never part of `package.json`'s publish set and is
+ * never uploaded as a CI artifact (CI only restores/uploads specific
+ * allowlisted `data/*.json` tracker files, never the whole `data/` tree).
+ *
+ * A store file's mere presence confers no approval by itself: `isApproved`/
+ * `status` only ever report `APPROVED` for a digest whose full event history
+ * reduces cleanly through `reduceChain` — a hand-forged or truncated file
+ * with no valid, hash-chained `PROPOSED` predecessor is read as
+ * `integrity: "broken"` or lacks the digest in `state`, never as approved.
+ *
+ * Required downstream gate for WP-77b (G77B-03, tracked, not implemented
+ * here): execution-time digest binding — the executor must recompute the
+ * digest from the exact contract it runs (same `journeyId`) before trusting
+ * any `isApproved` result for that run; a store file approving a *different*
+ * contract body under the same digest-looking string is out of scope for
+ * this module and must be closed before WP-77b wires this store into
+ * execution or the dashboard.
  */
 
 const fs = require("fs");
@@ -148,6 +190,103 @@ const MAX_LOCK_RETRY_MS = 60 * 1000; // 1 minute, further capped by lockTimeoutM
 
 function ok(value) { return Object.assign({ ok: true }, value); }
 function bad(code, message) { return { ok: false, code, message: String(message || code).slice(0, 200) }; }
+
+// --------------------------------------------------------------- default store location (G77B-03, issue #125)
+
+// `path.join('data', 'outcome-approvals')` relative subpath, exposed so
+// callers/tests can assert against the real value instead of duplicating it.
+const DEFAULT_STORE_SUBPATH = path.join("data", "outcome-approvals");
+
+/**
+ * Deterministic default store root: `<repoRoot>/data/outcome-approvals`.
+ * `repoRoot` defaults to three levels up from this file
+ * (`src/core/outcome/` -> repo root); pass it explicitly only for tests that
+ * need an isolated fake repo root. Never throws, never touches the
+ * filesystem. Does not validate the result for symlink escape — that is
+ * `resolveStoreRoot`'s job.
+ */
+function defaultStoreRoot(repoRoot) {
+    const base = (typeof repoRoot === "string" && repoRoot.length > 0)
+        ? repoRoot
+        : path.join(__dirname, "..", "..", "..");
+    return path.join(base, DEFAULT_STORE_SUBPATH);
+}
+
+/** True if `p` contains a literal `..` path segment (string-level, pre-resolve). */
+function hasTraversalSegment(p) {
+    return p.split(/[\\/]+/).some((seg) => seg === "..");
+}
+
+/**
+ * True if `targetPath` or any of its ancestors, up to and including
+ * `allowedBaseResolved`, is a symlink whose realpath resolves outside
+ * `allowedBaseResolved`. Only ancestors that currently exist on disk are
+ * inspected (a not-yet-created default directory is not itself an escape).
+ * An unresolvable symlink (dangling target, permission error) is treated as
+ * an escape — fail closed rather than silently skip the check.
+ */
+function hasSymlinkEscape(targetPath, allowedBaseResolved) {
+    let cur = targetPath;
+    for (;;) {
+        let lst;
+        try { lst = fs.lstatSync(cur); } catch { lst = null; }
+        if (lst && lst.isSymbolicLink()) {
+            let real;
+            try { real = fs.realpathSync(cur); } catch { return true; }
+            const rel = path.relative(allowedBaseResolved, real);
+            if (rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel)) return true;
+        }
+        if (cur === allowedBaseResolved) break;
+        const parent = path.dirname(cur);
+        if (parent === cur) break; // reached filesystem root without meeting allowedBaseResolved
+        cur = parent;
+    }
+    return false;
+}
+
+/**
+ * Resolve either the default store root or a caller-supplied override to a
+ * usable `root` string, validating it fail-closed. Returns
+ * `{ ok: true, root }` or `{ ok: false, code: "INVALID_STORE_ROOT", message }`.
+ *
+ * `overrideRoot === undefined || null` resolves to `defaultStoreRoot(repoRoot)`,
+ * rejected if the default path's own ancestry has been replaced by a
+ * symlink leading outside `repoRoot` (or its own default). A supplied
+ * override must be a non-empty, NUL-free, absolute string containing no
+ * literal `..` segment; it is then used as-is (an explicit root is trusted
+ * by its caller — e.g. a test's tmpdir — and is not checked for symlink
+ * escape, since there is no "allowed base" for it to escape from).
+ *
+ * This function is additive: `propose`/`approve`/`reject`/`status`/
+ * `isApproved` do not call it and their explicit-`root` behaviour is
+ * unchanged. Callers that want the default location, or a validated
+ * override of it, call this first and pass its `root` through.
+ */
+function resolveStoreRoot(overrideRoot, repoRoot) {
+    if (overrideRoot === undefined || overrideRoot === null) {
+        const root = defaultStoreRoot(repoRoot);
+        const allowedBase = path.resolve((typeof repoRoot === "string" && repoRoot.length > 0)
+            ? repoRoot
+            : path.join(__dirname, "..", "..", ".."));
+        if (hasSymlinkEscape(root, allowedBase)) {
+            return bad("INVALID_STORE_ROOT", "default store root escapes the repository via a symlink");
+        }
+        return { ok: true, root };
+    }
+    if (typeof overrideRoot !== "string" || overrideRoot.length === 0) {
+        return bad("INVALID_STORE_ROOT", "store root override must be a non-empty string");
+    }
+    if (overrideRoot.includes("\0")) {
+        return bad("INVALID_STORE_ROOT", "store root override must not contain NUL bytes");
+    }
+    if (hasTraversalSegment(overrideRoot)) {
+        return bad("INVALID_STORE_ROOT", "store root override must not contain '..' traversal segments");
+    }
+    if (!path.isAbsolute(overrideRoot)) {
+        return bad("INVALID_STORE_ROOT", "store root override must be an absolute path");
+    }
+    return { ok: true, root: overrideRoot };
+}
 
 function isPlainObj(v) {
     if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
@@ -798,6 +937,12 @@ async function isApproved(root, journeyId, digest) {
 module.exports = {
     propose, approve, reject, status, isApproved,
     EVENT_TYPES, CHANNELS, GENESIS_PREV,
+    // G77B-03 (issue #125): deterministic, Git-ignored default store
+    // location and its fail-closed override validation. Additive only —
+    // propose/approve/reject/status/isApproved above are unchanged and never
+    // call these; callers that want the default location call
+    // resolveStoreRoot() themselves and pass its `root` through.
+    defaultStoreRoot, resolveStoreRoot, DEFAULT_STORE_SUBPATH,
     // G77B-02 (issue #125): documented lock-option bounds, exposed read-only
     // so tests can assert against the real constants instead of duplicating
     // the numbers. lockRetryMs's effective max is additionally capped per
