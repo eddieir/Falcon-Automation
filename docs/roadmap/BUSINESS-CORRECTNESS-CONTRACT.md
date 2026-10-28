@@ -182,3 +182,12 @@ Residual P3 findings from the PR #122 hardening security review (revision 38e2ec
 - A recycled pid, a future-dated lock mtime, or a hung live holder blocks writes to that journey until the holder exits or the lock is removed by an operator. Containers with separate pid namespaces are not covered.
 - The store root must not default to a tracked path and no store file may be committed (WP-77b default must be gitignored and tested).
 - Windows and NFS/shared filesystems were not examined and are unsupported.
+
+### Operator recovery for a stuck steal mutex or lock file
+
+Applies when writes to one journey fail with `LOCK_TIMEOUT` and an `events.jsonl.lock.steal` file (empty, unparseable, or left by a dead process) or an old `events.jsonl.lock` file sits in `<store root>/<journeyId>/`. The failure is fail-closed: nothing is written, committed events are unchanged, and the lock files hold only a pid, a random token and a timestamp (no contract content).
+
+1. Stop every process that may use the store, or confirm none is running. If the file is parseable, check its `pid` with `kill -0 <pid>`; a live pid means wait, do not remove.
+2. List the directory (`ls -la <store root>/<journeyId>/`). Remove only `events.jsonl.lock.steal` and, if its pid is dead, `events.jsonl.lock`. Never delete or edit `events.jsonl`.
+3. Check the history before resuming writes: `node -e 'require("./src/core/outcome/ContractStore").status(process.argv[1],process.argv[2],process.argv[3]).then(r=>console.log(JSON.stringify(r)))' <store root> <journeyId> <digest>`. `integrity` must be `ok`. If it is `broken`, stop and treat the store as untrusted: every contract in it stays unapproved until the history is explained.
+4. Resume normal operation. Record the incident (time, journey, what was removed) in the operator log.
