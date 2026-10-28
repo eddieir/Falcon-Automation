@@ -27,6 +27,15 @@ execution.log
 # Project Structure, which already documented this as gitignored).
 data/
 
+# Business-outcome-contract approval store default location (G77B-03,
+# issue #125): hash-chained events.jsonl, its .lock / .lock.steal mutex
+# files and SafeFs's atomic-write .tmp files, per journeyId, under
+# data/outcome-approvals/. Already covered by the broader `data/` rule
+# above; kept as its own narrow, anchored entry so this runtime state stays
+# ignored even if that broader rule is ever narrowed (see
+# docs/roadmap/BUSINESS-CORRECTNESS-CONTRACT.md).
+/data/outcome-approvals/
+
 # Playwright Traces & Screenshots
 trace.zip
 *.png

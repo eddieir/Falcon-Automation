@@ -128,6 +128,22 @@ jobs:
       - name: Run Dashboard auth regression test
         run: node tests/unit/DashboardAuth.check.js
 
+      # Business-outcome contract and approval store (issue #125): steal-mutex
+      # fail-closed (R1-B), FIFO/symlink/type-swap/size-cap file handling
+      # (FH), lock option bounds (LT), the gitignored default location (GS)
+      # and fingerprint hardening. Real child processes, FIFOs and
+      # filesystem identity checks, so this is the Linux evidence for the
+      # approval store. No browser, no DB, no network.
+      - name: Run Contract and ContractStore unit tests
+        run: |
+          node tests/unit/Contract.check.js
+          node tests/unit/ContractStore.check.js
+          node tests/unit/ContractStoreConcurrency.check.js
+          node tests/unit/ContractStoreHardening.check.js
+          node tests/unit/ContractStoreLockOptions.check.js
+          node tests/unit/ContractStoreDefaultLocation.check.js
+          node tests/unit/ContractStoreFingerprint.check.js
+
       # ── Database fixture (Phase 6) ──────────────────────────────────────────
       # Applies the same scripts/db/ci-seed.sql schema verified locally against
       # a disposable Postgres container. Re-running this against a fresh
