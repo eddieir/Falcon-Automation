@@ -17,10 +17,18 @@
  * `LOCK_TIMEOUT` on contention. A lock is only ever stolen from a dead owner
  * (verified via `process.kill(pid, 0)`; a live holder, however old its lock,
  * is never stolen) and only once it is older than `lockStaleMs` (default
- * 30000ms). Stealing is serialized by a short-lived mutex file
- * (`events.jsonl.lock.steal`): under it the stale lock is re-read and
- * unlinked only if it is still the exact stale content judged earlier
- * (there is no rename-aside step). While a stale lock file exists nobody can
+ * 30000ms), and only by the process that itself holds the short-lived
+ * mutex file (`events.jsonl.lock.steal`, created with `wx` mode 0600): under
+ * it the stale lock is re-read and unlinked only if it is still the exact
+ * stale content judged earlier (there is no rename-aside step). No process
+ * ever unlinks a mutex it does not hold; if the mutex is already present
+ * for any reason (a live holder, or a dead/empty/unparseable leftover from
+ * a crash) the current round simply does not steal — there is no automatic
+ * steal-mutex recovery of any kind. The caller's own retry loop keeps
+ * backing off, and `LOCK_TIMEOUT` is the bounded, explicit result once
+ * `lockTimeoutMs` elapses; a leftover mutex is cleared only by the
+ * documented operator procedure (remove the `.lock.steal` file by hand once
+ * no process holds it). While a stale lock file exists nobody can
  * create a fresh one (wx fails), so only a mutex holder can change it and a
  * live writer's fresh lock cannot be displaced by a late stealer. Immediately before the final rename,
  * the lock and a content fingerprint of the events file are re-checked
@@ -47,22 +55,17 @@
  *  - exclusivity of a live owner (including the gap between its final
  *    ownership check and the rename in writeChain) rests on: (a) wx being an
  *    atomic exclusive create; (b) process.kill(pid, 0) reporting liveness
- *    truthfully within one pid namespace on one host; (c) recovery of the steal
- *    mutex itself, allowed only when its pid is dead and it is older than
- *    lockStaleMs: it needs a crash inside the mutex's few-syscall critical
- *    section, and if a recoverer is delayed between its token recheck and its
- *    unlink while a third process creates a fresh mutex, the delayed unlink
- *    removes that fresh mutex and a fourth process can hold it concurrently
- *    (reproduced in scratch; a lost update then needs a second sub-millisecond
- *    race and a writer sitting in its commit gap). Inherent to lock files
- *    without kernel locks. An empty or unparseable steal mutex (crash between
- *    create and write) is never recovered: writes to that journey fail closed
- *    with LOCK_TIMEOUT until an operator removes the file by hand
- *    (availability only, data stays safe); (d) nobody with write access to the
- *    store directory deleting a live lock by hand; writeChain's rename has no
- *    compare-and-swap, so a live owner wrongly judged dead can lose to a later
- *    writer. A hung but still-live holder is never stolen from and yields
- *    `LOCK_TIMEOUT` for other writers until it exits or its process is gone.
+ *    truthfully within one pid namespace on one host; (c) nobody with write
+ *    access to the store directory deleting a live lock by hand; writeChain's
+ *    rename has no compare-and-swap, so a live owner wrongly judged dead can
+ *    lose to a later writer. A hung but still-live holder is never stolen
+ *    from and yields `LOCK_TIMEOUT` for other writers until it exits or its
+ *    process is gone. There is no steal-mutex recovery at all (R1, as
+ *    tracked in issue #125, is retired): a leftover `events.jsonl.lock.steal`
+ *    file — dead owner, empty, or unparseable — is never unlinked by a
+ *    process that does not hold it, and availability for that journey is
+ *    lost (data stays safe; writes fail closed with `LOCK_TIMEOUT`) until an
+ *    operator removes the file by hand;
  *
  * Security note (read before relying on this for anything beyond operator
  * mistakes): the hash chain proves *internal consistency* of one file. It
@@ -224,9 +227,16 @@ function lockSnapshotKey(info) {
  * into being removed: by the time we hold the mutex, lockFile is either
  * still the exact content we judged stale (safe to unlink) or it has
  * already changed (we back off and let the caller retry from scratch).
- * Never throws; a failure to acquire the mutex or recover a dead one is
- * just "did not steal this round" and the caller's own retry loop and
- * lockTimeoutMs deadline govern how long that is tried for.
+ * Never throws.
+ *
+ * R1-B (issue #125): there is no automatic steal-mutex recovery. If this
+ * process does not win the `wx` create of stealMutexFile -- for any reason,
+ * including a dead, empty or unparseable leftover from a crashed holder --
+ * it does nothing to that file and simply reports "did not steal this
+ * round". No process ever unlinks a mutex it does not hold. The caller's
+ * own retry loop and lockTimeoutMs deadline bound how long that is tried
+ * for and yield the explicit LOCK_TIMEOUT once exhausted; clearing a
+ * leftover mutex is an operator action, not something this code attempts.
  */
 async function tryStealUnderMutex(lockFile, stealMutexFile, judgedInfo, lockStaleMs) {
     const mutexToken = crypto.randomBytes(16).toString("hex");
@@ -237,23 +247,11 @@ async function tryStealUnderMutex(lockFile, stealMutexFile, judgedInfo, lockStal
         fh = await fs.promises.open(stealMutexFile, "wx", 0o600);
         try { await fh.writeFile(mutexPayload, "utf8"); } finally { await fh.close(); }
     } catch (e) {
-        if (!e || e.code !== "EEXIST") return; // unexpected I/O error: fail closed, nothing stolen this round
-        // Someone else holds the steal mutex. Only recover it if it is
-        // itself older than lockStaleMs and its owning pid is provably
-        // dead, and only via a token-checked unlink (never blind).
-        const minfo = await readLockRaw(stealMutexFile);
-        if (minfo.exists && !minfo.symlink && Number.isFinite(minfo.mtimeMs) && minfo.parsed) {
-            const mAge = Date.now() - minfo.mtimeMs;
-            if (mAge > lockStaleMs && !isPidAlive(minfo.parsed.pid)) {
-                try {
-                    const recheck = await readLockRaw(stealMutexFile);
-                    if (recheck.parsed && recheck.parsed.token === minfo.parsed.token) {
-                        await fs.promises.unlink(stealMutexFile);
-                    }
-                } catch { /* best effort; outer loop retries */ }
-            }
-        }
-        return; // did not acquire the mutex this round
+        await __pause("mutexEexist");
+        // Someone else already holds (or left behind) the steal mutex.
+        // Fail closed this round; never inspect or unlink it. (Covers the
+        // expected EEXIST case and any unexpected I/O error alike.)
+        return;
     }
 
     try {
