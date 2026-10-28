@@ -27,7 +27,9 @@
  * Guaranteed by this mechanism: on one host, two processes racing to
  * approve/reject/propose against the same journey will not both win — one
  * succeeds, the other observes the committed state (or a clean lock error),
- * and no event is silently lost.
+ * and a lost-update is detected and refused rather than written. This holds
+ * for cooperating processes that share one process-id namespace and one local
+ * filesystem (not across containers with separate pid namespaces).
  *
  * NOT guaranteed / residual limits:
  *  - single host only — this uses local file locks (open 'wx' + rename);

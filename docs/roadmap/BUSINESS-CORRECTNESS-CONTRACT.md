@@ -173,3 +173,11 @@ Known limitations, recorded from the WP-77a security review and not yet fixed:
 - Approving an older never-approved revision supersedes a newer approved one (revision order is enforced at propose only). Approvals on the `test` channel count in `isApproved`. Error text for internal failures can include a raw exception message. For in-memory object input, validation and digest read the object at different times.
 
 Conditions for WP-77b: the store must not be committed to the repository (a committed self-consistent chain would be a forged approval); the executor must recompute the digest from the contract it actually runs, with that contract's own `journeyId`.
+
+Residual P3 findings from the PR #122 hardening security review (revision 38e2ec2, no P0/P1/P2), accepted for WP-77a and to be addressed before WP-77b wires the store into execution or the dashboard:
+
+- A FIFO or very large file placed at `events.jsonl` makes `fileFingerprint` block or allocate unbounded memory while the lock is held. Fix: derive the fingerprint from the bytes `loadChain` already read (this also removes the second read).
+- `lockOptsOf` does not clamp caller-supplied values (for example `lockStaleMs: 0`).
+- A recycled pid, a future-dated lock mtime, or a hung live holder blocks writes to that journey until the holder exits or the lock is removed by an operator. Containers with separate pid namespaces are not covered.
+- A directory used as the lock path leaves `.stale-*` leftovers; the store root must not default to a tracked path and no store file may be committed (WP-77b default must be gitignored and tested).
+- Windows and NFS/shared filesystems were not examined and are unsupported.
