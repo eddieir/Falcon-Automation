@@ -15,12 +15,38 @@
  * within the same process. Lock acquisition retries with a short backoff up
  * to `lockTimeoutMs` (default 5000ms) and fails closed (no write) with
  * `LOCK_TIMEOUT` on contention. A lock is only ever stolen from a dead owner
+ *
+ * G77B-02 (issue #125): the three lock options (`lockTimeoutMs`,
+ * `lockStaleMs`, `lockRetryMs`) are validated and bounds-checked before any
+ * lock or journey I/O is attempted. `lockTimeoutMs` and `lockStaleMs` must
+ * each be a strict integer in [1, 300000] (1ms..5min) — never zero, never
+ * unbounded ("an unlimited wait" is explicitly disallowed). `lockRetryMs`
+ * must be a strict integer in [1, 60000], additionally capped per call at
+ * whichever is smaller of that or the resolved `lockTimeoutMs`, so a retry
+ * interval can never exceed (or default its way past) the timeout it backs
+ * off within. Only `typeof "number"` values passing `Number.isSafeInteger`
+ * are accepted — NaN, Infinity, floats, strings and booleans are all
+ * rejected, never coerced or silently truncated. An omitted option resolves
+ * to its documented default, itself clamped into range. Any out-of-range or
+ * wrong-typed value fails the whole call closed with
+ * `{ ok: false, code: "INVALID_LOCK_OPTION" }` before `acquireLock` creates
+ * the journey directory or attempts a `wx` open — there is no code path
+ * through `propose`/`approve`/`reject` that reaches a write, or that skips
+ * lock acquisition, on invalid lock-option input.
  * (verified via `process.kill(pid, 0)`; a live holder, however old its lock,
  * is never stolen) and only once it is older than `lockStaleMs` (default
- * 30000ms). Stealing is serialized by a short-lived mutex file
- * (`events.jsonl.lock.steal`): under it the stale lock is re-read and
- * unlinked only if it is still the exact stale content judged earlier
- * (there is no rename-aside step). While a stale lock file exists nobody can
+ * 30000ms), and only by the process that itself holds the short-lived
+ * mutex file (`events.jsonl.lock.steal`, created with `wx` mode 0600): under
+ * it the stale lock is re-read and unlinked only if it is still the exact
+ * stale content judged earlier (there is no rename-aside step). No process
+ * ever unlinks a mutex it does not hold; if the mutex is already present
+ * for any reason (a live holder, or a dead/empty/unparseable leftover from
+ * a crash) the current round simply does not steal — there is no automatic
+ * steal-mutex recovery of any kind. The caller's own retry loop keeps
+ * backing off, and `LOCK_TIMEOUT` is the bounded, explicit result once
+ * `lockTimeoutMs` elapses; a leftover mutex is cleared only by the
+ * documented operator procedure (remove the `.lock.steal` file by hand once
+ * no process holds it). While a stale lock file exists nobody can
  * create a fresh one (wx fails), so only a mutex holder can change it and a
  * live writer's fresh lock cannot be displaced by a late stealer. Immediately before the final rename,
  * the lock and a content fingerprint of the events file are re-checked
@@ -47,22 +73,17 @@
  *  - exclusivity of a live owner (including the gap between its final
  *    ownership check and the rename in writeChain) rests on: (a) wx being an
  *    atomic exclusive create; (b) process.kill(pid, 0) reporting liveness
- *    truthfully within one pid namespace on one host; (c) recovery of the steal
- *    mutex itself, allowed only when its pid is dead and it is older than
- *    lockStaleMs: it needs a crash inside the mutex's few-syscall critical
- *    section, and if a recoverer is delayed between its token recheck and its
- *    unlink while a third process creates a fresh mutex, the delayed unlink
- *    removes that fresh mutex and a fourth process can hold it concurrently
- *    (reproduced in scratch; a lost update then needs a second sub-millisecond
- *    race and a writer sitting in its commit gap). Inherent to lock files
- *    without kernel locks. An empty or unparseable steal mutex (crash between
- *    create and write) is never recovered: writes to that journey fail closed
- *    with LOCK_TIMEOUT until an operator removes the file by hand
- *    (availability only, data stays safe); (d) nobody with write access to the
- *    store directory deleting a live lock by hand; writeChain's rename has no
- *    compare-and-swap, so a live owner wrongly judged dead can lose to a later
- *    writer. A hung but still-live holder is never stolen from and yields
- *    `LOCK_TIMEOUT` for other writers until it exits or its process is gone.
+ *    truthfully within one pid namespace on one host; (c) nobody with write
+ *    access to the store directory deleting a live lock by hand; writeChain's
+ *    rename has no compare-and-swap, so a live owner wrongly judged dead can
+ *    lose to a later writer. A hung but still-live holder is never stolen
+ *    from and yields `LOCK_TIMEOUT` for other writers until it exits or its
+ *    process is gone. There is no steal-mutex recovery at all (R1, as
+ *    tracked in issue #125, is retired): a leftover `events.jsonl.lock.steal`
+ *    file — dead owner, empty, or unparseable — is never unlinked by a
+ *    process that does not hold it, and availability for that journey is
+ *    lost (data stays safe; writes fail closed with `LOCK_TIMEOUT`) until an
+ *    operator removes the file by hand;
  *
  * Security note (read before relying on this for anything beyond operator
  * mistakes): the hash chain proves *internal consistency* of one file. It
@@ -75,6 +96,49 @@
  *
  * No contract body, locator text or expected values are ever stored here —
  * only digests, revisions and lifecycle metadata.
+ *
+ * G77B-03 (issue #125): a deterministic, Git-ignored *default* store
+ * location. `defaultStoreRoot(repoRoot)` resolves to
+ * `<repoRoot>/data/outcome-approvals`, where `repoRoot` defaults to
+ * `path.join(__dirname, '..', '..', '..')` (this file lives at
+ * `src/core/outcome/ContractStore.js`, so three levels up is the repo
+ * root). This is purely additive: `propose`/`approve`/`reject`/`status`/
+ * `isApproved` still take an explicit `root` argument and never consult
+ * this default themselves — nothing here changes their behaviour.
+ * `resolveStoreRoot(overrideRoot, repoRoot)` is the fail-closed gate for any
+ * caller (CLI/config) that wants to turn an optional override into a root:
+ * no override resolves to the default (rejecting it if the default's own
+ * `data`/`outcome-approvals` ancestry has been replaced by a symlink at all —
+ * even one pointing at another directory inside `repoRoot` — since that
+ * swap would otherwise defeat the `.gitignore` rule below just as surely as
+ * one pointing outside `repoRoot`); a supplied override must be a non-empty,
+ * NUL-free, absolute string with no literal `..` traversal segment, and is
+ * otherwise used as-is (an explicit root, e.g. a test's tmpdir, is trusted
+ * by the caller and is not required to resolve under any particular base).
+ * Any rejection returns `{ ok: false, code: "INVALID_STORE_ROOT" }`, matching
+ * the shape of every other fail-closed result in this module, before any
+ * directory is created or file touched.
+ *
+ * The default directory is covered by the repo's broad `data/` ignore rule
+ * and additionally by its own narrow, commented `.gitignore` entry (so it
+ * stays ignored even if the broader rule is ever narrowed). A store file
+ * under this path is never part of `package.json`'s publish set and is
+ * never uploaded as a CI artifact (CI only restores/uploads specific
+ * allowlisted `data/*.json` tracker files, never the whole `data/` tree).
+ *
+ * A store file's mere presence confers no approval by itself: `isApproved`/
+ * `status` only ever report `APPROVED` for a digest whose full event history
+ * reduces cleanly through `reduceChain` — a hand-forged or truncated file
+ * with no valid, hash-chained `PROPOSED` predecessor is read as
+ * `integrity: "broken"` or lacks the digest in `state`, never as approved.
+ *
+ * Required downstream gate for WP-77b (G77B-03, tracked, not implemented
+ * here): execution-time digest binding — the executor must recompute the
+ * digest from the exact contract it runs (same `journeyId`) before trusting
+ * any `isApproved` result for that run; a store file approving a *different*
+ * contract body under the same digest-looking string is out of scope for
+ * this module and must be closed before WP-77b wires this store into
+ * execution or the dashboard.
  */
 
 const fs = require("fs");
@@ -101,8 +165,131 @@ const DEFAULT_LOCK_TIMEOUT_MS = 5000;
 const DEFAULT_LOCK_STALE_MS = 30000;
 const DEFAULT_LOCK_RETRY_MS = 25;
 
+// G77B-02 (issue #125): documented, enforced bounds for the three lock
+// options. `lockTimeoutMs`/`lockStaleMs` share the same [1ms, 5min] range —
+// below 1ms the deadline math degenerates (an immediately-expired wait that
+// cannot distinguish "no contention" from "gave up"), and above 5 minutes a
+// caller would be granting itself what is, in practice, an unlimited wait, the
+// one thing this lock is documented to never do. `lockRetryMs` has a 1ms
+// floor (never a zero/negative busy-spin) and is additionally capped, per
+// call, at whichever is smaller of MAX_LOCK_RETRY_MS or the resolved
+// lockTimeoutMs for that same call — a retry interval may never exceed the
+// timeout it backs off within. Values outside these ranges are rejected
+// fail-closed with `{ ok: false, code: "INVALID_LOCK_OPTION" }` before any
+// lock file is touched (no directory is created, no wx open is attempted);
+// an unset option still resolves to the documented default, clamped into the
+// same range so a default can never itself violate the retry-vs-timeout
+// invariant. Only a strict, non-NaN, non-Infinity, integer `typeof "number"`
+// passing `Number.isSafeInteger` is ever accepted — floats, strings,
+// booleans, NaN and Infinity are all rejected, never coerced.
+const MIN_LOCK_TIMEOUT_MS = 1;
+const MAX_LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const MIN_LOCK_STALE_MS = 1;
+const MAX_LOCK_STALE_MS = 5 * 60 * 1000; // 5 minutes
+const MIN_LOCK_RETRY_MS = 1;
+const MAX_LOCK_RETRY_MS = 60 * 1000; // 1 minute, further capped by lockTimeoutMs per call
+
 function ok(value) { return Object.assign({ ok: true }, value); }
 function bad(code, message) { return { ok: false, code, message: String(message || code).slice(0, 200) }; }
+
+// --------------------------------------------------------------- default store location (G77B-03, issue #125)
+
+// `path.join('data', 'outcome-approvals')` relative subpath, exposed so
+// callers/tests can assert against the real value instead of duplicating it.
+const DEFAULT_STORE_SUBPATH = path.join("data", "outcome-approvals");
+
+/**
+ * Deterministic default store root: `<repoRoot>/data/outcome-approvals`.
+ * `repoRoot` defaults to three levels up from this file
+ * (`src/core/outcome/` -> repo root); pass it explicitly only for tests that
+ * need an isolated fake repo root. Never throws, never touches the
+ * filesystem. Does not validate the result for symlink escape — that is
+ * `resolveStoreRoot`'s job.
+ */
+function defaultStoreRoot(repoRoot) {
+    const base = (typeof repoRoot === "string" && repoRoot.length > 0)
+        ? repoRoot
+        : path.join(__dirname, "..", "..", "..");
+    return path.join(base, DEFAULT_STORE_SUBPATH);
+}
+
+/** True if `p` contains a literal `..` path segment (string-level, pre-resolve). */
+function hasTraversalSegment(p) {
+    return p.split(/[\\/]+/).some((seg) => seg === "..");
+}
+
+/**
+ * True if any existing ancestor of `targetPath`, strictly below
+ * `allowedBaseResolved` (exclusive — `allowedBaseResolved` itself is never
+ * inspected), is a symlink. This is deliberately not limited to a symlink
+ * whose realpath happens to resolve *outside* `allowedBaseResolved`: a
+ * symlink placed at `data` or `data/outcome-approvals` that points at some
+ * other directory *inside* the repo would still defeat the `.gitignore`
+ * protection on the real, intended default path, so any symlink among these
+ * components is rejected regardless of where it points. `allowedBaseResolved`
+ * itself (the repo root) is never flagged even if it is reached through a
+ * symlinked parent (e.g. macOS's `/tmp` -> `/private/tmp`) — only components
+ * strictly below it are inspected. Only ancestors that currently exist on
+ * disk are inspected (a not-yet-created default directory is not itself an
+ * escape).
+ */
+function hasSymlinkEscape(targetPath, allowedBaseResolved) {
+    let cur = targetPath;
+    for (;;) {
+        if (cur === allowedBaseResolved) break;
+        let lst;
+        try { lst = fs.lstatSync(cur); } catch { lst = null; }
+        if (lst && lst.isSymbolicLink()) return true;
+        const parent = path.dirname(cur);
+        if (parent === cur) break; // reached filesystem root without meeting allowedBaseResolved
+        cur = parent;
+    }
+    return false;
+}
+
+/**
+ * Resolve either the default store root or a caller-supplied override to a
+ * usable `root` string, validating it fail-closed. Returns
+ * `{ ok: true, root }` or `{ ok: false, code: "INVALID_STORE_ROOT", message }`.
+ *
+ * `overrideRoot === undefined || null` resolves to `defaultStoreRoot(repoRoot)`,
+ * rejected if the default path's own ancestry has been replaced by a
+ * symlink leading outside `repoRoot` (or its own default). A supplied
+ * override must be a non-empty, NUL-free, absolute string containing no
+ * literal `..` segment; it is then used as-is (an explicit root is trusted
+ * by its caller — e.g. a test's tmpdir — and is not checked for symlink
+ * escape, since there is no "allowed base" for it to escape from).
+ *
+ * This function is additive: `propose`/`approve`/`reject`/`status`/
+ * `isApproved` do not call it and their explicit-`root` behaviour is
+ * unchanged. Callers that want the default location, or a validated
+ * override of it, call this first and pass its `root` through.
+ */
+function resolveStoreRoot(overrideRoot, repoRoot) {
+    if (overrideRoot === undefined || overrideRoot === null) {
+        const root = defaultStoreRoot(repoRoot);
+        const allowedBase = path.resolve((typeof repoRoot === "string" && repoRoot.length > 0)
+            ? repoRoot
+            : path.join(__dirname, "..", "..", ".."));
+        if (hasSymlinkEscape(root, allowedBase)) {
+            return bad("INVALID_STORE_ROOT", "default store root escapes the repository via a symlink");
+        }
+        return { ok: true, root };
+    }
+    if (typeof overrideRoot !== "string" || overrideRoot.length === 0) {
+        return bad("INVALID_STORE_ROOT", "store root override must be a non-empty string");
+    }
+    if (overrideRoot.includes("\0")) {
+        return bad("INVALID_STORE_ROOT", "store root override must not contain NUL bytes");
+    }
+    if (hasTraversalSegment(overrideRoot)) {
+        return bad("INVALID_STORE_ROOT", "store root override must not contain '..' traversal segments");
+    }
+    if (!path.isAbsolute(overrideRoot)) {
+        return bad("INVALID_STORE_ROOT", "store root override must be an absolute path");
+    }
+    return { ok: true, root: overrideRoot };
+}
 
 function isPlainObj(v) {
     if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
@@ -153,12 +340,48 @@ function withFileLock(key, fn) {
 
 // --------------------------------------------------------------- cross-process lock file
 
+function clampToRange(def, min, max) { return Math.min(Math.max(def, min), max); }
+
+/**
+ * Validate and resolve one lock option. `v === undefined` resolves to `def`,
+ * clamped into [min, max] so a caller-unset option can never itself violate
+ * the bound. Any other value must be a strict `typeof "number"` passing
+ * `Number.isSafeInteger` (rejects NaN, Infinity, floats, strings, booleans)
+ * and must fall within [min, max]; otherwise fails closed with
+ * `INVALID_LOCK_OPTION`.
+ */
+function validateBoundedLockOption(name, v, def, min, max) {
+    if (v === undefined) return { ok: true, value: clampToRange(def, min, max) };
+    if (typeof v !== "number" || !Number.isSafeInteger(v)) {
+        return bad("INVALID_LOCK_OPTION", `${name} must be a safe integer`);
+    }
+    if (v < min || v > max) {
+        return bad("INVALID_LOCK_OPTION", `${name} must be between ${min} and ${max}`);
+    }
+    return { ok: true, value: v };
+}
+
+/**
+ * Resolve and validate all three lock options together. Returns
+ * `{ ok: true, lockTimeoutMs, lockStaleMs, lockRetryMs }` or
+ * `{ ok: false, code: "INVALID_LOCK_OPTION", message }`. `lockRetryMs`'s
+ * upper bound is additionally capped at the resolved `lockTimeoutMs` for
+ * this same call, so a retry interval can never exceed (or, via the clamped
+ * default path, silently inherit a default that would exceed) the timeout
+ * it backs off within. Idempotent: calling this again on its own `ok: true`
+ * output (which carries only already-valid values) re-validates to the same
+ * result.
+ */
 function lockOptsOf(opts) {
     const o = opts || {};
-    const lockTimeoutMs = Number.isInteger(o.lockTimeoutMs) && o.lockTimeoutMs >= 0 ? o.lockTimeoutMs : DEFAULT_LOCK_TIMEOUT_MS;
-    const lockStaleMs = Number.isInteger(o.lockStaleMs) && o.lockStaleMs >= 0 ? o.lockStaleMs : DEFAULT_LOCK_STALE_MS;
-    const lockRetryMs = Number.isInteger(o.lockRetryMs) && o.lockRetryMs > 0 ? o.lockRetryMs : DEFAULT_LOCK_RETRY_MS;
-    return { lockTimeoutMs, lockStaleMs, lockRetryMs };
+    const t = validateBoundedLockOption("lockTimeoutMs", o.lockTimeoutMs, DEFAULT_LOCK_TIMEOUT_MS, MIN_LOCK_TIMEOUT_MS, MAX_LOCK_TIMEOUT_MS);
+    if (!t.ok) return t;
+    const s = validateBoundedLockOption("lockStaleMs", o.lockStaleMs, DEFAULT_LOCK_STALE_MS, MIN_LOCK_STALE_MS, MAX_LOCK_STALE_MS);
+    if (!s.ok) return s;
+    const retryMax = Math.min(MAX_LOCK_RETRY_MS, t.value);
+    const r = validateBoundedLockOption("lockRetryMs", o.lockRetryMs, DEFAULT_LOCK_RETRY_MS, MIN_LOCK_RETRY_MS, retryMax);
+    if (!r.ok) return r;
+    return { ok: true, lockTimeoutMs: t.value, lockStaleMs: s.value, lockRetryMs: r.value };
 }
 
 function isPidAlive(pid) {
@@ -196,8 +419,11 @@ async function readLockRaw(lockFile) {
     if (!lst.isFile()) return { exists: true, broken: true, mtimeMs: lst.mtimeMs };
     let fh = null;
     try {
+        // O_NONBLOCK: a FIFO opened O_RDONLY alone blocks until a writer
+        // attaches; non-blocking open returns immediately regardless, so a
+        // lock path replaced by a FIFO/device can never hang this read.
         // O_NOFOLLOW is absent on some platforms (e.g. Windows); the lstat symlink check above is then the only guard.
-        fh = await fs.promises.open(lockFile, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+        fh = await fs.promises.open(lockFile, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | (fs.constants.O_NOFOLLOW || 0));
         const st = await fh.stat();
         if (!st.isFile() || st.size > MAX_LOCK_BYTES) return { exists: true, broken: true, mtimeMs: lst.mtimeMs };
         const buf = await fh.readFile();
@@ -224,9 +450,16 @@ function lockSnapshotKey(info) {
  * into being removed: by the time we hold the mutex, lockFile is either
  * still the exact content we judged stale (safe to unlink) or it has
  * already changed (we back off and let the caller retry from scratch).
- * Never throws; a failure to acquire the mutex or recover a dead one is
- * just "did not steal this round" and the caller's own retry loop and
- * lockTimeoutMs deadline govern how long that is tried for.
+ * Never throws.
+ *
+ * R1-B (issue #125): there is no automatic steal-mutex recovery. If this
+ * process does not win the `wx` create of stealMutexFile -- for any reason,
+ * including a dead, empty or unparseable leftover from a crashed holder --
+ * it does nothing to that file and simply reports "did not steal this
+ * round". No process ever unlinks a mutex it does not hold. The caller's
+ * own retry loop and lockTimeoutMs deadline bound how long that is tried
+ * for and yield the explicit LOCK_TIMEOUT once exhausted; clearing a
+ * leftover mutex is an operator action, not something this code attempts.
  */
 async function tryStealUnderMutex(lockFile, stealMutexFile, judgedInfo, lockStaleMs) {
     const mutexToken = crypto.randomBytes(16).toString("hex");
@@ -237,23 +470,11 @@ async function tryStealUnderMutex(lockFile, stealMutexFile, judgedInfo, lockStal
         fh = await fs.promises.open(stealMutexFile, "wx", 0o600);
         try { await fh.writeFile(mutexPayload, "utf8"); } finally { await fh.close(); }
     } catch (e) {
-        if (!e || e.code !== "EEXIST") return; // unexpected I/O error: fail closed, nothing stolen this round
-        // Someone else holds the steal mutex. Only recover it if it is
-        // itself older than lockStaleMs and its owning pid is provably
-        // dead, and only via a token-checked unlink (never blind).
-        const minfo = await readLockRaw(stealMutexFile);
-        if (minfo.exists && !minfo.symlink && Number.isFinite(minfo.mtimeMs) && minfo.parsed) {
-            const mAge = Date.now() - minfo.mtimeMs;
-            if (mAge > lockStaleMs && !isPidAlive(minfo.parsed.pid)) {
-                try {
-                    const recheck = await readLockRaw(stealMutexFile);
-                    if (recheck.parsed && recheck.parsed.token === minfo.parsed.token) {
-                        await fs.promises.unlink(stealMutexFile);
-                    }
-                } catch { /* best effort; outer loop retries */ }
-            }
-        }
-        return; // did not acquire the mutex this round
+        await __pause("mutexEexist");
+        // Someone else already holds (or left behind) the steal mutex.
+        // Fail closed this round; never inspect or unlink it. (Covers the
+        // expected EEXIST case and any unexpected I/O error alike.)
+        return;
     }
 
     try {
@@ -286,7 +507,9 @@ async function tryStealUnderMutex(lockFile, stealMutexFile, judgedInfo, lockStal
  * Never writes to the destination (events.jsonl) itself.
  */
 async function acquireLock(lockFile, stealMutexFile, lockOpts) {
-    const { lockTimeoutMs, lockStaleMs, lockRetryMs } = lockOptsOf(lockOpts);
+    const resolved = lockOptsOf(lockOpts);
+    if (!resolved.ok) return resolved; // INVALID_LOCK_OPTION: fail closed, no wx open attempted
+    const { lockTimeoutMs, lockStaleMs, lockRetryMs } = resolved;
     const deadline = Date.now() + lockTimeoutMs;
     const token = crypto.randomBytes(16).toString("hex");
     const payload = JSON.stringify({ pid: process.pid, token, at: Date.now() });
@@ -334,13 +557,43 @@ async function releaseLock(lockFile, token) {
     }
 }
 
-/** Content fingerprint of the events file, symlink-refusing. Never throws. */
+/**
+ * Content fingerprint of the events file. Never throws, never blocks: the
+ * open is non-blocking (FH, G77B-01) and the handle's own fstat -- not a
+ * pre-open lstat -- decides whether this is a regular file, so a path
+ * swapped to a FIFO/dir/socket/device right before open is still rejected
+ * instead of hung on or trusted. A post-open lstat of the path is compared
+ * by (dev, ino) against the open handle to catch the path being replaced
+ * between validation and open.
+ *
+ * P3-3 (issue #125): the read itself is bounded by an explicit read loop
+ * (mirroring `readStoreFile`) rather than `fh.readFile()`, which would
+ * allocate and buffer however much the file delivers. `fstat`'s reported
+ * size is only a point-in-time snapshot; a file that grows after it (e.g.
+ * someone appending past `MAX_STORE_BYTES` between the `stat()` above and
+ * the read below) can never force an unbounded read or allocation here —
+ * the loop bails with `err:UNSUPPORTED_TYPE` the moment more bytes arrive
+ * than the already-validated size allows.
+ */
 async function fileFingerprint(file) {
     let fh = null;
     try {
-        fh = await fs.promises.open(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-        const buf = await fh.readFile();
-        return "h:" + crypto.createHash("sha256").update(buf).digest("hex");
+        fh = await fs.promises.open(file, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | (fs.constants.O_NOFOLLOW || 0));
+        const st = await fh.stat();
+        if (!st.isFile() || st.size > MAX_STORE_BYTES) return "err:UNSUPPORTED_TYPE";
+        let lst;
+        try { lst = await fs.promises.lstat(file); } catch { return "err:REPLACED"; }
+        if (lst.isSymbolicLink() || lst.dev !== st.dev || lst.ino !== st.ino) return "err:REPLACED";
+        const buf = Buffer.alloc(st.size + 1);
+        let off = 0;
+        for (;;) {
+            const { bytesRead } = await fh.read(buf, off, buf.length - off, off);
+            if (bytesRead === 0) break;
+            off += bytesRead;
+            if (off > st.size || off > MAX_STORE_BYTES) return "err:UNSUPPORTED_TYPE";
+            if (off >= buf.length) break;
+        }
+        return "h:" + crypto.createHash("sha256").update(buf.subarray(0, off)).digest("hex");
     } catch (e) {
         if (e && e.code === "ENOENT") return "missing";
         return "err:" + ((e && e.code) || "UNKNOWN");
@@ -424,25 +677,33 @@ function reduceChain(events, expectedJourneyId) {
 
 // --------------------------------------------------------------- bounded read
 
+/**
+ * FH / G77B-01 (issue #125): before any potentially-blocking read of the
+ * events file, open non-blocking (O_RDONLY|O_NONBLOCK|O_NOFOLLOW where
+ * available) so a FIFO/device at that path can never hang the open, then
+ * decide the file's type from the open handle's own fstat -- never from a
+ * preceding lstat of the path, which could be stale by the time open()
+ * runs. Any non-regular type (FIFO, directory, socket, device) or
+ * oversized file is rejected before any read is attempted. A post-open
+ * lstat of the path is compared by (dev, ino) against the handle to detect
+ * the path having been replaced (including by a symlink) between whatever
+ * earlier check ran and this open.
+ */
 async function readStoreFile(file) {
-    let lst;
-    try { lst = await fs.promises.lstat(file); } catch (e) {
-        if (e && e.code === "ENOENT") return { status: "missing" };
-        return { status: "broken" };
-    }
-    if (lst.isSymbolicLink()) return { status: "broken" };
-    if (!lst.isFile()) return { status: "broken" };
-
     let fh = null;
     try {
         try {
-            fh = await fs.promises.open(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+            fh = await fs.promises.open(file, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | (fs.constants.O_NOFOLLOW || 0));
         } catch (e) {
+            if (e && e.code === "ENOENT") return { status: "missing" };
             return { status: "broken" };
         }
         const st = await fh.stat();
         if (!st.isFile()) return { status: "broken" };
         if (st.size > MAX_STORE_BYTES) return { status: "broken" };
+        let lst;
+        try { lst = await fs.promises.lstat(file); } catch { return { status: "broken" }; }
+        if (lst.isSymbolicLink() || lst.dev !== st.dev || lst.ino !== st.ino) return { status: "broken" };
         const buf = Buffer.alloc(st.size + 1);
         let off = 0;
         for (;;) {
@@ -535,6 +796,7 @@ async function withLock(root, journeyId, opts, fn) {
         return bad("PATH_INVALID", "journeyId invalid");
     }
     const resolvedLockOpts = lockOptsOf(opts);
+    if (!resolvedLockOpts.ok) return resolvedLockOpts; // INVALID_LOCK_OPTION: fail closed before any lock/journey I/O
 
     return await withFileLock(file, async () => {
         // Only mutating operations reach here; read-only status/isApproved
@@ -550,6 +812,7 @@ async function withLock(root, journeyId, opts, fn) {
         if (!acq.ok) {
             if (acq.code === "LOCK_TIMEOUT") return bad("LOCK_TIMEOUT", "lock acquisition timed out");
             if (acq.code === "LOCK_CONTENTION") return bad("LOCK_CONTENTION", "lock contended by another writer");
+            if (acq.code === "INVALID_LOCK_OPTION") return acq;
             return bad("LOCK_IO_ERROR", "lock file could not be created");
         }
         try {
@@ -560,7 +823,14 @@ async function withLock(root, journeyId, opts, fn) {
                 const stillOurs = await lockStillOwnedBy(lockFile, acq.token);
                 if (!stillOurs) return bad("LOCK_LOST", "lock ownership lost before write");
                 const fingerprintAfter = await fileFingerprint(file);
-                if (fingerprintAfter !== fingerprintBefore) return bad("LOCK_LOST", "events file changed unexpectedly under lock");
+                // An "err:*" fingerprint is never trusted as a basis for
+                // "unchanged" — two equal error strings do not prove the
+                // file's content is actually the same, only that the same
+                // kind of read failure happened twice. Fail closed whenever
+                // either fingerprint is an error, even if they are identical.
+                if (fingerprintBefore.startsWith("err:") || fingerprintAfter.startsWith("err:") || fingerprintAfter !== fingerprintBefore) {
+                    return bad("LOCK_LOST", "events file changed unexpectedly under lock");
+                }
                 await __pause("beforeCommit");
                 const w = await writeChain(file, result.events);
                 if (!w.ok) return w;
@@ -693,6 +963,22 @@ async function isApproved(root, journeyId, digest) {
 module.exports = {
     propose, approve, reject, status, isApproved,
     EVENT_TYPES, CHANNELS, GENESIS_PREV,
+    // G77B-03 (issue #125): deterministic, Git-ignored default store
+    // location and its fail-closed override validation. Additive only —
+    // propose/approve/reject/status/isApproved above are unchanged and never
+    // call these; callers that want the default location call
+    // resolveStoreRoot() themselves and pass its `root` through.
+    defaultStoreRoot, resolveStoreRoot, DEFAULT_STORE_SUBPATH,
+    // G77B-02 (issue #125): documented lock-option bounds, exposed read-only
+    // so tests can assert against the real constants instead of duplicating
+    // the numbers. lockRetryMs's effective max is additionally capped per
+    // call at the resolved lockTimeoutMs (see lockOptsOf); this is the
+    // absolute ceiling before that per-call cap.
+    LOCK_OPTION_BOUNDS: Object.freeze({
+        lockTimeoutMs: Object.freeze({ min: MIN_LOCK_TIMEOUT_MS, max: MAX_LOCK_TIMEOUT_MS, default: DEFAULT_LOCK_TIMEOUT_MS }),
+        lockStaleMs: Object.freeze({ min: MIN_LOCK_STALE_MS, max: MAX_LOCK_STALE_MS, default: DEFAULT_LOCK_STALE_MS }),
+        lockRetryMs: Object.freeze({ min: MIN_LOCK_RETRY_MS, max: MAX_LOCK_RETRY_MS, default: DEFAULT_LOCK_RETRY_MS }),
+    }),
     // Exposed only for deterministic cross-process lock testing
     // (tests/unit/ContractStoreConcurrency.check.js). Not part of the public
     // contract-lifecycle API and must not be used to bypass lifecycle rules.
