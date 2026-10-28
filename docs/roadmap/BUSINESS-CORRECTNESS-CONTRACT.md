@@ -161,3 +161,33 @@ Plans and reports from before this change load unchanged. A report without `veri
 ## 11. Open questions for the owner
 
 Q1 non-quarantinable business FAIL (recommended yes). Q2 whether optional-assertion failures may ever block (recommended: only with explicit `severity: "blocking"`). Q3 default flip timing (D8). Q4 contract placement: Architect review recommends beside the plan, bound by `journeyId` and `digest` (owner to confirm).
+
+## WP-77a implementation status
+
+`src/core/outcome/Contract.js` (strict parse, canonical digest) and `src/core/outcome/ContractStore.js` (hash-chained approval log) are implemented. Nothing executes assertions yet and no plan, runner or report path reads them.
+
+Known limitations, recorded from the WP-77a security review and not yet fixed:
+
+- **P2 resolved.** Every mutating call now takes a per-journey lock file (`events.jsonl.lock`, `wx`, mode 0600, `{pid, token, at}`) before reading state, re-reads and re-verifies the whole chain under that lock, and re-checks lock ownership plus an events-file content fingerprint immediately before the final atomic write; mismatch aborts with `LOCK_LOST` and writes nothing. Two processes racing to approve/reject (or approve/approve) the same digest no longer lose an event: one wins, the other observes the committed state or a clean `INVALID_TRANSITION` or `LOCK_TIMEOUT` error. Covered by `tests/unit/ContractStoreConcurrency.check.js` using real child processes.
+- **Stale-lock steal race (found and fixed in the follow-up review of PR #122).** The first implementation stole a stale lock by renaming it aside. Two waiters that judged the same stale lock stale could displace the winner's live lock; a third writer could then take the lock while the winner was between its final ownership check and its rename, and both would commit (a lost event). `tests/unit/ContractStoreConcurrency.check.js` reproduces this deterministically with separate processes and pause points (it fails 5 of 5 on the rename-based logic and passes 10 of 10 on the fix). Stealing is now serialized by a short-lived mutex file (`events.jsonl.lock.steal`): under it the lock is re-read and unlinked only if it is still the exact stale content judged earlier. While a stale lock file exists nobody can create a fresh one, so only a mutex holder can change it. No `.stale-*` files are created any more.
+- Residual limits, documented in `ContractStore.js`: single host and one pid namespace (not NFS-safe); no external anchor (whole-store rollback to an earlier self-consistent copy is undetected); cutting the log at a line boundary is undetected; no identity is authenticated (`channel` and `at` are labels). Live-owner exclusivity, including the gap between the final ownership check and the rename in `writeChain`, relies on: (a) `wx` being an atomic exclusive create; (b) `process.kill(pid, 0)` reporting liveness truthfully; (c) recovery of the steal mutex itself (allowed only when its pid is dead and it is older than `lockStaleMs`): a crash inside the mutex's few-syscall critical section plus a delayed recoverer whose unlink removes a fresh mutex created by a third process would let two processes hold it, which the Security review reproduced deterministically in scratch and rates P3 (turning it into a lost event needs a further sub-millisecond race and a writer in its commit gap); an empty or unparseable steal mutex is never recovered, so writes to that journey fail closed with `LOCK_TIMEOUT` until an operator removes the file (availability only); (d) nobody with write access to the store directory deleting a live lock by hand. The final rename has no compare-and-swap, so a live owner wrongly judged dead can lose to a later writer. A hung live holder is never stolen from and makes other writers fail closed with `LOCK_TIMEOUT`.
+- Approving an older never-approved revision supersedes a newer approved one (revision order is enforced at propose only). Approvals on the `test` channel count in `isApproved`. Error text for internal failures can include a raw exception message. For in-memory object input, validation and digest read the object at different times.
+
+Conditions for WP-77b: the store must not be committed to the repository (a committed self-consistent chain would be a forged approval); the executor must recompute the digest from the contract it actually runs, with that contract's own `journeyId`.
+
+Residual P3 findings from the PR #122 hardening security review (revision 38e2ec2, no P0/P1/P2), accepted for WP-77a and to be addressed before WP-77b wires the store into execution or the dashboard:
+
+- A FIFO or very large file placed at `events.jsonl` makes `fileFingerprint` block or allocate unbounded memory while the lock is held. Fix: derive the fingerprint from the bytes `loadChain` already read (this also removes the second read).
+- `lockOptsOf` does not clamp caller-supplied values (for example `lockStaleMs: 0`).
+- A recycled pid, a future-dated lock mtime, or a hung live holder blocks writes to that journey until the holder exits or the lock is removed by an operator. Containers with separate pid namespaces are not covered.
+- The store root must not default to a tracked path and no store file may be committed (WP-77b default must be gitignored and tested).
+- Windows and NFS/shared filesystems were not examined and are unsupported.
+
+### Operator recovery for a stuck steal mutex or lock file
+
+Applies when writes to one journey fail with `LOCK_TIMEOUT` and an `events.jsonl.lock.steal` file (empty, unparseable, or left by a dead process) or an old `events.jsonl.lock` file sits in `<store root>/<journeyId>/`. The failure is fail-closed: nothing is written, committed events are unchanged, and the lock files hold only a pid, a random token and a timestamp (no contract content).
+
+1. Stop every process that may use the store, or confirm none is running. If the file is parseable, check its `pid` with `kill -0 <pid>`; a live pid means wait, do not remove.
+2. List the directory (`ls -la <store root>/<journeyId>/`). Remove only `events.jsonl.lock.steal` and, if its pid is dead, `events.jsonl.lock`. Never delete or edit `events.jsonl`.
+3. Check the history before resuming writes: `node -e 'require("./src/core/outcome/ContractStore").status(process.argv[1],process.argv[2],process.argv[3]).then(r=>console.log(JSON.stringify(r)))' <store root> <journeyId> <digest>`. `integrity` must be `ok`. If it is `broken`, stop and treat the store as untrusted: every contract in it stays unapproved until the history is explained.
+4. Resume normal operation. Record the incident (time, journey, what was removed) in the operator log.
