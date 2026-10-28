@@ -108,9 +108,10 @@
  * `resolveStoreRoot(overrideRoot, repoRoot)` is the fail-closed gate for any
  * caller (CLI/config) that wants to turn an optional override into a root:
  * no override resolves to the default (rejecting it if the default's own
- * `data`/`outcome-approvals` ancestry has been replaced by a symlink
- * pointing outside `repoRoot` — a symlink swap that would otherwise defeat
- * the `.gitignore` rule below); a supplied override must be a non-empty,
+ * `data`/`outcome-approvals` ancestry has been replaced by a symlink at all —
+ * even one pointing at another directory inside `repoRoot` — since that
+ * swap would otherwise defeat the `.gitignore` rule below just as surely as
+ * one pointing outside `repoRoot`); a supplied override must be a non-empty,
  * NUL-free, absolute string with no literal `..` traversal segment, and is
  * otherwise used as-is (an explicit root, e.g. a test's tmpdir, is trusted
  * by the caller and is not required to resolve under any particular base).
@@ -218,25 +219,27 @@ function hasTraversalSegment(p) {
 }
 
 /**
- * True if `targetPath` or any of its ancestors, up to and including
- * `allowedBaseResolved`, is a symlink whose realpath resolves outside
- * `allowedBaseResolved`. Only ancestors that currently exist on disk are
- * inspected (a not-yet-created default directory is not itself an escape).
- * An unresolvable symlink (dangling target, permission error) is treated as
- * an escape — fail closed rather than silently skip the check.
+ * True if any existing ancestor of `targetPath`, strictly below
+ * `allowedBaseResolved` (exclusive — `allowedBaseResolved` itself is never
+ * inspected), is a symlink. This is deliberately not limited to a symlink
+ * whose realpath happens to resolve *outside* `allowedBaseResolved`: a
+ * symlink placed at `data` or `data/outcome-approvals` that points at some
+ * other directory *inside* the repo would still defeat the `.gitignore`
+ * protection on the real, intended default path, so any symlink among these
+ * components is rejected regardless of where it points. `allowedBaseResolved`
+ * itself (the repo root) is never flagged even if it is reached through a
+ * symlinked parent (e.g. macOS's `/tmp` -> `/private/tmp`) — only components
+ * strictly below it are inspected. Only ancestors that currently exist on
+ * disk are inspected (a not-yet-created default directory is not itself an
+ * escape).
  */
 function hasSymlinkEscape(targetPath, allowedBaseResolved) {
     let cur = targetPath;
     for (;;) {
+        if (cur === allowedBaseResolved) break;
         let lst;
         try { lst = fs.lstatSync(cur); } catch { lst = null; }
-        if (lst && lst.isSymbolicLink()) {
-            let real;
-            try { real = fs.realpathSync(cur); } catch { return true; }
-            const rel = path.relative(allowedBaseResolved, real);
-            if (rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel)) return true;
-        }
-        if (cur === allowedBaseResolved) break;
+        if (lst && lst.isSymbolicLink()) return true;
         const parent = path.dirname(cur);
         if (parent === cur) break; // reached filesystem root without meeting allowedBaseResolved
         cur = parent;
@@ -562,6 +565,15 @@ async function releaseLock(lockFile, token) {
  * instead of hung on or trusted. A post-open lstat of the path is compared
  * by (dev, ino) against the open handle to catch the path being replaced
  * between validation and open.
+ *
+ * P3-3 (issue #125): the read itself is bounded by an explicit read loop
+ * (mirroring `readStoreFile`) rather than `fh.readFile()`, which would
+ * allocate and buffer however much the file delivers. `fstat`'s reported
+ * size is only a point-in-time snapshot; a file that grows after it (e.g.
+ * someone appending past `MAX_STORE_BYTES` between the `stat()` above and
+ * the read below) can never force an unbounded read or allocation here —
+ * the loop bails with `err:UNSUPPORTED_TYPE` the moment more bytes arrive
+ * than the already-validated size allows.
  */
 async function fileFingerprint(file) {
     let fh = null;
@@ -572,9 +584,16 @@ async function fileFingerprint(file) {
         let lst;
         try { lst = await fs.promises.lstat(file); } catch { return "err:REPLACED"; }
         if (lst.isSymbolicLink() || lst.dev !== st.dev || lst.ino !== st.ino) return "err:REPLACED";
-        const buf = await fh.readFile();
-        if (buf.length > MAX_STORE_BYTES) return "err:UNSUPPORTED_TYPE";
-        return "h:" + crypto.createHash("sha256").update(buf).digest("hex");
+        const buf = Buffer.alloc(st.size + 1);
+        let off = 0;
+        for (;;) {
+            const { bytesRead } = await fh.read(buf, off, buf.length - off, off);
+            if (bytesRead === 0) break;
+            off += bytesRead;
+            if (off > st.size || off > MAX_STORE_BYTES) return "err:UNSUPPORTED_TYPE";
+            if (off >= buf.length) break;
+        }
+        return "h:" + crypto.createHash("sha256").update(buf.subarray(0, off)).digest("hex");
     } catch (e) {
         if (e && e.code === "ENOENT") return "missing";
         return "err:" + ((e && e.code) || "UNKNOWN");
@@ -804,7 +823,14 @@ async function withLock(root, journeyId, opts, fn) {
                 const stillOurs = await lockStillOwnedBy(lockFile, acq.token);
                 if (!stillOurs) return bad("LOCK_LOST", "lock ownership lost before write");
                 const fingerprintAfter = await fileFingerprint(file);
-                if (fingerprintAfter !== fingerprintBefore) return bad("LOCK_LOST", "events file changed unexpectedly under lock");
+                // An "err:*" fingerprint is never trusted as a basis for
+                // "unchanged" — two equal error strings do not prove the
+                // file's content is actually the same, only that the same
+                // kind of read failure happened twice. Fail closed whenever
+                // either fingerprint is an error, even if they are identical.
+                if (fingerprintBefore.startsWith("err:") || fingerprintAfter.startsWith("err:") || fingerprintAfter !== fingerprintBefore) {
+                    return bad("LOCK_LOST", "events file changed unexpectedly under lock");
+                }
                 await __pause("beforeCommit");
                 const w = await writeChain(file, result.events);
                 if (!w.ok) return w;
