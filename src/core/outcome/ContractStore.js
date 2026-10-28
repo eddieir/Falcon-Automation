@@ -199,8 +199,11 @@ async function readLockRaw(lockFile) {
     if (!lst.isFile()) return { exists: true, broken: true, mtimeMs: lst.mtimeMs };
     let fh = null;
     try {
+        // O_NONBLOCK: a FIFO opened O_RDONLY alone blocks until a writer
+        // attaches; non-blocking open returns immediately regardless, so a
+        // lock path replaced by a FIFO/device can never hang this read.
         // O_NOFOLLOW is absent on some platforms (e.g. Windows); the lstat symlink check above is then the only guard.
-        fh = await fs.promises.open(lockFile, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+        fh = await fs.promises.open(lockFile, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | (fs.constants.O_NOFOLLOW || 0));
         const st = await fh.stat();
         if (!st.isFile() || st.size > MAX_LOCK_BYTES) return { exists: true, broken: true, mtimeMs: lst.mtimeMs };
         const buf = await fh.readFile();
@@ -332,12 +335,26 @@ async function releaseLock(lockFile, token) {
     }
 }
 
-/** Content fingerprint of the events file, symlink-refusing. Never throws. */
+/**
+ * Content fingerprint of the events file. Never throws, never blocks: the
+ * open is non-blocking (FH, G77B-01) and the handle's own fstat -- not a
+ * pre-open lstat -- decides whether this is a regular file, so a path
+ * swapped to a FIFO/dir/socket/device right before open is still rejected
+ * instead of hung on or trusted. A post-open lstat of the path is compared
+ * by (dev, ino) against the open handle to catch the path being replaced
+ * between validation and open.
+ */
 async function fileFingerprint(file) {
     let fh = null;
     try {
-        fh = await fs.promises.open(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+        fh = await fs.promises.open(file, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | (fs.constants.O_NOFOLLOW || 0));
+        const st = await fh.stat();
+        if (!st.isFile() || st.size > MAX_STORE_BYTES) return "err:UNSUPPORTED_TYPE";
+        let lst;
+        try { lst = await fs.promises.lstat(file); } catch { return "err:REPLACED"; }
+        if (lst.isSymbolicLink() || lst.dev !== st.dev || lst.ino !== st.ino) return "err:REPLACED";
         const buf = await fh.readFile();
+        if (buf.length > MAX_STORE_BYTES) return "err:UNSUPPORTED_TYPE";
         return "h:" + crypto.createHash("sha256").update(buf).digest("hex");
     } catch (e) {
         if (e && e.code === "ENOENT") return "missing";
@@ -422,25 +439,33 @@ function reduceChain(events, expectedJourneyId) {
 
 // --------------------------------------------------------------- bounded read
 
+/**
+ * FH / G77B-01 (issue #125): before any potentially-blocking read of the
+ * events file, open non-blocking (O_RDONLY|O_NONBLOCK|O_NOFOLLOW where
+ * available) so a FIFO/device at that path can never hang the open, then
+ * decide the file's type from the open handle's own fstat -- never from a
+ * preceding lstat of the path, which could be stale by the time open()
+ * runs. Any non-regular type (FIFO, directory, socket, device) or
+ * oversized file is rejected before any read is attempted. A post-open
+ * lstat of the path is compared by (dev, ino) against the handle to detect
+ * the path having been replaced (including by a symlink) between whatever
+ * earlier check ran and this open.
+ */
 async function readStoreFile(file) {
-    let lst;
-    try { lst = await fs.promises.lstat(file); } catch (e) {
-        if (e && e.code === "ENOENT") return { status: "missing" };
-        return { status: "broken" };
-    }
-    if (lst.isSymbolicLink()) return { status: "broken" };
-    if (!lst.isFile()) return { status: "broken" };
-
     let fh = null;
     try {
         try {
-            fh = await fs.promises.open(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+            fh = await fs.promises.open(file, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | (fs.constants.O_NOFOLLOW || 0));
         } catch (e) {
+            if (e && e.code === "ENOENT") return { status: "missing" };
             return { status: "broken" };
         }
         const st = await fh.stat();
         if (!st.isFile()) return { status: "broken" };
         if (st.size > MAX_STORE_BYTES) return { status: "broken" };
+        let lst;
+        try { lst = await fs.promises.lstat(file); } catch { return { status: "broken" }; }
+        if (lst.isSymbolicLink() || lst.dev !== st.dev || lst.ino !== st.ino) return { status: "broken" };
         const buf = Buffer.alloc(st.size + 1);
         let off = 0;
         for (;;) {
