@@ -7,7 +7,7 @@
  * or oversized files are detected on read.
  *
  * Cross-process coordination: every mutating operation (propose / approve /
- * reject / supersede) takes a per-journey lock file (`events.jsonl.lock`,
+ * reject; approve may also emit a SUPERSEDED event) takes a per-journey lock file (`events.jsonl.lock`,
  * created with `wx` mode 0600, containing `{pid, token, at}`) BEFORE it reads
  * any chain state, re-reads and re-verifies the whole chain from disk under
  * that lock, appends, and writes atomically, then releases the lock. An
@@ -163,6 +163,7 @@ async function readLockRaw(lockFile) {
     if (!lst.isFile()) return { exists: true, broken: true, mtimeMs: lst.mtimeMs };
     let fh = null;
     try {
+        // O_NOFOLLOW is absent on some platforms (e.g. Windows); the lstat symlink check above is then the only guard.
         fh = await fs.promises.open(lockFile, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
         const st = await fh.stat();
         if (!st.isFile() || st.size > MAX_LOCK_BYTES) return { exists: true, broken: true, mtimeMs: lst.mtimeMs };
@@ -224,6 +225,10 @@ async function acquireLock(lockFile, lockOpts) {
                             try { await fs.promises.unlink(stolenName); } catch { /* ignore */ }
                             // fall through: lockFile is now free, retry fresh create immediately
                         } else {
+                            // We moved aside a lock that is not the one judged stale. Its owner will
+                            // fail the pre-write ownership check (LOCK_LOST), so no write can happen
+                            // under it; remove the moved file so it cannot accumulate.
+                            try { await fs.promises.unlink(stolenName); } catch { /* best effort */ }
                             return { ok: false, code: "LOCK_CONTENTION" };
                         }
                     }

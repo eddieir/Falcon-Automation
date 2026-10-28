@@ -11,7 +11,20 @@ const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { spawn } = require("child_process");
+const childProcess = require("child_process");
+
+// Every child is tracked and killed on exit so a failed assertion can never
+// leave a lock-holding worker running after the test process ends.
+const liveChildren = new Set();
+function spawn(...args) {
+    const child = childProcess.spawn(...args);
+    liveChildren.add(child);
+    child.on("exit", () => liveChildren.delete(child));
+    return child;
+}
+process.on("exit", () => {
+    for (const child of liveChildren) { try { child.kill("SIGKILL"); } catch { /* already gone */ } }
+});
 const Store = require("../../src/core/outcome/ContractStore");
 const Contract = require("../../src/core/outcome/Contract");
 const SafeFs = require("../../src/core/parallel/SafeFs");
