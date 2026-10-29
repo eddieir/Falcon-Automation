@@ -2,6 +2,10 @@
 
 ### Self-healing browser tests. Reviewable recovery. Clear release evidence.
 
+**The problem every QA team knows.** A developer renames a button ID or reshuffles a page. The application still works, but the test suite turns red. Someone has to trace each broken locator and fix it by hand, and the same work returns with the next release. Over time, maintenance eats the hours meant for new coverage, and real defects hide among failures that were never really failures.
+
+**Why Falcon exists.** Falcon was built to take that repair work off your team without taking the decisions away from it. When a locator breaks, Falcon looks for the same element using evidence from earlier runs, declines to guess when the match is unclear, and records each repair as a proposal that a person approves before it is reused. Local recovery needs no AI provider; model-assisted selection is optional.
+
 Falcon is an open-source test automation framework built on Playwright. It explores a web application, generates interaction scenarios from the live page, and runs them with layered locator recovery. Teams can follow execution in a live dashboard, inspect what changed, and decide which recovered selectors to trust.
 
 **For QA leaders and engineering teams evaluating how to reduce selector maintenance and make test results easier to investigate.**
@@ -13,8 +17,6 @@ Falcon is an open-source test automation framework built on Playwright. It explo
 ---
 
 ## Why teams evaluate Falcon
-
-A changed button ID can break a test even when the application still works. Repeated locator failures consume maintenance time and make genuine product failures harder to distinguish.
 
 Falcon brings discovery, execution, recovery, and review into one workflow:
 
