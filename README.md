@@ -1,6 +1,6 @@
 # Falcon Automation
 
-### Self-healing browser tests. Reviewable recovery. Clear release evidence.
+### Self-healing browser tests. Reviewable recovery.
 
 **The problem every QA team knows.** A developer renames a button ID or reshuffles a page. The application still works, but the test suite turns red. Someone has to trace each broken locator and fix it by hand, and the same work returns with the next release. Over time, maintenance eats the hours meant for new coverage, and real defects hide among failures that were never really failures.
 
