@@ -1,6 +1,10 @@
 # Falcon Automation
 
-### Self-healing browser tests. Reviewable recovery. Clear release evidence.
+### Self-healing browser tests. Reviewable recovery.
+
+**The problem every QA team knows.** A developer renames a button ID or reshuffles a page. The application still works, but the test suite turns red. Someone has to trace each broken locator and fix it by hand, and the same work returns with the next release. Over time, maintenance eats the hours meant for new coverage, and real defects hide among failures that were never really failures.
+
+**Why Falcon exists.** Falcon was built to take that repair work off your team without taking the decisions away from it. When a locator breaks, Falcon looks for the same element using evidence from earlier runs, declines to guess when the match is unclear, and records each repair as a proposal that a person approves before it is reused. Local recovery needs no AI provider; model-assisted selection is optional.
 
 Falcon is an open-source test automation framework built on Playwright. It explores a web application, generates interaction scenarios from the live page, and runs them with layered locator recovery. Teams can follow execution in a live dashboard, inspect what changed, and decide which recovered selectors to trust.
 
@@ -14,15 +18,13 @@ Falcon is an open-source test automation framework built on Playwright. It explo
 
 ## Why teams evaluate Falcon
 
-A changed button ID can break a test even when the application still works. Repeated locator failures consume maintenance time and make genuine product failures harder to distinguish.
-
 Falcon brings discovery, execution, recovery, and review into one workflow:
 
 | Team need | What Falcon provides |
 | --- | --- |
 | Spend less time repairing selectors | Retries, approved replacements, local evidence matching, and optional AI-assisted recovery for clicks, text entry, and dropdown selection. |
 | Explore an unfamiliar application | A bounded crawl that discovers pages and generates interaction scenarios from their DOM. |
-| Understand what a run actually covered | Page-level coverage, explicit reasons for untested pages, and pass/fail/skip results. |
+| Understand what a run actually covered | Page-level coverage, explicit reasons for untested pages, and pass/fail/skip results. Today a pass means the interaction succeeded; reporting verified business outcomes separately is planned for [M1](#roadmap). |
 | Review recovery decisions | Scoped locator proposals, approve/reject controls, rollback, and persisted decision history. |
 | Investigate unstable tests | Repeated execution, flaky-scenario tracking, quarantine review, and run-history trends. |
 | Fit into an existing delivery workflow | CLI execution, GitHub Actions, reports, page-level parallelism, and deterministic sharding. |
@@ -38,7 +40,7 @@ https://github.com/user-attachments/assets/0640bba0-e755-42a5-9af7-c772f902be06
 
 
 
-**What the demo shows:** a saved customer journey on a local copy of AI-agency (the open-source code behind AxonRadar) passes. A UI refactor then renames one test hook. Falcon recovers because the control kept strong identity evidence, a person approves the repair in the dashboard, and a fresh Falcon process reuses it. Falcon also refuses a different change when the control had no stable identity. Recovery uses local evidence only: no API keys and no LLM. The journey's steps were written for the demo; Falcon captured the selector.
+**What the demo shows:** a saved customer journey passes on a local copy of a real open-source web application (AI-agency, the code behind the AxonRadar site). A UI refactor then renames one test hook. Falcon recovers because the control kept strong identity evidence, a person approves the repair in the dashboard, and a fresh Falcon process reuses it. Falcon also refuses a different change when the control had no stable identity. Recovery uses local evidence only: no API keys and no LLM. The journey's steps were written for the demo; Falcon captured the selector.
 
 [Watch the full demo (1 min 42 s, MP4)](docs/demo/falcon-customer-demo-full-16x9.mp4) · [LinkedIn cut (4:5)](docs/demo/falcon-customer-demo-linkedin-4x5.mp4) · [Reproduce it and see what it proves](docs/demo/CUSTOMER-DEMO.md)
 
@@ -239,27 +241,272 @@ The current review audit records decision channels such as CLI and dashboard, no
 | [Competitive benchmark protocol](docs/research/competitive-benchmark-protocol.md) | Neutral workloads, scoring rules, the scorer and a local run against Playwright, Selenium and Cypress, with its limits. |
 | [Release history](CHANGELOG.md) | Delivered changes and fixes. |
 | [Development plans](docs/PHASE-PLANS.md) | Phase plans and implementation context. |
+| [Delivery plan](docs/roadmap/ROADMAP.md) | Milestone timeline, decision gates, risks, and the full delivery chart. |
 | [Contributing](CONTRIBUTING.md) | Development and contribution guidance. |
 
+<a id="roadmap"></a>
 
 ## Roadmap
 
-Falcon's roadmap is organized into GitHub milestones. Target dates are provisional planning estimates, not release commitments. See the [milestone register](docs/FALCON-MILESTONE-LINKS.md) and [execution strategy](docs/roadmap/EXECUTION-STRATEGY.md) for sequencing, dependencies, and current status.
+Falcon is developed in ten milestones, M0 to M9. [GitHub milestones](https://github.com/eddieir/Falcon-Automation/milestones) are the source of truth. Target dates are provisional planning estimates, not release commitments.
 
-| Milestone | Target date | Focus |
-| --- | --- | --- |
-| [M0 — Competitive evidence baseline](https://github.com/eddieir/Falcon-Automation/milestone/1) | 2026-11-13 | Competitor evidence, benchmark harness, and capability-claim audit |
-| [M1 — Trustworthy Alpha](https://github.com/eddieir/Falcon-Automation/milestone/2) | 2027-01-08 | Verified business assertions, truthful reporting, and bounded journey discovery |
-| [M2 — Secure Technical Preview](https://github.com/eddieir/Falcon-Automation/milestone/3) | 2027-02-19 | Security gates, safe actions, and isolated authenticated journeys |
-| [M3 — Verified Self-Healing](https://github.com/eddieir/Falcon-Automation/milestone/4) | 2027-03-26 | Matcher and replay guarantees, with external-app healing evidence |
-| [M4 — Developer Beta](https://github.com/eddieir/Falcon-Automation/milestone/5) | 2027-05-07 | Playwright test import/export and compatibility |
-| [M5 — Efficient CI](https://github.com/eddieir/Falcon-Automation/milestone/6) | 2027-06-18 | Test selection, sharding, and cost/runtime controls |
-| [M6 — Enterprise Operations](https://github.com/eddieir/Falcon-Automation/milestone/7) | 2027-08-13 | RBAC, retention, audit export, and CI integrations |
-| [M7 — Customer Pilot](https://github.com/eddieir/Falcon-Automation/milestone/8) | 2027-09-24 | Design-partner evaluations, ROI/TCO evidence, and packaging decisions |
-| [M8 — Advanced QA](https://github.com/eddieir/Falcon-Automation/milestone/9) | 2027-12-03 | Accessibility, visual regression, and UI-to-API journey evidence |
-| [M9 — Independent Competitive Release](https://github.com/eddieir/Falcon-Automation/milestone/10) | 2028-01-14 | Reproducible benchmarks, independent reviews, and release-readiness evidence |
+```mermaid
+gantt
+    title Falcon roadmap, M0 to M9
+    dateFormat YYYY-MM-DD
+    axisFormat %b %Y
+    tickInterval 2month
+    todayMarker off
 
-<a id="roadmap"></a>
+    section Done
+    M0 Competitive evidence baseline    :done, m0, 2026-10-23, 2026-11-13
+
+    section In progress
+    M1 Trustworthy Alpha                :active, m1, 2026-10-27, 2027-01-08
+
+    section Next
+    M2 Secure Technical Preview         :m2, 2027-01-11, 2027-02-19
+
+    section Planned
+    M3 Verified Self-Healing            :m3, 2027-02-22, 2027-03-26
+    M4 Developer Beta                   :m4, 2027-03-29, 2027-05-07
+    M5 Efficient CI                     :m5, 2027-05-10, 2027-06-18
+    M6 Enterprise Operations            :m6, 2027-06-21, 2027-08-13
+    M7 Customer Pilot                   :m7, 2027-08-16, 2027-09-24
+    M8 Advanced QA                      :m8, 2027-09-27, 2027-12-03
+    M9 Independent Competitive Release  :m9, 2027-12-06, 2028-01-14
+```
+
+| Milestone | Target | Status | What you'll get |
+| --- | --- | --- | --- |
+| [M0 — Competitive evidence baseline](https://github.com/eddieir/Falcon-Automation/milestone/1) | 13 Nov 2026 | ✅ Done | A public record of what works today, with evidence behind every claim |
+| [M1 — Trustworthy Alpha](https://github.com/eddieir/Falcon-Automation/milestone/2) | 8 Jan 2027 | 🔵 In progress | Results that show green only when your business checks pass, not just when clicks succeed |
+| [M2 — Secure Technical Preview](https://github.com/eddieir/Falcon-Automation/milestone/3) | 19 Feb 2027 | 🟡 Next | Safe exploration by default, and isolated test logins for each user role |
+| [M3 — Verified Self-Healing](https://github.com/eddieir/Falcon-Automation/milestone/4) | 26 Mar 2027 | ⚪ Planned | Measured, explainable healing that you can review and undo |
+| [M4 — Developer Beta](https://github.com/eddieir/Falcon-Automation/milestone/5) | 7 May 2027 | ⚪ Planned | Bring your Playwright tests in, take clean Playwright tests out, and get started in five minutes |
+| [M5 — Efficient CI](https://github.com/eddieir/Falcon-Automation/milestone/6) | 18 Jun 2027 | ⚪ Planned | Faster, cheaper CI that runs only the affected tests, within time and AI-cost limits |
+| [M6 — Enterprise Operations](https://github.com/eddieir/Falcon-Automation/milestone/7) | 13 Aug 2027 | ⚪ Planned | Team roles, audit trails, and retention controls for larger organizations |
+| [M7 — Customer Pilot](https://github.com/eddieir/Falcon-Automation/milestone/8) | 24 Sep 2027 | ⚪ Planned | Results from real design-partner pilots, plus a cost and ROI model |
+| [M8 — Advanced QA](https://github.com/eddieir/Falcon-Automation/milestone/9) | 3 Dec 2027 | ⚪ Planned | Accessibility, visual, and API checks inside the same customer journeys |
+| [M9 — Independent Competitive Release](https://github.com/eddieir/Falcon-Automation/milestone/10) | 14 Jan 2028 | ⚪ Planned | An independently reviewed release with reproducible benchmarks |
+
+<details>
+<summary><b>Delivery plan for each milestone</b>: what "done" means, dependencies, and a timeline of the issues</summary>
+
+Dates inside each milestone are planning estimates and move as work lands. Issue numbers link to the work on GitHub.
+
+#### M0 — Competitive evidence baseline · target 13 Nov 2026 · ✅ Done
+
+**Done when:** Completed on 26 Oct 2026. The competitor evidence register, the benchmark harness with a local run, and the [capability truth table](docs/CAPABILITY-TRUTH-TABLE.md) are published.
+
+**Depends on:** Nothing
+
+```mermaid
+gantt
+    title M0 Competitive evidence baseline, target 13 Nov 2026
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    tickInterval 1day
+    todayMarker off
+
+    section Done
+    Competitor evidence register (#74)            :done, t1, 2026-10-23, 2026-10-27
+    Neutral benchmark harness (#75)               :done, t2, 2026-10-23, 2026-10-27
+    Capability truth table (#76)                  :done, t3, 2026-10-24, 2026-10-27
+```
+
+#### M1 — Trustworthy Alpha · target 8 Jan 2027 · 🔵 In progress
+
+**Done when:** A run with no approved business checks can never be reported as fully verified. Approved checks run the same way every time, without an LLM. Discovery finds 2–5 step journeys in local test apps, within set page and action limits.
+
+**Depends on:** M0
+
+```mermaid
+gantt
+    title M1 Trustworthy Alpha, target 8 Jan 2027
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    tickInterval 2week
+    todayMarker off
+
+    section Done
+    Foundations merged (#79, #77)                 :done, t1, 2026-10-23, 2026-10-29
+
+    section In progress
+    Safer storage for approved checks (#125)      :active, t2, 2026-11-02, 2026-11-14
+    Multi-step journey discovery (#78)            :active, t3, 2026-11-02, 2026-11-21
+
+    section Planned
+    Business checks that run without AI (#77)     :t4, 2026-11-16, 2026-12-05
+    Review and approve suggested checks (#77)     :t5, 2026-11-23, 2026-12-19
+    Strict verified-only CI mode (#79)            :t6, 2026-12-07, 2026-12-19
+    Journey discovery in site sweeps (#78)        :t7, 2026-12-14, 2027-01-02
+    Release checks and reviews                    :t8, 2027-01-04, 2027-01-08
+```
+
+#### M2 — Secure Technical Preview · target 19 Feb 2027 · 🟡 Next
+
+**Done when:** Destructive actions are blocked by default, with a visible reason. Each user role runs in its own browser context, with no shared sessions or leaked secrets. An independent human security review signs off.
+
+**Depends on:** M1, and an independent security reviewer
+
+```mermaid
+gantt
+    title M2 Secure Technical Preview, target 19 Feb 2027
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    tickInterval 1week
+    todayMarker off
+
+    section Planned
+    Security review gates (#80)                   :t1, 2027-01-11, 2027-01-30
+    Risky actions blocked by default (#81)        :t2, 2027-01-25, 2027-02-11
+    Isolated logins per user role (#82)           :t3, 2027-02-01, 2027-02-18
+```
+
+#### M3 — Verified Self-Healing · target 26 Mar 2027 · ⚪ Planned
+
+**Done when:** Healing accuracy, wrong-action and refusal rates are published reproducibly, including on applications the Falcon team did not write. Ambiguous matches are refused, and every repair can be traced and undone.
+
+**Depends on:** M0 and M1
+
+```mermaid
+gantt
+    title M3 Verified Self-Healing, target 26 Mar 2027
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    tickInterval 1week
+    todayMarker off
+
+    section Planned
+    Healing benchmark corpus (#83)                :t1, 2027-02-22, 2027-03-06
+    Stricter element matching and replay (#84)    :t2, 2027-03-08, 2027-03-20
+    Explain and undo every repair (#85)           :t3, 2027-03-15, 2027-03-27
+```
+
+#### M4 — Developer Beta · target 7 May 2027 · ⚪ Planned
+
+**Done when:** Playwright suites import without running their code, and anything unsupported is listed rather than skipped. Exported tests compile and pass. A first run works on Node.js 22 and 24 without an API key.
+
+**Depends on:** M1 and M3
+
+```mermaid
+gantt
+    title M4 Developer Beta, target 7 May 2027
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    tickInterval 1week
+    todayMarker off
+
+    section Planned
+    Import Playwright tests (#86)                 :t1, 2027-03-29, 2027-04-17
+    Export clean Playwright tests (#87)           :t2, 2027-04-12, 2027-05-04
+    Five-minute onboarding (#88)                  :t3, 2027-04-19, 2027-05-08
+```
+
+#### M5 — Efficient CI · target 18 Jun 2027 · ⚪ Planned
+
+**Done when:** If the impact of a change is unknown, the full relevant test set runs. A run that hits its budget reports PARTIAL or UNKNOWN, never PASSED. Related failures are grouped without hiding different root causes.
+
+**Depends on:** M1
+
+```mermaid
+gantt
+    title M5 Efficient CI, target 18 Jun 2027
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    tickInterval 1week
+    todayMarker off
+
+    section Planned
+    Run only the tests a change affects (#89)     :t1, 2027-05-10, 2027-05-29
+    Run-time and AI-cost budgets (#91)            :t2, 2027-05-10, 2027-06-05
+    Group related failures (#90)                  :t3, 2027-05-31, 2027-06-19
+```
+
+#### M6 — Enterprise Operations · target 13 Aug 2027 · ⚪ Planned
+
+**Done when:** Access is denied by default, and audit records show who did what. Retention, deletion and audit export are integrity-checked, with no credentials or personal data in default artifacts. CI integrations are safe for pull requests from forks.
+
+**Depends on:** M2, and an independent security review
+
+```mermaid
+gantt
+    title M6 Enterprise Operations, target 13 Aug 2027
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    tickInterval 1week
+    todayMarker off
+
+    section Planned
+    Team roles and permissions (#92)              :t1, 2027-06-21, 2027-07-17
+    Retention and audit export (#93)              :t2, 2027-07-05, 2027-07-31
+    Safer CI integrations (#95)                   :t3, 2027-07-19, 2027-08-12
+```
+
+#### M7 — Customer Pilot · target 24 Sep 2027 · ⚪ Planned
+
+**Done when:** Three scoped design-partner evaluations are completed, or the reason they could not be recruited is documented. ROI figures use customer-verified inputs. Packaging decisions have legal sign-off.
+
+**Depends on:** M2, M3, and recruiting design partners
+
+```mermaid
+gantt
+    title M7 Customer Pilot, target 24 Sep 2027
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    tickInterval 1week
+    todayMarker off
+
+    section Planned
+    Packaging and support plans (#98)             :t1, 2027-08-16, 2027-09-11
+    Three design-partner pilots (#96)             :t2, 2027-08-16, 2027-09-25
+    ROI and cost calculator (#97)                 :t3, 2027-08-23, 2027-09-18
+```
+
+#### M8 — Advanced QA · target 3 Dec 2027 · ⚪ Planned
+
+**Done when:** Accessibility findings are tied to journeys and never presented as certification. Visual baselines change only with explicit approval. UI actions are linked to API evidence, with sensitive data masked.
+
+**Depends on:** M1 and M6
+
+```mermaid
+gantt
+    title M8 Advanced QA, target 3 Dec 2027
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    tickInterval 2week
+    todayMarker off
+
+    section Planned
+    Accessibility checks in journeys (#99)        :t1, 2027-09-27, 2027-10-30
+    Visual change review (#100)                   :t2, 2027-10-11, 2027-11-13
+    Link UI actions to API calls (#101)           :t3, 2027-10-25, 2027-12-02
+```
+
+#### M9 — Independent Competitive Release · target 14 Jan 2028 · ⚪ Planned
+
+**Done when:** The benchmark is rerun on the release version. An independent human security and QA review is recorded. Every published claim links to its evidence.
+
+**Depends on:** All earlier milestones, and independent reviewers
+
+```mermaid
+gantt
+    title M9 Independent Competitive Release, target 14 Jan 2028
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    tickInterval 1week
+    todayMarker off
+
+    section Planned
+    Cross-tool benchmarks (#102)                  :t1, 2027-12-06, 2027-12-24
+    Independent security and QA review (#103)     :t2, 2027-12-06, 2028-01-08
+    Release evidence pack (#104)                  :t3, 2028-01-03, 2028-01-15
+```
+
+</details>
+
+For the team's working plan, including decisions, risks, and the full delivery chart, see the **[delivery plan](docs/roadmap/ROADMAP.md)**.
 
 ## Project status and license
 
