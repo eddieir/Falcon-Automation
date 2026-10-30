@@ -62,7 +62,7 @@
     "Self-Healing"
   ],
   "author": "Peyman Iravani",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "allure-playwright": "^3.14.0",
     "axios": "^1.8.2",

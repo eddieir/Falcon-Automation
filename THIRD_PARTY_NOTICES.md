@@ -1,6 +1,6 @@
 # Third-party notices
 
-Falcon's own code is licensed under the MIT License (`LICENSE`). The files below are third-party material kept in the repository under **their own** licenses; the MIT License does not relicense them, and their terms apply wherever they are copied or redistributed. This list is informational, not legal advice.
+Falcon's own code is licensed under the Apache License 2.0 (`LICENSE`, with attribution in `NOTICE`); versions up to and including the `v1.0.0-mit` tag were released under the MIT License. The files below are third-party material kept in the repository under **their own** licenses; Falcon's license does not relicense them, and their terms apply wherever they are copied or redistributed. This list is informational, not legal advice.
 
 ## Trail of Bits `differential-review` skill (CC BY-SA 4.0)
 
