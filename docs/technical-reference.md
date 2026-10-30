@@ -1229,4 +1229,4 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for setup, validation, and pull reques
 
 ## License
 
-MIT. See [LICENSE](../LICENSE)
+Apache License 2.0. See [LICENSE](../LICENSE). Versions up to and including the `v1.0.0-mit` tag were released under the MIT License.
