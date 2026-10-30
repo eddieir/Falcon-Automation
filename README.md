@@ -10,7 +10,7 @@ Falcon is an open-source test automation framework built on Playwright. It explo
 
 **For QA leaders and engineering teams evaluating how to reduce selector maintenance and make test results easier to investigate.**
 
-**Technical preview · Node.js 22+ · Playwright · MIT licensed**
+**Technical preview · Node.js 22+ · Playwright · Apache 2.0 licensed**
 
 [See the demo](#see-falcon-in-action) · [Try it locally](#quick-start) · [View the architecture](docs/ARCHITECTURE.md) · [Explore the docs](#documentation) · [View the roadmap](#roadmap)
 
@@ -512,4 +512,8 @@ For the team's working plan, including decisions, risks, and the full delivery c
 
 Falcon is an **open-source technical preview in active development**. Evaluate it against your own application, assertions, data policies, and CI requirements. The repository's [announcement readiness notes](docs/ANNOUNCEMENT-READINESS.md) document the evidence and limits behind the provider release.
 
-Released under the [MIT License](LICENSE). Created by **Peyman Iravani**.
+Released under the [Apache License 2.0](LICENSE); see also [NOTICE](NOTICE). Versions up to and including the `v1.0.0-mit` tag were released under the MIT License, and those versions remain available under it.
+
+Falcon's core is open source and will stay that way. Team and enterprise features may be offered under a separate commercial license in the future.
+
+Created by **Peyman Iravani**.
