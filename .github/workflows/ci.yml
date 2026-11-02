@@ -143,6 +143,7 @@ jobs:
           node tests/unit/ContractStoreLockOptions.check.js
           node tests/unit/ContractStoreDefaultLocation.check.js
           node tests/unit/ContractStoreFingerprint.check.js
+          node tests/unit/ContractStoreSnapshot.check.js
 
       # ── Database fixture (Phase 6) ──────────────────────────────────────────
       # Applies the same scripts/db/ci-seed.sql schema verified locally against
