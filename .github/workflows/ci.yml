@@ -148,6 +148,8 @@ jobs:
           node tests/unit/NavigationEvaluator.check.js
           node tests/unit/ContractCli.check.js
           node tests/unit/ExecutionBinding.check.js
+          node tests/unit/PlanContract.check.js
+          node tests/unit/TestRunnerVerify.check.js
 
       # ── Database fixture (Phase 6) ──────────────────────────────────────────
       # Applies the same scripts/db/ci-seed.sql schema verified locally against

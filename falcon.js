@@ -64,6 +64,7 @@ const ParallelRunner  = require("./src/core/parallel/Runner");
 const InvocationContext = require("./src/core/llm/InvocationContext");
 const { isKeyShapedValue } = require("./src/core/llm/transport/guardedFetch");
 const ContractCli      = require("./src/core/outcome/ContractCli");
+const ExecutionBinding = require("./src/core/outcome/ExecutionBinding");
 
 const DEFAULT_URL = "https://www.saucedemo.com";
 
@@ -452,14 +453,14 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerCon
  * --plan=<file>: replay a saved plan through the same TestRunner → AIHealer
  * path every other mode uses. No discovery, no crawl: the plan is the test.
  */
-const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContext = null) => {
+const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContext = null, contractBinding = null) => {
     const startedAt = Date.now();
     const page = await context.newPage();
     await page.goto(plan.url, { waitUntil: "load" });
     Logger.info(`✅ Loaded: ${plan.url}`);
     emit("explorerPage", { url: plan.url });
     Logger.info(`▶  Running saved plan: ${plan.test_scenarios.length} step(s), repeat=${repeatCount}…`);
-    const results = await TestRunner.runRepeatedTestPlan(page, plan, repeatCount, { providerContext });
+    const results = await TestRunner.runRepeatedTestPlan(page, plan, repeatCount, { providerContext, contractBinding });
     const only = {
         url: plan.url,
         status: "tested",
@@ -514,6 +515,7 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
         process.exit(1);
     }
     let savedPlan = null;
+    let contractBinding = null;
     if (planPath) {
         try {
             savedPlan = await PlanFile.load(planPath);
@@ -521,6 +523,24 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
             Logger.error(`❌ ${error.message}`);
             await Logger.flush();
             process.exit(error instanceof PlanFile.PlanError ? 2 : 1);
+        }
+        // GS12: the approved contract is bound (schema, digest, journey,
+        // approval state) before any browser exists. A failed binding does
+        // not stop the interaction steps; the verify step reports it unavailable.
+        if (savedPlan.contract) {
+            const storeRootFlag = readStrictValueFlag(args, "store-root");
+            if (!storeRootFlag.ok) {
+                await Logger.flush();
+                process.exit(1);
+            }
+            contractBinding = await ExecutionBinding.bind({
+                contractFile: savedPlan.contract.file,
+                journeyId: savedPlan.contract.journeyId,
+                storeRoot: storeRootFlag.value,
+                repoRoot: __dirname,
+            });
+            if (contractBinding.ok) Logger.info(`🔐 Contract bound: journey ${contractBinding.journeyId}, ${contractBinding.digest}`);
+            else Logger.warning(`⚠️ Contract not bound (${contractBinding.code}); business assertions will be reported unavailable.`);
         }
     }
 
@@ -678,7 +698,7 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
         const context = await browser.newContext();
 
         const sweep = savedPlan
-            ? await runSavedPlan(context, savedPlan, emit, repeatCount, providerContext)
+            ? await runSavedPlan(context, savedPlan, emit, repeatCount, providerContext, contractBinding)
             : singlePage
             ? await runEntryPageOnly(context, url, emit, repeatCount, providerContext, savePlanPath)
             : await runWholeApp(context, url, emit, {

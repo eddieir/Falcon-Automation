@@ -47,6 +47,10 @@ function toAssertion(a) {
             if (src.length > cap) src = src.slice(0, cap).replace(/[A-Za-z0-9+\/_=-]+$/, "") || "[redacted]";
             out.locator = clean(Schemas.redactText(Schemas.stripUrlQueries(src)), Limits.SELECTOR_MAX);
         }
+        // WP-77N: optional identity metadata, kept only when it already satisfies the schema's
+        // pattern so normalisation can never turn missing/invalid evidence into present evidence.
+        if (typeof a.id === "string" && Schemas.isAssertionId(a.id)) out.id = a.id;
+        if (typeof a.digest === "string" && Schemas.isAssertionDigest(a.digest)) out.digest = a.digest;
     } catch { return null; }
     return out;
 }
