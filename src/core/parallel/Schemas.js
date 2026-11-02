@@ -159,18 +159,27 @@ const commitOf = (v, p) => { if (v !== "unknown") str(v, p, 40, { pattern: /^[0-
 const CHECK_NAME = /^[A-Za-z0-9._-]+$/;
 const JOURNEY_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const isJourneyId = (v) => typeof v === "string" && JOURNEY_ID.test(v) && !FORBIDDEN_KEYS.has(v);
+// WP-77N: shared with ShardBundle.toAssertion so normalisation and schema validation agree on shape.
+const isAssertionId = (v) => typeof v === "string" && Limits.NAME_PATTERN.test(v) && v.length >= 1 && v.length <= 64 && !FORBIDDEN_KEYS.has(v);
+const isAssertionDigest = (v) => typeof v === "string" && /^sha256:[0-9a-f]{64}$/.test(v);
 
 function journeyId(v, p) {
     str(v, p, 64, { min: 1, pattern: JOURNEY_ID });
     if (FORBIDDEN_KEYS.has(v)) rej("FORBIDDEN_VALUE", p);
 }
 
+// WP-77N: optional identity metadata carried alongside assertion evidence, additive only.
+const ASSERTION_ID_PATTERN = Limits.NAME_PATTERN;
+const ASSERTION_DIGEST = /^sha256:[0-9a-f]{64}$/;
+
 /** `null` marks a source assertion record that was malformed; it can only ever classify as INCONCLUSIVE. */
 function rowAssertion(v, p) {
     if (v === null) return;
-    obj(v, p, [], ["check", "locator"]);
+    obj(v, p, [], ["check", "locator", "id", "digest"]);
     if (v.check !== undefined) str(v.check, p + ".check", 40, { min: 1, pattern: CHECK_NAME });
     if (v.locator !== undefined) selector(v.locator, p + ".locator");
+    if (v.id !== undefined) str(v.id, p + ".id", 64, { min: 1, pattern: ASSERTION_ID_PATTERN });
+    if (v.digest !== undefined) str(v.digest, p + ".digest", 71, { min: 71, pattern: ASSERTION_DIGEST });
 }
 
 function checkSize(o, max, code = "TOO_LARGE") {
@@ -427,5 +436,5 @@ const validateEventPayload = (type, p) => wrap((x) => _payload(type, x))(p);
 module.exports = {
     validateManifest, validateFragment, validateJournal, validateEventPayload,
     canonicalJson, sha256, eventId, EVENT_TYPES, HEALING_TIERS, DISPOSITIONS,
-    PAYLOAD_MAX_BYTES, isJourneyId, redactText, stripUrlQueries, storedUrl, urlId,
+    PAYLOAD_MAX_BYTES, isJourneyId, isAssertionId, isAssertionDigest, redactText, stripUrlQueries, storedUrl, urlId,
 };

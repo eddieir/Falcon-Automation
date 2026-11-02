@@ -50,7 +50,7 @@ const ERROR = Object.freeze({
 
 const ALLOWED = Object.freeze({
     SCHEMA_VERSION: 1,
-    CHECKS: Object.freeze(["textEquals", "valueEquals", "enabled", "disabled", "absent", "countEquals", "moneyEquals"]),
+    CHECKS: Object.freeze(["textEquals", "valueEquals", "enabled", "disabled", "absent", "countEquals", "moneyEquals", "pathEquals"]),
     PROVENANCE_SOURCES: Object.freeze(["spec", "human-confirmed", "fixture", "independent-calc", "external-reference"]),
     MAX_ASSERTIONS: 50,
     MAX_PAYLOAD_BYTES: 256 * 1024,
@@ -290,6 +290,21 @@ function validateExpected(check, has, expected) {
         if (!Number.isInteger(expected) || expected < 0 || !Number.isSafeInteger(expected)) rej(ERROR.EXPECTED_INVALID);
         return;
     }
+    if (check === "pathEquals") {
+        if (!has) rej(ERROR.MISSING_KEY);
+        if (
+            typeof expected !== "string" ||
+            expected.length === 0 ||
+            expected.length > MAX_EXPECTED_STRING ||
+            !expected.startsWith("/") ||
+            expected.includes("?") ||
+            expected.includes("#") ||
+            CONTROL.test(expected)
+        ) {
+            rej(ERROR.EXPECTED_INVALID);
+        }
+        return;
+    }
     if (check === "moneyEquals") {
         if (!has) rej(ERROR.MISSING_KEY);
         if (!isPlainObj(expected)) rej(ERROR.EXPECTED_INVALID);
@@ -325,6 +340,7 @@ function validateAssertion(a) {
     if (typeof a.required !== "boolean") rej(ERROR.TYPE_INVALID);
     if (typeof a.check !== "string" || !ALLOWED.CHECKS.includes(a.check)) rej(ERROR.CHECK_INVALID);
     if (!checkLocator(a.locator)) rej(ERROR.LOCATOR_INVALID);
+    if (a.check === "pathEquals" && a.locator !== "url:pathname") rej(ERROR.LOCATOR_INVALID);
     validateExpected(a.check, Object.prototype.hasOwnProperty.call(a, "expected"), a.expected);
     validateProvenance(a.provenance);
 }

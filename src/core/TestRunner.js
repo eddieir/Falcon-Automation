@@ -5,6 +5,7 @@ const AIHealer = require("./AIHealer/AIHealer");
 const HealingReport = require("./AIHealer/HealingReport");
 const AdaptiveRetry = require("./AIHealer/AdaptiveRetry");
 const FlakinessTracker = require("./FlakinessTracker");
+const NavigationEvaluator = require("./outcome/NavigationEvaluator");
 
 /**
  * TestRunner — orchestrates scenario-based and exploratory test execution.
@@ -50,6 +51,8 @@ class TestRunner {
         this.healer = new AIHealer(page, { ...options.healerOptions, providerContext: options.providerContext });
         this.testPlan = testPlan || { url: "", test_scenarios: [] };
         this.results = [];
+        this.contractBinding = options.contractBinding || null;
+        this.verifyTimeoutMs = options.verifyTimeoutMs;
     }
 
     /**
@@ -65,6 +68,7 @@ class TestRunner {
             // what discovers and repairs a renamed or moved element. Only a
             // genuinely unsupported action is skipped, and that decision is
             // made inside runScenario() itself.
+            const beforeCount = this.results.length;
             await this.runScenario(scenario);
 
             // Journey plans (--plan with "journey": true) are ordered steps of
@@ -73,8 +77,9 @@ class TestRunner {
             // step that does not pass ends the journey, and a step that
             // carried the browser to another origin is never followed.
             if (this.testPlan.journey) {
-                const last = this.results[this.results.length - 1];
-                if (!last || last.status !== "passed") {
+                const pushedRows = this.results.slice(beforeCount);
+                const stepOk = pushedRows.length > 0 && pushedRows.every((row) => row.status === "passed");
+                if (!stepOk) {
                     this._skipRemaining(scenario, "an earlier step did not pass");
                     break;
                 }
@@ -103,6 +108,48 @@ class TestRunner {
     _skipRemaining(current, reason) {
         const list = this.testPlan.test_scenarios;
         for (const rest of list.slice(list.indexOf(current) + 1)) {
+            if (rest.action === "verify") {
+                // A required approved assertion that did not run is `unavailable`, not `skipped`:
+                // ReportManager counts unavailable as a failing verdict, so a quarantined or
+                // otherwise non-passing earlier step can never leave a required assertion unrun with exit 0.
+                const contract = this.testPlan.contract;
+                const binding = this.contractBinding;
+                if (binding && binding.ok) {
+                    for (const a of binding.contract.assertions) {
+                        this.results.push({
+                            name: `${rest.description}: ${a.id}`,
+                            status: "unavailable",
+                            journeyId: binding.journeyId,
+                            required: true,
+                            reason: `Not run: ${reason}`,
+                            assertion: {
+                                id: a.id,
+                                digest: binding.digest,
+                                check: a.check,
+                                locator: a.locator,
+                                expected: a.expected,
+                                outcome: "not_run",
+                            },
+                        });
+                    }
+                } else {
+                    const code = binding ? binding.code : "NO_BINDING";
+                    this.results.push({
+                        name: rest.description,
+                        status: "unavailable",
+                        journeyId: contract && contract.journeyId,
+                        required: true,
+                        reason: `Not run: ${reason}`,
+                        assertion: {
+                            id: "binding",
+                            check: "contract",
+                            locator: "contract:binding",
+                            outcome: code.toLowerCase(),
+                        },
+                    });
+                }
+                continue;
+            }
             this.results.push({ name: rest.description, status: "skipped", reason: `Not run: ${reason}` });
         }
     }
@@ -193,6 +240,80 @@ class TestRunner {
     }
 
     /**
+     * `verify` — a business-outcome assertion row, backed by a
+     * pre-approved contract bound once before the run (WP-77N). Never
+     * retries, never heals, never rewrites `expected`: a failure here is a
+     * finding about the application, not a broken locator.
+     */
+    async runVerify(scenario) {
+        const startTime = Date.now();
+        const contract = this.testPlan.contract;
+        const binding = this.contractBinding;
+
+        if (!binding || !binding.ok) {
+            const code = binding ? binding.code : "NO_BINDING";
+            Logger.error(`❌ Contract binding unavailable for ${scenario.description}: ${code}`);
+            this.results.push({
+                name: scenario.description,
+                status: "unavailable",
+                duration: Date.now() - startTime,
+                journeyId: contract && contract.journeyId,
+                required: true,
+                reason: `Contract binding failed: ${code}`,
+                assertion: {
+                    id: "binding",
+                    check: "contract",
+                    locator: "contract:binding",
+                    outcome: code.toLowerCase(),
+                },
+            });
+            return;
+        }
+
+        for (const a of binding.contract.assertions) {
+            const assertionStart = Date.now();
+            const timeoutMs = a.timeoutMs !== undefined ? a.timeoutMs : this.verifyTimeoutMs;
+            const options = timeoutMs !== undefined ? { timeoutMs } : {};
+            let r;
+            try {
+                r = await NavigationEvaluator.evaluate(this.page, a, options);
+            } catch (error) {
+                r = { status: "unavailable", outcome: "internal_error", matches: 0, reason: error.message };
+            }
+            const duration = Date.now() - assertionStart;
+            const assertion = {
+                id: a.id,
+                digest: binding.digest,
+                check: a.check,
+                locator: a.locator,
+                expected: a.expected,
+                outcome: r.outcome,
+                matches: r.matches,
+                ...(r.actual !== undefined ? { actual: r.actual } : {}),
+            };
+            const row = {
+                name: `${scenario.description}: ${a.id}`,
+                status: r.status,
+                duration,
+                journeyId: binding.journeyId,
+                required: true,
+                assertion,
+            };
+            if (r.status === "failed") {
+                Logger.error(`❌ Assertion failed: ${scenario.description}: ${a.id}`);
+                row.error = `Assertion failed: ${a.check}`;
+                row.errorType = "assertion";
+            } else if (r.status === "unavailable") {
+                Logger.error(`❌ Assertion unavailable: ${scenario.description}: ${a.id}`);
+                row.reason = r.reason;
+            } else {
+                Logger.info(`✅ Assertion passed: ${scenario.description}: ${a.id}`);
+            }
+            this.results.push(row);
+        }
+    }
+
+    /**
      * If the page has drifted away from the URL this test plan was
      * generated from, navigate back to it before the next scenario runs.
      * Compares normalised URLs (SiteSweep.normalizeUrl) so a harmless
@@ -231,6 +352,11 @@ class TestRunner {
 
         if (scenario.action === "expect") {
             await this.runExpect(scenario);
+            return;
+        }
+
+        if (scenario.action === "verify") {
+            await this.runVerify(scenario);
             return;
         }
 
