@@ -53,4 +53,4 @@ All applicable tests must pass in headless mode before opening a PR. Record the 
 - Follow the surrounding JavaScript style and avoid unrelated formatting changes.
 - Complete the pull request template and link related issues.
 
-Contributions are provided under the project's [MIT license](LICENSE).
+Contributions are provided under the project's [Apache License 2.0](LICENSE).
