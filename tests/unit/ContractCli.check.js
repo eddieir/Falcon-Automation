@@ -75,6 +75,39 @@ function stdinFromLines(lines) {
 }
 
 async function main() {
+    await test("propose into a store root that does not exist yet creates it privately and records PROPOSED", async () => {
+        const base = await tmpRoot();
+        const dir = await tmpRoot();
+        const root = path.join(base, "nested", "store");
+        const c = contractObj();
+        const file = await writeContractFile(dir, c);
+        const out = fakeStdout();
+        const r = await ContractCli.run([`--contract-propose=${file}`, `--store-root=${root}`], {
+            repoRoot: base, stdin: stdinFromLines(null), stdout: out, isTTY: false,
+        });
+        assert.strictEqual(r.code, 0, out.text());
+        assert.strictEqual(fs.statSync(root).isDirectory(), true);
+        if (process.platform !== "win32") assert.strictEqual(fs.statSync(root).mode & 0o077, 0, "store root must be private");
+        const Store = require("../../src/core/outcome/ContractStore");
+        const st = await Store.status(root, c.journeyId, digestOf(c));
+        assert.strictEqual(st.status, "PROPOSED");
+    });
+
+    await test("approve against a store that does not exist is refused and creates nothing", async () => {
+        const base = await tmpRoot();
+        const dir = await tmpRoot();
+        const root = path.join(base, "never-created");
+        const c = contractObj();
+        const file = await writeContractFile(dir, c);
+        const out = fakeStdout();
+        const r = await ContractCli.run([`--contract-approve=${file}`, `--confirm-digest=${digestOf(c)}`, `--store-root=${root}`], {
+            repoRoot: base, stdin: stdinFromLines(null), stdout: out, isTTY: false,
+        });
+        assert.strictEqual(r.code, 1);
+        assert.ok(out.text().includes("error "), "failure must name a fixed error code");
+        assert.strictEqual(fs.existsSync(root), false);
+    });
+
     await test("propose then status PROPOSED", async () => {
         const root = await tmpRoot();
         const dir = await tmpRoot();
