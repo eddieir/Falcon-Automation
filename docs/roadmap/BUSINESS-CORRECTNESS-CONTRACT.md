@@ -120,6 +120,8 @@ Allowed `provenance.source`: `spec`, `human-confirmed`, `fixture`, `independent-
 
 Lifecycle: `proposed → approved | rejected`; `approved → superseded` (new revision, new digest). Any change to `expected`, `locator`, `check` or `required` is a material change: the digest changes and status returns to `proposed`. The store is append-only with a hash chain; if the history cannot be verified (truncated, reordered) Falcon fails closed and treats every contract as unapproved. A rejected or superseded digest cannot regain `approved`; re-approval creates a new revision. Approval records `channel` (cli/dashboard) and a timestamp, and states that no authenticated identity is proven (see CAP-08, CAP-12). Assertion approval is a separate store from locator approval (`LocatorMemory`) and neither can approve the other.
 
+**Store trust boundary (WP-77P).** The hash chain is keyless. It detects accidental corruption and some unauthorized edits (truncation, reordering, altered events). It does not authenticate who approved a contract, and a party with write access to the store directory can rebuild a valid-looking history. A digest binds approval to exact contract content, not to a verified approver. Each mutation derives its lifecycle state and baseline fingerprint from one validated read of `events.jsonl` and re-fingerprints the live file once before writing; any difference fails with `LOCK_LOST` and writes nothing. HMAC, signatures or an identity service are out of scope here and require a separate CTO decision.
+
 ## 7. Missing evidence
 
 | Situation | Outcome |

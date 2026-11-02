@@ -689,7 +689,7 @@ function reduceChain(events, expectedJourneyId) {
  * the path having been replaced (including by a symlink) between whatever
  * earlier check ran and this open.
  */
-async function readStoreFile(file) {
+async function readStoreFile(file, wantFingerprint) {
     let fh = null;
     try {
         try {
@@ -717,7 +717,9 @@ async function readStoreFile(file) {
         try {
             text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(buf.subarray(0, off));
         } catch { return { status: "broken" }; }
-        if (text === "") return { status: "ok", events: [] };
+        // Same bytes as `text`: the lifecycle state and this fingerprint cannot diverge.
+        const fingerprint = wantFingerprint ? "h:" + crypto.createHash("sha256").update(buf.subarray(0, off)).digest("hex") : undefined;
+        if (text === "") return { status: "ok", events: [], fingerprint };
         if (!text.endsWith("\n")) return { status: "broken" }; // truncated final line
         const lines = text.split("\n").slice(0, -1);
         const events = [];
@@ -727,7 +729,7 @@ async function readStoreFile(file) {
             if (!parsed.ok) return { status: "broken" };
             events.push(parsed.value);
         }
-        return { status: "ok", events };
+        return { status: "ok", events, fingerprint };
     } catch {
         return { status: "broken" };
     } finally {
@@ -735,8 +737,14 @@ async function readStoreFile(file) {
     }
 }
 
-/** Read + fully verify one journeyId's event log. Never throws. */
-async function loadChain(root, journeyId) {
+/**
+ * Read + fully verify one journeyId's event log. Never throws. With
+ * `wantFingerprint`, the result carries `fingerprint` computed from the very
+ * bytes the chain was reduced from ("missing" when absent, "err:BROKEN" when
+ * unreadable), so a mutation's baseline can never describe different content
+ * than its lifecycle state.
+ */
+async function loadChain(root, journeyId, wantFingerprint) {
     if (!checkJourneyId(journeyId)) return { integrity: "broken", status: "missing", file: null };
     let file;
     try {
@@ -744,15 +752,16 @@ async function loadChain(root, journeyId) {
     } catch {
         return { integrity: "broken", status: "missing", file: null };
     }
-    const read = await readStoreFile(file);
-    if (read.status === "missing") return { integrity: "missing", file, events: [] };
-    if (read.status === "broken") return { integrity: "broken", file, events: [] };
+    const read = await readStoreFile(file, wantFingerprint);
+    if (read.status === "missing") return { integrity: "missing", file, events: [], fingerprint: "missing" };
+    if (read.status === "broken") return { integrity: "broken", file, events: [], fingerprint: "err:BROKEN" };
 
     const reduced = reduceChain(read.events, journeyId);
-    if (reduced.tamper) return { integrity: "broken", file, events: read.events };
+    if (reduced.tamper) return { integrity: "broken", file, events: read.events, fingerprint: "err:BROKEN" };
     return {
         integrity: "ok",
         file,
+        fingerprint: read.fingerprint,
         events: read.events,
         state: reduced.state,
         revisionOf: reduced.revisionOf,
@@ -779,7 +788,7 @@ function normalizeOpts(opts) {
 /**
  * Resolve the lock and events file paths, take the in-process queue guard,
  * then the cross-process lock file, then invoke `fn(chain, file)` with a
- * freshly-loaded (never pre-lock) chain. `fn` must return either a plain
+ * freshly-loaded (never pre-lock) chain snapshot. `fn` must return either a plain
  * response object (no write — e.g. an error or idempotent result) or
  * `{ __write: true, events, response }` to append `events` atomically.
  * Immediately before the write, lock ownership and the events file content
@@ -816,8 +825,12 @@ async function withLock(root, journeyId, opts, fn) {
             return bad("LOCK_IO_ERROR", "lock file could not be created");
         }
         try {
-            const chain = await loadChain(root, journeyId);
-            const fingerprintBefore = await fileFingerprint(file);
+            // One validated read yields both the lifecycle state and the
+            // baseline fingerprint (STORE-CONSISTENCY-01); the live file is
+            // re-fingerprinted once, immediately before the write.
+            const chain = await loadChain(root, journeyId, true);
+            const fingerprintBefore = chain.fingerprint;
+            await __pause("afterSnapshot");
             const result = await fn(chain, file);
             if (result && result.__write) {
                 const stillOurs = await lockStillOwnedBy(lockFile, acq.token);
