@@ -38,15 +38,17 @@ const MAX_SELECTOR = 1000;
 const MAX_TEXT = 500;
 const DEFAULT_EXPECT_TIMEOUT_MS = 5000;
 const MAX_EXPECT_TIMEOUT_MS = 30000;
-const ACTIONS = ["click", "type", "select", "expect"];
+const ACTIONS = ["click", "type", "select", "expect", "verify"];
 const CHECKS = ["visible", "containsText", "attributeExists", "attributeEquals"];
+const MAX_CONTRACT_PATH = 1000;
 
-const TOP_KEYS = ["format", "version", "url", "journey", "scenarios"];
+const TOP_KEYS = ["format", "version", "url", "journey", "scenarios", "contract", "journeyId"];
 const KEYS_BY_ACTION = {
   click: ["action", "locator", "description"],
   type: ["action", "locator", "description", "value"],
   select: ["action", "locator", "description", "value"],
   expect: ["action", "locator", "description", "check", "value", "attribute", "timeoutMs"],
+  verify: ["action", "description"],
 };
 
 class PlanError extends Error {
@@ -109,8 +111,10 @@ function validateScenario(s, i, problems) {
   for (const key of Object.keys(s)) {
     if (!KEYS_BY_ACTION[s.action].includes(key)) problems.push(`${at}.${key}: unknown property for action "${s.action}"`);
   }
-  const bad = selectorProblem(s.locator);
-  if (bad) problems.push(`${at}.locator: ${bad}`);
+  if (s.action !== "verify") {
+    const bad = selectorProblem(s.locator);
+    if (bad) problems.push(`${at}.locator: ${bad}`);
+  }
   checkText(s.description, `${at}.description`, problems, { required: true });
 
   if (s.action === "type" || s.action === "select") checkText(s.value, `${at}.value`, problems, { required: true });
@@ -143,8 +147,21 @@ function urlProblem(raw) {
   return null;
 }
 
-/** Validate a parsed plan document; returns the runner shape `{ url, journey, test_scenarios }`. */
-function validate(doc) {
+/** A `contract` must be a non-empty, bounded path string with no control characters. */
+function contractPathProblem(value) {
+  if (typeof value !== "string" || value.trim() === "") return "must be a non-empty string";
+  if (value.length > MAX_CONTRACT_PATH) return `must be at most ${MAX_CONTRACT_PATH} characters`;
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(value)) return "must not contain control characters";
+  return null;
+}
+
+/**
+ * Validate a parsed plan document; returns the runner shape
+ * `{ url, journey, test_scenarios, contract? }`. `baseDir` anchors a
+ * relative `contract` path (default: the current working directory).
+ */
+function validate(doc, baseDir) {
   const problems = [];
   if (!isPlainObject(doc)) throw new PlanError("Plan must be a JSON object.");
   if (doc.format !== FORMAT) problems.push(`format: must be "${FORMAT}"`);
@@ -153,19 +170,54 @@ function validate(doc) {
   const bad = typeof doc.url === "string" ? urlProblem(doc.url) : "must be a string";
   if (bad) problems.push(`url: ${bad}`);
   if (doc.journey !== undefined && typeof doc.journey !== "boolean") problems.push("journey: must be a boolean");
+
+  const hasContract = doc.contract !== undefined;
+  const hasJourneyId = doc.journeyId !== undefined;
+  if (hasContract !== hasJourneyId) {
+    problems.push("contract/journeyId: must both be present or both absent");
+  } else if (hasContract) {
+    const contractBad = contractPathProblem(doc.contract);
+    if (contractBad) problems.push(`contract: ${contractBad}`);
+    const { isJourneyId } = require("./parallel/Schemas");
+    if (!isJourneyId(doc.journeyId)) problems.push("journeyId: invalid");
+    if (doc.journey !== true) problems.push("journey: must be true when contract and journeyId are present");
+  }
+
+  let verifyCount = 0;
+  let verifyFirst = false;
   if (!Array.isArray(doc.scenarios) || doc.scenarios.length === 0) problems.push("scenarios: must be a non-empty array");
   else if (doc.scenarios.length > MAX_SCENARIOS) problems.push(`scenarios: at most ${MAX_SCENARIOS} allowed`);
-  else doc.scenarios.forEach((s, i) => validateScenario(s, i, problems));
+  else {
+    doc.scenarios.forEach((s, i) => validateScenario(s, i, problems));
+    doc.scenarios.forEach((s, i) => {
+      if (isPlainObject(s) && s.action === "verify") {
+        verifyCount++;
+        if (i === 0) verifyFirst = true;
+      }
+    });
+    if (verifyCount > 1) problems.push('scenarios: at most one "verify" scenario is allowed');
+    if (verifyFirst) problems.push('scenarios[0]: a "verify" scenario must not be first');
+    if (verifyCount > 0 && !(hasContract && hasJourneyId)) {
+      problems.push('scenarios: a "verify" scenario requires both contract and journeyId');
+    }
+    if (hasContract && hasJourneyId && verifyCount === 0) {
+      problems.push('scenarios: contract and journeyId require at least one "verify" scenario');
+    }
+  }
 
   if (problems.length) {
     const shown = problems.slice(0, 10).join("; ");
     throw new PlanError(`Plan rejected (${problems.length} problem${problems.length === 1 ? "" : "s"}): ${shown}`);
   }
-  return {
+  const result = {
     url: doc.url,
     journey: doc.journey === true,
     test_scenarios: doc.scenarios.map((s) => ({ ...s })),
   };
+  if (hasContract) {
+    result.contract = { file: path.resolve(baseDir || process.cwd(), doc.contract), journeyId: doc.journeyId };
+  }
+  return result;
 }
 
 /** Read, size-limit, parse and validate a plan file. */
@@ -191,7 +243,7 @@ async function load(file) {
   } catch {
     throw new PlanError("Plan file is not valid JSON.", "PLAN_FILE");
   }
-  return validate(doc);
+  return validate(doc, path.dirname(path.resolve(file)));
 }
 
 /** Serialize the runner-shape plan to the versioned document (validates it first). */
