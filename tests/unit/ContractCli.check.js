@@ -75,6 +75,20 @@ function stdinFromLines(lines) {
 }
 
 async function main() {
+    await test("FIFO contract file is refused within the deadline (no blocking read)", async () => {
+        if (process.platform === "win32") return;
+        const dir = await tmpRoot();
+        const root = await tmpRoot();
+        const fifo = path.join(dir, "contract.json");
+        require("child_process").execFileSync("mkfifo", [fifo]);
+        const out = fakeStdout();
+        const r = await Promise.race([
+            ContractCli.run([`--contract-propose=${fifo}`, `--store-root=${root}`], { repoRoot: root, stdin: stdinFromLines(null), stdout: out, isTTY: false }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("blocked on FIFO")), 5000)),
+        ]);
+        assert.deepStrictEqual([r.handled, r.code], [true, 2]);
+    });
+
     await test("a bare action or value flag (no =value) is refused with code 2, never falling through to a sweep", async () => {
         for (const flag of ["--contract-approve", "--contract-propose", "--contract-reject", "--confirm-digest", "--store-root"]) {
             const out = fakeStdout();
