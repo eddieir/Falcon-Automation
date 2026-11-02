@@ -512,11 +512,11 @@ async function main() {
         const swapPath = file + ".fh13-swap-fixture";
         await fs.promises.writeFile(swapPath, "unrelated swap content, not JSON\n");
 
-        // withLock's call order against this file is exactly: (1) loadChain's
-        // readStoreFile open, (2) fileFingerprint "before" open, (3)
-        // fileFingerprint "after" open (transition's fn does no I/O of its
-        // own). Swap on the 3rd matching open so fingerprintBefore observes
-        // the real valid content and fingerprintAfter observes the replaced
+        // withLock's call order against this file is exactly: (1) the shared
+        // snapshot read (state + baseline fingerprint), (2) the live
+        // fileFingerprint before the write (transition's fn does no I/O of
+        // its own). Swap on the 2nd matching open so the baseline observed
+        // the real valid content and the live check observes the replaced
         // file -- the dev/ino check must make those two fingerprints differ.
         const fsPromises = fs.promises;
         const origOpen = fsPromises.open;
@@ -526,7 +526,7 @@ async function main() {
             const fh = await origOpen.apply(this, args);
             if (args[0] === file) {
                 openCount++;
-                if (openCount === 3 && !swapped) {
+                if (openCount === 2 && !swapped) {
                     swapped = true;
                     await fs.promises.rename(swapPath, file);
                 }
@@ -540,13 +540,13 @@ async function main() {
             fsPromises.open = origOpen;
         }
 
-        assert.strictEqual(swapped, true, "the open() wrapper never reached the 3rd matching open (fingerprintAfter) -- call sequence assumption is stale");
+        assert.strictEqual(swapped, true, "the open() wrapper never reached the 2nd matching open (live fingerprint) -- call sequence assumption is stale");
         assert.strictEqual(r.ok, false, JSON.stringify(r));
         // Without the post-open dev/ino check in fileFingerprint, the "after"
         // fingerprint would be computed from the same stale fd as "before"
         // (identical hash), LOCK_LOST would never fire, and the approval
         // would be written on top of the swapped-in file.
-        assert.strictEqual(r.code, "LOCK_LOST", `expected the path swap between fingerprintBefore and fingerprintAfter to be caught, got ${JSON.stringify(r)}`);
+        assert.strictEqual(r.code, "LOCK_LOST", `expected the path swap between the snapshot and the live fingerprint to be caught, got ${JSON.stringify(r)}`);
         assert.strictEqual(fs.existsSync(lockFile), false, "lock file must not remain after a failed operation");
         assert.strictEqual(fs.existsSync(stealFile), false, "steal mutex must not remain after a failed operation");
         assert.strictEqual(await Store.isApproved(root, c.journeyId, digest), false);

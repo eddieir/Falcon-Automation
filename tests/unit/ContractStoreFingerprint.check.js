@@ -98,7 +98,7 @@ async function proposeDirect(root, c) {
 async function main() {
     // --------------------------------------------------------------- FP01
     await test(
-        "FP01: two identical err:* fingerprints (before/after) never prove 'unchanged' -- fails closed, writes nothing",
+        "FP01: an err:* live fingerprint never proves 'unchanged' -- fails closed, writes nothing",
         async () => {
             const root = await tmpRoot();
             const c = contract();
@@ -110,11 +110,9 @@ async function main() {
             const originalBytes = await fs.promises.readFile(file);
 
             // withLock's open() call order against `file` is exactly:
-            // (1) loadChain's readStoreFile open (must succeed so the chain
-            // loads normally), (2) fileFingerprint "before" open, (3)
-            // fileFingerprint "after" open. Force opens #2 and #3 to throw
-            // the identical fixed-code error so both fingerprints resolve
-            // to the identical string "err:EFP01".
+            // (1) the shared snapshot read (state + baseline fingerprint),
+            // (2) the live fileFingerprint just before the write. Force #2
+            // to throw so the live fingerprint resolves to "err:EFP01".
             const fsPromises = fs.promises;
             const origOpen = fsPromises.open;
             let matchingOpenCount = 0;
@@ -122,7 +120,7 @@ async function main() {
             fsPromises.open = async function (...args) {
                 if (args[0] === file) {
                     matchingOpenCount++;
-                    if (matchingOpenCount === 2 || matchingOpenCount === 3) {
+                    if (matchingOpenCount === 2) {
                         errThrowCount++;
                         throw Object.assign(new Error("simulated FP01 I/O failure"), { code: "EFP01" });
                     }
@@ -136,8 +134,8 @@ async function main() {
                 fsPromises.open = origOpen;
             }
 
-            assert.strictEqual(matchingOpenCount >= 3, true, "the open() wrapper never reached the 3rd matching open (fingerprintAfter) -- call sequence assumption is stale");
-            assert.strictEqual(errThrowCount, 2, "the wrapper must have forced exactly the before/after fingerprint opens to fail");
+            assert.strictEqual(matchingOpenCount >= 2, true, "the open() wrapper never reached the 2nd matching open (live fingerprint) -- call sequence assumption is stale");
+            assert.strictEqual(errThrowCount, 1, "the wrapper must have forced exactly the live fingerprint open to fail");
             assert.strictEqual(r.ok, false, JSON.stringify(r));
             assert.strictEqual(r.code, "LOCK_LOST", `two identical err:* fingerprints must still fail closed, got ${JSON.stringify(r)}`);
             assert.strictEqual(fs.existsSync(lockFile), false, "lock file must not remain after a failed operation");
@@ -173,7 +171,7 @@ async function main() {
             fsPromises.open = async function (...args) {
                 if (args[0] !== file) return origOpen.apply(this, args);
                 matchingOpenCount++;
-                if (matchingOpenCount !== 2 && matchingOpenCount !== 3) {
+                if (matchingOpenCount !== 2) {
                     return origOpen.apply(this, args);
                 }
                 const realFh = await origOpen.apply(this, args);
@@ -204,10 +202,10 @@ async function main() {
                 fsPromises.open = origOpen;
             }
 
-            assert.strictEqual(matchingOpenCount >= 3, true, "the open() wrapper never reached the 3rd matching open (fingerprintAfter) -- call sequence assumption is stale");
+            assert.strictEqual(matchingOpenCount >= 2, true, "the open() wrapper never reached the 2nd matching open (live fingerprint) -- call sequence assumption is stale");
             assert.strictEqual(r.ok, false, JSON.stringify(r));
             assert.strictEqual(r.code, "LOCK_LOST", `an over-budget fingerprint read must fail closed, got ${JSON.stringify(r)}`);
-            assert.strictEqual(readCalls <= 2, true, `the bounded read loop must stop at the first over-budget read per fingerprint call, saw ${readCalls} total read() calls`);
+            assert.strictEqual(readCalls <= 1, true, `the bounded read loop must stop at the first over-budget read of the live fingerprint call, saw ${readCalls} total read() calls`);
             assert.strictEqual(maxBytesReadInOneCall <= SMALL_SIZE + 1, true, "a single read() call must never be asked to deliver more than size+1 bytes");
             assert.strictEqual(readFileCalls, 0, "fileFingerprint must never fall back to fh.readFile() -- the read must be bounded by the explicit loop");
             assert.strictEqual(fs.existsSync(lockFile), false, "lock file must not remain after a failed operation");
