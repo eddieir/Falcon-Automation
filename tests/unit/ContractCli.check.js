@@ -75,6 +75,14 @@ function stdinFromLines(lines) {
 }
 
 async function main() {
+    await test("a bare action or value flag (no =value) is refused with code 2, never falling through to a sweep", async () => {
+        for (const flag of ["--contract-approve", "--contract-propose", "--contract-reject", "--confirm-digest", "--store-root"]) {
+            const out = fakeStdout();
+            const r = await ContractCli.run([flag], { repoRoot: os.tmpdir(), stdin: stdinFromLines(null), stdout: out, isTTY: false });
+            assert.deepStrictEqual([r.handled, r.code], [true, 2], flag);
+        }
+    });
+
     await test("propose into a store root that does not exist yet creates it privately and records PROPOSED", async () => {
         const base = await tmpRoot();
         const dir = await tmpRoot();

@@ -109,13 +109,16 @@ class TestRunner {
         const list = this.testPlan.test_scenarios;
         for (const rest of list.slice(list.indexOf(current) + 1)) {
             if (rest.action === "verify") {
+                // A required approved assertion that did not run is `unavailable`, not `skipped`:
+                // ReportManager counts unavailable as a failing verdict, so a quarantined or
+                // otherwise non-passing earlier step can never leave a required assertion unrun with exit 0.
                 const contract = this.testPlan.contract;
                 const binding = this.contractBinding;
                 if (binding && binding.ok) {
                     for (const a of binding.contract.assertions) {
                         this.results.push({
                             name: `${rest.description}: ${a.id}`,
-                            status: "skipped",
+                            status: "unavailable",
                             journeyId: binding.journeyId,
                             required: true,
                             reason: `Not run: ${reason}`,
@@ -133,7 +136,7 @@ class TestRunner {
                     const code = binding ? binding.code : "NO_BINDING";
                     this.results.push({
                         name: rest.description,
-                        status: "skipped",
+                        status: "unavailable",
                         journeyId: contract && contract.journeyId,
                         required: true,
                         reason: `Not run: ${reason}`,
