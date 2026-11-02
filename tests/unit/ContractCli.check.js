@@ -115,6 +115,23 @@ async function main() {
         assert.strictEqual(st.status, "PROPOSED");
     });
 
+    await test("propose prints a moneyEquals expectation explicitly (operator sees amount and currency)", async () => {
+        const base = await tmpRoot();
+        const dir = await tmpRoot();
+        const c = contractObj({ assertions: [{
+            id: "M1", required: true, check: "moneyEquals", locator: "#total", expected: { minor: 5997, currency: "USD" },
+            provenance: { source: "spec", ref: "CHECKOUT-001#total" },
+        }] });
+        const file = await writeContractFile(dir, c);
+        const out = fakeStdout();
+        const r = await ContractCli.run([`--contract-propose=${file}`, `--store-root=${path.join(base, "s")}`], {
+            repoRoot: base, stdin: stdinFromLines(null), stdout: out, isTTY: false,
+        });
+        assert.strictEqual(r.code, 0, out.text());
+        assert.ok(out.text().includes('{"minor":5997,"currency":"USD"}'), out.text());
+        assert.ok(!out.text().includes("[object Object]"));
+    });
+
     await test("approve against a store that does not exist is refused and creates nothing", async () => {
         const base = await tmpRoot();
         const dir = await tmpRoot();
