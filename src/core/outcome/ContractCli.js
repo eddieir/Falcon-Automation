@@ -40,7 +40,7 @@ function parseFlags(args) {
 
 function printAssertions(stdout, assertions) {
     for (const a of assertions) {
-        stdout.write(`${a.id} ${a.required} ${a.check} ${a.locator} ${a.expected === undefined ? "" : a.expected}\n`);
+        stdout.write(`${a.id} ${a.required} ${a.check} ${a.locator} ${a.expected === undefined ? "" : typeof a.expected === "object" ? JSON.stringify(a.expected) : a.expected}\n`);
     }
 }
 

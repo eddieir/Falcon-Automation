@@ -6,6 +6,7 @@ const HealingReport = require("./AIHealer/HealingReport");
 const AdaptiveRetry = require("./AIHealer/AdaptiveRetry");
 const FlakinessTracker = require("./FlakinessTracker");
 const NavigationEvaluator = require("./outcome/NavigationEvaluator");
+const DataEvaluator = require("./outcome/DataEvaluator");
 
 /**
  * TestRunner — orchestrates scenario-based and exploratory test execution.
@@ -127,7 +128,7 @@ class TestRunner {
                                 digest: binding.digest,
                                 check: a.check,
                                 locator: a.locator,
-                                expected: a.expected,
+                                ...(DataEvaluator.SUPPORTED.includes(a.check) ? {} : { expected: a.expected }),
                                 outcome: "not_run",
                             },
                         });
@@ -274,9 +275,10 @@ class TestRunner {
             const assertionStart = Date.now();
             const timeoutMs = a.timeoutMs !== undefined ? a.timeoutMs : this.verifyTimeoutMs;
             const options = timeoutMs !== undefined ? { timeoutMs } : {};
+            const isData = DataEvaluator.SUPPORTED.includes(a.check);
             let r;
             try {
-                r = await NavigationEvaluator.evaluate(this.page, a, options);
+                r = await (isData ? DataEvaluator : NavigationEvaluator).evaluate(this.page, a, options);
             } catch (error) {
                 r = { status: "unavailable", outcome: "internal_error", matches: 0, reason: error.message };
             }
@@ -286,10 +288,11 @@ class TestRunner {
                 digest: binding.digest,
                 check: a.check,
                 locator: a.locator,
-                expected: a.expected,
+                // WP-77D: data checks never put approved or observed values in a row.
+                ...(isData ? {} : { expected: a.expected }),
                 outcome: r.outcome,
                 matches: r.matches,
-                ...(r.actual !== undefined ? { actual: r.actual } : {}),
+                ...(!isData && r.actual !== undefined ? { actual: r.actual } : {}),
             };
             const row = {
                 name: `${scenario.description}: ${a.id}`,
