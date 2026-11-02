@@ -51,6 +51,14 @@ class FakeLocator {
         });
     }
 
+    async isVisible() {
+        return this._page._resolve(this._selector).every((e) => e.hidden !== true);
+    }
+
+    async innerText() {
+        return this.textContent();
+    }
+
     async textContent() {
         const els = this._page._resolve(this._selector);
         if (els.length !== 1) throw new Error("expected exactly one element");
@@ -95,6 +103,10 @@ function throwingEvaluatePage() {
         textContent: async () => {
             throw new Error("boom");
         },
+        innerText: async () => {
+            throw new Error("boom");
+        },
+        isVisible: async () => true,
     });
     return page;
 }
@@ -501,6 +513,37 @@ async function main() {
         const r = await DataEvaluator.evaluate(page, { check: "moneyEquals", locator: "#amount", expected: { minor: 99999, currency: "USD" } }, { timeoutMs: 150 });
         assertResultShape(r);
         assertNoLeak(r, "424.24", "999.99");
+    });
+
+    await test("moneyEquals: 'KR 59.99' => unavailable currency_ambiguous", async () => {
+        const r = await DataEvaluator.evaluate(fixedMoneyPage("KR 59.99"), { check: "moneyEquals", locator: "#amount", expected: { minor: 5999, currency: "NOK" } }, { timeoutMs: 150 });
+        assert.strictEqual(r.status, "unavailable");
+        assert.strictEqual(r.outcome, "currency_ambiguous");
+    });
+
+    await test("valueEquals: type=hidden input is unsupported, never passes", async () => {
+        const page = fixedValuePage({ tag: "INPUT", type: "hidden", value: "abc" });
+        const r = await DataEvaluator.evaluate(page, { check: "valueEquals", locator: "#x", expected: "abc" }, { timeoutMs: 150 });
+        assert.strictEqual(r.status, "unavailable");
+        assert.strictEqual(r.outcome, "unsupported_element");
+    });
+
+    await test("settle: a late confirming read overruns the deadline by at most ~one poll interval", async () => {
+        const page = fixedMoneyPage("USD 1.00");
+        const t = Date.now();
+        const r = await DataEvaluator.evaluate(page, { check: "moneyEquals", locator: "#amount", expected: { minor: 100, currency: "USD" } }, { timeoutMs: 100 });
+        assert.strictEqual(r.status, "passed");
+        assert.ok(Date.now() - t < 100 + 250, "bounded overrun");
+    });
+
+    await test("moneyEquals/valueEquals: invisible target => unavailable target_hidden", async () => {
+        const m = new FakePage({ elementsFn: fixedElements({ "#amount": [{ text: "USD 1.00", hidden: true }] }) });
+        const r = await DataEvaluator.evaluate(m, { check: "moneyEquals", locator: "#amount", expected: { minor: 100, currency: "USD" } }, { timeoutMs: 150 });
+        assert.strictEqual(r.outcome, "target_hidden");
+        assert.strictEqual(r.status, "unavailable");
+        const v = fixedValuePage({ tag: "INPUT", type: "text", value: "abc", hidden: true });
+        const r2 = await DataEvaluator.evaluate(v, { check: "valueEquals", locator: "#x", expected: "abc" }, { timeoutMs: 150 });
+        assert.strictEqual(r2.outcome, "target_hidden");
     });
 
     console.log(`\n${passed} passed, ${failures} failed`);

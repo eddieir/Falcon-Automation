@@ -311,6 +311,23 @@ test("PRIVACY: shard bundle toAssertion never carries expected/actual for a data
     assert.ok(!("actual" in out));
 });
 
+test("verify step skipped (earlier step fails) => not_run rows carry no expected value, run fails", async () => {
+    const ctx = await setup();
+    const doc = JSON.parse(fs.readFileSync(path.join(ctx.dir, "plan.json"), "utf8"));
+    doc.scenarios.splice(1, 0, { action: "click", locator: "#does-not-exist", description: "Click missing" });
+    fs.writeFileSync(path.join(ctx.dir, "plan.json"), JSON.stringify(doc));
+    const r = await execute(ctx);
+    assert.notStrictEqual(r.code, 0, r.out);
+    assert.notStrictEqual(r.level, "BUSINESS_VERIFIED");
+    const skipped = r.rows.filter((x) => x.assertion && x.assertion.outcome === "not_run");
+    assert.strictEqual(skipped.length, 3, JSON.stringify(r.rows));
+    for (const x of skipped) {
+        assert.ok(!("expected" in x.assertion) && !("actual" in x.assertion), x.assertion.id);
+        assert.strictEqual(x.status, "unavailable");
+    }
+    assertNoSecretLeak(ctx, r.out);
+});
+
 test("runtime made zero LLM requests across every run", () => {
     assert.strictEqual(llmHits, 0);
 });

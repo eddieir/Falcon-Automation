@@ -128,7 +128,7 @@ class TestRunner {
                                 digest: binding.digest,
                                 check: a.check,
                                 locator: a.locator,
-                                expected: a.expected,
+                                ...(DataEvaluator.SUPPORTED.includes(a.check) ? {} : { expected: a.expected }),
                                 outcome: "not_run",
                             },
                         });

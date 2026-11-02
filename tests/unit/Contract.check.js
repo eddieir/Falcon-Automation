@@ -315,6 +315,17 @@ test("pathEquals: valid contract parses", () => {
     assert.strictEqual(r.ok, true, JSON.stringify(r));
 });
 
+test("countEquals: 10000 accepted, 10001 -> EXPECTED_INVALID", () => {
+    for (const [n, ok] of [[10000, true], [10001, false]]) {
+        const a = baseContract();
+        a.assertions[0].check = "countEquals";
+        a.assertions[0].expected = n;
+        const r = Contract.parse(j(a));
+        assert.strictEqual(r.ok, ok, String(n));
+        if (!ok) assert.strictEqual(r.code, Contract.ERROR.EXPECTED_INVALID);
+    }
+});
+
 test("pathEquals: expected without leading slash -> EXPECTED_INVALID", () => {
     const a = baseContract();
     a.assertions[0].check = "pathEquals";
