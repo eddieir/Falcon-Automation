@@ -63,6 +63,7 @@ const { parseParallelArgs } = require("./src/core/parallel/Args");
 const ParallelRunner  = require("./src/core/parallel/Runner");
 const InvocationContext = require("./src/core/llm/InvocationContext");
 const { isKeyShapedValue } = require("./src/core/llm/transport/guardedFetch");
+const ContractCli      = require("./src/core/outcome/ContractCli");
 
 const DEFAULT_URL = "https://www.saucedemo.com";
 
@@ -479,6 +480,17 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
     if (!rejectKeyCarrierFlags(args)) {
         await Logger.flush();
         process.exit(1);
+    }
+
+    const contractCli = await ContractCli.run(args, {
+        repoRoot: __dirname,
+        stdin: process.stdin,
+        stdout: process.stdout,
+        isTTY: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+    });
+    if (contractCli.handled) {
+        await Logger.flush();
+        process.exit(contractCli.code);
     }
 
     // Saved plans: a rejected plan is input the user must fix (exit 2), checked

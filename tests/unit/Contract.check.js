@@ -306,5 +306,92 @@ test("parse never throws on hostile input", () => {
     }
 });
 
+test("pathEquals: valid contract parses", () => {
+    const a = baseContract();
+    a.assertions[0].check = "pathEquals";
+    a.assertions[0].locator = "url:pathname";
+    a.assertions[0].expected = "/checkout/confirm";
+    const r = Contract.parse(j(a));
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+});
+
+test("pathEquals: expected without leading slash -> EXPECTED_INVALID", () => {
+    const a = baseContract();
+    a.assertions[0].check = "pathEquals";
+    a.assertions[0].locator = "url:pathname";
+    a.assertions[0].expected = "checkout/confirm";
+    const r = Contract.parse(j(a));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.EXPECTED_INVALID);
+});
+
+test("pathEquals: expected with query string -> EXPECTED_INVALID", () => {
+    const a = baseContract();
+    a.assertions[0].check = "pathEquals";
+    a.assertions[0].locator = "url:pathname";
+    a.assertions[0].expected = "/checkout?x=1";
+    const r = Contract.parse(j(a));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.EXPECTED_INVALID);
+});
+
+test("pathEquals: expected with fragment -> EXPECTED_INVALID", () => {
+    const a = baseContract();
+    a.assertions[0].check = "pathEquals";
+    a.assertions[0].locator = "url:pathname";
+    a.assertions[0].expected = "/checkout#x";
+    const r = Contract.parse(j(a));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.EXPECTED_INVALID);
+});
+
+test("pathEquals: empty expected -> EXPECTED_INVALID", () => {
+    const a = baseContract();
+    a.assertions[0].check = "pathEquals";
+    a.assertions[0].locator = "url:pathname";
+    a.assertions[0].expected = "";
+    const r = Contract.parse(j(a));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.EXPECTED_INVALID);
+});
+
+test("pathEquals: missing expected -> MISSING_KEY", () => {
+    const a = baseContract();
+    a.assertions[0].check = "pathEquals";
+    a.assertions[0].locator = "url:pathname";
+    delete a.assertions[0].expected;
+    const r = Contract.parse(j(a));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.MISSING_KEY);
+});
+
+test("pathEquals: non-string expected -> EXPECTED_INVALID", () => {
+    const a = baseContract();
+    a.assertions[0].check = "pathEquals";
+    a.assertions[0].locator = "url:pathname";
+    a.assertions[0].expected = 42;
+    const r = Contract.parse(j(a));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.EXPECTED_INVALID);
+});
+
+test("pathEquals: locator other than url:pathname -> LOCATOR_INVALID", () => {
+    const a = baseContract();
+    a.assertions[0].check = "pathEquals";
+    a.assertions[0].locator = "#x";
+    a.assertions[0].expected = "/checkout";
+    const r = Contract.parse(j(a));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.LOCATOR_INVALID);
+});
+
+test("pathEquals addition does not change digest of existing textEquals contracts", () => {
+    const r1 = Contract.parse(j(baseContract()));
+    const r2 = Contract.parse(j(baseContract()));
+    assert.strictEqual(r1.ok, true);
+    assert.strictEqual(r2.ok, true);
+    assert.strictEqual(r1.digest, r2.digest);
+});
+
 console.log(`\n${passed} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);
