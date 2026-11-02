@@ -355,3 +355,52 @@ test("F merged rows keep deterministic legacy keys and gain only the additive me
     assert.strictEqual(report.summary.passed, 1);
     assert.strictEqual(report.result, "PASSED");
 });
+
+// ------------------------------------------------------------ G: WP-77N assertion id/digest identity
+
+const DIGEST = "sha256:" + H("a");
+
+test("G1 valid id+digest survive toAssertion, schema validation and merge", async () => {
+    const f = fragmentFor(0, 2, [exec("passed", { id: "assert-1", digest: DIGEST })]);
+    assert.deepStrictEqual(f.results[0].assertion, { ...EV, id: "assert-1", digest: DIGEST });
+    assert.ok(Schemas.validateFragment(f).ok);
+    const { report } = await mergeReport([[exec("passed", { id: "assert-1", digest: DIGEST })], [exec("passed")]], { total: 2 });
+    const row = report.tests.find((t) => t.pageOrdinal === 0);
+    assert.strictEqual(row.assertion.id, "assert-1");
+    assert.strictEqual(row.assertion.digest, DIGEST);
+});
+
+test("G2 malformed digest is dropped; check/locator survive and the row stays valid", () => {
+    const f = fragmentFor(0, 2, [exec("passed", { id: "assert-1", digest: "sha256:not-hex" })]);
+    assert.deepStrictEqual(f.results[0].assertion, { ...EV, id: "assert-1" });
+    assert.ok(!("digest" in f.results[0].assertion));
+    assert.ok(Schemas.validateFragment(f).ok);
+});
+
+test("G2b malformed id is dropped; check/locator survive and the row stays valid", () => {
+    const f = fragmentFor(0, 2, [exec("passed", { id: "has space", digest: DIGEST })]);
+    assert.deepStrictEqual(f.results[0].assertion, { ...EV, digest: DIGEST });
+    assert.ok(!("id" in f.results[0].assertion));
+    assert.ok(Schemas.validateFragment(f).ok);
+});
+
+test("G3 an unknown extra assertion key is still rejected by the schema", () => {
+    const f = baseFrag();
+    f.results[0].assertion = { ...EV, id: "assert-1", digest: DIGEST, sneaky: 1 };
+    const v = Schemas.validateFragment(f);
+    assert.strictEqual(v.ok, false);
+    assert.strictEqual(v.code, "UNKNOWN_KEY");
+});
+
+test("G4 rows without id/digest are unchanged, byte-for-byte, from the pre-WP-77N shape", () => {
+    const f = fragmentFor(0, 2, [exec("passed")]);
+    assert.deepStrictEqual(f.results[0].assertion, EV);
+    assert.strictEqual(JSON.stringify(f.results[0].assertion), JSON.stringify(EV));
+});
+
+test("G5 a FAIL row with id/digest stays FAILED", async () => {
+    const { report } = await mergeReport([[exec("failed", { id: "assert-1", digest: DIGEST })]], { total: 1 });
+    assert.strictEqual(report.result, "FAILED");
+    assert.strictEqual(report.tests[0].status, "failed");
+    assert.strictEqual(report.tests[0].assertion.id, "assert-1");
+});
