@@ -213,3 +213,26 @@ Comparison rules: the path is `new URL(page.url()).pathname` compared for exact 
 Evidence: each assertion row carries `assertion.id`, `assertion.digest`, `journeyId`, `required`, the check, the bounded outcome (`actual` is capped at 200 characters and only present on failure). Shard bundles preserve `id` and `digest` when they validate.
 
 Limits: the digest binds the contract, not the plan's URL or steps, and `pathEquals` ignores origin (the journey's same-origin guard limits this). A required `verify` that cannot run (earlier step failed or quarantined, binding failed) is reported `unavailable`, which fails the run. The digest binds content, not an approver identity (see the store trust boundary above). `--store-root` must be an absolute path without `..`; the default root is Git-ignored. Plans using `contract` cannot be combined with `--workers`/`--shard`.
+
+## Data-value assertions (WP-77D)
+
+`valueEquals`, `countEquals` and `moneyEquals` run through the same path as WP-77N: approved contract, digest binding, `verify` step, `DataEvaluator`. No LLM, no healing, no rewriting of `expected`. Contract schema and digest semantics are unchanged.
+
+| Check | Locator | Expected (approved) | Comparison |
+|---|---|---|---|
+| `valueEquals` | exactly one visible `<input>`, `<textarea>` or `<select>` (checkbox, radio, file, hidden and button inputs are unsupported) | non-empty string | current `.value` property, strictly equal: no trim, no case folding, no coercion |
+| `countEquals` | any selector | integer 0..10000 (enforced at approval) | count of ALL matching elements, hidden ones included |
+| `moneyEquals` | exactly one visible element (rendered text) | `{minor, currency}` | displayed amount parsed to integer minor units (BigInt) and compared with the approved `minor` and `currency` |
+
+Money format (locale-independent, never guessed from the host or browser): one amount with one explicit currency, ISO 4217 code or `€`/`£`, before or after the amount. `,` groups thousands in groups of exactly three, `.` is the decimal point; decimals are either absent or exactly the currency's minor-unit digits (JPY 0, USD 2, KWD 3). `$`, `¥`, `kr` and other ambiguous symbols, a missing currency, `1.234,50`, `12,50`, `12.5`, exponents, signs, NaN and Infinity are `unavailable`, never a pass. A wrong amount or a different explicit currency is `failed`. No conversion, no exchange rates. Negative amounts are not approvable (`minor` must be >= 0). The exponent table covers the common zero-, three- and four-decimal currencies; other codes use two.
+
+Outcomes: `failed` means the page was read and disagrees; `unavailable` means there is no usable evidence (missing or ambiguous target, unsupported element, malformed or ambiguous amount, read error). Both fail the run; neither can reach `BUSINESS_VERIFIED`.
+
+Settle policy: a pass needs two consecutive passing reads 100 ms apart, so a transient DOM state cannot go green. Polling is bounded (default 5000 ms, clamped 100..30000); the confirming read of a first pass may run up to one poll interval past that deadline. A timeout itself never passes. A passing assertion costs about one extra poll interval.
+
+Privacy: report rows for these checks carry only id, contract digest, check, locator, a fixed outcome code, match count and a fixed reason. Neither the approved `expected` nor any page value is written to the report, the shard payload, logs or terminal output of a run. Limits: the approved contract and the event store stay readable to local users, and `--contract-propose`/`--contract-approve` still print the exact expected values to the operator so approval is informed; do not run them where the terminal is captured if the values are sensitive. Browser traces, screenshots and videos can still contain page values.
+
+Known limits: an empty `valueEquals` expectation cannot be approved (the schema requires a non-empty string; an empty page value against an approved value is a failure). Optional (`required:false`) assertions remain unsupported. Permission and side-effect checks (`enabled`, `disabled`, `absent`) remain unsupported and resolve to `unavailable`.
+
+Residual (accepted limits): `countEquals` with expected 0 also passes when the selector is stale or wrong; Playwright's default action timeout can extend a single read past the clamped deadline; CSS-generated content (`::before`/`::after`) is not part of `innerText`.
+Sampling limit: reads are 100 ms apart, so a value that flickers at a rate that aliases with the poll interval can still produce two matching reads; the settle rule is a best-effort guard, not proof of a stable final state.

@@ -53,6 +53,7 @@ const ALLOWED = Object.freeze({
     CHECKS: Object.freeze(["textEquals", "valueEquals", "enabled", "disabled", "absent", "countEquals", "moneyEquals", "pathEquals"]),
     PROVENANCE_SOURCES: Object.freeze(["spec", "human-confirmed", "fixture", "independent-calc", "external-reference"]),
     MAX_ASSERTIONS: 50,
+    MAX_COUNT: 10000,
     MAX_PAYLOAD_BYTES: 256 * 1024,
     MAX_DEPTH: 6,
 });
@@ -287,7 +288,7 @@ function validateExpected(check, has, expected) {
     }
     if (check === "countEquals") {
         if (!has) rej(ERROR.MISSING_KEY);
-        if (!Number.isInteger(expected) || expected < 0 || !Number.isSafeInteger(expected)) rej(ERROR.EXPECTED_INVALID);
+        if (!Number.isInteger(expected) || expected < 0 || expected > ALLOWED.MAX_COUNT) rej(ERROR.EXPECTED_INVALID);
         return;
     }
     if (check === "pathEquals") {
