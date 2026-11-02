@@ -6,6 +6,15 @@ See [README.md](README.md) for the current feature set, architecture, and usage.
 
 ---
 
+## License change: MIT to Apache License 2.0
+
+- **New versions are licensed under the Apache License 2.0.** `LICENSE` now holds the unmodified Apache 2.0 text, and a new `NOTICE` file carries the copyright line. `package.json` declares `Apache-2.0`.
+- **Earlier versions stay MIT.** Everything up to and including the `v1.0.0-mit` tag was released under the MIT License and remains available under it.
+- README, CONTRIBUTING, THIRD_PARTY_NOTICES and the technical reference now name the new license. The README also states that Falcon's core stays open source and that team and enterprise features may be offered commercially in the future.
+- No code or behavior changes. Dependency licenses (Playwright under Apache 2.0, most others under MIT) are compatible with Apache 2.0.
+
+---
+
 ## OpenAI client hardening
 
 - **`OPENAI_CUSTOM_HEADERS` is no longer applied.** The `openai` SDK parses that variable in its constructor and merges it over the client's own headers, so a value in the environment could replace the `Authorization` and `OpenAI-Organization` headers Falcon sets. Falcon's OpenAI clients (the three LLM providers and the legacy `AIHealer` client) are now built through `src/core/llm/transport/sdkConstruct.js`, which hides the variable while the SDK constructor runs and restores it afterwards. It also pins the SDK's admin key and webhook secret, which Falcon does not use, to null. Anyone who relied on the variable to add gateway headers will no longer have them sent; Falcon has no documented setting for extra headers.
