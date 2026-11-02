@@ -22,7 +22,8 @@
  * Settle policy: a PASS needs two consecutive passing reads one poll
  * interval (100 ms) apart, so a transient intermediate DOM state cannot
  * produce a green result. Polling is bounded by `timeoutMs` (default 5000,
- * clamped to [100, 30000]); a timeout never passes.
+ * clamped to [100, 30000]); the confirming read of a first pass may run one
+ * poll interval past that deadline, and a timeout itself never passes.
  *
  * Privacy: results carry fixed `outcome` codes and fixed `reason` strings
  * only. Neither the approved `expected` value nor any page value is ever
@@ -35,7 +36,7 @@ const CLAMP_MIN_MS = 100;
 const CLAMP_MAX_MS = 30000;
 const DEFAULT_TIMEOUT_MS = 5000;
 const POLL_INTERVAL_MS = 100;
-const MAX_COUNT = 10000;
+const MAX_COUNT = require("./Contract").ALLOWED.MAX_COUNT;
 const MAX_MONEY_TEXT = 64;
 
 const SUPPORTED = Object.freeze(["valueEquals", "countEquals", "moneyEquals"]);
@@ -54,6 +55,7 @@ const OUTCOME = Object.freeze({
     PRECISION_UNSUPPORTED: "precision_unsupported",
     TARGET_UNAVAILABLE: "target_unavailable",
     TARGET_AMBIGUOUS: "target_ambiguous",
+    TARGET_HIDDEN: "target_hidden",
     UNSUPPORTED_ELEMENT: "unsupported_element",
     READ_FAILED: "read_failed",
     INVALID_EXPECTED: "invalid_expected",
@@ -73,6 +75,7 @@ const REASON = Object.freeze({
     precision_unsupported: "displayed precision does not fit the currency minor unit",
     target_unavailable: "no element matched the locator",
     target_ambiguous: "more than one element matched the locator",
+    target_hidden: "the matched element is not visible",
     unsupported_element: "matched element is not a supported value element",
     read_failed: "the element could not be read",
     invalid_expected: "approved expected value is not usable by this check",
@@ -86,7 +89,7 @@ const THREE_DECIMAL = new Set(["BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"])
 const FOUR_DECIMAL = new Set(["CLF", "UYW"]);
 // Symbols that map to exactly one currency. "$", "¥", "kr", "Fr" etc. are ambiguous.
 const SYMBOLS = Object.freeze({ "€": "EUR", "£": "GBP" });
-const AMBIGUOUS_SYMBOLS = /[$¥₹₩₽¢₱฿₫₪]|\bkr\b|\bFr\b|\bRs\b/;
+const AMBIGUOUS_SYMBOLS = /[$¥₹₩₽¢₱฿₫₪]|\b(?:kr|KR|Kr|Fr|FR|Rs|RS)\b/;
 
 function exponentOf(currency) {
     if (ZERO_DECIMAL.has(currency)) return 0;
@@ -156,11 +159,18 @@ async function readSingle(page, locatorText) {
     }
     if (count === 0) return { fail: result("unavailable", OUTCOME.TARGET_UNAVAILABLE, 0) };
     if (count > 1) return { fail: result("unavailable", OUTCOME.TARGET_AMBIGUOUS, count) };
+    let visible;
+    try {
+        visible = await locator.isVisible();
+    } catch {
+        return { fail: result("unavailable", OUTCOME.READ_FAILED, 1) };
+    }
+    if (!visible) return { fail: result("unavailable", OUTCOME.TARGET_HIDDEN, 1) };
     return { locator };
 }
 
 const VALUE_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
-const NON_TEXT_INPUT_TYPES = new Set(["checkbox", "radio", "file", "button", "submit", "reset", "image"]);
+const NON_TEXT_INPUT_TYPES = new Set(["checkbox", "radio", "file", "button", "submit", "reset", "image", "hidden"]);
 
 async function readValueOnce(page, a) {
     const t = await readSingle(page, a.locator);
@@ -201,7 +211,7 @@ async function readMoneyOnce(page, a) {
     if (t.fail) return t.fail;
     let text;
     try {
-        text = await t.locator.textContent();
+        text = await t.locator.innerText();
     } catch {
         return result("unavailable", OUTCOME.READ_FAILED, 1);
     }
@@ -232,7 +242,7 @@ async function settle(readOnce, deadline) {
         if (!prevPassed && Date.now() >= deadline) break;
         await sleep(POLL_INTERVAL_MS);
     }
-    return last || result("unavailable", OUTCOME.INTERNAL_ERROR, 0);
+    return last; // non-null: the loop breaks only after a non-passing read
 }
 
 function expectedUsable(a) {
