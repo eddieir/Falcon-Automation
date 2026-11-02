@@ -14,6 +14,7 @@ const fs = require("fs");
 const readline = require("readline");
 
 const Contract = require("./Contract");
+const ExecutionBinding = require("./ExecutionBinding");
 const Store = require("./ContractStore");
 
 const ACTION_FLAGS = ["--contract-propose", "--contract-approve", "--contract-reject"];
@@ -43,24 +44,15 @@ function printAssertions(stdout, assertions) {
     }
 }
 
-/** Bounded, symlink-rejecting read of the contract file. */
-async function readContractFile(file) {
-    let st;
-    try {
-        st = await fs.promises.lstat(file);
-    } catch (e) {
-        return { ok: false, code: 2 };
-    }
-    if (!st.isFile()) return { ok: false, code: 2 };
-    if (st.size > Contract.ALLOWED.MAX_PAYLOAD_BYTES) return { ok: false, code: 2 };
-    let text;
-    try {
-        text = await fs.promises.readFile(file, "utf8");
-    } catch (e) {
-        return { ok: false, code: 2 };
-    }
-    if (Buffer.byteLength(text, "utf8") > Contract.ALLOWED.MAX_PAYLOAD_BYTES) return { ok: false, code: 2 };
-    return { ok: true, text };
+/**
+ * Contract file read shared with ExecutionBinding: the descriptor is opened
+ * non-blocking and without following symlinks, then fstat'd and read through
+ * that same descriptor (bounded), so the text shown to the operator, its
+ * digest and what gets approved cannot diverge via a path swap.
+ */
+async function readContractFileForCli(file) {
+    const r = await ExecutionBinding.readContractFile(file);
+    return r.ok ? r : { ok: false, code: 2 };
 }
 
 /** Read exactly one line from stdin; returns null on EOF/empty/error. */
@@ -98,7 +90,7 @@ async function run(args, io) {
     if (!rootResult.ok) return { handled: true, code: 2 };
     const root = rootResult.root;
 
-    const readResult = await readContractFile(file);
+    const readResult = await readContractFileForCli(file);
     if (!readResult.ok) return { handled: true, code: readResult.code };
 
     const parseResult = Contract.parse(readResult.text);

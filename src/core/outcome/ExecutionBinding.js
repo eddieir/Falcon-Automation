@@ -148,4 +148,4 @@ async function bind(args) {
     }
 }
 
-module.exports = { bind, CODES };
+module.exports = { bind, CODES, readContractFile };
