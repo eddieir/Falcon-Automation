@@ -194,3 +194,22 @@ This is the only way to clear these files: Falcon never removes a leftover steal
 2. List the directory (`ls -la <store root>/<journeyId>/`). Remove only `events.jsonl.lock.steal` and, if its pid is dead, `events.jsonl.lock`. Never delete or edit `events.jsonl`.
 3. Check the history before resuming writes: `node -e 'require("./src/core/outcome/ContractStore").status(process.argv[1],process.argv[2],process.argv[3]).then(r=>console.log(JSON.stringify(r)))' <store root> <journeyId> <digest>`. `integrity` must be `ok`. If it is `broken`, stop and treat the store as untrusted: every contract in it stays unapproved until the history is explained.
 4. Resume normal operation. Record the incident (time, journey, what was removed) in the operator log.
+
+## Navigation assertions (WP-77N)
+
+Scope: two deterministic checks on a journey plan, `pathEquals` (final URL pathname) and `textEquals` on a heading element. Data-value, permission and side-effect assertions are not implemented. Every other contract check type is reported `unavailable` by the runtime, never passed. Only `required: true` assertions are supported; a contract containing an optional assertion fails binding (`optional_assertion_unsupported`).
+
+Workflow (no LLM at runtime, no auto-approval):
+
+1. Write the contract JSON (`NavigationProposal.buildNavigationProposal` builds one). Propose it: `node falcon.js --contract-propose=contract.json [--store-root=/abs/dir]`. A proposal is unapproved.
+2. Review the printed assertions and digest, then approve: `--contract-approve=contract.json` (type the full digest at the prompt) or non-interactively `--confirm-digest=sha256:...`, which must equal the recomputed digest. Without a terminal and without the flag the command refuses. `--contract-reject=...` records a rejection.
+3. Reference the contract from a journey plan: top-level `contract` (path relative to the plan) and `journeyId`, plus one `verify` step after the interaction. `journey` must be `true`.
+4. Run `node falcon.js --plan=plan.json [--store-root=/abs/dir]`.
+
+Execution binding (GS12) happens before the browser starts: the contract file is read with bounded, symlink-refusing I/O, validated against the strict schema, its digest recomputed, its `journeyId` compared with the plan's, and the store must report that exact digest `APPROVED` with a verifiable chain. Any failure (`NOT_APPROVED`, `JOURNEY_MISMATCH`, `STORE_MISSING`, `STORE_BROKEN`, `STORE_ROOT_INVALID`, `CONTRACT_UNREADABLE`, `CONTRACT_INVALID`) leaves the interaction steps running but makes the `verify` step report one `unavailable` assertion row: verification level `UNVERIFIED` and a failing exit code. The frozen contract used for the digest check is the object evaluated; the file is not re-read.
+
+Comparison rules: the path is `new URL(page.url()).pathname` compared for exact equality (no decoding, trailing slash significant, query/fragment ignored). Heading text is NFC-normalised with whitespace runs collapsed and trimmed, then compared exactly (case-sensitive). The locator must match exactly one heading element. A timeout is never a pass. Failed approved checks are never healed and expected values are never rewritten.
+
+Evidence: each assertion row carries `assertion.id`, `assertion.digest`, `journeyId`, `required`, the check, the bounded outcome (`actual` is capped at 200 characters and only present on failure). Shard bundles preserve `id` and `digest` when they validate.
+
+Limits: the digest binds content, not an approver identity (see the store trust boundary above). `--store-root` must be an absolute path without `..`; the default root is Git-ignored. Plans using `contract` cannot be combined with `--workers`/`--shard`.

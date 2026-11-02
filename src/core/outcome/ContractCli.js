@@ -105,8 +105,19 @@ async function run(args, io) {
     const { value, digest } = parseResult;
 
     if (action === "--contract-propose") {
+        // The store root may not exist on a first run; create it privately.
+        // Only propose creates state; approve and reject require an existing store.
+        try {
+            await fs.promises.mkdir(root, { recursive: true, mode: 0o700 });
+        } catch {
+            io.stdout.write("error STORE_ROOT_UNWRITABLE\n");
+            return { handled: true, code: 1 };
+        }
         const r = await Store.propose(root, value, { channel: "cli" });
-        if (!r.ok) return { handled: true, code: 1 };
+        if (!r.ok) {
+            io.stdout.write(`error ${r.code}\n`);
+            return { handled: true, code: 1 };
+        }
         io.stdout.write(`journeyId ${value.journeyId}\n`);
         io.stdout.write(`digest ${digest}\n`);
         io.stdout.write(`revision ${value.revision}\n`);
@@ -139,7 +150,11 @@ async function run(args, io) {
 
     const op = action === "--contract-approve" ? Store.approve : Store.reject;
     const r = await op(root, value.journeyId, digest, { channel: "cli" });
-    if (!r.ok) return { handled: true, code: 1 };
+    if (!r.ok) {
+        io.stdout.write(`error ${r.code}\n`);
+        return { handled: true, code: 1 };
+    }
+    io.stdout.write(`status ${action === "--contract-approve" ? "APPROVED" : "REJECTED"}\n`);
     return { handled: true, code: 0 };
 }
 
