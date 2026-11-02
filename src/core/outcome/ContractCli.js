@@ -25,7 +25,8 @@ function parseFlags(args) {
     for (const token of args) {
         if (typeof token !== "string") continue;
         const eq = token.indexOf("=");
-        if (eq === -1) continue;
+        // A known flag without "=value" must not fall through to the default sweep.
+        if (eq === -1) { if (KNOWN_FLAGS.includes(token)) return { ok: false, code: 2 }; continue; }
         const name = token.slice(0, eq);
         if (!KNOWN_FLAGS.includes(name)) continue;
         const value = token.slice(eq + 1);

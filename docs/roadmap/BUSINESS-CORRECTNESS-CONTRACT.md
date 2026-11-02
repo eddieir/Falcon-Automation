@@ -212,4 +212,4 @@ Comparison rules: the path is `new URL(page.url()).pathname` compared for exact 
 
 Evidence: each assertion row carries `assertion.id`, `assertion.digest`, `journeyId`, `required`, the check, the bounded outcome (`actual` is capped at 200 characters and only present on failure). Shard bundles preserve `id` and `digest` when they validate.
 
-Limits: the digest binds content, not an approver identity (see the store trust boundary above). `--store-root` must be an absolute path without `..`; the default root is Git-ignored. Plans using `contract` cannot be combined with `--workers`/`--shard`.
+Limits: the digest binds the contract, not the plan's URL or steps, and `pathEquals` ignores origin (the journey's same-origin guard limits this). A required `verify` that cannot run (earlier step failed or quarantined, binding failed) is reported `unavailable`, which fails the run. The digest binds content, not an approver identity (see the store trust boundary above). `--store-root` must be an absolute path without `..`; the default root is Git-ignored. Plans using `contract` cannot be combined with `--workers`/`--shard`.

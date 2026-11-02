@@ -112,13 +112,34 @@ async function run(page, p, b, healer) {
         assert.strictEqual(level, "UNVERIFIED");
     });
 
-    await test("failed click skips verify with NOT_TESTED rows, never BUSINESS_VERIFIED", async () => {
+    await test("failed click leaves verify unrun as unavailable rows, never BUSINESS_VERIFIED", async () => {
         const page = new FakePage({ pathname: SPEC.path, heading: SPEC.heading });
         const { rows, level } = await run(page, plan(), binding(), { healAndClick: async () => { throw new Error("click failed"); } });
         const v = rows.filter((r) => r.assertion);
-        assert.deepStrictEqual(v.map((r) => r.status), ["skipped", "skipped"]);
+        assert.deepStrictEqual(v.map((r) => r.status), ["unavailable", "unavailable"]);
         assert.strictEqual(page.locatorCalls, 0);
         assert.notStrictEqual(level, "BUSINESS_VERIFIED");
+    });
+
+    await test("quarantined click then verify: required assertions unrun => run result is not PASSED (exit would be nonzero)", async () => {
+        const ReportManager = require("../../src/core/ReportManager");
+        const page = new FakePage({ pathname: SPEC.path, heading: SPEC.heading });
+        const runner = new TestRunner(page, plan(), { contractBinding: binding(), verifyTimeoutMs: 100 });
+        const real = runner.runScenario.bind(runner);
+        runner.runScenario = async (sc) => {
+            if (sc.action === "click") { runner.results.push({ name: sc.description, status: "quarantined", duration: 1, errorType: "quarantined" }); return; }
+            return real(sc);
+        };
+        const rows = await runner.executeTest();
+        assert.notStrictEqual(Verification.aggregateRun(rows).level, "BUSINESS_VERIFIED");
+        const prev = process.exitCode;
+        const origLog = console.log;
+        console.log = () => {};
+        let report;
+        try { report = ReportManager.buildReport({ tests: rows, runId: "t", duration: 0 }); } finally { console.log = origLog; }
+        assert.ok(report && report.result && report.result !== "NO_TESTS_RUN", "report must be a real verdict");
+        assert.notStrictEqual(report.result, "PASSED", "run with an unrun required assertion must not be PASSED");
+        process.exitCode = prev;
     });
 
     await test("plan without contract or verify => no assertion rows, INTERACTION_ONLY", async () => {
