@@ -65,6 +65,11 @@ function isValidDigest(digest) {
  */
 function snapshotRow(row) {
     const status = row && row.status;
+    // A deduped row is never executed and contributes nothing: do not touch
+    // its assertion (keeps a hostile getter on a deduped row inert, as before).
+    if (status === "deduped") {
+        return { status, hasAssertion: false, isAssertionObject: false, hasOwnId: false, hasOwnDigest: false };
+    }
     const hasAssertion = !!(row && Object.prototype.hasOwnProperty.call(row, "assertion"));
     const assertion = row ? row.assertion : undefined;
     const isAssertionObject = isPlainObject(assertion);
@@ -266,10 +271,6 @@ function aggregateRun(rows, opts) {
 
         if (approvalMismatch && classified.assertionOutcome === "PASS" && isBoundSnapshot(snap)) {
             classified = { ...classified, assertionOutcome: "INCONCLUSIVE", reasonCodes: [...classified.reasonCodes, REASON_CODES.APPROVAL_MISMATCH] };
-        }
-
-        if (approvalUnproven && classified.assertionOutcome === "PASS" && isBoundSnapshot(snap)) {
-            classified = { ...classified, assertionOutcome: "INCONCLUSIVE", reasonCodes: [...classified.reasonCodes, REASON_CODES.APPROVAL_UNPROVEN] };
         }
 
         if (approvalUnproven && classified.assertionOutcome === "PASS" && isBoundSnapshot(snap)) {
