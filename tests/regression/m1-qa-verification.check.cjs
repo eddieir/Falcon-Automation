@@ -15,6 +15,12 @@ const { classifyRow, aggregateRun } = require(path.join(__dirname, "..", "..", "
 
 const EV = { check: "visible", locator: "#x" };
 
+// WP-77F: a row's assertion only counts as a required business assertion
+// when it carries its OWN `id` or `digest`. Use `bound()` to build fixture
+// rows that must count toward `assertions.required` under the new contract.
+const DIGEST = "sha256:" + "a".repeat(64);
+const bound = (extra) => ({ id: "A1", digest: DIGEST, check: "visible", locator: "#x", ...extra });
+
 function row(status, assertion) {
     const r = { name: "test", status };
     if (assertion !== undefined) r.assertion = assertion;
@@ -71,14 +77,29 @@ test("empty assertion object {} on a passed row is NOT evidence: INCONCLUSIVE, n
 });
 
 test("a FAIL with an empty assertion object is still FAIL (failures are never reduced)", () => {
-    assert.strictEqual(classifyRow(row("failed", {})).assertionOutcome, "FAIL");
-    assert.strictEqual(classifyRow(row("quarantined", {})).assertionOutcome, "FAIL");
+    // WP-77F: {} has no own id/digest, so it is a plain (contractless)
+    // assertion, not a required business assertion. A failing plain row is
+    // a technical failure (assertionOutcome stays null, not "FAIL"), but the
+    // safety property still holds: a technical failure still forces the run
+    // level to FAILED, so a failure is never reduced.
+    const failedClassified = classifyRow(row("failed", {}));
+    assert.strictEqual(failedClassified.assertionOutcome, null);
+    assert.strictEqual(failedClassified.technicalFailure, true);
+    assert.strictEqual(aggregateRun([row("failed", {})]).level, "FAILED");
+
+    const quarantinedClassified = classifyRow(row("quarantined", {}));
+    assert.strictEqual(quarantinedClassified.assertionOutcome, null);
+    assert.strictEqual(quarantinedClassified.technicalFailure, true);
+    assert.strictEqual(aggregateRun([row("quarantined", {})]).level, "FAILED");
 });
 
 test("assertion object with arbitrary keys still classified correctly", () => {
+    // WP-77F: no own id/digest -> plain assertion; a failing plain row is a
+    // technical failure, not an assertion FAIL, but still fails the run.
     const weirdAssertion = { foo: "bar", baz: 123, nested: { x: 1 } };
     const c = classifyRow(row("failed", weirdAssertion));
-    assert.strictEqual(c.assertionOutcome, "FAIL");
+    assert.strictEqual(c.assertionOutcome, null);
+    assert.strictEqual(c.technicalFailure, true);
 });
 
 // ----------------------------------------------------------------
@@ -87,14 +108,12 @@ test("assertion object with arbitrary keys still classified correctly", () => {
 
 test("assertion with getter does not cause side effects during classification", () => {
     let getterCalled = 0;
-    const hostileAssertion = {
+    const hostileAssertion = bound({
         get dangerous() {
             getterCalled++;
             return "triggered";
-        },
-        check: "visible",
-        locator: "#x"
-    };
+        }
+    });
 
     const c = classifyRow(row("passed", hostileAssertion));
     assert.strictEqual(c.assertionOutcome, "PASS");
@@ -106,7 +125,7 @@ test("rows with prototype pollution keys are handled safely", () => {
     const pollutedRow = {
         name: "test",
         status: "passed",
-        assertion: EV,
+        assertion: bound(),
         __proto__: { injected: "bad" },
         constructor: { name: "hacked" }
     };
@@ -119,7 +138,7 @@ test("rows with prototype pollution keys are handled safely", () => {
 });
 
 test("assertion with __proto__ key is treated as plain object", () => {
-    const assertion = { __proto__: { evil: true }, check: "visible", locator: "#x" };
+    const assertion = bound({ __proto__: { evil: true } });
     const c = classifyRow(row("passed", assertion));
     assert.strictEqual(c.assertionOutcome, "PASS");
 });
@@ -134,7 +153,7 @@ test("null row in array does not crash", () => {
 });
 
 test("undefined row in array does not crash", () => {
-    const result = aggregateRun([row("passed", EV), undefined, row("passed", EV)]);
+    const result = aggregateRun([row("passed", bound()), undefined, row("passed", bound())]);
     assert.strictEqual(result.level, "BUSINESS_VERIFIED");
     assert.strictEqual(result.assertions.required, 2);
 });
@@ -179,9 +198,13 @@ test("aggregateRun handles non-array input as empty array", () => {
 // ----------------------------------------------------------------
 
 test("huge row list (10k rows) processes without timeout or memory issues", () => {
+    // WP-77F: a required business assertion must be contract-bound (own
+    // id/digest). Give every row its own id (same digest for all, so the
+    // run has no approval mismatch) so all 10000 rows count toward
+    // assertions.required/pass.
     const rows = [];
     for (let i = 0; i < 10000; i++) {
-        rows.push(row("passed", { check: "visible", locator: "#x" }));
+        rows.push(row("passed", bound({ id: `A${i}` })));
     }
     const start = Date.now();
     const result = aggregateRun(rows);
@@ -252,11 +275,20 @@ test("passed + Object.create(null) assertion is plain object", () => {
 // ----------------------------------------------------------------
 
 test("assertion inheriting properties only (Object.create({check: 'visible'}))", () => {
+    // WP-77F: an inherited `check`/`locator` (not own) is still not an own
+    // id/digest, so this row is plain, not contract-bound. A passing plain
+    // row with evidence is an interaction, not a required business
+    // assertion: no crash, assertionOutcome stays null, and the run is
+    // INTERACTION_ONLY with zero required assertions.
     const proto = { check: "visible", locator: "#x" };
     const inheritedAssertion = Object.create(proto);
     const c = classifyRow(row("passed", inheritedAssertion));
-    // Should still pass isPlainObject check
-    assert.ok(c.assertionOutcome);
+    assert.strictEqual(c.assertionOutcome, null);
+    assert.strictEqual(c.interaction, true);
+
+    const result = aggregateRun([row("passed", inheritedAssertion)]);
+    assert.strictEqual(result.level, "INTERACTION_ONLY");
+    assert.strictEqual(result.assertions.required, 0);
 });
 
 // ----------------------------------------------------------------
@@ -271,11 +303,13 @@ test("all deduped rows produce UNVERIFIED NO_TESTS_RUN", () => {
 });
 
 test("deduped mixed with passed assertions does not reduce level", () => {
+    // WP-77F: bind the passed rows (own id/digest) so they still count as
+    // required business assertions under the new contract.
     const result = aggregateRun([
-        row("passed", EV),
+        row("passed", bound({ id: "A1" })),
         row("deduped"),
         row("deduped", {}),
-        row("passed", EV)
+        row("passed", bound({ id: "A2" }))
     ]);
     assert.strictEqual(result.level, "BUSINESS_VERIFIED");
     assert.strictEqual(result.assertions.required, 2);
@@ -286,11 +320,13 @@ test("deduped mixed with passed assertions does not reduce level", () => {
 // ----------------------------------------------------------------
 
 test("one FAIL assertion overrides many PASS assertions", () => {
+    // WP-77F: bind every row (same digest, distinct ids) so the passes and
+    // the fail all count as required business assertions.
     const rows = [];
     for (let i = 0; i < 99; i++) {
-        rows.push(row("passed", EV));
+        rows.push(row("passed", bound({ id: `A${i}` })));
     }
-    rows.push(row("failed", {}));
+    rows.push(row("failed", bound({ id: "FAIL1" })));
 
     const result = aggregateRun(rows);
     assert.strictEqual(result.level, "FAILED");
@@ -299,16 +335,19 @@ test("one FAIL assertion overrides many PASS assertions", () => {
 });
 
 test("one INCONCLUSIVE/NOT_TESTED overrides PASS", () => {
+    // WP-77F: bind every row (same digest, distinct ids) so the pass and
+    // the unavailable/skipped rows all count as required business
+    // assertions and can exercise the precedence rule.
     const inconclusiveCase = aggregateRun([
-        row("passed", EV),
-        row("passed", EV),
-        row("unavailable", {})
+        row("passed", bound({ id: "A1" })),
+        row("passed", bound({ id: "A2" })),
+        row("unavailable", bound({ id: "A3" }))
     ]);
     assert.strictEqual(inconclusiveCase.level, "UNVERIFIED");
 
     const notTestedCase = aggregateRun([
-        row("passed", EV),
-        row("skipped", {})
+        row("passed", bound({ id: "A1" })),
+        row("skipped", bound({ id: "A2" }))
     ]);
     assert.strictEqual(notTestedCase.level, "UNVERIFIED");
 });
@@ -323,8 +362,10 @@ test("technical failure (failed without assertion) produces FAILED", () => {
 // ----------------------------------------------------------------
 
 test("passed with assertion present but status is interaction produces assertion outcome", () => {
-    // The code checks hasAssertion first, so this should be an assertion
-    const c = classifyRow(row("passed", { check: "visible", locator: "#x" }));
+    // The code checks hasAssertion first, so this should be an assertion.
+    // WP-77F: only a contract-bound assertion (own id + digest) is an assertion outcome;
+    // a plain { check, locator } row is an interaction (covered in tests/unit/Verification.check.js).
+    const c = classifyRow(row("passed", bound()));
     assert.strictEqual(c.assertionOutcome, "PASS");
     assert.strictEqual(c.interaction, false);
 });

@@ -34,34 +34,53 @@ function row(status, assertion) {
     return r;
 }
 
+// WP-77F: contract-origin assertion fixture. Only rows carrying their own
+// `id` AND `digest` come from an approved contract (runVerify / shard
+// rows); a plain `expect` row never has either. Tests that build rows with
+// `row("passed", { check, locator })` and expect PASS/BUSINESS_VERIFIED
+// encode the pre-WP-77F defect (any assertion object counted as required)
+// and are updated below to use `bound()` instead.
+function bound(extra) {
+    return { id: "A1", digest: "sha256:" + "a".repeat(64), check: "visible", locator: "#x", ...extra };
+}
+
 // ---------------------------------------------------------------------
 // classifyRow — per-row mapping
 // ---------------------------------------------------------------------
 
-test("classifyRow: passed + assertion -> PASS", () => {
-    const c = classifyRow(row("passed", { check: "visible", locator: "#x" }));
+test("classifyRow: passed + bound (contract-origin) assertion -> PASS", () => {
+    const c = classifyRow(row("passed", bound()));
     assert.strictEqual(c.assertionOutcome, "PASS");
     assert.strictEqual(c.ignored, false);
 });
 
-test("classifyRow: failed + assertion -> FAIL", () => {
+// WP-77F: plain expect row
+test("classifyRow: failed + plain (contractless) assertion -> technical failure, not FAIL", () => {
     const c = classifyRow(row("failed", { check: "visible", locator: "#x" }));
-    assert.strictEqual(c.assertionOutcome, "FAIL");
+    assert.strictEqual(c.assertionOutcome, null);
+    assert.strictEqual(c.technicalFailure, true);
 });
 
-test("classifyRow: unavailable + assertion -> INCONCLUSIVE", () => {
+// WP-77F: plain expect row
+test("classifyRow: unavailable + plain (contractless) assertion -> technical failure, not INCONCLUSIVE", () => {
     const c = classifyRow(row("unavailable", { check: "visible", locator: "#x" }));
-    assert.strictEqual(c.assertionOutcome, "INCONCLUSIVE");
+    assert.strictEqual(c.assertionOutcome, null);
+    assert.strictEqual(c.technicalFailure, true);
 });
 
-test("classifyRow: skipped + assertion -> NOT_TESTED", () => {
+// WP-77F: plain expect row
+test("classifyRow: skipped + plain (contractless) assertion -> no contribution, not NOT_TESTED", () => {
     const c = classifyRow(row("skipped", { check: "visible", locator: "#x" }));
-    assert.strictEqual(c.assertionOutcome, "NOT_TESTED");
+    assert.strictEqual(c.assertionOutcome, null);
+    assert.strictEqual(c.interaction, false);
+    assert.strictEqual(c.technicalFailure, false);
 });
 
-test("classifyRow: quarantined + assertion -> FAIL (Q1, never hidden)", () => {
+// WP-77F: plain expect row
+test("classifyRow: quarantined + plain (contractless) assertion -> technical failure, not FAIL", () => {
     const c = classifyRow(row("quarantined", { check: "visible", locator: "#x" }));
-    assert.strictEqual(c.assertionOutcome, "FAIL");
+    assert.strictEqual(c.assertionOutcome, null);
+    assert.strictEqual(c.technicalFailure, true);
 });
 
 test("classifyRow: malformed assertion (array) -> INCONCLUSIVE + MALFORMED_ASSERTION, regardless of status", () => {
@@ -114,7 +133,7 @@ test("classifyRow: skipped/quarantined without assertion -> no contribution", ()
 // ---------------------------------------------------------------------
 
 test("N1: all required assertions pass -> BUSINESS_VERIFIED", () => {
-    const r = aggregateRun([row("passed", { check: "visible", locator: "#x" }), row("passed", { check: "visible", locator: "#x" })]);
+    const r = aggregateRun([row("passed", bound({ id: "A1" })), row("passed", bound({ id: "A2" }))]);
     assert.strictEqual(r.level, "BUSINESS_VERIFIED");
     assert.strictEqual(r.assertions.required, 2);
     assert.strictEqual(r.assertions.pass, 2);
@@ -129,16 +148,27 @@ test("N2: one required assertion fails -> FAILED", () => {
     assert.strictEqual(r.journeys.failed, 1);
 });
 
-test("N3: required assertion never runs (earlier step failed) -> UNVERIFIED", () => {
+// WP-77F: plain expect row. A plain (contractless) assertion is never
+// "required", so a lone plain-skipped row contributes nothing -- it is
+// indistinguishable from no rows having run at all.
+test("N3: a lone plain (contractless) skipped row -> UNVERIFIED via NO_TESTS_RUN, not notTested", () => {
     const r = aggregateRun([row("skipped", { check: "visible", locator: "#x" })]);
     assert.strictEqual(r.level, "UNVERIFIED");
-    assert.strictEqual(r.assertions.notTested, 1);
+    assert.strictEqual(r.assertions.notTested, 0);
+    assert.strictEqual(r.assertions.required, 0);
+    assert.deepStrictEqual(r.reasonCodes, [REASON_CODES.NO_TESTS_RUN]);
 });
 
-test("N4: required evidence missing (target absent) -> UNVERIFIED", () => {
+// WP-77F: plain expect row. A plain (contractless) unavailable row is a
+// technical failure, not an inconclusive *assertion*, so it still surfaces
+// as FAILED (a technical failure is never silently downgraded to
+// UNVERIFIED), and it never contributes to the assertions.inconclusive count.
+test("N4: a lone plain (contractless) unavailable row -> FAILED (technical failure), not inconclusive assertion", () => {
     const r = aggregateRun([row("unavailable", { check: "visible", locator: "#x" })]);
-    assert.strictEqual(r.level, "UNVERIFIED");
-    assert.strictEqual(r.assertions.inconclusive, 1);
+    assert.strictEqual(r.level, "FAILED");
+    assert.strictEqual(r.assertions.inconclusive, 0);
+    assert.strictEqual(r.assertions.required, 0);
+    assert.strictEqual(r.journeys.failed, 1);
 });
 
 // N6 (REFUSED) and N7 (optional assertions) are not achievable with legacy
@@ -247,6 +277,133 @@ test("aggregateRun never copies locator/value text into the block", () => {
 test("aggregateRun is deterministic: same input, same output, no clock/ids", () => {
     const rows = [row("passed", { check: "visible", locator: "#x" }), row("failed")];
     assert.deepStrictEqual(aggregateRun(rows), aggregateRun(rows));
+});
+
+// ---------------------------------------------------------------------
+// WP-77F: bound vs. plain assertion semantics (issue #77)
+//
+// A "plain" assertion ({ check, locator } with neither own `id` nor own
+// `digest`) comes from a contractless `expect` row and can never count as
+// a required business assertion. A "bound" assertion (own `id` or own
+// `digest`) comes from an approved contract (runVerify / shard rows) and
+// is the only thing that can count toward assertions.required.
+// ---------------------------------------------------------------------
+
+test("classifyRow: bound + failed -> FAIL", () => {
+    const c = classifyRow(row("failed", bound()));
+    assert.strictEqual(c.assertionOutcome, "FAIL");
+});
+
+test("classifyRow: bound + unavailable -> INCONCLUSIVE", () => {
+    const c = classifyRow(row("unavailable", bound()));
+    assert.strictEqual(c.assertionOutcome, "INCONCLUSIVE");
+});
+
+test("classifyRow: bound + skipped -> NOT_TESTED", () => {
+    const c = classifyRow(row("skipped", bound()));
+    assert.strictEqual(c.assertionOutcome, "NOT_TESTED");
+});
+
+test("classifyRow: bound + quarantined -> FAIL (Q1, never hidden)", () => {
+    const c = classifyRow(row("quarantined", bound()));
+    assert.strictEqual(c.assertionOutcome, "FAIL");
+});
+
+test("classifyRow: bound + passed missing check -> INCONCLUSIVE + MALFORMED_ASSERTION", () => {
+    const c = classifyRow(row("passed", bound({ check: undefined })));
+    assert.strictEqual(c.assertionOutcome, "INCONCLUSIVE");
+    assert.deepStrictEqual(c.reasonCodes, [REASON_CODES.MALFORMED_ASSERTION]);
+});
+
+test("classifyRow: bound + passed missing locator -> INCONCLUSIVE + MALFORMED_ASSERTION", () => {
+    const c = classifyRow(row("passed", bound({ locator: undefined })));
+    assert.strictEqual(c.assertionOutcome, "INCONCLUSIVE");
+    assert.deepStrictEqual(c.reasonCodes, [REASON_CODES.MALFORMED_ASSERTION]);
+});
+
+test("classifyRow: bound + passed with empty id -> INCONCLUSIVE + MALFORMED_ASSERTION", () => {
+    const c = classifyRow(row("passed", bound({ id: "" })));
+    assert.strictEqual(c.assertionOutcome, "INCONCLUSIVE");
+    assert.deepStrictEqual(c.reasonCodes, [REASON_CODES.MALFORMED_ASSERTION]);
+});
+
+test("classifyRow: bound + passed with id over 64 chars -> INCONCLUSIVE + MALFORMED_ASSERTION", () => {
+    const c = classifyRow(row("passed", bound({ id: "a".repeat(65) })));
+    assert.strictEqual(c.assertionOutcome, "INCONCLUSIVE");
+    assert.deepStrictEqual(c.reasonCodes, [REASON_CODES.MALFORMED_ASSERTION]);
+});
+
+test("classifyRow: bound + passed with malformed digest -> INCONCLUSIVE + MALFORMED_ASSERTION", () => {
+    const c = classifyRow(row("passed", bound({ digest: "sha256:" + "g".repeat(64) })));
+    assert.strictEqual(c.assertionOutcome, "INCONCLUSIVE");
+    assert.deepStrictEqual(c.reasonCodes, [REASON_CODES.MALFORMED_ASSERTION]);
+});
+
+test("classifyRow: the runner's binding-failure row (id only, no digest, unavailable) stays INCONCLUSIVE, not technicalFailure", () => {
+    const c = classifyRow(row("unavailable", { id: "binding", check: "contract", locator: "contract:binding" }));
+    assert.strictEqual(c.assertionOutcome, "INCONCLUSIVE");
+    assert.strictEqual(c.technicalFailure, false);
+});
+
+test("[plain passed] -> INTERACTION_ONLY, required 0, NO_REQUIRED_ASSERTIONS", () => {
+    const r = aggregateRun([row("passed", { check: "visible", locator: "#x" })]);
+    assert.strictEqual(r.level, "INTERACTION_ONLY");
+    assert.strictEqual(r.assertions.required, 0);
+    assert.ok(r.reasonCodes.includes(REASON_CODES.NO_REQUIRED_ASSERTIONS));
+});
+
+test("[plain failed] -> FAILED", () => {
+    const r = aggregateRun([row("failed", { check: "visible", locator: "#x" })]);
+    assert.strictEqual(r.level, "FAILED");
+});
+
+test("[bound pass + plain pass] -> BUSINESS_VERIFIED, required exactly 1", () => {
+    const r = aggregateRun([row("passed", bound()), row("passed", { check: "visible", locator: "#x" })]);
+    assert.strictEqual(r.level, "BUSINESS_VERIFIED");
+    assert.strictEqual(r.assertions.required, 1);
+});
+
+test("[bound pass + plain failed] -> FAILED", () => {
+    const r = aggregateRun([row("passed", bound()), row("failed", { check: "visible", locator: "#x" })]);
+    assert.strictEqual(r.level, "FAILED");
+});
+
+test("[bound fail] -> FAILED", () => {
+    const r = aggregateRun([row("failed", bound())]);
+    assert.strictEqual(r.level, "FAILED");
+});
+
+test("[bound skipped] -> UNVERIFIED", () => {
+    const r = aggregateRun([row("skipped", bound())]);
+    assert.strictEqual(r.level, "UNVERIFIED");
+});
+
+test("[bound quarantined] -> FAILED", () => {
+    const r = aggregateRun([row("quarantined", bound())]);
+    assert.strictEqual(r.level, "FAILED");
+});
+
+test("two distinct valid digests among bound rows -> no PASS, never BUSINESS_VERIFIED, APPROVAL_MISMATCH", () => {
+    const r = aggregateRun([
+        row("passed", bound({ id: "A1", digest: "sha256:" + "a".repeat(64) })),
+        row("passed", bound({ id: "A2", digest: "sha256:" + "b".repeat(64) })),
+    ]);
+    assert.strictEqual(r.assertions.pass, 0);
+    assert.notStrictEqual(r.level, "BUSINESS_VERIFIED");
+    assert.ok(r.reasonCodes.includes("APPROVAL_MISMATCH"));
+});
+
+test("shard-shaped bound row (journeyId/required on the row) -> BUSINESS_VERIFIED", () => {
+    const shardRow = { name: "x", status: "passed", assertion: bound(), journeyId: "j1", required: true };
+    const r = aggregateRun([shardRow]);
+    assert.strictEqual(r.level, "BUSINESS_VERIFIED");
+});
+
+test("shard-normalised plain row ({check, locator} only) alone -> never BUSINESS_VERIFIED (INTERACTION_ONLY)", () => {
+    const shardRow = { name: "x", status: "passed", assertion: { check: "visible", locator: "#x" } };
+    const r = aggregateRun([shardRow]);
+    assert.strictEqual(r.level, "INTERACTION_ONLY");
+    assert.notStrictEqual(r.level, "BUSINESS_VERIFIED");
 });
 
 console.log(`\n${passed} passed, ${failures} failed`);

@@ -56,6 +56,26 @@ Precedence for combining required assertions: `FAIL` > `REFUSED` > `INCONCLUSIVE
 
 Legacy `result` (`PASSED`/`FAILED`/`PARTIAL`/`NO_TESTS_RUN`) and the default exit code do not change in WP-79a/b. They are joined by a `verification` block.
 
+### Contract-bound versus contractless assertion rows (WP-77F)
+
+A row counts as a *required assertion* only if its assertion record is **contract-bound**: it carries its own `id` and `digest` (`sha256:` plus 64 hex digits) emitted by `verify` or by a shard row that preserved them. A PASS requires a valid id (1–64 chars), a valid digest, and check and locator evidence; otherwise it is `INCONCLUSIVE` with reason code `MALFORMED_ASSERTION`, never `PASS`.
+
+A *contractless* UI `expect` row (assertion has neither id nor digest) is treated as an **interaction**, not a required assertion:
+
+| Outcome | Behavior |
+|---|---|
+| passed | contributes to `INTERACTION_ONLY` at best |
+| failed, unavailable, or quarantined | technical failure; journey is `FAILED`; exit codes unchanged |
+| skipped | no contribution; not counted |
+
+Contractless rows never increment `assertions.required`.
+
+**Contradictory approval evidence**: If bound rows in a single run carry more than one distinct valid digest, no bound row can achieve `PASS`. All become `INCONCLUSIVE`, and `reasonCodes` includes the new code `APPROVAL_MISMATCH` (additive).
+
+**Binding-failure row**: The special row with `id: "binding"` and no digest remains `INCONCLUSIVE` / `UNVERIFIED`.
+
+**Compatibility**: Reports are unchanged in shape; the `verification` block is additive. Before this change, a plan with only a passing UI `expect` could be reported `BUSINESS_VERIFIED`. That was a defect against the rule already stated here: a plan with `expect` steps but no contract is `INTERACTION_ONLY`.
+
 ## 3. Aggregation invariants (enforced in code and tests)
 
 1. A run is `BUSINESS_VERIFIED` only if it has ≥1 journey, every journey in scope is `BUSINESS_VERIFIED`, and no required assertion is anything but `PASS`.
