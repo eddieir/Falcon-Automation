@@ -24,6 +24,9 @@ const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
 const RUN = "gh-7900001";
 const ENV = { FALCON_LOCATOR_SALT: "fixture-salt" };
 const EV = { check: "visible", locator: "#ok" };
+// Contract-bound digest (WP-77F): assertions with their own id/digest count
+// toward `assertions.required`; see src/core/outcome/Verification.js.
+const DIGEST = "sha256:" + H("a");
 
 // Executed-result shape emitted by TestRunner.runExpect.
 const exec = (status, extra = {}) => ({
@@ -250,12 +253,18 @@ const FIXTURES = {
     c5_unavailable: [[exec("unavailable")], [exec("passed")]],
     c6_skipped: [[exec("skipped")], [exec("passed")]],
     e1_interactionOnly: [[plain("click")], [plain("type")]],
-    e2_verified: [[plain("click"), exec("passed")], [plain("go")]],
+    e2_verified: [[plain("click"), exec("passed", { id: "assert-1", digest: DIGEST })], [plain("go")]],
     e4_noCheck: [[{ name: "a", status: "passed", assertion: { locator: "#x" } }]],
     e5_noLocator: [[{ name: "a", status: "passed", assertion: { check: "visible" } }]],
     e5b_emptyObject: [[{ name: "a", status: "passed", assertion: {} }]],
     e5c_malformed: [[{ name: "a", status: "passed", assertion: "nope" }], [exec("passed")]],
-    e8_dedupe: [[exec("passed"), { ...exec("passed"), status: "deduped", firstRunOn: "u" }], [exec("passed")]],
+    e8_dedupe: [
+        [
+            exec("passed", { id: "assert-1", digest: DIGEST }),
+            { ...exec("passed", { id: "assert-3", digest: DIGEST }), status: "deduped", firstRunOn: "u" },
+        ],
+        [exec("passed", { id: "assert-2", digest: DIGEST })],
+    ],
     e9_mixedFailure: [[exec("passed"), plain("c", "failed")], [exec("passed")], [exec("passed")]],
     withMeta: [[{ ...exec("passed"), journeyId: "j1", required: true }], [exec("passed")]],
     emptyShardPages: [[], [exec("passed")]],
@@ -297,6 +306,13 @@ test("E7 a quarantined assertion failure is never BUSINESS_VERIFIED through shar
 test("E8 deduped rows do not inflate assertion counts", async () => {
     const { report } = await mergeReport(FIXTURES.e8_dedupe);
     assert.strictEqual(report.verification.assertions.required, 2);
+});
+
+test("E10 plain (unbound) passed assertion rows never count as required through shard merge", async () => {
+    const rows = [[exec("passed")], [exec("passed")]];
+    const { report } = await mergeReport(rows, { total: 2 });
+    assert.strictEqual(report.verification.level, "INTERACTION_ONLY");
+    assert.strictEqual(report.verification.assertions.required, 0);
 });
 
 test("C7 legacy fragments (no assertion fields) merge as before", async () => {
@@ -357,8 +373,6 @@ test("F merged rows keep deterministic legacy keys and gain only the additive me
 });
 
 // ------------------------------------------------------------ G: WP-77N assertion id/digest identity
-
-const DIGEST = "sha256:" + H("a");
 
 test("G1 valid id+digest survive toAssertion, schema validation and merge", async () => {
     const f = fragmentFor(0, 2, [exec("passed", { id: "assert-1", digest: DIGEST })]);
