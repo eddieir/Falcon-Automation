@@ -410,6 +410,63 @@ async function main() {
         });
     }
 
+    await test("file-json: relative path resolves against baseDir, not the working directory", async () => {
+        writeTmpFile("rel-ok.json", JSON.stringify({ status: "REL-OK-3" }));
+        assert.notStrictEqual(fs.realpathSync(process.cwd()), fs.realpathSync(tmpBase));
+        const r = await BackendEvaluator.evaluate(
+            { check: "backendEquals", locator: "backend:state", expected: "REL-OK-3", source: { kind: "file-json", path: "rel-ok.json", pointer: "/status" } },
+            { timeoutMs: 300, baseDir: tmpBase }
+        );
+        assert.strictEqual(r.outcome, "backend_match");
+    });
+
+    await test("http-json: a trickling response cannot outlive the wall-clock budget", async () => {
+        const server = await startServer((req, res) => {
+            res.writeHead(200, { "content-type": "application/json" });
+            const t = setInterval(() => res.write(" "), 80);
+            res.on("close", () => clearInterval(t));
+        });
+        const started = Date.now();
+        const r = await BackendEvaluator.evaluate(
+            { check: "backendExists", locator: "backend:state", expected: true, source: { kind: "http-json", url: urlFor(server, "/"), pointer: "/x" } },
+            { timeoutMs: 400 }
+        );
+        const elapsed = Date.now() - started;
+        server.closeAllConnections && server.closeAllConnections();
+        await closeServer(server);
+        assert.strictEqual(r.status, "unavailable");
+        assert.ok(elapsed < 3000, `took ${elapsed}ms`);
+    });
+
+    await test("http-json: IPv6 loopback [::1] source is readable", async () => {
+        let server;
+        try {
+            server = await new Promise((resolve, reject) => {
+                const s = http.createServer(jsonHandler(JSON.stringify({ v: "V6-OK" })));
+                s.once("error", reject);
+                s.listen(0, "::1", () => resolve(s));
+            });
+        } catch { console.log("   (IPv6 loopback unavailable on this host; skipped)"); return; }
+        const r = await BackendEvaluator.evaluate(
+            { check: "backendEquals", locator: "backend:state", expected: "V6-OK", source: { kind: "http-json", url: `http://[::1]:${server.address().port}/`, pointer: "/v" } },
+            { timeoutMs: 400 }
+        );
+        await closeServer(server);
+        assert.strictEqual(r.outcome, "backend_match");
+    });
+
+    await test("http-json: non-loopback literal IP is refused before any connection", async () => {
+        let hits = 0;
+        const server = await startServer((req, res) => { hits++; res.end("{}"); });
+        const r = await BackendEvaluator.evaluate(
+            { check: "backendExists", locator: "backend:state", expected: true, source: { kind: "http-json", url: `http://10.255.255.1:${server.address().port}/`, pointer: "/x" } },
+            { timeoutMs: 300 }
+        );
+        await closeServer(server);
+        assert.strictEqual(r.outcome, "source_unsafe");
+        assert.strictEqual(hits, 0);
+    });
+
     await test("file-json: symlink target => unavailable source_unsafe", async () => {
         const target = writeTmpFile("link-target.json", JSON.stringify({ x: 1 }));
         const link = path.join(tmpBase, "link.json");
