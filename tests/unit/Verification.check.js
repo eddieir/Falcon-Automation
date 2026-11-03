@@ -504,5 +504,10 @@ test("getter digest invalid-then-valid: exactly one read per field per aggregate
     assert.strictEqual(locatorReads, 1);
 });
 
+test("deduped row with a throwing assertion getter stays inert (never read)", () => {
+    const deduped = { status: "deduped", get assertion() { throw new Error("must not be read"); } };
+    assert.strictEqual(aggregateRun([deduped]).level, "UNVERIFIED");
+});
+
 console.log(`\n${passed} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);
