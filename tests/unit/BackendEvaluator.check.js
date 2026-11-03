@@ -210,6 +210,18 @@ async function main() {
             assert.strictEqual(r.status, "passed");
             assert.strictEqual(r.outcome, "backend_match");
         });
+        await test("backendEquals: expected null vs object/array/value => type_mismatch; vs null => passed", async () => {
+            const nullServer = await startServer(jsonHandler(JSON.stringify({ obj: {}, arr: [1], s: "x", nul: null })));
+            const cases = [["/obj", "type_mismatch"], ["/arr", "type_mismatch"], ["/s", "type_mismatch"], ["/nul", "backend_match"]];
+            for (const [pointer, outcome] of cases) {
+                const r = await BackendEvaluator.evaluate(
+                    { check: "backendEquals", locator: "backend:state", expected: null, source: { kind: "http-json", url: urlFor(nullServer, "/"), pointer } },
+                    { timeoutMs: 300 }
+                );
+                assert.strictEqual(r.outcome, outcome, pointer);
+            }
+            await closeServer(nullServer);
+        });
         await test("backendExists: inherited property names are not own properties (no prototype walk)", async () => {
             for (const pointer of ["/toString", "/constructor", "/hasOwnProperty"]) {
                 const r = await BackendEvaluator.evaluate(

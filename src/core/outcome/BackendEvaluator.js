@@ -192,7 +192,8 @@ function compare(assertion, body) {
             : result("failed", OUTCOME.BACKEND_MISMATCH, 1);
     }
 
-    // backendEquals
+    // backendEquals: `typeof null === "object"`, so null needs its own type guard.
+    if (assertion.expected === null && value !== null) return result("failed", OUTCOME.TYPE_MISMATCH, 1);
     if (typeof value !== typeof assertion.expected) return result("failed", OUTCOME.TYPE_MISMATCH, 1);
     return value === assertion.expected
         ? result("passed", OUTCOME.BACKEND_MATCH, 1)

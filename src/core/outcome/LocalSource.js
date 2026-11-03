@@ -25,7 +25,8 @@
  *   - The per-call timeout is `min(2000ms, caller budget)`.
  *
  * file-json safety:
- *   - Opened `O_RDONLY | O_NONBLOCK | O_NOFOLLOW`; a symlink target is
+ *   - Opened `O_RDONLY | O_NONBLOCK | O_NOFOLLOW` (O_NOFOLLOW is absent on
+ *     Windows, where the lstat/inode cross-check below is the only guard); a symlink target is
  *     refused by this open call failing with `ELOOP`.
  *   - `fstat`/`lstat` are cross-checked (dev/ino) against a TOCTOU swap.
  *   - The resolved real path must sit under the real path of the supplied
@@ -121,7 +122,7 @@ function readHttpJson(urlString, options = {}) {
                 method: "GET",
                 host: ip,
                 port: u.port ? Number(u.port) : 80,
-                path: `${u.pathname}${u.search || ""}`,
+                path: u.pathname,
                 headers: { Host: u.host, Accept: "application/json" },
                 agent: false,
                 timeout: timeoutMs,
