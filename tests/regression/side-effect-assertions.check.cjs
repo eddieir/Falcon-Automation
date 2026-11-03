@@ -35,43 +35,45 @@ let fixture, llm, llmHits = 0, base;
 let lateFlippedAt = new Map();
 const listen = (server) => new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
 
-function pageHtml(variant) {
-    // The page always reports success and carries a decoy that displays the expected value.
-    return `<!doctype html><title>fixture</title>
-        <button id="save">Save order</button>
-        <span id="msg"></span>
-        <span id="decoy">paid</span>
-        <script>
-            document.getElementById('save').addEventListener('click', function () {
-                fetch('/act/${variant}', { method: 'POST' });
-                document.getElementById('msg').textContent = 'Order saved!';
-            });
-        </script>`;
-}
+const VARIANTS = new Set(["paid", "pending", "wrong-count", "wrong-ref", "late", "down"]);
+const STATE_BY_VARIANT = new Map(Object.entries(STATE));
+
+// Static page: the variant is derived client-side from the URL, never interpolated into markup.
+const PAGE_HTML = `<!doctype html><title>fixture</title>
+    <button id="save">Save order</button>
+    <span id="msg"></span>
+    <span id="decoy">paid</span>
+    <script>
+        var variant = encodeURIComponent(location.pathname.split('/').pop());
+        document.getElementById('save').addEventListener('click', function () {
+            fetch('/act/' + variant, { method: 'POST' });
+            document.getElementById('msg').textContent = 'Order saved!';
+        });
+    </script>`;
 
 test.before(async () => {
     fixture = await listen(http.createServer((req, res) => {
         const url = req.url.split("?")[0];
         let m;
-        if ((m = /^\/page\/([a-z-]+)$/.exec(url))) {
+        if ((m = /^\/page\/([a-z-]+)$/.exec(url)) && VARIANTS.has(m[1])) {
             res.writeHead(200, { "content-type": "text/html" });
-            res.end(pageHtml(m[1]));
+            res.end(PAGE_HTML);
             return;
         }
-        if ((m = /^\/act\/([a-z-]+)$/.exec(url)) && req.method === "POST") {
+        if ((m = /^\/act\/([a-z-]+)$/.exec(url)) && req.method === "POST" && VARIANTS.has(m[1])) {
             if (!lateFlippedAt.has(m[1])) lateFlippedAt.set(m[1], Date.now());
             res.writeHead(204); res.end();
             return;
         }
-        if ((m = /^\/api\/orders\/([a-z-]+)$/.exec(url))) {
+        if ((m = /^\/api\/orders\/([a-z-]+)$/.exec(url)) && VARIANTS.has(m[1])) {
             const v = m[1];
             if (v === "down") { req.socket.destroy(); return; }
             let doc;
             if (v === "late") {
                 const t = lateFlippedAt.get(v);
                 doc = t && Date.now() - t >= LATE_FLIP_MS ? STATE.paid() : STATE.pending();
-            } else if (STATE[v]) {
-                doc = STATE[v]();
+            } else if (STATE_BY_VARIANT.has(v)) {
+                doc = STATE_BY_VARIANT.get(v)();
             } else { res.writeHead(404); res.end(); return; }
             res.writeHead(200, { "content-type": "application/json" });
             res.end(JSON.stringify(doc));
