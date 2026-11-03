@@ -154,7 +154,7 @@ class ReportManager {
      * no exit code. The caller supplies `runId` and `duration`. The same
      * validation and tally rules as generateReport, which delegates here.
      */
-    static buildReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [], runId, duration, timings = null } = {}) {
+    static buildReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [], runId, duration, timings = null, verificationProvenance } = {}) {
         if (!Array.isArray(tests) || !Array.isArray(uiIssues) || !Array.isArray(healingEvents) || !Array.isArray(pages)) {
             throw new TypeError("Report results, issues, healing events and pages must be arrays");
         }
@@ -218,7 +218,7 @@ class ReportManager {
             // WP-79a: additive verification classification block, a pure
             // function of `tests` only. Does not change `summary`, `result`
             // or any existing key; legacy callers are unaffected.
-            verification: Verification.aggregateRun(tests),
+            verification: Verification.aggregateRun(tests, { approvalProvenance: verificationProvenance }),
         };
 
         // VOLATILE, parallel/shard runs only: stage wall times in ms. Strip

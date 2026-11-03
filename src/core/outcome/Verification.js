@@ -35,21 +35,13 @@ const REASON_CODES = Object.freeze({
     NO_REQUIRED_ASSERTIONS: "NO_REQUIRED_ASSERTIONS",
     MALFORMED_ASSERTION: "MALFORMED_ASSERTION",
     APPROVAL_MISMATCH: "APPROVAL_MISMATCH",
+    APPROVAL_UNPROVEN: "APPROVAL_UNPROVEN",
 });
 
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
 
 function isPlainObject(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// A row's assertion is "bound" (contract-origin) when it carries its own
-// `id` or `digest` field; a contractless `expect` row has neither.
-function isBoundAssertion(assertion) {
-    return isPlainObject(assertion) && (
-        Object.prototype.hasOwnProperty.call(assertion, "id")
-        || Object.prototype.hasOwnProperty.call(assertion, "digest")
-    );
 }
 
 function isValidId(id) {
@@ -60,13 +52,57 @@ function isValidDigest(digest) {
     return typeof digest === "string" && DIGEST_RE.test(digest);
 }
 
-function hasEvidence(assertion) {
-    return typeof assertion.check === "string" && assertion.check !== ""
-        && typeof assertion.locator === "string" && assertion.locator !== "";
+/**
+ * Read every field this classifier ever needs from a row exactly once, and
+ * return a plain snapshot object. This is the only place `row.status`,
+ * `row.assertion`, and (for a plain-object assertion) `assertion.id` /
+ * `assertion.digest` / `assertion.check` / `assertion.locator` are read —
+ * callers (both single-row classification and run aggregation) must work
+ * from the returned snapshot rather than re-reading the row or its
+ * assertion. This matters when any of those fields is a getter: a snapshot
+ * guarantees each getter fires exactly once per row, however many times the
+ * snapshot's data is subsequently consulted.
+ */
+function snapshotRow(row) {
+    const status = row && row.status;
+    const hasAssertion = !!(row && Object.prototype.hasOwnProperty.call(row, "assertion"));
+    const assertion = row ? row.assertion : undefined;
+    const isAssertionObject = isPlainObject(assertion);
+
+    let hasOwnId = false, hasOwnDigest = false, id, digest, check, locator;
+    if (isAssertionObject) {
+        hasOwnId = Object.prototype.hasOwnProperty.call(assertion, "id");
+        hasOwnDigest = Object.prototype.hasOwnProperty.call(assertion, "digest");
+        id = assertion.id;
+        digest = assertion.digest;
+        check = assertion.check;
+        locator = assertion.locator;
+    }
+
+    return {
+        status,
+        hasAssertion,
+        isAssertionObject,
+        hasOwnId,
+        hasOwnDigest,
+        id,
+        digest,
+        check,
+        locator,
+    };
+}
+
+function isBoundSnapshot(snap) {
+    return snap.isAssertionObject && (snap.hasOwnId || snap.hasOwnDigest);
+}
+
+function hasEvidenceSnapshot(snap) {
+    return typeof snap.check === "string" && snap.check !== ""
+        && typeof snap.locator === "string" && snap.locator !== "";
 }
 
 /**
- * Classify a single row (legacy shape: { status, assertion? , ... }).
+ * Classify a single row's snapshot (see `snapshotRow`).
  *
  * Returns an internal (non-schema) shape describing the row's contribution:
  * { ignored, assertionOutcome, interaction, technicalFailure, reasonCodes }
@@ -80,8 +116,8 @@ function hasEvidence(assertion) {
  * values before any row reaches here, and any other shape falls through to
  * "no contribution" rather than raising.
  */
-function classifyRow(row) {
-    const status = row && row.status;
+function classifySnapshot(snap) {
+    const status = snap.status;
 
     // `deduped` is never executed; it contributes nothing to coverage,
     // regardless of any other field present on the row.
@@ -89,10 +125,8 @@ function classifyRow(row) {
         return { ignored: true, assertionOutcome: null, interaction: false, technicalFailure: false, reasonCodes: [] };
     }
 
-    const hasAssertion = !!(row && Object.prototype.hasOwnProperty.call(row, "assertion"));
-
-    if (hasAssertion) {
-        if (!isPlainObject(row.assertion)) {
+    if (snap.hasAssertion) {
+        if (!snap.isAssertionObject) {
             // A malformed assertion record can never be trusted enough to
             // report PASS/FAIL; it is INCONCLUSIVE regardless of `status`.
             return {
@@ -104,9 +138,7 @@ function classifyRow(row) {
             };
         }
 
-        const assertion = row.assertion;
-
-        if (isBoundAssertion(assertion)) {
+        if (isBoundSnapshot(snap)) {
             // Contract-origin row (runVerify / shard rows): only these can
             // ever count as a required business assertion. A PASS needs
             // full evidence — a valid id, a valid digest, and the check/
@@ -114,7 +146,7 @@ function classifyRow(row) {
             // INCONCLUSIVE, never PASS. FAIL is deliberately not subject to
             // this rule: a failure is never reduced.
             if (status === "passed") {
-                if (!(isValidId(assertion.id) && isValidDigest(assertion.digest) && hasEvidence(assertion))) {
+                if (!(isValidId(snap.id) && isValidDigest(snap.digest) && hasEvidenceSnapshot(snap))) {
                     return {
                         ignored: false,
                         assertionOutcome: "INCONCLUSIVE",
@@ -147,7 +179,7 @@ function classifyRow(row) {
         // must still be able to fail the run), and skipped contributes
         // nothing.
         if (status === "passed") {
-            if (hasEvidence(assertion)) {
+            if (hasEvidenceSnapshot(snap)) {
                 return { ignored: false, assertionOutcome: null, interaction: true, technicalFailure: false, reasonCodes: [] };
             }
             return {
@@ -179,37 +211,69 @@ function classifyRow(row) {
 }
 
 /**
+ * Classify a single row (legacy shape: { status, assertion? , ... }).
+ * Convenience wrapper around `snapshotRow` + `classifySnapshot` for callers
+ * that only need one row's classification (e.g. unit tests).
+ */
+function classifyRow(row) {
+    return classifySnapshot(snapshotRow(row));
+}
+
+/**
  * Aggregate a run's rows into the additive `verification` report block.
  * Pure function of `rows`: order-independent, no timestamps/ids, and never
  * copies locator/value text from any assertion into the result.
  */
-function aggregateRun(rows) {
+function aggregateRun(rows, opts) {
     const list = Array.isArray(rows) ? rows : [];
+    // WP-77H: read the provenance option exactly once. Shard-merged rows
+    // carry an assertion id/digest that is only shape-validated against the
+    // fragment schema — nothing ties it to an approved business-outcome
+    // contract. When the caller marks the run's approval provenance as
+    // "unproven" (ShardMerge does this on its single buildReport call), a
+    // bound PASS can never be trusted enough to report BUSINESS_VERIFIED;
+    // it is downgraded to INCONCLUSIVE with reason APPROVAL_UNPROVEN. Any
+    // other opts value (including undefined) preserves prior behaviour.
+    const approvalUnproven = !!(opts && opts.approvalProvenance === "unproven");
 
     let pass = 0, fail = 0, inconclusive = 0, refused = 0, notTested = 0, required = 0;
     let interactionCount = 0, technicalFailureCount = 0;
     const reasonSet = new Set();
 
+    // Snapshot every row exactly once; both the distinct-digest collection
+    // below and the per-row classification work from these snapshots, never
+    // re-reading `row`/`row.assertion`/`assertion.id`/`assertion.digest`.
+    const snapshots = list.map(snapshotRow);
+
     // WP-77F: contradictory approval evidence. Collect the distinct valid
-    // digests carried by non-deduped bound rows; more than one means the
-    // rows disagree about which approved contract they came from, so no
-    // bound PASS in this run can be trusted.
+    // digests carried by non-deduped bound rows whose id is ALSO valid —
+    // a malformed-id row never contributes a digest to this set, even if
+    // its digest happens to be well-formed. More than one distinct valid
+    // digest means the rows disagree about which approved contract they
+    // came from, so no bound PASS in this run can be trusted.
     const validDigests = new Set();
-    for (const row of list) {
-        if (row && row.status === "deduped") continue;
-        const assertion = row && row.assertion;
-        if (isBoundAssertion(assertion) && isValidDigest(assertion.digest)) {
-            validDigests.add(assertion.digest);
+    for (const snap of snapshots) {
+        if (snap.status === "deduped") continue;
+        if (isBoundSnapshot(snap) && isValidId(snap.id) && isValidDigest(snap.digest)) {
+            validDigests.add(snap.digest);
         }
     }
     const approvalMismatch = validDigests.size > 1;
 
-    for (const row of list) {
-        let classified = classifyRow(row);
+    for (const snap of snapshots) {
+        let classified = classifySnapshot(snap);
         if (classified.ignored) continue;
 
-        if (approvalMismatch && classified.assertionOutcome === "PASS" && isBoundAssertion(row && row.assertion)) {
+        if (approvalMismatch && classified.assertionOutcome === "PASS" && isBoundSnapshot(snap)) {
             classified = { ...classified, assertionOutcome: "INCONCLUSIVE", reasonCodes: [...classified.reasonCodes, REASON_CODES.APPROVAL_MISMATCH] };
+        }
+
+        if (approvalUnproven && classified.assertionOutcome === "PASS" && isBoundSnapshot(snap)) {
+            classified = { ...classified, assertionOutcome: "INCONCLUSIVE", reasonCodes: [...classified.reasonCodes, REASON_CODES.APPROVAL_UNPROVEN] };
+        }
+
+        if (approvalUnproven && classified.assertionOutcome === "PASS" && isBoundSnapshot(snap)) {
+            classified = { ...classified, assertionOutcome: "INCONCLUSIVE", reasonCodes: [...classified.reasonCodes, REASON_CODES.APPROVAL_UNPROVEN] };
         }
 
         for (const code of classified.reasonCodes) reasonSet.add(code);
