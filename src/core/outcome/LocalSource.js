@@ -64,7 +64,9 @@ function isLoopbackAddress(addr) {
 // Literal IP (v4/v6) only, or the literal name `localhost`; never a DNS name.
 function resolveLiteralHost(hostname) {
     if (hostname === "localhost") return "127.0.0.1";
-    return net.isIP(hostname) ? hostname : null;
+    // WHATWG URL reports IPv6 hosts in brackets.
+    const bare = hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
+    return net.isIP(bare) ? bare : null;
 }
 
 function parseJsonBody(buf) {
@@ -90,9 +92,11 @@ function parseJsonBody(buf) {
 function readHttpJson(urlString, options = {}) {
     return new Promise((resolve) => {
         let settled = false;
+        let wallTimer = null;
         const finish = (value) => {
             if (settled) return;
             settled = true;
+            if (wallTimer) clearTimeout(wallTimer);
             resolve(value);
         };
 
@@ -108,7 +112,8 @@ function readHttpJson(urlString, options = {}) {
             return;
         }
         const ip = resolveLiteralHost(u.hostname);
-        if (!ip) {
+        // Refuse before any socket is opened: only loopback literals are ever contacted.
+        if (!ip || !isLoopbackAddress(ip)) {
             finish(fail(OUTCOME.SOURCE_UNSAFE));
             return;
         }
@@ -131,6 +136,13 @@ function readHttpJson(urlString, options = {}) {
             finish(fail(OUTCOME.SOURCE_UNREACHABLE));
             return;
         }
+
+        // `timeout` above is only a socket idle timeout; a trickling response
+        // would keep it alive, so also enforce a wall-clock deadline.
+        wallTimer = setTimeout(() => {
+            req.destroy();
+            finish(fail(OUTCOME.SOURCE_UNREACHABLE));
+        }, timeoutMs);
 
         req.on("socket", (socket) => {
             socket.once("connect", () => {
@@ -215,11 +227,14 @@ async function readFileJson(filePath, baseDir) {
         return fail(OUTCOME.SOURCE_UNSAFE);
     }
 
+    // Resolve against the base directory, never the process working directory.
+    const absPath = path.resolve(realBase, filePath);
+
     let fh = null;
     try {
         try {
             fh = await fs.promises.open(
-                filePath,
+                absPath,
                 fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | (fs.constants.O_NOFOLLOW || 0)
             );
         } catch (e) {
@@ -232,7 +247,7 @@ async function readFileJson(filePath, baseDir) {
 
         let lst;
         try {
-            lst = await fs.promises.lstat(filePath);
+            lst = await fs.promises.lstat(absPath);
         } catch {
             return fail(OUTCOME.READ_FAILED);
         }
@@ -242,7 +257,7 @@ async function readFileJson(filePath, baseDir) {
 
         let realFile;
         try {
-            realFile = await fs.promises.realpath(filePath);
+            realFile = await fs.promises.realpath(absPath);
         } catch {
             return fail(OUTCOME.READ_FAILED);
         }

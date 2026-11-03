@@ -61,6 +61,10 @@ const ALLOWED = Object.freeze({
 
 const FORBIDDEN_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+// Backend source strings are shown to the approving operator: also reject
+// format characters (bidi overrides/isolates, zero-width) and line/paragraph
+// separators, which JSON.stringify does not escape and which can disguise text.
+const DISPLAY_UNSAFE = /[\p{Cf}\u2028\u2029]/u;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const CURRENCY_PATTERN = /^[A-Z]{3}$/;
 const MAX_LOCATOR = 1000;
@@ -106,7 +110,7 @@ function validateRelativePath(p) {
     if (!PATH_PATTERN.test(p)) rej(ERROR.SOURCE_INVALID);
     if (p.startsWith("/") || p.includes("..")) rej(ERROR.SOURCE_INVALID);
     for (const seg of p.split("/")) {
-        if (seg === "" || seg === ".") rej(ERROR.SOURCE_INVALID);
+        if (seg === "" || seg.startsWith(".")) rej(ERROR.SOURCE_INVALID);
     }
 }
 
@@ -116,7 +120,7 @@ function decodePointerSegment(raw) {
 }
 
 function validatePointer(pointer) {
-    if (typeof pointer !== "string" || pointer.length > MAX_POINTER || CONTROL.test(pointer)) rej(ERROR.SOURCE_INVALID);
+    if (typeof pointer !== "string" || pointer.length > MAX_POINTER || CONTROL.test(pointer) || DISPLAY_UNSAFE.test(pointer)) rej(ERROR.SOURCE_INVALID);
     if (pointer === "") return;
     if (pointer[0] !== "/") rej(ERROR.SOURCE_INVALID);
     const rawSegments = pointer.slice(1).split("/");
@@ -406,7 +410,7 @@ function validateExpected(check, has, expected) {
             return;
         }
         if (typeof expected === "string") {
-            if (expected.length > MAX_EXPECTED_STRING || CONTROL.test(expected)) rej(ERROR.EXPECTED_INVALID);
+            if (expected.length > MAX_EXPECTED_STRING || CONTROL.test(expected) || DISPLAY_UNSAFE.test(expected)) rej(ERROR.EXPECTED_INVALID);
             return;
         }
         rej(ERROR.EXPECTED_INVALID);

@@ -569,6 +569,17 @@ test("source with unknown kind, or kind-mismatched fields -> SOURCE_INVALID", ()
     assert.strictEqual(Contract.parse(j(backendContract({ source: { kind: "http-json", url: "http://127.0.0.1:1", pointer: "", extra: 1 } }))).ok, false);
 });
 
+test("backend display-unsafe characters (bidi, zero-width, line separators) and dot-segment paths are rejected", () => {
+    for (const ch of ["\u202e", "\u2066", "\u2069", "\u200b", "\u2028", "\u2029"]) {
+        assert.strictEqual(Contract.parse(j(backendContract({ source: { kind: "http-json", url: "http://127.0.0.1:1/x", pointer: `/a${ch}b` } }))).ok, false, `pointer U+${ch.charCodeAt(0).toString(16)}`);
+        assert.strictEqual(Contract.parse(j(backendContract({ expected: `ok${ch}` }))).ok, false, `expected U+${ch.charCodeAt(0).toString(16)}`);
+    }
+    for (const p of [".env", ".git/config", "a/.hidden/b.json"]) {
+        assert.strictEqual(Contract.parse(j(backendContract({ source: { kind: "file-json", path: p, pointer: "" } }))).ok, false, p);
+    }
+    assert.strictEqual(Contract.parse(j(backendContract({ source: { kind: "file-json", path: "state/orders.json", pointer: "" } }))).ok, true);
+});
+
 test("digest changes when source.url, source.path, or pointer changes; stable otherwise", () => {
     const base = Contract.parse(j(backendContract())).digest;
     const again = Contract.parse(j(backendContract())).digest;
