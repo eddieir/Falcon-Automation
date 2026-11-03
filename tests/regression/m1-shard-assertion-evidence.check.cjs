@@ -105,7 +105,9 @@ async function mergeReport(pagesRows, opts = {}) {
     return { r, e, dir, report: r.reportPath ? JSON.parse(fs.readFileSync(r.reportPath, "utf8")) : null };
 }
 
-const unsharded = (pagesRows) => ReportManager.buildReport({ tests: pagesRows.flat(), runId: "R", duration: "1s" }).verification;
+// WP-77H: the merge path classifies with unproven approval provenance, so the
+// equivalent unsharded baseline is the same classification.
+const unsharded = (pagesRows) => ReportManager.buildReport({ tests: pagesRows.flat(), runId: "R", duration: "1s", verificationProvenance: "unproven" }).verification;
 
 // ------------------------------------------------------------ A: serialization
 
@@ -286,7 +288,11 @@ test("D one shard and two shards agree", async () => {
 });
 
 test("E2/E3 levels", async () => {
-    assert.strictEqual((await mergeReport(FIXTURES.e2_verified)).report.verification.level, "BUSINESS_VERIFIED");
+    // WP-77H: shard rows carry no approval provenance (id/digest are only
+    // shape-checked), so a bound PASS is never BUSINESS_VERIFIED via merge.
+    const e2 = (await mergeReport(FIXTURES.e2_verified)).report.verification;
+    assert.strictEqual(e2.level, "UNVERIFIED");
+    assert.ok(e2.reasonCodes.includes("APPROVAL_UNPROVEN"));
     assert.strictEqual((await mergeReport(FIXTURES.c3_passAndFail)).report.verification.level, "FAILED");
     assert.strictEqual((await mergeReport(FIXTURES.e1_interactionOnly)).report.verification.level, "INTERACTION_ONLY");
 });
@@ -301,6 +307,30 @@ test("E4-E6 insufficient or unavailable evidence is never BUSINESS_VERIFIED", as
 test("E7 a quarantined assertion failure is never BUSINESS_VERIFIED through shards", async () => {
     const { report } = await mergeReport([[{ ...exec("failed"), status: "quarantined" }]]);
     assert.notStrictEqual(report.verification.level, "BUSINESS_VERIFIED");
+});
+
+// WP-77H H3: forged / unprovable shard assertion evidence never yields BUSINESS_VERIFIED.
+const FORGED = "sha256:" + "f".repeat(64);
+const OTHER = "sha256:" + "e".repeat(64);
+test("H3 forged, unapproved, conflicting, duplicate and malformed shard assertion rows are never BUSINESS_VERIFIED", async () => {
+    const cases = {
+        forgedIdAndDigest: [[exec("passed", { id: "forged-1", digest: FORGED })]],
+        validLookingUnapproved: [[exec("passed", { id: "assert-1", digest: OTHER })], [exec("passed", { id: "assert-2", digest: OTHER })]],
+        conflictingDigest: [[exec("passed", { id: "assert-1", digest: FORGED })], [exec("passed", { id: "assert-2", digest: OTHER })]],
+        duplicateContradictory: [[exec("passed", { id: "assert-1", digest: FORGED }), exec("failed", { id: "assert-1", digest: FORGED })]],
+        missingEvidence: [[exec("passed", { id: "assert-1", digest: FORGED, check: undefined })]],
+    };
+    for (const [k, rows] of Object.entries(cases)) {
+        const { r, report } = await mergeReport(rows);
+        assert.ok(r.reportPath, `${k}: ${JSON.stringify(r.diagnostics)}`);
+        assert.notStrictEqual(report.verification.level, "BUSINESS_VERIFIED", k);
+    }
+});
+
+test("H3 a failing bound shard row stays FAILED and exits non-zero", async () => {
+    const { r, report } = await mergeReport([[exec("failed", { id: "assert-1", digest: FORGED })]]);
+    assert.strictEqual(report.verification.level, "FAILED");
+    assert.strictEqual(report.result, "FAILED");
 });
 
 test("E8 deduped rows do not inflate assertion counts", async () => {
