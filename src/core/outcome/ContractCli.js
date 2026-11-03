@@ -38,8 +38,17 @@ function parseFlags(args) {
     return { ok: true, flags: found };
 }
 
+// backend* checks carry a `source` describing out-of-page evidence; their
+// expected value and source are always JSON.stringify'd so every character
+// is escaped. Other checks keep their existing (byte-identical) formatting.
+const BACKEND_CHECKS = new Set(["backendEquals", "backendCountEquals", "backendExists"]);
+
 function printAssertions(stdout, assertions) {
     for (const a of assertions) {
+        if (BACKEND_CHECKS.has(a.check)) {
+            stdout.write(`${a.id} ${a.required} ${a.check} ${a.locator} ${JSON.stringify(a.expected)} ${JSON.stringify(a.source)}\n`);
+            continue;
+        }
         stdout.write(`${a.id} ${a.required} ${a.check} ${a.locator} ${a.expected === undefined ? "" : typeof a.expected === "object" ? JSON.stringify(a.expected) : a.expected}\n`);
     }
 }

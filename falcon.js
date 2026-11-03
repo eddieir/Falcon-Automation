@@ -460,7 +460,7 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
     Logger.info(`✅ Loaded: ${plan.url}`);
     emit("explorerPage", { url: plan.url });
     Logger.info(`▶  Running saved plan: ${plan.test_scenarios.length} step(s), repeat=${repeatCount}…`);
-    const results = await TestRunner.runRepeatedTestPlan(page, plan, repeatCount, { providerContext, contractBinding });
+    const results = await TestRunner.runRepeatedTestPlan(page, plan, repeatCount, { providerContext, contractBinding, baseDir: __dirname });
     const only = {
         url: plan.url,
         status: "tested",
