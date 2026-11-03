@@ -8,6 +8,9 @@
  */
 
 const assert = require("assert");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const TestRunner = require("../../src/core/TestRunner");
 const Verification = require("../../src/core/outcome/Verification");
 
@@ -154,6 +157,123 @@ async function run(page, p, b, healer) {
         for (const r of rows.filter((x) => x.assertion)) {
             assert.ok(r.assertion.id && r.assertion.digest === DIGEST && r.journeyId === "checkout-basic" && r.required === true);
         }
+    });
+
+    // ------------------------------------------------------ WP-77S backend checks
+    //
+    // CANARY is never approved/observed; it must never appear in a verify row's
+    // serialized JSON, just as DataEvaluator's checks never leak expected/actual.
+    const CANARY = "do-not-leak-this-value-9f1c";
+
+    function backendDoc(dir, orderCount) {
+        const file = path.join(dir, "orders.json");
+        fs.writeFileSync(file, JSON.stringify({ orders: new Array(orderCount).fill({}), note: CANARY }));
+        return file;
+    }
+
+    // `source.path` is the file LocalSource.readFileJson opens directly; it
+    // must resolve under `baseDir` (see tests/unit/BackendEvaluator.check.js).
+    function backendBinding(expected, filePath) {
+        return {
+            ok: true,
+            journeyId: "checkout-basic",
+            digest: DIGEST,
+            contract: deepFreeze({
+                schemaVersion: 1, journeyId: "checkout-basic", requirementId: "CHECKOUT-001", revision: 1,
+                assertions: [
+                    {
+                        id: "order-created", required: true, check: "backendCountEquals", locator: "backend:state", expected,
+                        source: { kind: "file-json", path: filePath, pointer: "/orders" },
+                        provenance: { source: "spec", ref: "plan:checkout" },
+                    },
+                ],
+            }),
+        };
+    }
+
+    function backendPlan() {
+        return { url: "http://127.0.0.1:1/checkout", journey: true, contract: { file: "/x", journeyId: "checkout-basic" }, test_scenarios: [{ action: "verify", description: "Verify order" }] };
+    }
+
+    await test("backend check passes => row omits expected/actual, keeps id/digest/check/locator/outcome/matches", async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-backend-"));
+        const file = backendDoc(dir, 2);
+        const runner = new TestRunner(new FakePage({ pathname: SPEC.path, heading: SPEC.heading }), backendPlan(), {
+            contractBinding: backendBinding(2, file), verifyTimeoutMs: 100, baseDir: dir,
+        });
+        const rows = await runner.executeTest();
+        const row = rows.find((r) => r.assertion && r.assertion.id === "order-created");
+        assert.strictEqual(row.status, "passed");
+        assert.strictEqual(row.assertion.outcome, "backend_match");
+        assert.strictEqual(row.assertion.matches, 1);
+        assert.deepStrictEqual(Object.keys(row.assertion).sort(), ["check", "digest", "id", "locator", "matches", "outcome"].sort());
+        assert.ok(!JSON.stringify(row).includes(CANARY), "row must never carry the backend document's content");
+        assert.strictEqual(Verification.aggregateRun(rows).level, "BUSINESS_VERIFIED");
+    });
+
+    await test("backend check with wrong count => FAILED, no expected/actual leaked", async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-backend-"));
+        const file = backendDoc(dir, 2);
+        const runner = new TestRunner(new FakePage({ pathname: SPEC.path, heading: SPEC.heading }), backendPlan(), {
+            contractBinding: backendBinding(3, file), verifyTimeoutMs: 100, baseDir: dir,
+        });
+        const rows = await runner.executeTest();
+        const row = rows.find((r) => r.assertion && r.assertion.id === "order-created");
+        assert.strictEqual(row.status, "failed");
+        assert.strictEqual(row.errorType, "assertion");
+        assert.ok(!("expected" in row.assertion) && !("actual" in row.assertion));
+        assert.ok(!JSON.stringify(row).includes(CANARY));
+        assert.strictEqual(Verification.aggregateRun(rows).level, "FAILED");
+    });
+
+    await test("backend source unreachable (no such file) => unavailable, UNVERIFIED, never BUSINESS_VERIFIED", async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-backend-"));
+        // No orders.json written: LocalSource must report a source-level outcome, not a crash.
+        const runner = new TestRunner(new FakePage({ pathname: SPEC.path, heading: SPEC.heading }), backendPlan(), {
+            contractBinding: backendBinding(2, path.join(dir, "orders.json")), verifyTimeoutMs: 100, baseDir: dir,
+        });
+        const rows = await runner.executeTest();
+        const row = rows.find((r) => r.assertion && r.assertion.id === "order-created");
+        assert.strictEqual(row.status, "unavailable");
+        assert.notStrictEqual(Verification.aggregateRun(rows).level, "BUSINESS_VERIFIED");
+        assert.strictEqual(Verification.aggregateRun(rows).level, "UNVERIFIED");
+    });
+
+    await test("backend evaluator crash => fixed reason, error message and secrets never reach the row", async () => {
+        const BackendEvaluator = require("../../src/core/outcome/BackendEvaluator");
+        const real = BackendEvaluator.evaluate;
+        BackendEvaluator.evaluate = async () => { throw new Error(`boom ${CANARY} http://127.0.0.1:1/secret`); };
+        try {
+            const dir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-backend-"));
+            const runner = new TestRunner(new FakePage({ pathname: SPEC.path, heading: SPEC.heading }), backendPlan(), {
+                contractBinding: backendBinding(2, backendDoc(dir, 2)), verifyTimeoutMs: 100, baseDir: dir,
+            });
+            const rows = await runner.executeTest();
+            const row = rows.find((r) => r.assertion && r.assertion.id === "order-created");
+            assert.strictEqual(row.status, "unavailable");
+            assert.ok(!JSON.stringify(rows).includes(CANARY), "error message must not reach rows");
+            assert.ok(!JSON.stringify(rows).includes("127.0.0.1:1/secret"));
+        } finally {
+            BackendEvaluator.evaluate = real;
+        }
+    });
+
+    await test("backend check skipped via _skipRemaining (earlier step failed) => unavailable row omits expected", async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-backend-"));
+        const file = backendDoc(dir, 2);
+        const p = {
+            url: "http://127.0.0.1:1/checkout", journey: true, contract: { file: "/x", journeyId: "checkout-basic" },
+            test_scenarios: [{ action: "click", locator: "#checkout", description: "Click checkout" }, { action: "verify", description: "Verify order" }],
+        };
+        const runner = new TestRunner(new FakePage({ pathname: SPEC.path, heading: SPEC.heading }), p, {
+            contractBinding: backendBinding(2, file), verifyTimeoutMs: 100, baseDir: dir,
+        });
+        runner.healer = { healAndClick: async () => { throw new Error("click failed"); } };
+        const rows = await runner.executeTest();
+        const row = rows.find((r) => r.assertion && r.assertion.id === "order-created");
+        assert.strictEqual(row.status, "unavailable");
+        assert.ok(!("expected" in row.assertion));
+        assert.strictEqual(row.assertion.outcome, "not_run");
     });
 
     console.log(`\n${passed} passed, ${failures} failed`);
