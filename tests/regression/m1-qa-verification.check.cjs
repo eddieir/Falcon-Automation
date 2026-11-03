@@ -100,6 +100,10 @@ test("assertion object with arbitrary keys still classified correctly", () => {
     const c = classifyRow(row("failed", weirdAssertion));
     assert.strictEqual(c.assertionOutcome, null);
     assert.strictEqual(c.technicalFailure, true);
+    // WP-77H: the run-level outcome must also be FAILED, not just the row.
+    const agg = aggregateRun([row("failed", weirdAssertion)]);
+    assert.strictEqual(agg.level, "FAILED");
+    assert.strictEqual(agg.assertions.required, 0);
 });
 
 // ----------------------------------------------------------------
