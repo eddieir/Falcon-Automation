@@ -236,3 +236,28 @@ Known limits: an empty `valueEquals` expectation cannot be approved (the schema 
 
 Residual (accepted limits): `countEquals` with expected 0 also passes when the selector is stale or wrong; Playwright's default action timeout can extend a single read past the clamped deadline; CSS-generated content (`::before`/`::after`) is not part of `innerText`.
 Sampling limit: reads are 100 ms apart, so a value that flickers at a rate that aliases with the poll interval can still produce two matching reads; the settle rule is a best-effort guard, not proof of a stable final state.
+
+## Side-effect assertions (WP-77S)
+
+`backendEquals`, `backendCountEquals` and `backendExists` verify a business side effect from a trusted local backend source that Falcon reads itself, not from anything the page shows. A page that reports success while the backend state is wrong fails business verification (`FAILED`, nonzero exit). They use the same approved-contract path as the other checks: propose, explicit approval, digest binding (GS12), `verify` step, then `BackendEvaluator`. No LLM, no healing, and no page object is passed to the evaluator.
+
+Each backend assertion carries a `source` (required, allowed only on these checks) and the fixed locator `backend:state`:
+
+| Check | `expected` | Comparison |
+|---|---|---|
+| `backendEquals` | string (max 2000), safe integer, boolean or null | strict type and value at the JSON pointer; no coercion (`"5"` is not `5`) |
+| `backendCountEquals` | integer 0..10000 | the value at the pointer must be an array of exactly that length |
+| `backendExists` | boolean | presence of the pointer (own properties only) equals `expected` |
+
+Source grammar (part of the digest, so the approver sees exactly where Falcon will read):
+- `{"kind":"http-json","url":"http://127.0.0.1:PORT/path","pointer":"/a/b"}`. Host must be a literal `127.0.0.1`, `[::1]` or `localhost`; no userinfo, query, fragment, `%` or `..`; port 1..65535.
+- `{"kind":"file-json","path":"rel/state.json","pointer":"/a/b"}`. Relative POSIX path under the run's base directory.
+- The pointer is RFC 6901, at most 8 segments; `__proto__`, `constructor` and `prototype` segments are rejected.
+
+Trust model: loopback only. No DNS lookup, no proxy variables, redirects are refused, the socket peer address must be loopback, the response must be HTTP 200 without content-encoding, the body is capped at 64 KiB and each request at 2 s. File sources use `O_NOFOLLOW`, a dev/ino check and a realpath containment check. Existing contracts and their digests are unchanged.
+
+Outcomes: `failed` means the source was read and disagrees (value, type, count or presence); `unavailable` means there is no usable evidence (unreachable, redirect, non-200, oversized, invalid JSON, unsafe file, invalid expected). Both fail the run and neither can reach `BUSINESS_VERIFIED`. Settle policy matches the data checks: two consecutive passing reads 100 ms apart, bounded polling, a timeout never passes.
+
+Privacy: rows carry only id, digest, check, the constant locator, a fixed outcome code and `matches` (0 or 1). The expected value, the observed value, the URL, the path and the pointer never appear in rows, shard payloads, logs or terminal output of a run; error text is replaced by a fixed string. `--contract-propose` and `--contract-approve` print the source and expected values (JSON-escaped) so the approver can review them.
+
+Residual limits: duplicate keys in a backend JSON response resolve last-wins; an attacker who controls the local port is out of scope (same local trust boundary as the approval store); eventual consistency beyond the timeout fails closed; the confirming read may run up to one poll interval past the deadline.

@@ -7,6 +7,17 @@ const AdaptiveRetry = require("./AIHealer/AdaptiveRetry");
 const FlakinessTracker = require("./FlakinessTracker");
 const NavigationEvaluator = require("./outcome/NavigationEvaluator");
 const DataEvaluator = require("./outcome/DataEvaluator");
+const BackendEvaluator = require("./outcome/BackendEvaluator");
+
+/**
+ * True for a check whose verify row must never carry `expected`/`actual`
+ * (data checks, WP-77D, and backend side-effect checks, WP-77S): the
+ * approved expectation and the observed value are both privacy-sensitive
+ * and are reported only as fixed `outcome`/`reason` codes.
+ */
+function isValueFree(check) {
+    return DataEvaluator.SUPPORTED.includes(check) || BackendEvaluator.SUPPORTED.includes(check);
+}
 
 /**
  * TestRunner — orchestrates scenario-based and exploratory test execution.
@@ -54,6 +65,10 @@ class TestRunner {
         this.results = [];
         this.contractBinding = options.contractBinding || null;
         this.verifyTimeoutMs = options.verifyTimeoutMs;
+        // WP-77S: `file-json` backend sources are read relative to this
+        // directory (see LocalSource.readFileJson); defaults to the process
+        // working directory so existing callers need no change.
+        this.baseDir = typeof options.baseDir === "string" && options.baseDir.length > 0 ? options.baseDir : process.cwd();
     }
 
     /**
@@ -128,7 +143,7 @@ class TestRunner {
                                 digest: binding.digest,
                                 check: a.check,
                                 locator: a.locator,
-                                ...(DataEvaluator.SUPPORTED.includes(a.check) ? {} : { expected: a.expected }),
+                                ...(isValueFree(a.check) ? {} : { expected: a.expected }),
                                 outcome: "not_run",
                             },
                         });
@@ -276,23 +291,37 @@ class TestRunner {
             const timeoutMs = a.timeoutMs !== undefined ? a.timeoutMs : this.verifyTimeoutMs;
             const options = timeoutMs !== undefined ? { timeoutMs } : {};
             const isData = DataEvaluator.SUPPORTED.includes(a.check);
+            const isBackend = BackendEvaluator.SUPPORTED.includes(a.check);
             let r;
             try {
-                r = await (isData ? DataEvaluator : NavigationEvaluator).evaluate(this.page, a, options);
+                if (isBackend) {
+                    r = await BackendEvaluator.evaluate(a, { ...options, baseDir: this.baseDir });
+                } else {
+                    r = await (isData ? DataEvaluator : NavigationEvaluator).evaluate(this.page, a, options);
+                }
             } catch (error) {
-                r = { status: "unavailable", outcome: "internal_error", matches: 0, reason: error.message };
+                // A backend check never surfaces `error.message`: it can carry the
+                // backend URL/path, a response fragment, or similar sensitive detail.
+                r = {
+                    status: "unavailable",
+                    outcome: "internal_error",
+                    matches: 0,
+                    reason: isBackend ? "unexpected error during evaluation" : error.message,
+                };
             }
             const duration = Date.now() - assertionStart;
+            const valueFree = isData || isBackend;
             const assertion = {
                 id: a.id,
                 digest: binding.digest,
                 check: a.check,
                 locator: a.locator,
-                // WP-77D: data checks never put approved or observed values in a row.
-                ...(isData ? {} : { expected: a.expected }),
+                // WP-77D/WP-77S: data and backend checks never put approved or
+                // observed values in a row.
+                ...(valueFree ? {} : { expected: a.expected }),
                 outcome: r.outcome,
                 matches: r.matches,
-                ...(!isData && r.actual !== undefined ? { actual: r.actual } : {}),
+                ...(!valueFree && r.actual !== undefined ? { actual: r.actual } : {}),
             };
             const row = {
                 name: `${scenario.description}: ${a.id}`,

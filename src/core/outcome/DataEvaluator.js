@@ -276,4 +276,4 @@ async function evaluate(page, assertion, options = {}) {
     }
 }
 
-module.exports = { evaluate, parseMoney, exponentOf, SUPPORTED, MAX_COUNT, OUTCOME };
+module.exports = { evaluate, parseMoney, exponentOf, SUPPORTED, MAX_COUNT, OUTCOME, settle };
