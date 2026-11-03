@@ -406,5 +406,108 @@ test("shard-normalised plain row ({check, locator} only) alone -> never BUSINESS
     assert.notStrictEqual(r.level, "BUSINESS_VERIFIED");
 });
 
+// ---------------------------------------------------------------------
+// 77H-D2: malformed-id rows never contribute a digest to the mismatch set
+// ---------------------------------------------------------------------
+
+function malformedIdRow(status, digest, idValue) {
+    return row(status, { id: idValue, digest, check: "visible", locator: "#x" });
+}
+
+test("missing id + valid digest differing from a valid row's digest -> no APPROVAL_MISMATCH; valid row PASS; malformed row INCONCLUSIVE/MALFORMED_ASSERTION", () => {
+    const validDigest = "sha256:" + "a".repeat(64);
+    const otherDigest = "sha256:" + "b".repeat(64);
+    const validRow = row("passed", bound({ id: "A1", digest: validDigest }));
+    const noIdRow = row("passed", { digest: otherDigest, check: "visible", locator: "#x" });
+    const r = aggregateRun([validRow, noIdRow]);
+    assert.ok(!r.reasonCodes.includes("APPROVAL_MISMATCH"));
+    assert.strictEqual(r.assertions.pass, 1);
+
+    const noIdClassified = classifyRow(noIdRow);
+    assert.strictEqual(noIdClassified.assertionOutcome, "INCONCLUSIVE");
+    assert.ok(noIdClassified.reasonCodes.includes(REASON_CODES.MALFORMED_ASSERTION));
+});
+
+for (const badId of [42, "", "x".repeat(65)]) {
+    test(`malformed id (${JSON.stringify(badId)}) + valid digest differing from a valid row's digest -> no APPROVAL_MISMATCH; valid row PASS; malformed row INCONCLUSIVE/MALFORMED_ASSERTION`, () => {
+        const validDigest = "sha256:" + "a".repeat(64);
+        const otherDigest = "sha256:" + "b".repeat(64);
+        const validRow = row("passed", bound({ id: "A1", digest: validDigest }));
+        const badRow = malformedIdRow("passed", otherDigest, badId);
+        const r = aggregateRun([validRow, badRow]);
+        assert.ok(!r.reasonCodes.includes("APPROVAL_MISMATCH"));
+        assert.strictEqual(r.assertions.pass, 1);
+
+        const badClassified = classifyRow(badRow);
+        assert.strictEqual(badClassified.assertionOutcome, "INCONCLUSIVE");
+        assert.ok(badClassified.reasonCodes.includes(REASON_CODES.MALFORMED_ASSERTION));
+    });
+}
+
+test("valid ids + conflicting digests -> APPROVAL_MISMATCH, level not BUSINESS_VERIFIED", () => {
+    const r = aggregateRun([
+        row("passed", bound({ id: "A1", digest: "sha256:" + "a".repeat(64) })),
+        row("passed", bound({ id: "A2", digest: "sha256:" + "c".repeat(64) })),
+    ]);
+    assert.ok(r.reasonCodes.includes("APPROVAL_MISMATCH"));
+    assert.notStrictEqual(r.level, "BUSINESS_VERIFIED");
+});
+
+test("getter digest valid-then-invalid: exactly one read per field per aggregateRun", () => {
+    let digestReads = 0;
+    let idReads = 0;
+    let checkReads = 0;
+    let locatorReads = 0;
+    const digestValues = ["sha256:" + "a".repeat(64), "not-a-digest"];
+    const gettableRow = {
+        name: "x",
+        status: "passed",
+        get assertion() {
+            const self = this;
+            return {
+                get id() { idReads++; return "A1"; },
+                get digest() { digestReads++; return digestValues.shift(); },
+                get check() { checkReads++; return "visible"; },
+                get locator() { locatorReads++; return "#x"; },
+            };
+        },
+    };
+    aggregateRun([gettableRow]);
+    assert.strictEqual(idReads, 1);
+    assert.strictEqual(digestReads, 1);
+    assert.strictEqual(checkReads, 1);
+    assert.strictEqual(locatorReads, 1);
+});
+
+test("getter digest invalid-then-valid: exactly one read per field per aggregateRun", () => {
+    let digestReads = 0;
+    let idReads = 0;
+    let checkReads = 0;
+    let locatorReads = 0;
+    const digestValues = ["not-a-digest", "sha256:" + "a".repeat(64)];
+    const gettableRow = {
+        name: "x",
+        status: "passed",
+        get assertion() {
+            return {
+                get id() { idReads++; return "A1"; },
+                get digest() { digestReads++; return digestValues.shift(); },
+                get check() { checkReads++; return "visible"; },
+                get locator() { locatorReads++; return "#x"; },
+            };
+        },
+    };
+    aggregateRun([gettableRow]);
+    assert.strictEqual(idReads, 1);
+    assert.strictEqual(digestReads, 1);
+    assert.strictEqual(checkReads, 1);
+    assert.strictEqual(locatorReads, 1);
+});
+
+test("deduped row with a throwing assertion getter stays inert (never read)", () => {
+    const deduped = { status: "deduped", get assertion() { throw new Error("must not be read"); } };
+    assert.strictEqual(aggregateRun([deduped]).level, "UNVERIFIED");
+});
+
 console.log(`\n${passed} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);

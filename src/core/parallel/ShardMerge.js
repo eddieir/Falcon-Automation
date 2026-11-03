@@ -379,6 +379,8 @@ async function merge({ inputDir, expectTotal, expectRunId, expectCommit, paths, 
         const report = ReportManager.buildReport({
             tests, uiIssues: payload.uiIssues, healingEvents, coverage, pages, timings,
             runId, duration: `${(wallMs / 1000).toFixed(2)}s`,
+            // WP-77H: shard rows carry no approval provenance; never BUSINESS_VERIFIED.
+            verificationProvenance: "unproven",
         });
         report.stateMerge = { eventsApplied: stateMerge.eventsApplied, duplicates: stateMerge.duplicates, conflicts: stateMerge.conflicts };
         const code = report.result === "PASSED" ? 0 : 1;
