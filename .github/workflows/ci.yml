@@ -147,6 +147,7 @@ jobs:
           node tests/unit/NavigationProposal.check.js
           node tests/unit/NavigationEvaluator.check.js
           node tests/unit/DataEvaluator.check.js
+          node tests/unit/BackendEvaluator.check.js
           node tests/unit/ContractCli.check.js
           node tests/unit/ExecutionBinding.check.js
           node tests/unit/PlanContract.check.js

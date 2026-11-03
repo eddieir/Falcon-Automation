@@ -42,6 +42,7 @@ const ERROR = Object.freeze({
     PROVENANCE_SOURCE_INVALID: "PROVENANCE_SOURCE_INVALID",
     PROVENANCE_OBSERVED: "PROVENANCE_OBSERVED",
     PROVENANCE_REF_INVALID: "PROVENANCE_REF_INVALID",
+    SOURCE_INVALID: "SOURCE_INVALID",
     APPROVAL_FORBIDDEN: "APPROVAL_FORBIDDEN",
     DIGEST_INVALID: "DIGEST_INVALID",
     DIGEST_MISMATCH: "DIGEST_MISMATCH",
@@ -50,7 +51,7 @@ const ERROR = Object.freeze({
 
 const ALLOWED = Object.freeze({
     SCHEMA_VERSION: 1,
-    CHECKS: Object.freeze(["textEquals", "valueEquals", "enabled", "disabled", "absent", "countEquals", "moneyEquals", "pathEquals"]),
+    CHECKS: Object.freeze(["textEquals", "valueEquals", "enabled", "disabled", "absent", "countEquals", "moneyEquals", "pathEquals", "backendEquals", "backendCountEquals", "backendExists"]),
     PROVENANCE_SOURCES: Object.freeze(["spec", "human-confirmed", "fixture", "independent-calc", "external-reference"]),
     MAX_ASSERTIONS: 50,
     MAX_COUNT: 10000,
@@ -65,6 +66,87 @@ const CURRENCY_PATTERN = /^[A-Z]{3}$/;
 const MAX_LOCATOR = 1000;
 const MAX_EXPECTED_STRING = 2000;
 const MAX_REF_STRING = 500;
+
+// --------------------------------------------------------- backend-state checks
+//
+// backendEquals/backendCountEquals/backendExists assert against out-of-page
+// backend state (an HTTP JSON response or a local JSON file), referenced via
+// an RFC6901 pointer. The locator for these checks is always the fixed
+// constant below; the actual target lives in the `source` field.
+
+const BACKEND_CHECKS = new Set(["backendEquals", "backendCountEquals", "backendExists"]);
+const BACKEND_LOCATOR = "backend:state";
+const BASE_ASSERTION_KEYS = Object.freeze(["id", "required", "check", "locator", "expected", "provenance"]);
+const BACKEND_ASSERTION_KEYS = Object.freeze([...BASE_ASSERTION_KEYS, "source"]);
+const MAX_URL = 500;
+const MAX_PATH = 200;
+const MAX_POINTER = 200;
+const MAX_POINTER_SEGMENTS = 8;
+
+// Host allowlist + bounded port; path segment charset excludes "%", and ".."
+// / "//" are rejected explicitly below since the charset alone permits them.
+const URL_PATTERN = /^http:\/\/(127\.0\.0\.1|\[::1\]|localhost):([1-9][0-9]{0,4})(\/[A-Za-z0-9._~/-]*)?$/;
+const PATH_PATTERN = /^[A-Za-z0-9._/-]+$/;
+const TILDE_RE = /~(?!0|1)/;
+const ARRAY_INDEX_DIGITS = /^[0-9]+$/;
+const ARRAY_INDEX_CANONICAL = /^(0|[1-9][0-9]*)$/;
+const FORBIDDEN_POINTER_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
+
+function validateUrl(url) {
+    if (typeof url !== "string" || url.length === 0 || url.length > MAX_URL) rej(ERROR.SOURCE_INVALID);
+    if (CONTROL.test(url)) rej(ERROR.SOURCE_INVALID);
+    if (url.includes("..") || url.slice(7).includes("//")) rej(ERROR.SOURCE_INVALID);
+    const m = URL_PATTERN.exec(url);
+    if (!m) rej(ERROR.SOURCE_INVALID);
+    if (Number(m[2]) > 65535) rej(ERROR.SOURCE_INVALID);
+}
+
+function validateRelativePath(p) {
+    if (typeof p !== "string" || p.length === 0 || p.length > MAX_PATH) rej(ERROR.SOURCE_INVALID);
+    if (!PATH_PATTERN.test(p)) rej(ERROR.SOURCE_INVALID);
+    if (p.startsWith("/") || p.includes("..")) rej(ERROR.SOURCE_INVALID);
+    for (const seg of p.split("/")) {
+        if (seg === "" || seg === ".") rej(ERROR.SOURCE_INVALID);
+    }
+}
+
+function decodePointerSegment(raw) {
+    if (TILDE_RE.test(raw)) rej(ERROR.SOURCE_INVALID);
+    return raw.replace(/~1/g, "/").replace(/~0/g, "~");
+}
+
+function validatePointer(pointer) {
+    if (typeof pointer !== "string" || pointer.length > MAX_POINTER || CONTROL.test(pointer)) rej(ERROR.SOURCE_INVALID);
+    if (pointer === "") return;
+    if (pointer[0] !== "/") rej(ERROR.SOURCE_INVALID);
+    const rawSegments = pointer.slice(1).split("/");
+    if (rawSegments.length > MAX_POINTER_SEGMENTS) rej(ERROR.SOURCE_INVALID);
+    for (const raw of rawSegments) {
+        const seg = decodePointerSegment(raw);
+        if (FORBIDDEN_POINTER_SEGMENTS.has(seg)) rej(ERROR.SOURCE_INVALID);
+        if (ARRAY_INDEX_DIGITS.test(seg) && !ARRAY_INDEX_CANONICAL.test(seg)) rej(ERROR.SOURCE_INVALID);
+    }
+}
+
+function validateSource(source) {
+    if (!isPlainObj(source)) rej(ERROR.SOURCE_INVALID);
+    if (!Object.prototype.hasOwnProperty.call(source, "kind")) rej(ERROR.SOURCE_INVALID);
+    if (!Object.prototype.hasOwnProperty.call(source, "pointer")) rej(ERROR.SOURCE_INVALID);
+    if (source.kind === "http-json") {
+        const allowed = new Set(["kind", "url", "pointer"]);
+        for (const k of Object.keys(source)) if (!allowed.has(k)) rej(ERROR.SOURCE_INVALID);
+        if (!Object.prototype.hasOwnProperty.call(source, "url")) rej(ERROR.SOURCE_INVALID);
+        validateUrl(source.url);
+    } else if (source.kind === "file-json") {
+        const allowed = new Set(["kind", "path", "pointer"]);
+        for (const k of Object.keys(source)) if (!allowed.has(k)) rej(ERROR.SOURCE_INVALID);
+        if (!Object.prototype.hasOwnProperty.call(source, "path")) rej(ERROR.SOURCE_INVALID);
+        validateRelativePath(source.path);
+    } else {
+        rej(ERROR.SOURCE_INVALID);
+    }
+    validatePointer(source.pointer);
+}
 
 class Rej extends Error {
     constructor(code) { super(code); this.code = code; }
@@ -315,6 +397,30 @@ function validateExpected(check, has, expected) {
         if (typeof expected.currency !== "string" || !CURRENCY_PATTERN.test(expected.currency)) rej(ERROR.EXPECTED_INVALID);
         return;
     }
+    if (check === "backendEquals") {
+        if (!has) rej(ERROR.MISSING_KEY);
+        if (expected === null) return;
+        if (typeof expected === "boolean") return;
+        if (typeof expected === "number") {
+            if (!Number.isInteger(expected) || !Number.isSafeInteger(expected)) rej(ERROR.EXPECTED_INVALID);
+            return;
+        }
+        if (typeof expected === "string") {
+            if (expected.length > MAX_EXPECTED_STRING || CONTROL.test(expected)) rej(ERROR.EXPECTED_INVALID);
+            return;
+        }
+        rej(ERROR.EXPECTED_INVALID);
+    }
+    if (check === "backendCountEquals") {
+        if (!has) rej(ERROR.MISSING_KEY);
+        if (!Number.isInteger(expected) || expected < 0 || expected > ALLOWED.MAX_COUNT) rej(ERROR.EXPECTED_INVALID);
+        return;
+    }
+    if (check === "backendExists") {
+        if (!has) rej(ERROR.MISSING_KEY);
+        if (typeof expected !== "boolean") rej(ERROR.EXPECTED_INVALID);
+        return;
+    }
     rej(ERROR.CHECK_INVALID);
 }
 
@@ -332,9 +438,11 @@ function validateProvenance(p) {
 
 function validateAssertion(a) {
     if (!isPlainObj(a)) rej(ERROR.TYPE_INVALID);
-    const allowed = new Set(["id", "required", "check", "locator", "expected", "provenance"]);
+    const isBackend = typeof a.check === "string" && BACKEND_CHECKS.has(a.check);
+    const allowed = new Set(isBackend ? BACKEND_ASSERTION_KEYS : BASE_ASSERTION_KEYS);
     for (const k of Object.keys(a)) if (!allowed.has(k)) rej(ERROR.UNKNOWN_KEY);
-    for (const k of ["id", "required", "check", "locator", "provenance"]) {
+    const required = isBackend ? ["id", "required", "check", "locator", "provenance", "source"] : ["id", "required", "check", "locator", "provenance"];
+    for (const k of required) {
         if (!Object.prototype.hasOwnProperty.call(a, k)) rej(ERROR.MISSING_KEY);
     }
     if (!checkId(a.id)) rej(ERROR.ID_INVALID);
@@ -342,8 +450,10 @@ function validateAssertion(a) {
     if (typeof a.check !== "string" || !ALLOWED.CHECKS.includes(a.check)) rej(ERROR.CHECK_INVALID);
     if (!checkLocator(a.locator)) rej(ERROR.LOCATOR_INVALID);
     if (a.check === "pathEquals" && a.locator !== "url:pathname") rej(ERROR.LOCATOR_INVALID);
+    if (isBackend && a.locator !== BACKEND_LOCATOR) rej(ERROR.LOCATOR_INVALID);
     validateExpected(a.check, Object.prototype.hasOwnProperty.call(a, "expected"), a.expected);
     validateProvenance(a.provenance);
+    if (isBackend) validateSource(a.source);
 }
 
 function _validate(value) {
