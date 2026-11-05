@@ -594,5 +594,219 @@ test("digest changes when source.url, source.path, or pointer changes; stable ot
     assert.notStrictEqual(changedKind, base);
 });
 
+// --------------------------------------------------------------- visible check (WP-77R)
+
+function assertionOf(check, overrides = {}) {
+    return Object.assign(
+        {
+            id: "V1",
+            required: true,
+            check,
+            locator: "[data-testid=order-status]",
+            provenance: { source: "spec", ref: "ref" },
+        },
+        overrides
+    );
+}
+
+test("visible: valid form accepted, behaves like enabled/disabled/absent", () => {
+    const r = Contract.parse(j(baseContract({ assertions: [assertionOf("visible")] })));
+    assert.strictEqual(r.ok, true);
+});
+
+test("visible: expected key forbidden -> EXPECTED_FORBIDDEN", () => {
+    const r = Contract.parse(j(baseContract({ assertions: [assertionOf("visible", { expected: true })] })));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.EXPECTED_FORBIDDEN);
+});
+
+// --------------------------------------------------------------- accessEquals check (WP-77R)
+
+function accessAssertion(overrides = {}) {
+    return Object.assign(
+        {
+            id: "AC1",
+            required: true,
+            check: "accessEquals",
+            locator: "authz:access",
+            expected: "allowed",
+            provenance: { source: "spec", ref: "ref" },
+            source: { kind: "http-status", url: "http://127.0.0.1:8080/admin", identity: { id: "alice", role: "admin" } },
+        },
+        overrides
+    );
+}
+
+function accessContract(overrides = {}) {
+    return baseContract({ assertions: [accessAssertion(overrides)] });
+}
+
+test("accessEquals: valid allowed/denied forms accepted", () => {
+    assert.strictEqual(Contract.parse(j(accessContract({ expected: "allowed" }))).ok, true);
+    assert.strictEqual(Contract.parse(j(accessContract({ expected: "denied" }))).ok, true);
+});
+
+test("accessEquals: locator must be exactly authz:access -> LOCATOR_INVALID", () => {
+    const r = Contract.parse(j(accessContract({ locator: "#x" })));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.LOCATOR_INVALID);
+});
+
+test("accessEquals: expected other than allowed/denied -> EXPECTED_INVALID", () => {
+    assert.strictEqual(Contract.parse(j(accessContract({ expected: "maybe" }))).ok, false);
+    assert.strictEqual(Contract.parse(j(accessContract({ expected: "maybe" }))).code, Contract.ERROR.EXPECTED_INVALID);
+});
+
+test("accessEquals: missing expected -> MISSING_KEY", () => {
+    const a = accessAssertion();
+    delete a.expected;
+    const r = Contract.parse(j(baseContract({ assertions: [a] })));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.MISSING_KEY);
+});
+
+test("accessEquals: missing source -> MISSING_KEY", () => {
+    const a = accessAssertion();
+    delete a.source;
+    const r = Contract.parse(j(baseContract({ assertions: [a] })));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.MISSING_KEY);
+});
+
+test("accessEquals: source kind other than http-status -> SOURCE_INVALID", () => {
+    const r = Contract.parse(j(accessContract({ source: { kind: "backend-equals-style", url: "http://127.0.0.1:1", identity: { id: "a", role: "b" } } })));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.SOURCE_INVALID);
+});
+
+test("accessEquals: backend* http-json/file-json sources are not accepted; accessEquals http-status not accepted by backend*", () => {
+    const r1 = Contract.parse(j(accessContract({ source: { kind: "http-json", url: "http://127.0.0.1:1", pointer: "" } })));
+    assert.strictEqual(r1.ok, false);
+    const r2 = Contract.parse(j(backendContract({ source: { kind: "http-status", url: "http://127.0.0.1:1", identity: { id: "a", role: "b" } } })));
+    assert.strictEqual(r2.ok, false);
+});
+
+test("accessEquals: non-loopback url -> SOURCE_INVALID", () => {
+    const r = Contract.parse(j(accessContract({ source: { kind: "http-status", url: "http://example.com/admin", identity: { id: "a", role: "b" } } })));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.SOURCE_INVALID);
+});
+
+test("accessEquals: identity bad charset, extra keys, or missing key -> SOURCE_INVALID", () => {
+    assert.strictEqual(Contract.parse(j(accessContract({ source: { kind: "http-status", url: "http://127.0.0.1:1", identity: { id: "Alice", role: "admin" } } }))).ok, false);
+    assert.strictEqual(Contract.parse(j(accessContract({ source: { kind: "http-status", url: "http://127.0.0.1:1", identity: { id: "alice", role: "ad min" } } }))).ok, false);
+    assert.strictEqual(Contract.parse(j(accessContract({ source: { kind: "http-status", url: "http://127.0.0.1:1", identity: { id: "alice", role: "admin", extra: 1 } } }))).ok, false);
+    assert.strictEqual(Contract.parse(j(accessContract({ source: { kind: "http-status", url: "http://127.0.0.1:1", identity: { id: "alice" } } }))).ok, false);
+    assert.strictEqual(
+        Contract.parse(j(accessContract({ source: { kind: "http-status", url: "http://127.0.0.1:1", identity: { id: "a".repeat(33), role: "admin" } } }))).ok,
+        false
+    );
+});
+
+test("source key on a non-backend, non-access check -> UNKNOWN_KEY", () => {
+    const a = baseContract().assertions[0];
+    a.source = { kind: "http-status", url: "http://127.0.0.1:1", identity: { id: "a", role: "b" } };
+    const r = Contract.parse(j(baseContract({ assertions: [a] })));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.UNKNOWN_KEY);
+});
+
+test("accessEquals digest changes when role, identity id, url, or expected changes; stable otherwise", () => {
+    const base = Contract.parse(j(accessContract())).digest;
+    const again = Contract.parse(j(accessContract())).digest;
+    assert.strictEqual(base, again);
+
+    const changedRole = Contract.parse(j(accessContract({ source: { kind: "http-status", url: "http://127.0.0.1:8080/admin", identity: { id: "alice", role: "user" } } }))).digest;
+    const changedId = Contract.parse(j(accessContract({ source: { kind: "http-status", url: "http://127.0.0.1:8080/admin", identity: { id: "bob", role: "admin" } } }))).digest;
+    const changedUrl = Contract.parse(j(accessContract({ source: { kind: "http-status", url: "http://127.0.0.1:8080/other", identity: { id: "alice", role: "admin" } } }))).digest;
+    const changedExpected = Contract.parse(j(accessContract({ expected: "denied" }))).digest;
+
+    assert.notStrictEqual(changedRole, base);
+    assert.notStrictEqual(changedId, base);
+    assert.notStrictEqual(changedUrl, base);
+    assert.notStrictEqual(changedExpected, base);
+});
+
+// --------------------------------------------------------------- contradictory assertions (WP-77R)
+
+test("contradictory assertions: same locator enabled+disabled -> CONTRADICTORY_ASSERTIONS", () => {
+    const r = Contract.parse(
+        j(
+            baseContract({
+                assertions: [assertionOf("enabled", { id: "C1" }), assertionOf("disabled", { id: "C2" })],
+            })
+        )
+    );
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.CONTRADICTORY_ASSERTIONS);
+});
+
+test("contradictory assertions: absent plus visible/enabled/disabled on same locator -> CONTRADICTORY_ASSERTIONS", () => {
+    for (const other of ["visible", "enabled", "disabled"]) {
+        const r = Contract.parse(
+            j(
+                baseContract({
+                    assertions: [assertionOf("absent", { id: "C1" }), assertionOf(other, { id: "C2" })],
+                })
+            )
+        );
+        assert.strictEqual(r.ok, false, other);
+        assert.strictEqual(r.code, Contract.ERROR.CONTRADICTORY_ASSERTIONS, other);
+    }
+});
+
+test("contradictory assertions: two accessEquals, same url+identity.id, different expected -> CONTRADICTORY_ASSERTIONS", () => {
+    const r = Contract.parse(
+        j(
+            baseContract({
+                assertions: [accessAssertion({ id: "C1", expected: "allowed" }), accessAssertion({ id: "C2", expected: "denied" })],
+            })
+        )
+    );
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.CONTRADICTORY_ASSERTIONS);
+});
+
+test("contradictory assertions: two accessEquals, same url+identity.id, different role -> CONTRADICTORY_ASSERTIONS", () => {
+    const r = Contract.parse(
+        j(
+            baseContract({
+                assertions: [
+                    accessAssertion({ id: "C1", source: { kind: "http-status", url: "http://127.0.0.1:8080/admin", identity: { id: "alice", role: "admin" } } }),
+                    accessAssertion({ id: "C2", source: { kind: "http-status", url: "http://127.0.0.1:8080/admin", identity: { id: "alice", role: "user" } } }),
+                ],
+            })
+        )
+    );
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, Contract.ERROR.CONTRADICTORY_ASSERTIONS);
+});
+
+test("contradictory assertions: exact duplicates are accepted", () => {
+    const r1 = Contract.parse(
+        j(
+            baseContract({
+                assertions: [assertionOf("enabled", { id: "C1" }), assertionOf("enabled", { id: "C2" })],
+            })
+        )
+    );
+    assert.strictEqual(r1.ok, true);
+
+    const r2 = Contract.parse(
+        j(
+            baseContract({
+                assertions: [accessAssertion({ id: "C1" }), accessAssertion({ id: "C2" })],
+            })
+        )
+    );
+    assert.strictEqual(r2.ok, true);
+});
+
+test("existing legacy contracts (no new checks) are unaffected by contradiction detection and keep their digest", () => {
+    const r = Contract.parse(j(baseContract()));
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.digest, "sha256:8652cc5606339f190df7161900d183d8727d2d2c19d00144ddc6f28ea2120714");
+});
+
 console.log(`\n${passed} passed, ${failures} failed`);
 if (failures > 0) process.exit(1);

@@ -46,12 +46,13 @@ const ERROR = Object.freeze({
     APPROVAL_FORBIDDEN: "APPROVAL_FORBIDDEN",
     DIGEST_INVALID: "DIGEST_INVALID",
     DIGEST_MISMATCH: "DIGEST_MISMATCH",
+    CONTRADICTORY_ASSERTIONS: "CONTRADICTORY_ASSERTIONS",
     INTERNAL: "INTERNAL",
 });
 
 const ALLOWED = Object.freeze({
     SCHEMA_VERSION: 1,
-    CHECKS: Object.freeze(["textEquals", "valueEquals", "enabled", "disabled", "absent", "countEquals", "moneyEquals", "pathEquals", "backendEquals", "backendCountEquals", "backendExists"]),
+    CHECKS: Object.freeze(["textEquals", "valueEquals", "enabled", "disabled", "absent", "visible", "countEquals", "moneyEquals", "pathEquals", "backendEquals", "backendCountEquals", "backendExists", "accessEquals"]),
     PROVENANCE_SOURCES: Object.freeze(["spec", "human-confirmed", "fixture", "independent-calc", "external-reference"]),
     MAX_ASSERTIONS: 50,
     MAX_COUNT: 10000,
@@ -82,6 +83,18 @@ const BACKEND_CHECKS = new Set(["backendEquals", "backendCountEquals", "backendE
 const BACKEND_LOCATOR = "backend:state";
 const BASE_ASSERTION_KEYS = Object.freeze(["id", "required", "check", "locator", "expected", "provenance"]);
 const BACKEND_ASSERTION_KEYS = Object.freeze([...BASE_ASSERTION_KEYS, "source"]);
+
+// ------------------------------------------------------------- access checks
+//
+// accessEquals asserts an authorization outcome ("allowed"/"denied") for a
+// given identity against a given URL, as observed via an HTTP status probe.
+// Like backend* checks, the locator is a fixed constant and the real target
+// lives in `source`.
+
+const ACCESS_CHECKS = new Set(["accessEquals"]);
+const ACCESS_LOCATOR = "authz:access";
+const ACCESS_EXPECTED_VALUES = new Set(["allowed", "denied"]);
+const IDENTITY_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const MAX_URL = 500;
 const MAX_PATH = 200;
 const MAX_POINTER = 200;
@@ -368,7 +381,7 @@ function validateExpected(check, has, expected) {
         }
         return;
     }
-    if (check === "enabled" || check === "disabled" || check === "absent") {
+    if (check === "enabled" || check === "disabled" || check === "absent" || check === "visible") {
         if (has) rej(ERROR.EXPECTED_FORBIDDEN);
         return;
     }
@@ -425,7 +438,32 @@ function validateExpected(check, has, expected) {
         if (typeof expected !== "boolean") rej(ERROR.EXPECTED_INVALID);
         return;
     }
+    if (check === "accessEquals") {
+        if (!has) rej(ERROR.MISSING_KEY);
+        if (typeof expected !== "string" || !ACCESS_EXPECTED_VALUES.has(expected)) rej(ERROR.EXPECTED_INVALID);
+        return;
+    }
     rej(ERROR.CHECK_INVALID);
+}
+
+function validateIdentity(identity) {
+    if (!isPlainObj(identity)) rej(ERROR.SOURCE_INVALID);
+    const allowed = new Set(["id", "role"]);
+    const keys = Object.keys(identity);
+    if (keys.length !== 2 || !keys.every((k) => allowed.has(k))) rej(ERROR.SOURCE_INVALID);
+    for (const k of ["id", "role"]) {
+        if (typeof identity[k] !== "string" || !IDENTITY_PATTERN.test(identity[k])) rej(ERROR.SOURCE_INVALID);
+    }
+}
+
+function validateAccessSource(source) {
+    if (!isPlainObj(source)) rej(ERROR.SOURCE_INVALID);
+    const allowed = new Set(["kind", "url", "identity"]);
+    const keys = Object.keys(source);
+    if (keys.length !== 3 || !keys.every((k) => allowed.has(k))) rej(ERROR.SOURCE_INVALID);
+    if (source.kind !== "http-status") rej(ERROR.SOURCE_INVALID);
+    validateUrl(source.url);
+    validateIdentity(source.identity);
 }
 
 function validateProvenance(p) {
@@ -443,9 +481,11 @@ function validateProvenance(p) {
 function validateAssertion(a) {
     if (!isPlainObj(a)) rej(ERROR.TYPE_INVALID);
     const isBackend = typeof a.check === "string" && BACKEND_CHECKS.has(a.check);
-    const allowed = new Set(isBackend ? BACKEND_ASSERTION_KEYS : BASE_ASSERTION_KEYS);
+    const isAccess = typeof a.check === "string" && ACCESS_CHECKS.has(a.check);
+    const needsSource = isBackend || isAccess;
+    const allowed = new Set(needsSource ? BACKEND_ASSERTION_KEYS : BASE_ASSERTION_KEYS);
     for (const k of Object.keys(a)) if (!allowed.has(k)) rej(ERROR.UNKNOWN_KEY);
-    const required = isBackend ? ["id", "required", "check", "locator", "provenance", "source"] : ["id", "required", "check", "locator", "provenance"];
+    const required = needsSource ? ["id", "required", "check", "locator", "provenance", "source"] : ["id", "required", "check", "locator", "provenance"];
     for (const k of required) {
         if (!Object.prototype.hasOwnProperty.call(a, k)) rej(ERROR.MISSING_KEY);
     }
@@ -455,9 +495,48 @@ function validateAssertion(a) {
     if (!checkLocator(a.locator)) rej(ERROR.LOCATOR_INVALID);
     if (a.check === "pathEquals" && a.locator !== "url:pathname") rej(ERROR.LOCATOR_INVALID);
     if (isBackend && a.locator !== BACKEND_LOCATOR) rej(ERROR.LOCATOR_INVALID);
+    if (isAccess && a.locator !== ACCESS_LOCATOR) rej(ERROR.LOCATOR_INVALID);
     validateExpected(a.check, Object.prototype.hasOwnProperty.call(a, "expected"), a.expected);
     validateProvenance(a.provenance);
     if (isBackend) validateSource(a.source);
+    if (isAccess) validateAccessSource(a.source);
+}
+
+/**
+ * Cross-assertion contradiction detection, scoped to a single contract's
+ * assertion list. Exact duplicates are permitted; only genuinely conflicting
+ * claims about the same locator/identity are rejected.
+ */
+function checkContradictions(assertions) {
+    const byLocator = new Map();
+    const accessByKey = new Map();
+    for (const a of assertions) {
+        if (a.check === "enabled" || a.check === "disabled" || a.check === "absent" || a.check === "visible") {
+            let set = byLocator.get(a.locator);
+            if (!set) {
+                set = new Set();
+                byLocator.set(a.locator, set);
+            }
+            set.add(a.check);
+        }
+        if (a.check === "accessEquals") {
+            const key = `${a.source.url}\u0000${a.source.identity.id}`;
+            const prev = accessByKey.get(key);
+            if (prev) {
+                if (prev.expected !== a.expected || prev.role !== a.source.identity.role) {
+                    rej(ERROR.CONTRADICTORY_ASSERTIONS);
+                }
+            } else {
+                accessByKey.set(key, { expected: a.expected, role: a.source.identity.role });
+            }
+        }
+    }
+    for (const set of byLocator.values()) {
+        if (set.has("enabled") && set.has("disabled")) rej(ERROR.CONTRADICTORY_ASSERTIONS);
+        if (set.has("absent") && (set.has("visible") || set.has("enabled") || set.has("disabled"))) {
+            rej(ERROR.CONTRADICTORY_ASSERTIONS);
+        }
+    }
 }
 
 function _validate(value) {
@@ -488,6 +567,8 @@ function _validate(value) {
         if (seenIds.has(a.id)) rej(ERROR.DUPLICATE_ASSERTION_ID);
         seenIds.add(a.id);
     }
+
+    checkContradictions(value.assertions);
 
     if (Object.prototype.hasOwnProperty.call(value, "digest")) {
         if (typeof value.digest !== "string" || !DIGEST_PATTERN.test(value.digest)) rej(ERROR.DIGEST_INVALID);
