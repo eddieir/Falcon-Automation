@@ -180,6 +180,11 @@ class ReportManager {
         const unavailable = tests.filter((t, idx) => t.status === "unavailable" && !isExcludedOptional(t, idx)).length;
         const total        = tests.length;
         const optionalNotPassed = tests.filter((t, idx) => isExcludedOptional(t, idx)).length;
+        // A trusted optional PASS must not soften a failing run into PARTIAL:
+        // the PASSED/FAILED/PARTIAL branches below weigh only non-optional passes.
+        // `summary.passed` still counts every passed row.
+        const optionalPassed = tests.filter((t, idx) => optionalIdx.has(idx) && t.status === "passed").length;
+        const gatingPassed = passed - optionalPassed;
 
         // `deduped` and (as of Phase 11) `skipped` are the statuses that
         // describe work this run never actually reached a verdict on:
@@ -207,9 +212,11 @@ class ReportManager {
             overallResult = "NO_TESTS_RUN";
         } else if (failed === 0 && unavailable === 0) {
             overallResult = "PASSED";
-        } else if (passed === 0) {
+        } else if (gatingPassed === 0) {
             overallResult = "FAILED";
         } else {
+            // `result` is the technical-execution summary (non-PASSED => exit 1);
+            // `verification.level` is the business-correctness verdict.
             overallResult = "PARTIAL"; // some passed, some failed/unavailable
         }
 

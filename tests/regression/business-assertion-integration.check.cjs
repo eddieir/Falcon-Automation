@@ -497,6 +497,14 @@ test("E10 draft CLI: refuses to overwrite, rejects invalid specs without writing
         assert.notStrictEqual(r.code, 0, `${name} must be rejected`);
         assert.ok(!fs.existsSync(o), `${name} must write nothing`);
     }
+    // Unrelated write failures must not be reported as OUT_EXISTS and must not leak the path.
+    const missingDirOut = path.join(dir, "no-such-dir", "secret-name.json");
+    const mw = await run([`--contract-draft=${specFile}`, `--out=${missingDirOut}`], dir);
+    assert.strictEqual(mw.code, 2, mw.out);
+    assert.ok(!mw.out.includes("OUT_EXISTS"), "a missing directory is not an existing file");
+    assert.ok(mw.out.includes("OUT_WRITE_FAILED"), mw.out);
+    assert.ok(!mw.out.includes("secret-name") && !mw.out.includes("no-such-dir"), "error must not leak the path");
+    assert.ok(again.out.includes("OUT_EXISTS"), "an existing destination is still OUT_EXISTS");
     const unreadable = await run([`--contract-draft=${path.join(dir, "missing.json")}`, `--out=${path.join(dir, "o2.json")}`], dir);
     assert.notStrictEqual(unreadable.code, 0);
     assert.ok(!fs.existsSync(path.join(dir, "o2.json")));

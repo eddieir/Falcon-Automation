@@ -308,7 +308,7 @@ function aggregateRun(rows, opts) {
     // WP-77I: trusted-optional tallies. These never feed `required`, `fail`,
     // `inconclusive`, etc. above, so an optional-only outcome can never by
     // itself flip the run's level between FAILED/UNVERIFIED/BUSINESS_VERIFIED.
-    let optTotal = 0, optPass = 0, optFail = 0, optInconclusive = 0, optNotTested = 0;
+    let optPass = 0, optFail = 0, optInconclusive = 0, optNotTested = 0;
     const reasonSet = new Set();
 
     // Snapshot every row exactly once; both the distinct-digest collection
@@ -323,12 +323,12 @@ function aggregateRun(rows, opts) {
     const approvalMismatch = computeApprovalMismatch(snapshots);
     const trustedOptional = computeTrustedOptionalSet(snapshots, approvalUnproven, approvalMismatch);
 
-    // An untrusted `required: false` claim on a bound row is never honoured:
+    // An untrusted `required: false` claim (bound or unbound) is never honoured:
     // it is treated exactly like a required row, but the run is flagged so
     // the claim's existence is still visible in the report.
     snapshots.forEach((snap, idx) => {
         if (snap.status === "deduped") return;
-        if (isBoundSnapshot(snap) && snap.optionalClaim && !trustedOptional.has(idx)) {
+        if (snap.optionalClaim && !trustedOptional.has(idx)) {
             reasonSet.add(REASON_CODES.OPTIONAL_CLAIM_UNTRUSTED);
         }
     });
@@ -348,7 +348,6 @@ function aggregateRun(rows, opts) {
         for (const code of classified.reasonCodes) reasonSet.add(code);
 
         if (trustedOptional.has(idx)) {
-            optTotal++;
             switch (classified.assertionOutcome) {
                 case "PASS": optPass++; break;
                 case "FAIL": optFail++; break;

@@ -94,9 +94,16 @@ async function runDraft(specFile, outFile, io) {
 
     try {
         await fs.promises.writeFile(outFile, text, { encoding: "utf8", flag: "wx" });
-    } catch {
-        io.stdout.write("error OUT_EXISTS\n");
-        return { handled: true, code: 1 };
+    } catch (err) {
+        // Only a confirmed destination-exists condition is OUT_EXISTS; any
+        // other failure (missing directory, permissions, storage) fails closed
+        // with a generic code and never echoes the path or the system message.
+        if (err && err.code === "EEXIST") {
+            io.stdout.write("error OUT_EXISTS\n");
+            return { handled: true, code: 1 };
+        }
+        io.stdout.write("error OUT_WRITE_FAILED\n");
+        return { handled: true, code: 2 };
     }
 
     printAssertions(io.stdout, contract.assertions);
