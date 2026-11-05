@@ -166,5 +166,42 @@ test("aggregation is order independent with optional rows", () => {
     assert.strictEqual(a, b);
 });
 
+test("P1: a trusted optional PASS cannot soften a required failure into PARTIAL", () => {
+    const r = report([bound("failed", true, "r1"), bound("passed", false, "o1")]);
+    assert.strictEqual(r.result, "FAILED");
+    assert.strictEqual(r.verification.level, "FAILED");
+    assert.strictEqual(r.summary.passed, 1, "summary.passed still counts every passed row");
+    assert.strictEqual(r.summary.failed, 1);
+});
+
+test("P1 compatibility: required fail + required pass stays PARTIAL; optional-only pass stays PASSED", () => {
+    assert.strictEqual(report([bound("failed", true, "r1"), bound("passed", true, "r2")]).result, "PARTIAL");
+    assert.strictEqual(report([bound("passed", false, "o1")]).result, "PASSED");
+    const legacy = report([{ name: "a", status: "passed" }, { name: "b", status: "failed" }]);
+    assert.strictEqual(legacy.result, "PARTIAL");
+});
+
+test("P1: an UNTRUSTED optional pass (unproven) still counts as a gating pass", () => {
+    const r = report([bound("failed", true, "r1"), bound("passed", false, "o1")], "unproven");
+    assert.notStrictEqual(r.result, "PASSED");
+    assert.strictEqual(r.verification.level, "FAILED");
+});
+
+test("P2: an unbound required:false claim is required, flagged OPTIONAL_CLAIM_UNTRUSTED, and cannot bypass a failure", () => {
+    const unboundFail = { name: "p", status: "failed", required: false, assertion: { check: "pathEquals", locator: "url:pathname" } };
+    const noAssertion = { name: "q", status: "failed", required: false };
+    for (const bad of [unboundFail, noAssertion]) {
+        const rows = [bound("passed", true, "r1"), bad];
+        const v = aggregateRun(rows);
+        assert.ok(v.reasonCodes.includes(REASON_CODES.OPTIONAL_CLAIM_UNTRUSTED), "claim must leave a reason-code trail");
+        assert.notStrictEqual(v.level, "BUSINESS_VERIFIED");
+        assert.strictEqual(v.assertions.optional, undefined);
+        assert.notStrictEqual(report(rows).result, "PASSED");
+        assert.ok(report(rows).verification.reasonCodes.includes(REASON_CODES.OPTIONAL_CLAIM_UNTRUSTED));
+    }
+    const passingUnbound = aggregateRun([bound("passed", true, "r1"), { name: "p", status: "passed", required: false, assertion: { check: "pathEquals", locator: "url:pathname" } }]);
+    assert.ok(passingUnbound.reasonCodes.includes(REASON_CODES.OPTIONAL_CLAIM_UNTRUSTED));
+});
+
 console.log(`\n${passed} passed, ${failures} failed`);
 process.exitCode = failures > 0 ? 1 : 0;
