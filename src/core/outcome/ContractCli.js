@@ -41,7 +41,7 @@ function parseFlags(args) {
 // backend* checks carry a `source` describing out-of-page evidence; their
 // expected value and source are always JSON.stringify'd so every character
 // is escaped. Other checks keep their existing (byte-identical) formatting.
-const BACKEND_CHECKS = new Set(["backendEquals", "backendCountEquals", "backendExists"]);
+const BACKEND_CHECKS = new Set(["backendEquals", "backendCountEquals", "backendExists", "accessEquals"]);
 
 function printAssertions(stdout, assertions) {
     for (const a of assertions) {

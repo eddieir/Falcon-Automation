@@ -211,6 +211,126 @@ function readHttpJson(urlString, options = {}) {
     });
 }
 
+const MAX_AUTH_HEADER_LEN = 600;
+const ALLOWED_PROBE_HEADERS = new Set(["Authorization"]);
+
+function headersUsable(headers) {
+    if (headers === undefined || headers === null) return true;
+    if (typeof headers !== "object") return false;
+    for (const key of Object.keys(headers)) {
+        if (!ALLOWED_PROBE_HEADERS.has(key)) return false;
+        const value = headers[key];
+        if (typeof value !== "string" || value.length === 0 || value.length > MAX_AUTH_HEADER_LEN) return false;
+        if (/[\r\n]/.test(value)) return false;
+    }
+    return true;
+}
+
+/**
+ * Probes an `http:` endpoint for its status only, never its body. Shares the
+ * loopback-literal-only, no-DNS, no-proxy, fresh-socket safety of
+ * `readHttpJson`, but:
+ *   - never follows a redirect (a 3xx is reported as `ok: true` with that
+ *     status, exactly like any other status);
+ *   - never reads the response body (`res.resume()` then `res.destroy()`);
+ *   - sends only `Accept` plus the caller-supplied `headers`, which may
+ *     contain only an `Authorization` string header (max 600 chars, no CR/LF)
+ *     — anything else fails `source_unsafe` before a socket is opened.
+ *
+ * @param {string} urlString - an `http:` URL with a literal-IP (or
+ *   `localhost`) host.
+ * @param {{timeoutMs?: number, headers?: {Authorization?: string}}} [options]
+ * @returns {Promise<{ok: true, status: number} | {ok: false, outcome: string}>}
+ */
+function probeHttpStatus(urlString, options = {}) {
+    return new Promise((resolve) => {
+        let settled = false;
+        let wallTimer = null;
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            if (wallTimer) clearTimeout(wallTimer);
+            resolve(value);
+        };
+
+        let u;
+        try {
+            u = new URL(urlString);
+        } catch {
+            finish(fail(OUTCOME.SOURCE_UNREACHABLE));
+            return;
+        }
+        if (u.protocol !== "http:") {
+            finish(fail(OUTCOME.SOURCE_UNSAFE));
+            return;
+        }
+        const ip = resolveLiteralHost(u.hostname);
+        if (!ip || !isLoopbackAddress(ip)) {
+            finish(fail(OUTCOME.SOURCE_UNSAFE));
+            return;
+        }
+
+        const suppliedHeaders = options && options.headers;
+        if (!headersUsable(suppliedHeaders)) {
+            finish(fail(OUTCOME.SOURCE_UNSAFE));
+            return;
+        }
+
+        const budget = Number(options && options.timeoutMs);
+        const timeoutMs = Math.max(1, Math.min(MAX_HTTP_TIMEOUT_MS, Number.isFinite(budget) ? budget : MAX_HTTP_TIMEOUT_MS));
+
+        const headers = Object.assign({ Host: u.host, Accept: "application/json" }, suppliedHeaders || {});
+
+        let req;
+        try {
+            req = http.request({
+                method: "GET",
+                host: ip,
+                port: u.port ? Number(u.port) : 80,
+                path: u.pathname,
+                headers,
+                agent: false,
+                timeout: timeoutMs,
+            });
+        } catch {
+            finish(fail(OUTCOME.SOURCE_UNREACHABLE));
+            return;
+        }
+
+        wallTimer = setTimeout(() => {
+            req.destroy();
+            finish(fail(OUTCOME.SOURCE_UNREACHABLE));
+        }, timeoutMs);
+
+        req.on("socket", (socket) => {
+            socket.once("connect", () => {
+                if (!isLoopbackAddress(socket.remoteAddress)) {
+                    finish(fail(OUTCOME.SOURCE_UNSAFE));
+                    req.destroy();
+                }
+            });
+        });
+
+        req.on("timeout", () => {
+            req.destroy();
+            finish(fail(OUTCOME.SOURCE_UNREACHABLE));
+        });
+
+        req.on("error", () => {
+            finish(fail(OUTCOME.SOURCE_UNREACHABLE));
+        });
+
+        req.on("response", (res) => {
+            const status = res.statusCode;
+            res.resume();
+            req.destroy();
+            finish({ ok: true, status });
+        });
+
+        req.end();
+    });
+}
+
 /**
  * @param {string} filePath - path to the JSON document.
  * @param {string} baseDir - directory the document must resolve under.
@@ -291,4 +411,4 @@ async function readFileJson(filePath, baseDir) {
     }
 }
 
-module.exports = { readHttpJson, readFileJson, OUTCOME, MAX_BODY_BYTES };
+module.exports = { readHttpJson, readFileJson, probeHttpStatus, OUTCOME, MAX_BODY_BYTES };
