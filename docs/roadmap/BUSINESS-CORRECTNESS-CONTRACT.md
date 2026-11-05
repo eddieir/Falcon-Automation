@@ -311,8 +311,8 @@ Asserts grant or denial via HTTP status probe. Carries fixed locator `authz:acce
 {"kind": "http-status", "url": "http://127.0.0.1:PORT/path", "identity": {"id": "viewer", "role": "viewer"}}
 ```
 
-Runtime: GET the URL with `Authorization: Bearer <token>` from fixture identities (`fixtures/identities.json`, map id → {role, token}). Per read:
-- Identity unknown (id not in fixtures, missing token, or role mismatch) → unavailable, no request.
+Runtime: GET the URL with `Authorization: Bearer <token>` from fixture identities (`fixtures/identities.json`, map id → {role, token, origins}). `origins` is a required non-empty list of exact `scheme://host:port` origins the token may be sent to. Per read:
+- Identity unknown (id not in fixtures or missing token), role mismatch, or source origin not listed in the identity's `origins` (missing or empty list included) → unavailable, no request. This stops a contract from steering a token to another local listener.
 - Status 200 → observed `"allowed"`.
 - Status 401 or 403 → observed `"denied"`.
 - Any other status (404, 5xx, 3xx, timeout, network error) → unavailable.
@@ -342,7 +342,7 @@ Identity charset: `[a-z][a-z0-9_-]{0,31}` (32 chars max, lowercase, alphanumeric
 | `ui_disabled`, `ui_not_disabled` | matched 1 element; disabled test result |
 | `ui_absent`, `ui_present` | zero matches (pass) or >0 matches (fail) |
 | `access_as_expected`, `access_granted_unexpectedly`, `access_denied_unexpectedly` | identity resolved, status probe completed |
-| `identity_unknown`, `identity_mismatch`, `status_inconclusive` | identity missing or role mismatch; or status not 200/401/403 |
+| `identity_unknown`, `identity_mismatch`, `identity_origin_mismatch`, `status_inconclusive` | identity missing, role mismatch, or origin not allowed for the identity; or status not 200/401/403 |
 | `target_unavailable`, `target_ambiguous`, `read_failed` | UI element not found, duplicate match, or Playwright error |
 
 Example contract assertion:
@@ -361,7 +361,7 @@ Example contract assertion:
 
 ### Privacy, limits and planned features
 
-Report rows carry only id, digest, check, fixed outcome code and match count; tokens, URLs, identity strings, HTTP status and response body never appear. Fixture token files live under `fixtures/` (repo root) and must hold test-only tokens for local fixture servers, never real credentials; do not commit them.
+Report rows carry only id, digest, check, fixed outcome code and match count; tokens, URLs, identity strings, HTTP status and response body never appear. Fixture token files live under `fixtures/` (repo root) and must hold test-only tokens for local fixture servers, never real credentials; do not commit them. Falcon does not check the file's permissions; keep it owner-readable only (0600).
 
 Residual limits: UI state reads only measure current DOM/rendering state at poll time; transient states can be missed or matched by both reads if they alias with the 100 ms poll interval. Authorization probes depend on fixture availability and network conditions; a slow or missing endpoint blocks other assertions. The confirm read may run one poll interval past the deadline. An approved `accessEquals` contract is not proof of authorization enforcement—only that the endpoint status matched the expectation at test time.
 

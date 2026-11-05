@@ -67,6 +67,24 @@ function statusHandler(statusByToken) {
     };
 }
 
+// Fixture identities must list the origin they may be used against
+// (WP-77R). Tests that do not exercise that rule get the source origin
+// filled in; tests that set `origins` themselves are left untouched.
+const rawEvaluate = AccessEvaluator.evaluate;
+function withOrigins(assertion, options) {
+    const identities = options && options.identities;
+    if (!identities || typeof identities !== "object") return options;
+    let origin = null;
+    try { origin = new URL(assertion.source.url).origin; } catch { /* leave unfilled */ }
+    const filled = {};
+    for (const k of Object.keys(identities)) {
+        const f = identities[k];
+        filled[k] = f && typeof f === "object" && !("origins" in f) && origin ? { ...f, origins: [origin] } : f;
+    }
+    return { ...options, identities: filled };
+}
+AccessEvaluator.evaluate = (assertion, options) => rawEvaluate(assertion, withOrigins(assertion, options));
+
 async function main() {
     // --- allowed pass: admin token gets 200, expected "allowed" ---
     await checkAsync("allowed pass (200 + expected allowed)", async () => {
@@ -370,6 +388,49 @@ async function main() {
             // No lingering sockets beyond whatever handles already existed.
             const after = process._getActiveHandles().length;
             assert.ok(after <= before + 1);
+        }
+    });
+
+    // --- WP-77R security: a token is only ever sent to a listed origin ---
+    await checkAsync("token never reaches an origin the fixture does not list (zero requests)", async () => {
+        const attacker = await startServer(statusHandler(() => 200));
+        const legit = await startServer(statusHandler(() => 200));
+        try {
+            const identities = { admin: { role: "admin", token: "admin-token", origins: [new URL(legit.url).origin] } };
+            const assertion = {
+                check: "accessEquals",
+                expected: "allowed",
+                source: { kind: "http-status", url: attacker.url, identity: { id: "admin", role: "admin" } },
+            };
+            const r = await AccessEvaluator.evaluate(assertion, { timeoutMs: 800, identities });
+            assert.strictEqual(r.status, "unavailable");
+            assert.strictEqual(r.outcome, "identity_origin_mismatch");
+            assert.strictEqual(attacker.requests.length, 0, "token/request must never reach the unlisted origin");
+            assert.ok(!JSON.stringify(r).includes("admin-token"));
+        } finally {
+            await attacker.close();
+            await legit.close();
+        }
+    });
+
+    await checkAsync("fixture without origins fails closed (zero requests)", async () => {
+        for (const origins of [undefined, [], "http://127.0.0.1", [42]]) {
+            const srv = await startServer(statusHandler(() => 200));
+            try {
+                const fixture = { role: "admin", token: "admin-token" };
+                if (origins !== undefined) fixture.origins = origins;
+                const assertion = {
+                    check: "accessEquals",
+                    expected: "allowed",
+                    source: { kind: "http-status", url: srv.url, identity: { id: "admin", role: "admin" } },
+                };
+                const r = await rawEvaluate(assertion, { timeoutMs: 800, identities: { admin: fixture } });
+                assert.strictEqual(r.status, "unavailable");
+                assert.strictEqual(r.outcome, "identity_origin_mismatch");
+                assert.strictEqual(srv.requests.length, 0);
+            } finally {
+                await srv.close();
+            }
         }
     });
 
