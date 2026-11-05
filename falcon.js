@@ -453,14 +453,14 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerCon
  * --plan=<file>: replay a saved plan through the same TestRunner → AIHealer
  * path every other mode uses. No discovery, no crawl: the plan is the test.
  */
-const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContext = null, contractBinding = null) => {
+const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContext = null, contractBinding = null, identities = {}) => {
     const startedAt = Date.now();
     const page = await context.newPage();
     await page.goto(plan.url, { waitUntil: "load" });
     Logger.info(`✅ Loaded: ${plan.url}`);
     emit("explorerPage", { url: plan.url });
     Logger.info(`▶  Running saved plan: ${plan.test_scenarios.length} step(s), repeat=${repeatCount}…`);
-    const results = await TestRunner.runRepeatedTestPlan(page, plan, repeatCount, { providerContext, contractBinding, baseDir: __dirname });
+    const results = await TestRunner.runRepeatedTestPlan(page, plan, repeatCount, { providerContext, contractBinding, baseDir: __dirname, identities });
     const only = {
         url: plan.url,
         status: "tested",
@@ -541,6 +541,26 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
             });
             if (contractBinding.ok) Logger.info(`🔐 Contract bound: journey ${contractBinding.journeyId}, ${contractBinding.digest}`);
             else Logger.warning(`⚠️ Contract not bound (${contractBinding.code}); business assertions will be reported unavailable.`);
+        }
+    }
+
+    // WP-77R: fixture identities for `accessEquals` assertions. Loaded only
+    // when the bound contract actually needs one; any failure (missing
+    // file, bad JSON, unsafe path) leaves identities empty so the assertion
+    // fails closed as `unavailable`/`identity_unknown` rather than silently
+    // substituting a credential. Never logged.
+    let identities = {};
+    const needsIdentities = Boolean(
+        contractBinding && contractBinding.ok
+        && contractBinding.contract.assertions.some((a) => a.check === "accessEquals")
+    );
+    if (needsIdentities) {
+        try {
+            const LocalSource = require("./src/core/outcome/LocalSource");
+            const read = await LocalSource.readFileJson("fixtures/identities.json", __dirname);
+            if (read.ok && read.body && typeof read.body === "object") identities = read.body;
+        } catch {
+            identities = {};
         }
     }
 
@@ -698,7 +718,7 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
         const context = await browser.newContext();
 
         const sweep = savedPlan
-            ? await runSavedPlan(context, savedPlan, emit, repeatCount, providerContext, contractBinding)
+            ? await runSavedPlan(context, savedPlan, emit, repeatCount, providerContext, contractBinding, identities)
             : singlePage
             ? await runEntryPageOnly(context, url, emit, repeatCount, providerContext, savePlanPath)
             : await runWholeApp(context, url, emit, {
