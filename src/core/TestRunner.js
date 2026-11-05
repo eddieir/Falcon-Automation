@@ -143,7 +143,7 @@ class TestRunner {
                             name: `${rest.description}: ${a.id}`,
                             status: "unavailable",
                             journeyId: binding.journeyId,
-                            required: true,
+                            required: a.required,
                             reason: `Not run: ${reason}`,
                             assertion: {
                                 id: a.id,
@@ -343,7 +343,7 @@ class TestRunner {
                 status: r.status,
                 duration,
                 journeyId: binding.journeyId,
-                required: true,
+                required: a.required,
                 assertion,
             };
             if (r.status === "failed") {

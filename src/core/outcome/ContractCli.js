@@ -15,10 +15,13 @@ const readline = require("readline");
 
 const Contract = require("./Contract");
 const ExecutionBinding = require("./ExecutionBinding");
+const ProposalBuilder = require("./ProposalBuilder");
 const Store = require("./ContractStore");
 
 const ACTION_FLAGS = ["--contract-propose", "--contract-approve", "--contract-reject"];
-const KNOWN_FLAGS = ACTION_FLAGS.concat(["--confirm-digest", "--store-root"]);
+const DRAFT_FLAG = "--contract-draft";
+const OUT_FLAG = "--out";
+const KNOWN_FLAGS = ACTION_FLAGS.concat(["--confirm-digest", "--store-root", DRAFT_FLAG, OUT_FLAG]);
 
 /** Parse `--flag=value` tokens; each flag at most once; empty value invalid. */
 function parseFlags(args) {
@@ -64,6 +67,50 @@ async function readContractFileForCli(file) {
     return r.ok ? r : { ok: false, code: 2 };
 }
 
+/**
+ * `--contract-draft=<spec.json> --out=<contract.json>` -- builds a proposal
+ * contract deterministically from a plain spec file (ProposalBuilder; no
+ * LLM, no network, no clock) and writes it only if --out does not already
+ * exist. Never writes on any error, never touches the ContractStore, and
+ * never auto-approves: the operator still runs --contract-propose and
+ * --contract-approve with --confirm-digest afterwards.
+ */
+async function runDraft(specFile, outFile, io) {
+    const read = await readContractFileForCli(specFile);
+    if (!read.ok) return { handled: true, code: read.code };
+
+    const parsedJson = Contract.parseJsonStrict(read.text);
+    if (!parsedJson.ok) return { handled: true, code: 2 };
+
+    let contract;
+    try {
+        contract = ProposalBuilder.buildProposal(parsedJson.value);
+    } catch {
+        return { handled: true, code: 2 };
+    }
+
+    const digest = Contract.digestOf(contract);
+    const text = JSON.stringify(contract);
+
+    try {
+        await fs.promises.writeFile(outFile, text, { encoding: "utf8", flag: "wx" });
+    } catch (err) {
+        // Only a confirmed destination-exists condition is OUT_EXISTS; any
+        // other failure (missing directory, permissions, storage) fails closed
+        // with a generic code and never echoes the path or the system message.
+        if (err && err.code === "EEXIST") {
+            io.stdout.write("error OUT_EXISTS\n");
+            return { handled: true, code: 1 };
+        }
+        io.stdout.write("error OUT_WRITE_FAILED\n");
+        return { handled: true, code: 2 };
+    }
+
+    printAssertions(io.stdout, contract.assertions);
+    io.stdout.write(`digest ${digest}\n`);
+    return { handled: true, code: 0 };
+}
+
 /** Read exactly one line from stdin; returns null on EOF/empty/error. */
 function readOneLine(stdin, stdout, prompt) {
     return new Promise((resolve) => {
@@ -87,6 +134,15 @@ async function run(args, io) {
     const flags = parsed.flags;
 
     const actionsPresent = ACTION_FLAGS.filter((f) => flags.has(f));
+
+    if (flags.has(DRAFT_FLAG)) {
+        if (actionsPresent.length > 0) return { handled: true, code: 2 };
+        if (flags.has("--confirm-digest") || flags.has("--store-root")) return { handled: true, code: 2 };
+        if (!flags.has(OUT_FLAG)) return { handled: true, code: 2 };
+        return runDraft(flags.get(DRAFT_FLAG), flags.get(OUT_FLAG), io);
+    }
+    if (flags.has(OUT_FLAG)) return { handled: true, code: 2 };
+
     if (actionsPresent.length === 0) return { handled: false, code: 0 };
     if (actionsPresent.length > 1) return { handled: true, code: 2 };
 

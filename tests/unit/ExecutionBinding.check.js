@@ -277,7 +277,7 @@ async function main() {
         assert.strictEqual(r.code, "CONTRACT_INVALID");
     });
 
-    await test("B14: required:false assertion => CONTRACT_INVALID", async () => {
+    await test("B14: required:false assertion binds (WP-77I) and stays digest-bound", async () => {
         const root = await tmpRoot();
         const c = contract({
             journeyId: "checkout-optional",
@@ -286,12 +286,14 @@ async function main() {
                 provenance: { source: "spec", ref: "CHECKOUT-001#status" },
             }],
         });
+        const digest = await proposeAndApprove(root, c);
         const file = await writeContractFile(root, c);
 
         const r = await Binding.bind({ contractFile: file, journeyId: c.journeyId, storeRoot: root });
-        assert.strictEqual(r.ok, false);
-        assert.strictEqual(r.code, "CONTRACT_INVALID");
-        assert.strictEqual(r.reason, "optional_assertion_unsupported");
+        assert.strictEqual(r.ok, true, `expected ok: ${JSON.stringify(r)}`);
+        assert.strictEqual(r.digest, Contract.digestOf(c));
+        assert.strictEqual(r.digest, digest);
+        assert.strictEqual(r.contract.assertions[0].required, false);
     });
 
     await test("B15: superseded old digest => NOT_APPROVED", async () => {
