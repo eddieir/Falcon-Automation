@@ -165,13 +165,21 @@ class ReportManager {
             throw new TypeError("Each test result must have a valid status");
         }
         // Tally real outcomes
+        // Trusted optional (required: false) rows that failed/are unavailable/
+        // quarantined are warnings, not gating failures: exclude them from the
+        // counts that drive `verified`/`overallResult`, but keep them in
+        // `total` (they still ran) and leave passed optional rows in `passed`.
+        const optionalIdx = Verification.trustedOptionalIndexes(tests, { approvalProvenance: verificationProvenance });
+        const isExcludedOptional = (t, idx) => optionalIdx.has(idx) && ["failed", "unavailable", "quarantined"].includes(t.status);
+
         const passed      = tests.filter((t) => t.status === "passed").length;
-        const failed      = tests.filter((t) => t.status === "failed").length;
+        const failed      = tests.filter((t, idx) => t.status === "failed" && !isExcludedOptional(t, idx)).length;
         const skipped     = tests.filter((t) => t.status === "skipped").length;
-        const quarantined = tests.filter((t) => t.status === "quarantined").length;
+        const quarantined = tests.filter((t, idx) => t.status === "quarantined" && !isExcludedOptional(t, idx)).length;
         const deduped     = tests.filter((t) => t.status === "deduped").length;
-        const unavailable = tests.filter((t) => t.status === "unavailable").length;
+        const unavailable = tests.filter((t, idx) => t.status === "unavailable" && !isExcludedOptional(t, idx)).length;
         const total        = tests.length;
+        const optionalNotPassed = tests.filter((t, idx) => isExcludedOptional(t, idx)).length;
 
         // `deduped` and (as of Phase 11) `skipped` are the statuses that
         // describe work this run never actually reached a verdict on:
@@ -208,7 +216,10 @@ class ReportManager {
         const report = {
             runId,
             duration,
-            summary: { total, passed, failed, skipped, quarantined, deduped, unavailable },
+            summary: {
+                total, passed, failed, skipped, quarantined, deduped, unavailable,
+                ...(optionalNotPassed > 0 ? { optionalNotPassed } : {}),
+            },
             result: overallResult,
             tests,
             uiIssues,
@@ -259,6 +270,9 @@ class ReportManager {
             (deduped > 0 ? `  |  Deduped: ${deduped}` : "") +
             (unavailable > 0 ? `  |  Unavailable: ${unavailable}` : "")
         );
+        if (summary.optionalNotPassed > 0) {
+            console.log(`   Optional assertions not passed (warnings): ${summary.optionalNotPassed}`);
+        }
         if (coverage) {
             console.log(`   ${ReportManager.coverageLine(coverage, pages)}`);
         }

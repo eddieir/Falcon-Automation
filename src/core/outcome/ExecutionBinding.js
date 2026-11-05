@@ -123,8 +123,8 @@ async function bind(args) {
         const digest = parsed.digest;
 
         const assertions = Array.isArray(contract.assertions) ? contract.assertions : [];
-        if (assertions.some((a) => !a || a.required !== true)) {
-            return fail(CODES.CONTRACT_INVALID, "optional_assertion_unsupported");
+        if (assertions.some((a) => !a || typeof a.required !== "boolean")) {
+            return fail(CODES.CONTRACT_INVALID, "assertion_required_flag_invalid");
         }
 
         if (contract.journeyId !== journeyId) return fail(CODES.JOURNEY_MISMATCH, "journey_mismatch");
