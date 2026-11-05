@@ -36,6 +36,9 @@ const REASON_CODES = Object.freeze({
     MALFORMED_ASSERTION: "MALFORMED_ASSERTION",
     APPROVAL_MISMATCH: "APPROVAL_MISMATCH",
     APPROVAL_UNPROVEN: "APPROVAL_UNPROVEN",
+    OPTIONAL_CLAIM_UNTRUSTED: "OPTIONAL_CLAIM_UNTRUSTED",
+    OPTIONAL_FAILED: "OPTIONAL_FAILED",
+    OPTIONAL_UNVERIFIED: "OPTIONAL_UNVERIFIED",
 });
 
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
@@ -68,8 +71,13 @@ function snapshotRow(row) {
     // A deduped row is never executed and contributes nothing: do not touch
     // its assertion (keeps a hostile getter on a deduped row inert, as before).
     if (status === "deduped") {
-        return { status, hasAssertion: false, isAssertionObject: false, hasOwnId: false, hasOwnDigest: false };
+        return { status, hasAssertion: false, isAssertionObject: false, hasOwnId: false, hasOwnDigest: false, optionalClaim: false };
     }
+    // WP-77I: read `required` exactly once, only for a row that was actually
+    // executed. A row explicitly opting out of the required tally (`required
+    // === false`) is an "optional claim" — it is only ever honoured when
+    // `trustedOptionalIndexes` can independently verify the row's origin.
+    const optionalClaim = !!(row && row.required === false);
     const hasAssertion = !!(row && Object.prototype.hasOwnProperty.call(row, "assertion"));
     const assertion = row ? row.assertion : undefined;
     const isAssertionObject = isPlainObject(assertion);
@@ -94,6 +102,7 @@ function snapshotRow(row) {
         digest,
         check,
         locator,
+        optionalClaim,
     };
 }
 
@@ -225,6 +234,59 @@ function classifyRow(row) {
 }
 
 /**
+ * Collect the distinct valid digests carried by non-deduped bound rows whose
+ * id is ALSO valid, and report whether they disagree (more than one distinct
+ * digest). Shared by `aggregateRun` and `trustedOptionalIndexes` so both
+ * agree on what counts as contradictory approval evidence.
+ */
+function computeApprovalMismatch(snapshots) {
+    const validDigests = new Set();
+    for (const snap of snapshots) {
+        if (snap.status === "deduped") continue;
+        if (isBoundSnapshot(snap) && isValidId(snap.id) && isValidDigest(snap.digest)) {
+            validDigests.add(snap.digest);
+        }
+    }
+    return validDigests.size > 1;
+}
+
+/**
+ * WP-77I: indexes (into `snapshots`, same order as the input rows) of rows
+ * that are TRUSTED optional assertions — a bound row (own id or digest),
+ * with a valid id AND a valid digest, that claims `required: false`, while
+ * the run's approval provenance is proven and free of contradictory digest
+ * evidence. Any other `required: false` claim (unbound, malformed id/digest,
+ * unproven provenance, or mismatched digests) is never trusted and is
+ * treated exactly like a required row — fail closed.
+ */
+function computeTrustedOptionalSet(snapshots, approvalUnproven, approvalMismatch) {
+    const trusted = new Set();
+    snapshots.forEach((snap, idx) => {
+        if (snap.status === "deduped") return;
+        if (!snap.optionalClaim) return;
+        if (!isBoundSnapshot(snap)) return;
+        if (!(isValidId(snap.id) && isValidDigest(snap.digest))) return;
+        if (approvalUnproven) return;
+        if (approvalMismatch) return;
+        trusted.add(idx);
+    });
+    return trusted;
+}
+
+/**
+ * Public helper: which rows (by index into `rows`) are trusted optional
+ * assertions. `ReportManager` uses this to keep its own tallies in sync with
+ * `aggregateRun`'s classification without duplicating the trust rule.
+ */
+function trustedOptionalIndexes(rows, opts) {
+    const list = Array.isArray(rows) ? rows : [];
+    const approvalUnproven = !!(opts && opts.approvalProvenance === "unproven");
+    const snapshots = list.map(snapshotRow);
+    const approvalMismatch = computeApprovalMismatch(snapshots);
+    return computeTrustedOptionalSet(snapshots, approvalUnproven, approvalMismatch);
+}
+
+/**
  * Aggregate a run's rows into the additive `verification` report block.
  * Pure function of `rows`: order-independent, no timestamps/ids, and never
  * copies locator/value text from any assertion into the result.
@@ -243,6 +305,10 @@ function aggregateRun(rows, opts) {
 
     let pass = 0, fail = 0, inconclusive = 0, refused = 0, notTested = 0, required = 0;
     let interactionCount = 0, technicalFailureCount = 0;
+    // WP-77I: trusted-optional tallies. These never feed `required`, `fail`,
+    // `inconclusive`, etc. above, so an optional-only outcome can never by
+    // itself flip the run's level between FAILED/UNVERIFIED/BUSINESS_VERIFIED.
+    let optTotal = 0, optPass = 0, optFail = 0, optInconclusive = 0, optNotTested = 0;
     const reasonSet = new Set();
 
     // Snapshot every row exactly once; both the distinct-digest collection
@@ -250,24 +316,26 @@ function aggregateRun(rows, opts) {
     // re-reading `row`/`row.assertion`/`assertion.id`/`assertion.digest`.
     const snapshots = list.map(snapshotRow);
 
-    // WP-77F: contradictory approval evidence. Collect the distinct valid
-    // digests carried by non-deduped bound rows whose id is ALSO valid —
-    // a malformed-id row never contributes a digest to this set, even if
-    // its digest happens to be well-formed. More than one distinct valid
-    // digest means the rows disagree about which approved contract they
-    // came from, so no bound PASS in this run can be trusted.
-    const validDigests = new Set();
-    for (const snap of snapshots) {
-        if (snap.status === "deduped") continue;
-        if (isBoundSnapshot(snap) && isValidId(snap.id) && isValidDigest(snap.digest)) {
-            validDigests.add(snap.digest);
-        }
-    }
-    const approvalMismatch = validDigests.size > 1;
+    // WP-77F: contradictory approval evidence. More than one distinct valid
+    // digest among bound rows means the rows disagree about which approved
+    // contract they came from, so no bound PASS in this run can be trusted —
+    // and (WP-77I) no optional claim can be trusted either.
+    const approvalMismatch = computeApprovalMismatch(snapshots);
+    const trustedOptional = computeTrustedOptionalSet(snapshots, approvalUnproven, approvalMismatch);
 
-    for (const snap of snapshots) {
+    // An untrusted `required: false` claim on a bound row is never honoured:
+    // it is treated exactly like a required row, but the run is flagged so
+    // the claim's existence is still visible in the report.
+    snapshots.forEach((snap, idx) => {
+        if (snap.status === "deduped") return;
+        if (isBoundSnapshot(snap) && snap.optionalClaim && !trustedOptional.has(idx)) {
+            reasonSet.add(REASON_CODES.OPTIONAL_CLAIM_UNTRUSTED);
+        }
+    });
+
+    snapshots.forEach((snap, idx) => {
         let classified = classifySnapshot(snap);
-        if (classified.ignored) continue;
+        if (classified.ignored) return;
 
         if (approvalMismatch && classified.assertionOutcome === "PASS" && isBoundSnapshot(snap)) {
             classified = { ...classified, assertionOutcome: "INCONCLUSIVE", reasonCodes: [...classified.reasonCodes, REASON_CODES.APPROVAL_MISMATCH] };
@@ -278,6 +346,18 @@ function aggregateRun(rows, opts) {
         }
 
         for (const code of classified.reasonCodes) reasonSet.add(code);
+
+        if (trustedOptional.has(idx)) {
+            optTotal++;
+            switch (classified.assertionOutcome) {
+                case "PASS": optPass++; break;
+                case "FAIL": optFail++; break;
+                case "INCONCLUSIVE": optInconclusive++; break;
+                case "NOT_TESTED": optNotTested++; break;
+                default: break;
+            }
+            return;
+        }
 
         if (classified.assertionOutcome) {
             required++;
@@ -294,11 +374,17 @@ function aggregateRun(rows, opts) {
         } else if (classified.technicalFailure) {
             technicalFailureCount++;
         }
-    }
+    });
 
-    const ranCount = required + interactionCount + technicalFailureCount;
+    // Optional PASS/FAIL/INCONCLUSIVE count toward whether this run ran
+    // anything at all (so an optional-only run is INTERACTION_ONLY, not
+    // NO_TESTS_RUN); a skipped (NOT_TESTED) optional row does not.
+    const ranCount = required + interactionCount + technicalFailureCount + optPass + optFail + optInconclusive;
     const hasFail = fail > 0 || technicalFailureCount > 0;
     const hasInconclusiveGroup = inconclusive > 0 || notTested > 0 || refused > 0;
+
+    if (optFail > 0) reasonSet.add(REASON_CODES.OPTIONAL_FAILED);
+    if ((optInconclusive + optNotTested) > 0) reasonSet.add(REASON_CODES.OPTIONAL_UNVERIFIED);
 
     let level;
     if (hasFail) {
@@ -323,9 +409,16 @@ function aggregateRun(rows, opts) {
         schemaVersion: 1,
         level,
         journeys,
-        assertions: { required, pass, fail, inconclusive, refused, notTested, proposedUnapproved: 0 },
+        assertions: {
+            required, pass, fail, inconclusive, refused, notTested, proposedUnapproved: 0,
+            // WP-77I: additive, present only when a trusted optional row exists, so
+            // runs without optional assertions keep a byte-identical shape.
+            ...(optPass + optFail + optInconclusive + optNotTested > 0
+                ? { optional: { total: optPass + optFail + optInconclusive + optNotTested, pass: optPass, fail: optFail, inconclusive: optInconclusive, notTested: optNotTested } }
+                : {}),
+        },
         reasonCodes: [...reasonSet].sort(),
     };
 }
 
-module.exports = { classifyRow, aggregateRun, REASON_CODES };
+module.exports = { classifyRow, aggregateRun, trustedOptionalIndexes, REASON_CODES };
