@@ -283,3 +283,86 @@ Privacy: rows carry only id, digest, check, the constant locator, a fixed outcom
 Additional hardening: each HTTP read is bounded by a wall-clock deadline (a trickling response cannot extend it), file sources resolve against the run's base directory and never the working directory, non-loopback literals are refused before any socket opens, and display-unsafe characters (format characters such as bidi overrides and zero-width, plus U+2028/U+2029) and dot-segment file paths are rejected at approval.
 
 Residual limits: some invisible characters outside Unicode category Cf (for example U+3164) are still accepted in pointers and expected strings; `provenance.ref` is not checked for display-unsafe characters (the CLI does not print it); URL dot segments (`/a/./b`) are normalized by the URL parser, so the requested path can differ textually from the approved one on the same host; containment of file sources is verified after the open (symlinks, directories and special files are still refused); paths such as `node_modules/...` are not blocked, so an approved contract could probe a local JSON file by pass/fail; many assertions with long timeouts can stretch a run; duplicate keys in a backend JSON response resolve last-wins; an attacker who controls the local port is out of scope (same local trust boundary as the approval store); eventual consistency beyond the timeout fails closed; the confirming read may run up to one poll interval past the deadline.
+
+## Permission assertions (WP-77R)
+
+`visible`, `enabled`, `disabled` and `absent` verify UI state; `accessEquals` probes authorization. Both use the same approved-contract path: propose, approval, digest binding (GS12), `verify` step, then runtime evaluators. No LLM, no healing, no page passed to the evaluator.
+
+### UI-state checks
+
+Each check carries a Playwright locator string and no `expected` field:
+
+| Check | Semantics | Failure |
+|---|---|---|
+| `visible` | exactly one DOM match and `.isVisible()` true | zero matches (unavailable), >1 match (unavailable), found but not visible (failed) |
+| `enabled` | exactly one DOM match and `.isEnabled()` true | zero matches (unavailable), >1 match (unavailable), found but not enabled (failed) |
+| `disabled` | exactly one DOM match and `.isDisabled()` true | zero matches (unavailable), >1 match (unavailable), found but not disabled (failed) |
+| `absent` | zero DOM matches (including hidden elements) | any match found (failed) |
+
+**Critical:** UI state is not authorization. A hidden or disabled control proves nothing about backend permission. Absence in the DOM (zero matches) is different from presence-but-hidden; `absent` only passes on zero DOM matches.
+
+Settle policy: two consecutive passing reads 100 ms apart, bounded timeout (default 5000 ms, clamped 100..30000); timeout never passes.
+
+### Authorization checks (`accessEquals`)
+
+Asserts grant or denial via HTTP status probe. Carries fixed locator `authz:access`, expected `"allowed"` or `"denied"`, and required `source`:
+
+```json
+{"kind": "http-status", "url": "http://127.0.0.1:PORT/path", "identity": {"id": "viewer", "role": "viewer"}}
+```
+
+Runtime: GET the URL with `Authorization: Bearer <token>` from fixture identities (`fixtures/identities.json`, map id → {role, token, origins}). `origins` is a required non-empty list of exact `scheme://host:port` origins the token may be sent to. Per read:
+- Identity unknown (id not in fixtures or missing token), role mismatch, or source origin not listed in the identity's `origins` (missing or empty list included) → unavailable, no request. This stops a contract from steering a token to another local listener.
+- Status 200 → observed `"allowed"`.
+- Status 401 or 403 → observed `"denied"`.
+- Any other status (404, 5xx, 3xx, timeout, network error) → unavailable.
+- Observed matches expected → passed.
+- Expected "denied" but observed "allowed" → failed (`access_granted_unexpectedly`).
+- Expected "allowed" but observed "denied" → failed (`access_denied_unexpectedly`).
+
+Settle policy: identical to UI checks.
+
+### Contract contradiction rules
+
+Within a single contract, these assertions are mutually exclusive (schema rejects at approval):
+
+1. Same locator: cannot have both `enabled` and `disabled`.
+2. Same locator: cannot have `absent` with any of `visible`, `enabled`, `disabled`.
+3. Same URL + identity: cannot have conflicting `expected` values.
+4. Same URL + identity: cannot have mismatched `role` values.
+
+Identity charset: `[a-z][a-z0-9_-]{0,31}` (32 chars max, lowercase, alphanumeric + underscore + hyphen). Digest covers source and identity.
+
+### Outcomes and example contract
+
+| Outcome code | Trigger |
+|---|---|
+| `ui_visible`, `ui_not_visible` | matched 1 element; visibility test result |
+| `ui_enabled`, `ui_not_enabled` | matched 1 element; enabled test result |
+| `ui_disabled`, `ui_not_disabled` | matched 1 element; disabled test result |
+| `ui_absent`, `ui_present` | zero matches (pass) or >0 matches (fail) |
+| `access_as_expected`, `access_granted_unexpectedly`, `access_denied_unexpectedly` | identity resolved, status probe completed |
+| `identity_unknown`, `identity_mismatch`, `identity_origin_mismatch`, `status_inconclusive` | identity missing, role mismatch, or origin not allowed for the identity; or status not 200/401/403 |
+| `target_unavailable`, `target_ambiguous`, `read_failed` | UI element not found, duplicate match, or Playwright error |
+
+Example contract assertion:
+
+```json
+{
+  "id": "A3",
+  "required": true,
+  "check": "accessEquals",
+  "locator": "authz:access",
+  "expected": "denied",
+  "source": {"kind": "http-status", "url": "http://127.0.0.1:3000/admin/delete", "identity": {"id": "viewer", "role": "viewer"}},
+  "provenance": {"source": "spec", "ref": "RBAC-003"}
+}
+```
+
+### Privacy, limits and planned features
+
+Report rows carry only id, digest, check, fixed outcome code and match count; tokens, URLs, identity strings, HTTP status and response body never appear. Fixture token files live under `fixtures/` (repo root) and must hold test-only tokens for local fixture servers, never real credentials; do not commit them. Falcon does not check the file's permissions; keep it owner-readable only (0600).
+
+Residual limits: UI state reads only measure current DOM/rendering state at poll time; transient states can be missed or matched by both reads if they alias with the 100 ms poll interval. Authorization probes depend on fixture availability and network conditions; a slow or missing endpoint blocks other assertions. The confirm read may run one poll interval past the deadline. An approved `accessEquals` contract is not proof of authorization enforcement—only that the endpoint status matched the expectation at test time.
+
+Planned (not yet implemented): `accessEquals` on other HTTP probing patterns (POST, path discrimination, multi-tenant identity scoping), UI automation as prerequisite to authorization checks (login flow within a journey), role-based output masking in reports.

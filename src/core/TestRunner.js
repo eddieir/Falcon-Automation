@@ -8,15 +8,18 @@ const FlakinessTracker = require("./FlakinessTracker");
 const NavigationEvaluator = require("./outcome/NavigationEvaluator");
 const DataEvaluator = require("./outcome/DataEvaluator");
 const BackendEvaluator = require("./outcome/BackendEvaluator");
+const PermissionEvaluator = require("./outcome/PermissionEvaluator");
+const AccessEvaluator = require("./outcome/AccessEvaluator");
 
 /**
  * True for a check whose verify row must never carry `expected`/`actual`
- * (data checks, WP-77D, and backend side-effect checks, WP-77S): the
- * approved expectation and the observed value are both privacy-sensitive
- * and are reported only as fixed `outcome`/`reason` codes.
+ * (data checks, WP-77D; backend side-effect checks, WP-77S; and
+ * `accessEquals`, WP-77R): the approved expectation and the observed value
+ * are both privacy-sensitive and are reported only as fixed
+ * `outcome`/`reason` codes.
  */
 function isValueFree(check) {
-    return DataEvaluator.SUPPORTED.includes(check) || BackendEvaluator.SUPPORTED.includes(check);
+    return DataEvaluator.SUPPORTED.includes(check) || BackendEvaluator.SUPPORTED.includes(check) || AccessEvaluator.SUPPORTED.includes(check);
 }
 
 /**
@@ -69,6 +72,10 @@ class TestRunner {
         // directory (see LocalSource.readFileJson); defaults to the process
         // working directory so existing callers need no change.
         this.baseDir = typeof options.baseDir === "string" && options.baseDir.length > 0 ? options.baseDir : process.cwd();
+        // WP-77R: fixture identity map (id -> {role, token}) for `accessEquals`
+        // assertions. Supplied by the caller only; never logged, never echoed
+        // into a result row.
+        this.identities = options.identities && typeof options.identities === "object" ? options.identities : {};
     }
 
     /**
@@ -143,7 +150,7 @@ class TestRunner {
                                 digest: binding.digest,
                                 check: a.check,
                                 locator: a.locator,
-                                ...(isValueFree(a.check) ? {} : { expected: a.expected }),
+                                ...(!isValueFree(a.check) && a.expected !== undefined ? { expected: a.expected } : {}),
                                 outcome: "not_run",
                             },
                         });
@@ -292,33 +299,41 @@ class TestRunner {
             const options = timeoutMs !== undefined ? { timeoutMs } : {};
             const isData = DataEvaluator.SUPPORTED.includes(a.check);
             const isBackend = BackendEvaluator.SUPPORTED.includes(a.check);
+            const isAccess = AccessEvaluator.SUPPORTED.includes(a.check);
+            const isPermission = PermissionEvaluator.SUPPORTED.includes(a.check);
             let r;
             try {
                 if (isBackend) {
                     r = await BackendEvaluator.evaluate(a, { ...options, baseDir: this.baseDir });
+                } else if (isAccess) {
+                    r = await AccessEvaluator.evaluate(a, { ...options, identities: this.identities });
+                } else if (isPermission) {
+                    r = await PermissionEvaluator.evaluate(this.page, a, options);
                 } else {
                     r = await (isData ? DataEvaluator : NavigationEvaluator).evaluate(this.page, a, options);
                 }
             } catch (error) {
-                // A backend check never surfaces `error.message`: it can carry the
-                // backend URL/path, a response fragment, or similar sensitive detail.
+                // A backend or access check never surfaces `error.message`: it can
+                // carry a backend URL/path, a response fragment, a token, or
+                // similar sensitive detail.
                 r = {
                     status: "unavailable",
                     outcome: "internal_error",
                     matches: 0,
-                    reason: isBackend ? "unexpected error during evaluation" : error.message,
+                    reason: isBackend || isAccess ? "unexpected error during evaluation" : error.message,
                 };
             }
             const duration = Date.now() - assertionStart;
-            const valueFree = isData || isBackend;
+            const valueFree = isData || isBackend || isAccess;
             const assertion = {
                 id: a.id,
                 digest: binding.digest,
                 check: a.check,
                 locator: a.locator,
-                // WP-77D/WP-77S: data and backend checks never put approved or
-                // observed values in a row.
-                ...(valueFree ? {} : { expected: a.expected }),
+                // WP-77D/WP-77S/WP-77R: data, backend, and access checks never put
+                // approved or observed values in a row; UI permission checks carry
+                // no approved `expected` to begin with.
+                ...(!valueFree && a.expected !== undefined ? { expected: a.expected } : {}),
                 outcome: r.outcome,
                 matches: r.matches,
                 ...(!valueFree && r.actual !== undefined ? { actual: r.actual } : {}),

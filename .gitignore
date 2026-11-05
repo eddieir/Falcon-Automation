@@ -59,3 +59,6 @@ coverage/
 auth.json
 *.storage.json
 .playwright-cli/
+
+# Local fixture identities for accessEquals assertions (tokens); never commit
+fixtures/identities.json
