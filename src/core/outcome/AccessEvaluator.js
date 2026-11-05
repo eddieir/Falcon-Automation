@@ -11,7 +11,7 @@
  *   {check: "accessEquals", expected: "allowed"|"denied",
  *    source: {kind: "http-status", url, identity: {id, role}}}
  *
- * `options.identities` is a map of fixture id -> {role, token}, supplied by
+ * `options.identities` is a map of fixture id -> {role, token, origins}, supplied by
  * the caller (never read from the assertion itself, so a test fixture
  * cannot smuggle an arbitrary credential into an approved contract).
  *
@@ -22,6 +22,9 @@
  *     `unavailable`/`identity_mismatch` — no request is made.
  *   - the fixture's `token` must be a non-empty string; otherwise
  *     `unavailable`/`identity_unknown` — no request is made.
+ *   - the fixture's `origins` must be a non-empty array containing the exact
+ *     origin of `source.url`; otherwise `unavailable`/`identity_origin_mismatch`
+ *     — no request is made (a contract cannot steer a token to another listener).
  *   - otherwise, probe with `Authorization: Bearer <token>`.
  *     - status 200 -> observed `allowed`.
  *     - status 401 or 403 -> observed `denied`.
@@ -61,6 +64,7 @@ const OUTCOME = Object.freeze({
     ACCESS_DENIED_UNEXPECTEDLY: "access_denied_unexpectedly",
     IDENTITY_UNKNOWN: "identity_unknown",
     IDENTITY_MISMATCH: "identity_mismatch",
+    IDENTITY_ORIGIN_MISMATCH: "identity_origin_mismatch",
     STATUS_INCONCLUSIVE: "status_inconclusive",
     INVALID_EXPECTED: "invalid_expected",
     UNSUPPORTED_CHECK: "unsupported_check",
@@ -73,6 +77,7 @@ const REASON = Object.freeze({
     access_denied_unexpectedly: "access was denied when the approved expectation was allowed",
     identity_unknown: "fixture identity was not available to the evaluator",
     identity_mismatch: "fixture identity role did not match the approved identity role",
+    identity_origin_mismatch: "fixture identity is not allowed to be used against the approved source origin",
     status_inconclusive: "access source returned a status that does not determine allowed or denied",
     invalid_expected: "approved expected value is not usable by this check",
     unsupported_check: "check type is not supported by this evaluator",
@@ -121,6 +126,25 @@ async function readOnce(assertion, options, deadline) {
         return result("unavailable", OUTCOME.IDENTITY_UNKNOWN, 0);
     }
 
+    // The token may only be sent to an origin the fixture itself lists
+    // (`origins`, exact `scheme://host:port` match). A contract can choose the
+    // URL, so without this binding it could steer a token to any local
+    // listener. A missing or empty list fails closed; no request is sent.
+    let sourceOrigin = null;
+    try {
+        sourceOrigin = new URL(assertion.source.url).origin;
+    } catch {
+        sourceOrigin = null;
+    }
+    if (
+        !sourceOrigin ||
+        !Array.isArray(fixture.origins) ||
+        fixture.origins.length === 0 ||
+        !fixture.origins.some((o) => typeof o === "string" && o === sourceOrigin)
+    ) {
+        return result("unavailable", OUTCOME.IDENTITY_ORIGIN_MISMATCH, 0);
+    }
+
     let probeRes;
     try {
         probeRes = await LocalSource.probeHttpStatus(assertion.source.url, {
@@ -151,7 +175,7 @@ async function readOnce(assertion, options, deadline) {
 
 /**
  * @param {object} assertion - {check, expected, source, timeoutMs?}.
- * @param {{timeoutMs?: number, identities?: Record<string, {role: string, token: string}>}} [options]
+ * @param {{timeoutMs?: number, identities?: Record<string, {role: string, token: string, origins: string[]}>}} [options]
  * @returns {Promise<{status: "passed"|"failed"|"unavailable", outcome: string, matches: 0|1, reason: string}>}
  */
 async function evaluate(assertion, options = {}) {

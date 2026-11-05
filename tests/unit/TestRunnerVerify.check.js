@@ -369,6 +369,18 @@ async function run(page, p, b, healer) {
         viewer: { role: "viewer", token: "T-VIEW" },
     });
 
+    // Fixture identities list the origins they may be used against (WP-77R):
+    // derive them from the binding's accessEquals sources.
+    function withBindingOrigins(binding, identities) {
+        const origins = [];
+        for (const a of (binding.contract && binding.contract.assertions) || []) {
+            if (a.source && a.source.kind === "http-status") origins.push(new URL(a.source.url).origin);
+        }
+        const out = {};
+        for (const k of Object.keys(identities)) out[k] = { ...identities[k], origins };
+        return out;
+    }
+
     function startAccessServer() {
         let requests = 0;
         const server = http.createServer((req, res) => {
@@ -410,7 +422,7 @@ async function run(page, p, b, healer) {
 
     async function runAccess(binding, identities = IDENTITIES) {
         const runner = new TestRunner(new FakePage({ pathname: SPEC.path, heading: SPEC.heading }), accessPlan(), {
-            contractBinding: binding, verifyTimeoutMs: 300, identities,
+            contractBinding: binding, verifyTimeoutMs: 300, identities: withBindingOrigins(binding, identities),
         });
         const rows = await runner.executeTest();
         return { rows, level: Verification.aggregateRun(rows).level };
@@ -512,7 +524,7 @@ async function run(page, p, b, healer) {
                     ],
                 }),
             };
-            const runner = new TestRunner(page, permissionPlan(), { contractBinding: combined, verifyTimeoutMs: 300, identities: IDENTITIES });
+            const runner = new TestRunner(page, permissionPlan(), { contractBinding: combined, verifyTimeoutMs: 300, identities: withBindingOrigins(combined, IDENTITIES) });
             const rows = await runner.executeTest();
             const uiRow = rows.find((r) => r.assertion && r.assertion.id === "ui-delete-absent");
             const backendRow = rows.find((r) => r.assertion && r.assertion.id === "backend-delete-denied");

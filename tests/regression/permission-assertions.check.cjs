@@ -92,6 +92,9 @@ test.before(async () => {
     }));
     llm = await listen(http.createServer((req, res) => { llmHits++; res.writeHead(500); res.end("{}"); }));
     base = `http://127.0.0.1:${fixture.address().port}`;
+    // Identities may only be used against the fixture origin (WP-77R).
+    for (const k of Object.keys(IDENTITIES)) IDENTITIES[k].origins = [base];
+    fs.writeFileSync(IDENTITIES_PATH, JSON.stringify(IDENTITIES));
 });
 
 test.after(() => {

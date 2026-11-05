@@ -124,7 +124,7 @@ async function evaluate(page, assertion, options = {}) {
             return result("unavailable", OUTCOME.INTERNAL_ERROR, 0);
         }
         const deadline = Date.now() + clampTimeout(options && options.timeoutMs);
-        return await settle(() => readOnce(page, assertion), deadline);
+        return (await settle(() => readOnce(page, assertion), deadline)) || result("unavailable", OUTCOME.INTERNAL_ERROR, 0);
     } catch {
         return result("unavailable", OUTCOME.INTERNAL_ERROR, 0);
     }
