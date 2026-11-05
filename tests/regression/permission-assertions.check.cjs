@@ -405,6 +405,18 @@ test("P9 privacy: tokens and URLs never appear in the serialized report", async 
     for (const s of [T_ADMIN, T_VIEW, `${base}/api/`]) assert.ok(!r.out.includes(s), `run output leaks ${s}`);
 });
 
+test("P10 hidden-but-present is not absent: a CSS-hidden #delete fails the absent check", async () => {
+    const assertions = [
+        { id: "delete-absent", required: true, check: "absent", locator: "#delete", provenance: prov },
+    ];
+    const r = await execute(await setup({ role: "guest", assertions, journeyId: "hidden-not-absent" }));
+    assert.notStrictEqual(r.code, 0, r.out);
+    assert.strictEqual(r.level, "FAILED");
+    const by = assertionRows(r);
+    assert.strictEqual(by["delete-absent"].status, "failed");
+    assert.strictEqual(by["delete-absent"].assertion.outcome, "ui_present");
+});
+
 test("runtime made zero LLM requests across every run", () => {
     assert.strictEqual(llmHits, 0);
 });
