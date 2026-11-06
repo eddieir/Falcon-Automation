@@ -14,6 +14,7 @@ See [README.md](README.md) for the current feature set, architecture, and usage.
 - **Tally fix.** Optional assertions of journeys with different valid contract digests stay optional in the report tallies. Previously the pooled digest check could count them as required.
 - **Unchanged:** a single `--plan` with the default worker count, contractless plans, exit codes, and the refusal of `--plan` with `--shard`. Cross-process (`--shard`) contract verification remains unsupported.
 - **CI:** `JourneyAggregation.check.js` (S1) and the new `JourneyCoordinator.check.js` now run in the hosted unit step. S1 had not wired the first into CI.
+- **Teardown:** a browser-context `close()` failure no longer replaces a journey's valid result. It is reported separately as `JOURNEY_CLEANUP_FAILED`: the run cannot pass and is never `BUSINESS_VERIFIED`, while the journey's own evidence, including required failures, is kept.
 - Evidence, acceptance matrix, benchmark and rollback: `docs/architecture/wp-77-s2-q-evidence.md`.
 
 ---

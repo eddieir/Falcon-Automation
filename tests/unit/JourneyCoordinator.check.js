@@ -73,7 +73,7 @@ const rowsFor = (journeyId, digest, spec) => Object.entries(spec).map(([id, stat
 async function runAndReport(root, journeys, executeJourney, workers = 2) {
     const co = await Coordinator.run({ journeys, workers, storeRoot: root, repoRoot: root, executeJourney });
     assert.strictEqual(co.ok, true, JSON.stringify(co));
-    const entries = co.entries.map((e) => ({ binding: e.binding, rows: e.rows, revalidation: e.revalidation }));
+    const entries = co.entries.map((e) => ({ binding: e.binding, rows: e.rows, revalidation: e.revalidation, ...(e.cleanupFailed ? { cleanupFailed: true } : {}) }));
     const report = ReportManager.buildReport({ journeyEntries: entries, requireRevalidation: true, runId: "r", duration: "0s" });
     return { co, entries, report };
 }
@@ -449,6 +449,112 @@ async function main() {
         assert.strictEqual(v({ journeys: [j("a", "/tmp/same.json"), j("b", "/tmp/./same.json")] }).code, C.DUPLICATE_JOURNEY);
         const r = await Coordinator.run({ journeys: [j("a")], workers: 99, executeJourney: async () => ({ rows: [] }) });
         assert.deepStrictEqual(r, { ok: false, code: C.WORKERS_INVALID });
+    });
+
+
+    // ---- context teardown (WP-77I-S2 P2 correction) --------------------------------
+    // The production executor in falcon.js is Coordinator.runIsolated(openContext, work);
+    // these tests drive that exact function with fake browser contexts.
+    const fakeCtx = (closeThrows) => async () => ({ close: async () => { if (closeThrows) throw new Error("SECRET-CLOSE-ERR-7731"); } });
+    const isolated = (closeThrowsFor, work) => (a) => Coordinator.runIsolated(
+        fakeCtx(closeThrowsFor(a.plan.contract.journeyId)),
+        async () => work(a)
+    );
+    const passRows = (a) => ({ rows: rowsFor(a.plan.contract.journeyId, a.binding.digest, { R1: "passed" }) });
+
+    await test("F1: successful journey and successful close => unchanged PASSED / BUSINESS_VERIFIED, no cleanup flag", async () => {
+        const root = await tmpRoot();
+        const a = await approvedJourney(root, "j-a", [A("R1", true)]);
+        const b = await approvedJourney(root, "j-b", [A("R1", true)]);
+        const plain = await runAndReport(root, [a.journey, b.journey], async (x) => passRows(x));
+        const viaIso = await runAndReport(root, [a.journey, b.journey], isolated(() => false, passRows));
+        assert.strictEqual(viaIso.report.result, "PASSED");
+        assert.strictEqual(viaIso.report.verification.level, "BUSINESS_VERIFIED");
+        assert.ok(viaIso.co.entries.every((e) => !("cleanupFailed" in e)));
+        assert.strictEqual(viaIso.report.summary.integrityBreaches, undefined);
+        assert.deepStrictEqual(viaIso.report.verification, plain.report.verification, "identical to the pre-correction executor shape");
+        assert.strictEqual(cliExit(viaIso.entries), 0);
+    });
+
+    await test("F2: successful journey + throwing close => result preserved, run non-PASSED, UNVERIFIED, JOURNEY_CLEANUP_FAILED, exit 1, no misleading execution error", async () => {
+        const root = await tmpRoot();
+        const a = await approvedJourney(root, "j-a", [A("R1", true)]);
+        const { co, entries, report } = await runAndReport(root, [a.journey], isolated(() => true, passRows), 1);
+        assert.strictEqual(co.entries[0].rows.length, 1, "original assertion evidence is preserved");
+        assert.strictEqual(co.entries[0].rows[0].status, "passed");
+        assert.ok(!JSON.stringify(co.entries).includes("JOURNEY_EXECUTION_ERROR"), "must not be re-labelled as an execution failure");
+        assert.strictEqual(co.entries[0].cleanupFailed, true);
+        assert.notStrictEqual(report.result, "PASSED");
+        assert.strictEqual(report.verification.level, "UNVERIFIED", "isolation is uncertain: never BUSINESS_VERIFIED");
+        assert.ok(report.verification.reasonCodes.includes("JOURNEY_CLEANUP_FAILED"));
+        assert.strictEqual(report.summary.integrityBreaches, 1);
+        assert.strictEqual(cliExit(entries), 1);
+    });
+
+    await test("F3: required assertion failure + throwing close => the failure stays FAILED, cleanup also visible, exit 1", async () => {
+        const root = await tmpRoot();
+        const a = await approvedJourney(root, "j-a", [A("R1", true)]);
+        const { report, entries } = await runAndReport(root, [a.journey], isolated(() => true, (x) => ({ rows: rowsFor("j-a", x.binding.digest, { R1: "failed" }) })), 1);
+        assert.strictEqual(report.verification.level, "FAILED");
+        assert.notStrictEqual(report.result, "PASSED");
+        assert.ok(report.verification.reasonCodes.includes("JOURNEY_CLEANUP_FAILED"));
+        assert.strictEqual(cliExit(entries), 1);
+    });
+
+    await test("F4: execution failure followed by throwing close => both recorded separately, privacy-safe, non-PASSED", async () => {
+        const root = await tmpRoot();
+        const a = await approvedJourney(root, "j-a", [A("R1", true)]);
+        const { co, report, entries } = await runAndReport(root, [a.journey], isolated(() => true, async () => { throw new Error("SECRET-EXEC-ERR-5521"); }), 1);
+        assert.deepStrictEqual(co.entries[0].rows, [{ name: "journey", status: "failed", error: "JOURNEY_EXECUTION_ERROR" }]);
+        assert.strictEqual(co.entries[0].cleanupFailed, true, "cleanup failure is not lost behind the execution failure");
+        assert.ok(report.verification.reasonCodes.includes("JOURNEY_CLEANUP_FAILED"));
+        assert.notStrictEqual(report.result, "PASSED");
+        assert.notStrictEqual(report.verification.level, "BUSINESS_VERIFIED");
+        assert.strictEqual(cliExit(entries), 1);
+        const text = JSON.stringify({ co: co.entries.map((e) => e.rows), report });
+        assert.ok(!text.includes("SECRET-EXEC-ERR-5521") && !text.includes("SECRET-CLOSE-ERR-7731"), "no error text may reach the report");
+    });
+
+    await test("F5: two concurrent journeys, one teardown failure => only that journey is downgraded; concurrency and order preserved; run non-PASSED", async () => {
+        const root = await tmpRoot();
+        const a = await approvedJourney(root, "j-a", [A("R1", true)]);
+        const b = await approvedJourney(root, "j-b", [A("R1", true)]);
+        let active = 0, max = 0;
+        const { co, report, entries } = await runAndReport(root, [b.journey, a.journey], isolated((id) => id === "j-a", async (x) => {
+            active++; max = Math.max(max, active);
+            await new Promise((r) => setTimeout(r, 25));
+            active--;
+            return passRows(x);
+        }), 2);
+        assert.strictEqual(max, 2, "both journeys really ran concurrently");
+        assert.deepStrictEqual(co.entries.map((e) => e.journeyId), ["j-a", "j-b"]);
+        assert.deepStrictEqual(report.verification.perJourney.map((j) => j.level), ["UNVERIFIED", "BUSINESS_VERIFIED"]);
+        assert.strictEqual(report.verification.level, "UNVERIFIED");
+        assert.notStrictEqual(report.result, "PASSED");
+        assert.strictEqual(report.summary.integrityBreaches, 1);
+        assert.strictEqual(cliExit(entries), 1);
+    });
+
+    await test("F6: a context that cannot be opened is an execution failure with nothing to clean up", async () => {
+        const root = await tmpRoot();
+        const a = await approvedJourney(root, "j-a", [A("R1", true)]);
+        let closed = 0;
+        const { co, report } = await runAndReport(root, [a.journey], (x) => Coordinator.runIsolated(async () => { throw new Error("launch failed"); }, async () => { closed++; return passRows(x); }), 1);
+        assert.strictEqual(closed, 0, "work must not run without a context");
+        assert.deepStrictEqual(co.entries[0].rows, [{ name: "journey", status: "failed", error: "JOURNEY_EXECUTION_ERROR" }]);
+        assert.ok(!("cleanupFailed" in co.entries[0]));
+        assert.notStrictEqual(report.result, "PASSED");
+    });
+
+    await test("F7: a forged cleanup flag can only downgrade; it cannot upgrade or hide anything", async () => {
+        const root = await tmpRoot();
+        const a = await approvedJourney(root, "j-a", [A("R1", true)]);
+        const bound = await Binding.bind({ contractFile: a.file, journeyId: "j-a", storeRoot: root, repoRoot: root });
+        const rv = Object.freeze({ ok: true });
+        const withFlag = ReportManager.buildReport({ journeyEntries: [{ binding: bound, rows: rowsFor("j-a", a.digest, { R1: "failed" }), revalidation: rv, cleanupFailed: true }], requireRevalidation: true, runId: "r", duration: "0s" });
+        assert.strictEqual(withFlag.verification.level, "FAILED");
+        const falseFlag = ReportManager.buildReport({ journeyEntries: [{ binding: bound, rows: rowsFor("j-a", a.digest, { R1: "passed" }), revalidation: rv, cleanupFailed: "no" }], requireRevalidation: true, runId: "r", duration: "0s" });
+        assert.strictEqual(falseFlag.result, "PASSED", "only the exact boolean true counts");
     });
 
     for (const d of cleanups) { try { await fs.promises.rm(d, { recursive: true, force: true }); } catch { /* best effort */ } }

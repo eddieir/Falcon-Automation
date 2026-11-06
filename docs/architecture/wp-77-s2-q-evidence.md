@@ -56,7 +56,7 @@ Baseline: `5b523331b850f0e7fd6c56d2417a0e1254169183` (main, S1 merged). Issue #7
 
 | Command | Result |
 |---|---|
-| `node tests/unit/JourneyCoordinator.check.js` | 22 passed, 0 failed |
+| `node tests/unit/JourneyCoordinator.check.js` | 22 passed, 0 failed at `92b4952`; 29 passed, 0 failed after the teardown correction below |
 | `npm run test:unit` | exit 0 (includes `JourneyAggregation` 29/0, `Verification` 56/0, `OptionalAssertions` 18/0) |
 | `node --test --test-concurrency=1 tests/regression/approved-workers.check.cjs` | 10 pass, 0 fail (real Chromium, loopback) |
 | `npm run test:regression` (full, once) | 2482 tests: 2480 pass, 2 fail. Both failures are `playwright-pin.check.cjs` (installed 1.64.0 vs pin 1.64.1); environmental, identical on the baseline, and the hosted CI installs the pin with `npm ci` |
@@ -147,3 +147,26 @@ Revert this PR's merge commit (a single squash commit). There are no data or sto
 
 - `JourneyCoordinator.js` was started by Developer 1 (PARTIAL, unreviewed on return); the coordinator reviewed it, changed it (plan copy, resolved-path duplicate check) and wrote the rest of the runtime, the tests, the benchmark and the documentation, under the CTO exception of this cycle. This is coordinator-authored work and is not independent approval.
 - Independent QA, Code Review, Security and Release Manager verdicts: not yet requested. Dispatch usage: 1 of 8 (the failed Developer 1 run); 5 planned review/qualification dispatches and 2 reserves remain, none used.
+
+## Independent gate record and teardown correction (CTO-authorized, same PR)
+
+Dispatch ledger (hard ceiling 8): (1) Developer 1 PARTIAL, turn limit, no report. (2) QA, (3) Code Review: both ended at the turn limit with no report; preserved, not retried. (4) QA replacement on `92b4952`: PASS (independently reproduced the shared-context mutant failing W4; QA P3: supersession has no CLI-level test). (5) Code Review replacement on `92b4952`: APPROVE_WITH_CONDITIONS with two findings, assessed by reproduction by the coordinator:
+
+- **P1 symlink duplicate evasion: not reproducible.** `ExecutionBinding.bind` opens contract files with `O_NOFOLLOW`, so a symlinked contract is refused (`CONTRACT_UNREADABLE`, report `UNVERIFIED` / `BINDING_UNISSUED`); a symlink reusing a journey id is caught by `DUPLICATE_JOURNEY`; a contract file carries exactly one journey id. No change made.
+- **P2 context teardown masks the journey result: reproduced and corrected.** Original counterexample: with the executor `try { ...return rows } finally { await jContext.close() }`, a throwing `close()` after a valid run discarded the result: the journey became a `JOURNEY_EXECUTION_ERROR` failed row and the run `FAILED`. This failed closed (false failure, never a false pass), but it hid the real result and the cleanup fault.
+
+Correction: `JourneyCoordinator.runIsolated(openContext, work)` owns the context lifecycle. It keeps the journey's own outcome, flags a failed `close()` separately as the boolean `cleanupFailed` (never error text), re-throws execution errors as a message-free error that carries the flag, and the coordinator copies the flag onto the entry. `Verification` turns it into one integrity breach with the closed-set code `JOURNEY_CLEANUP_FAILED`: never `PASSED`, never `BUSINESS_VERIFIED`, while the journey's own evidence (including a required failure) is kept. `falcon.js` logs a fixed message per affected journey and passes the flag to the report. Only the exact boolean `true` counts, and the flag can only downgrade.
+
+| Case (tests F1-F7) | Result | Level | Reason code | Exit |
+|---|---|---|---|---|
+| success + successful close | `PASSED` | `BUSINESS_VERIFIED` | none | 0 |
+| success + throwing close | `PARTIAL` | `UNVERIFIED` | `JOURNEY_CLEANUP_FAILED` | 1 |
+| required failure + throwing close | `FAILED` | `FAILED` | `JOURNEY_CLEANUP_FAILED` | 1 |
+| execution failure + throwing close | non-`PASSED` | not `BUSINESS_VERIFIED` | `JOURNEY_CLEANUP_FAILED` (row stays `JOURNEY_EXECUTION_ERROR`) | 1 |
+| two concurrent journeys, one close fails | non-`PASSED` | per journey `UNVERIFIED`, `BUSINESS_VERIFIED` | `JOURNEY_CLEANUP_FAILED` (one breach) | 1 |
+
+Failing-before: against an implementation that keeps the original `try/finally { await close() }` behavior, F2-F5 fail (F2: `'failed' !== 'passed'`, the valid result is lost); with the correction all 29 coordinator tests pass. Focused re-run on the correction: `JourneyAggregation` 29/0, `Verification` 56/0, `OptionalAssertions` 18/0, `TestRunnerVerify` 29/0, `ReportManagerExitCode` ok, `approved-workers.check.cjs` 10/10.
+
+Not changed (explicit exclusions): realpath/symlink handling, locator-memory persistence, dashboard, shard authentication, worker modes, #78.
+
+Nonblocking follow-ups: (a) no CLI-level run of approval supersession during execution (covered at coordinator level by D1); (b) no test asserts that each journey receives a distinct identity-object copy: `loadIdentitiesFor` returns `structuredClone` of the file body but lives inside `falcon.js`, so a unit test would need a refactor outside this correction's scope; (c) the cleanup path is tested at the exact function level with fake contexts, not by forcing a real Chromium `close()` failure through the CLI.
