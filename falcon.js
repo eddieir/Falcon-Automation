@@ -65,6 +65,7 @@ const InvocationContext = require("./src/core/llm/InvocationContext");
 const { isKeyShapedValue } = require("./src/core/llm/transport/guardedFetch");
 const ContractCli      = require("./src/core/outcome/ContractCli");
 const ExecutionBinding = require("./src/core/outcome/ExecutionBinding");
+const JourneyCoordinator = require("./src/core/outcome/JourneyCoordinator");
 
 const DEFAULT_URL = "https://www.saucedemo.com";
 
@@ -450,6 +451,48 @@ const runEntryPageOnly = async (context, url, emit, repeatCount = 1, providerCon
 };
 
 /**
+ * WP-77R: fixture identities for `accessEquals` assertions. Loaded only when
+ * the bound contract actually needs one; any failure (missing file, bad JSON,
+ * unsafe path) yields {} so the assertion fails closed as
+ * `unavailable`/`identity_unknown` rather than silently substituting a
+ * credential. Always returns a fresh deep copy so concurrent journeys never
+ * share a mutable identity object. Never logged.
+ */
+const loadIdentitiesFor = async (binding) => {
+    const needs = Boolean(
+        binding && binding.ok
+        && binding.contract.assertions.some((a) => a.check === "accessEquals")
+    );
+    if (!needs) return {};
+    try {
+        const LocalSource = require("./src/core/outcome/LocalSource");
+        const read = await LocalSource.readFileJson("fixtures/identities.json", __dirname);
+        if (read.ok && read.body && typeof read.body === "object") return structuredClone(read.body);
+    } catch {
+        return {};
+    }
+    return {};
+};
+
+/** Every `--plan=<value>` occurrence, in order (the legacy reader rejects repeats). */
+const collectPlanValues = (args) => {
+    const values = [];
+    for (const a of args.filter((x) => x.startsWith("--plan="))) {
+        const v = a.slice("--plan=".length);
+        if (v.trim() === "") {
+            Logger.error("❌ --plan requires a value, e.g. --plan=<file>.");
+            return { ok: false };
+        }
+        if (isKeyShapedValue(v)) {
+            Logger.error("❌ --plan was given a credential-shaped value — a key must never be passed on the command line.");
+            return { ok: false };
+        }
+        values.push(v);
+    }
+    return { ok: true, values };
+};
+
+/**
  * --plan=<file>: replay a saved plan through the same TestRunner → AIHealer
  * path every other mode uses. No discovery, no crawl: the plan is the test.
  */
@@ -496,7 +539,17 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
 
     // Saved plans: a rejected plan is input the user must fix (exit 2), checked
     // before the dashboard or the browser exist.
-    const planFlag     = readStrictValueFlag(args, "plan");
+    // WP-77I-S2: approved-contract multi-journey mode = more than one --plan,
+    // or --plan with --workers N>1 (never with --shard: that stays refused).
+    const planValues    = collectPlanValues(args);
+    const earlyParallel = parseParallelArgs(args);
+    if (!planValues.ok) {
+        await Logger.flush();
+        process.exit(1);
+    }
+    const multiJourney = planValues.values.length > 0 && earlyParallel.ok && earlyParallel.shard === null
+        && (planValues.values.length > 1 || earlyParallel.workers > 1);
+    const planFlag     = multiJourney ? { ok: true, value: undefined } : readStrictValueFlag(args, "plan");
     const savePlanFlag = readStrictValueFlag(args, "save-plan");
     if (!planFlag.ok || !savePlanFlag.ok) {
         await Logger.flush();
@@ -511,6 +564,11 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
     }
     if (savePlanPath && !args.includes("--single-page")) {
         Logger.error("❌ --save-plan needs --single-page: a sweep produces one plan per page.");
+        await Logger.flush();
+        process.exit(1);
+    }
+    if (multiJourney && (savePlanFlag.value || args.includes("--single-page"))) {
+        Logger.error("❌ --plan replays a saved plan; it cannot be combined with --save-plan or --single-page.");
         await Logger.flush();
         process.exit(1);
     }
@@ -544,25 +602,7 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
         }
     }
 
-    // WP-77R: fixture identities for `accessEquals` assertions. Loaded only
-    // when the bound contract actually needs one; any failure (missing
-    // file, bad JSON, unsafe path) leaves identities empty so the assertion
-    // fails closed as `unavailable`/`identity_unknown` rather than silently
-    // substituting a credential. Never logged.
-    let identities = {};
-    const needsIdentities = Boolean(
-        contractBinding && contractBinding.ok
-        && contractBinding.contract.assertions.some((a) => a.check === "accessEquals")
-    );
-    if (needsIdentities) {
-        try {
-            const LocalSource = require("./src/core/outcome/LocalSource");
-            const read = await LocalSource.readFileJson("fixtures/identities.json", __dirname);
-            if (read.ok && read.body && typeof read.body === "object") identities = read.body;
-        } catch {
-            identities = {};
-        }
-    }
+    let identities = await loadIdentitiesFor(contractBinding);
 
     const urlArg      = args.find((a) => a.startsWith("--url="));
     const rawUrl      = urlArg ? urlArg.slice("--url=".length) : (savedPlan ? savedPlan.url : DEFAULT_URL);
@@ -614,7 +654,7 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
         await Logger.flush();
         process.exit(1);
     }
-    const parallelRun = parallel.shard !== null || parallel.workers > 1;
+    const parallelRun = !multiJourney && (parallel.shard !== null || parallel.workers > 1);
     if (parallelRun && (singlePage || savedPlan)) {
         Logger.error("❌ --single-page and --plan cannot be combined with --workers or --shard.");
         await Logger.flush();
@@ -653,7 +693,7 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
     }
     const providerContext = invocationResult.context;
 
-    if (!urlArg && !savedPlan) {
+    if (!urlArg && !savedPlan && !multiJourney) {
         Logger.info(`ℹ️  No --url supplied — defaulting to ${DEFAULT_URL}`);
     }
 
@@ -662,7 +702,7 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
     // ── Dashboard ─────────────────────────────────────────────────────────────
     const dashboard = new Dashboard({ port: Number(process.env.DASHBOARD_PORT) || 3000 }); // host: DASHBOARD_HOST, default 127.0.0.1
     let dashboardUp = false;
-    if (!noDashboard) {
+    if (!noDashboard && !multiJourney) {
         try {
             await dashboard.start(); // prints http://localhost:3000
             dashboardUp = true;
@@ -681,6 +721,91 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
     const emit = (name, payload) => {
         if (dashboardUp) dashboard.emit(name, payload);
     };
+
+    // ── WP-77I-S2: approved-contract journeys on in-process workers ─────────
+    // Whole journeys are scheduled across workers by JourneyCoordinator; each
+    // journey gets its own BrowserContext and its own deep-copied plan and
+    // identities. Approval is re-checked at merge time and a report is only
+    // trusted when every journey's revalidation succeeded.
+    if (multiJourney) {
+        const mFail = async (message) => {
+            Logger.error(`❌ ${message}`);
+            await Logger.flush();
+            process.exit(1);
+        };
+        if (urlArg) await mFail("--url cannot be combined with several approved-contract plans; each plan carries its own URL.");
+        const storeRootFlag = readStrictValueFlag(args, "store-root");
+        if (!storeRootFlag.ok) {
+            await Logger.flush();
+            process.exit(1);
+        }
+        const journeys = [];
+        for (const file of planValues.values) {
+            try {
+                journeys.push({ planFile: file, plan: await PlanFile.load(file) });
+            } catch (error) {
+                Logger.error(`❌ ${error.message}`);
+                await Logger.flush();
+                process.exit(error instanceof PlanFile.PlanError ? 2 : 1);
+            }
+        }
+        const configCheck = JourneyCoordinator.validateConfig({ journeys, workers: parallel.workers, shard: null });
+        if (!configCheck.ok) await mFail(`Approved-contract run refused (${configCheck.code}).`);
+
+        const mReport = new ReportManager();
+        mReport.startRun();
+        const mStartedAt = Date.now();
+        let mBrowser;
+        try {
+            mBrowser = await chromium.launch({ headless });
+            Logger.info(`▶  ${journeys.length} approved-contract journey(s) on ${Math.min(parallel.workers, journeys.length)} in-process worker(s)…`);
+            const coordinated = await JourneyCoordinator.run({
+                journeys,
+                workers: parallel.workers,
+                storeRoot: storeRootFlag.value,
+                repoRoot: __dirname,
+                // The context lifecycle (open, run, always close) lives in
+                // JourneyCoordinator.runIsolated: a failed close() is flagged
+                // as cleanupFailed and never replaces the journey's own result.
+                executeJourney: ({ plan, binding }) => JourneyCoordinator.runIsolated(
+                    () => mBrowser.newContext(),
+                    async (jContext) => {
+                        const jIdentities = await loadIdentitiesFor(binding);
+                        const sweep = await runSavedPlan(jContext, plan, () => {}, repeatCount, providerContext, binding, jIdentities);
+                        return { rows: sweep.pages.flatMap((p) => p.results), pages: sweep.pages };
+                    }
+                ),
+            });
+            if (!coordinated.ok) {
+                Logger.error(`❌ Approved-contract run refused (${coordinated.code}).`);
+                process.exitCode = 1;
+            } else {
+                for (const e of coordinated.entries) {
+                    if (e.cleanupFailed) Logger.error(`❌ Journey ${e.journeyId}: execution context could not be closed (JOURNEY_CLEANUP_FAILED); isolation is uncertain, so this run cannot pass.`);
+                }
+                const allPages = coordinated.entries.flatMap((e) => (Array.isArray(e.pages) ? e.pages : []));
+                const report = mReport.generateReport({
+                    tests: [],
+                    uiIssues: allPages.flatMap((p) => p.uiIssues || []),
+                    healingEvents: HealingReport._instance.logs,
+                    coverage: deriveCoverage(allPages),
+                    pages: allPages.map(pageBreakdown),
+                    journeyEntries: coordinated.entries.map((e) => ({ binding: e.binding, rows: e.rows, revalidation: e.revalidation, ...(e.cleanupFailed ? { cleanupFailed: true } : {}) })),
+                    requireRevalidation: true,
+                });
+                await recordRun({
+                    incomplete: false, report, coverage: deriveCoverage(allPages), repeat: repeatCount, startedAt: mStartedAt,
+                });
+            }
+        } catch (error) {
+            Logger.error(`❌ Fatal error: ${error && error.code ? error.code : "error"}`);
+            process.exitCode = 1;
+        } finally {
+            await Logger.flush();
+            if (mBrowser) await mBrowser.close();
+        }
+        return;
+    }
 
     // ── Phase 16: sharded / multi-worker run (never reached by default) ──────
     if (parallelRun) {

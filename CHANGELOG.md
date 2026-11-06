@@ -6,6 +6,19 @@ See [README.md](README.md) for the current feature set, architecture, and usage.
 
 ---
 
+## Approved-contract journeys on in-process workers (#77, WP-77I-S2 + WP-77Q)
+
+- **New:** repeat `--plan=<file>` (or pass `--plan` with `--workers=N`, N from 1 to 8) to run several approved-contract journeys concurrently in one process. Whole journeys are scheduled, never single assertions, each in its own browser context with its own copy of the plan and identities. Results are reported in `journeyId` order whatever the completion order.
+- **Merge-time approval re-check.** Every journey's approval is re-queried after the workers finish. A contract superseded, or an approval store that went missing or corrupt, during the run makes the run non-successful and never `BUSINESS_VERIFIED` (new closed-set code `APPROVAL_REVALIDATION_FAILED`).
+- **Duplicate protection.** The same journey, or the same binding object, submitted twice is a `JOURNEY_DUPLICATE` integrity breach. Duplicate or unknown plans are refused before any browser starts.
+- **Tally fix.** Optional assertions of journeys with different valid contract digests stay optional in the report tallies. Previously the pooled digest check could count them as required.
+- **Unchanged:** a single `--plan` with the default worker count, contractless plans, exit codes, and the refusal of `--plan` with `--shard`. Cross-process (`--shard`) contract verification remains unsupported.
+- **CI:** `JourneyAggregation.check.js` (S1) and the new `JourneyCoordinator.check.js` now run in the hosted unit step. S1 had not wired the first into CI.
+- **Teardown:** a browser-context `close()` failure no longer replaces a journey's valid result. It is reported separately as `JOURNEY_CLEANUP_FAILED`: the run cannot pass and is never `BUSINESS_VERIFIED`, while the journey's own evidence, including required failures, is kept.
+- Evidence, acceptance matrix, benchmark and rollback: `docs/architecture/wp-77-s2-q-evidence.md`.
+
+---
+
 ## License change: MIT to Apache License 2.0
 
 - **New versions are licensed under the Apache License 2.0.** `LICENSE` now holds the unmodified Apache 2.0 text, and a new `NOTICE` file carries the copyright line. `package.json` declares `Apache-2.0`.

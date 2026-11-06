@@ -3,7 +3,7 @@
 Status: design accepted (parent issue #77). Baseline `3dbdebd`. The work is split into two packages:
 
 - **S1 (Package 1): Trusted Verification Core.** Implemented (PR #140). Described in "WP-77I-S1" below.
-- **S2 (Package 2): in-process workers, CLI orchestration and journey scheduling.** Not implemented. Described in "Package 2 design (not delivered by S1)" below.
+- **S2 (Package 2): in-process workers, CLI orchestration and journey scheduling.** Implemented together with WP-77Q in one branch; see `wp-77-s2-q-evidence.md`. The "Package 2 design" section below is the accepted design it follows.
 
 ## WP-77I-S1: Trusted Verification Core
 
@@ -71,9 +71,9 @@ These are not delivered by S1 and are recorded so S2 does not assume them:
 - A stale comment in `src/core/ReportManager.js` still names the removed `BindingRegistry`. It is informational and is left for a separately reviewed change.
 - Local Playwright-pin regression failures (installed 1.64.0 versus the 1.64.1 pin) are environmental and were not repaired by this work.
 
-## Package 2 design (not delivered by S1)
+## Package 2 design (delivered by S2, see wp-77-s2-q-evidence.md)
 
-The following is the accepted design for S2 and is **not** implemented.
+The following is the accepted design for S2. S2 implements it (with the deviations listed in the evidence document).
 
 - `--plan <file> [--plan <file> ...] --workers N` runs several approved-contract journeys concurrently in one process.
 - Whole-journey scheduling: one plan is one contract is one journey. Assertions are never split across workers, so journey steps are never replayed.
