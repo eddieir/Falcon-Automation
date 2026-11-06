@@ -47,7 +47,34 @@ const REASON_CODES = Object.freeze({
     // integrity re-check (mutated after issuance, or digest no longer
     // matches its own contract).
     BINDING_TAMPERED: "BINDING_TAMPERED",
+    // WP-77IS (security P1): a REQUIRED contract assertion whose matched row
+    // reports `skipped` was recognized but never executed (not a business
+    // failure, never a pass); and a row whose status is outside the
+    // reporting vocabulary is malformed evidence (an integrity breach).
+    EVIDENCE_NOT_EXECUTED: "EVIDENCE_NOT_EXECUTED",
+    EVIDENCE_INVALID_STATUS: "EVIDENCE_INVALID_STATUS",
 });
+
+const VALID_ROW_STATUSES = new Set(["passed", "failed", "skipped", "quarantined", "deduped", "unavailable"]);
+
+/**
+ * Normalize the status of the single row matched to a contract assertion.
+ * `skipped` on a required assertion becomes `unavailable` plus a closed-set
+ * NOT_EXECUTED reason (no business failure is manufactured). A status outside
+ * the vocabulary (undefined, null, "PASS", anything else) is never trusted:
+ * it becomes `unavailable` and is flagged as an integrity breach.
+ */
+function normalizeMatchedStatus(status, required) {
+    if (status === "passed" || status === "failed" || status === "quarantined" || status === "unavailable") {
+        return { status };
+    }
+    if (status === "skipped") {
+        return required
+            ? { status: "unavailable", reason: REASON_CODES.EVIDENCE_NOT_EXECUTED }
+            : { status: "skipped" };
+    }
+    return { status: "unavailable", reason: REASON_CODES.EVIDENCE_INVALID_STATUS, breach: true };
+}
 
 const ExecutionBinding = require("./ExecutionBinding");
 // Pure module (no I/O) — safe to require directly for the independent
@@ -578,8 +605,12 @@ function resolveJourney(binding, rows, opts) {
                     passthrough.push(plainFailedRow(binding.journeyId));
                 }
             }
-        } else {
+        } else if (VALID_ROW_STATUSES.has(snap.status)) {
             passthrough.push(row);
+        } else {
+            // Malformed status on a plain row: never trusted, never counted.
+            reasons.add(REASON_CODES.EVIDENCE_INVALID_STATUS);
+            integrityBreaches++;
         }
     }
 
@@ -593,8 +624,11 @@ function resolveJourney(binding, rows, opts) {
                 assertion: { id, digest: binding.digest, check: def.check, locator: def.locator },
             });
         } else if (matches.length === 1) {
+            const norm = normalizeMatchedStatus(matches[0] && matches[0].status, def.required);
+            if (norm.reason) reasons.add(norm.reason);
+            if (norm.breach) integrityBreaches++;
             sanitizedAssertionRows.push({
-                status: matches[0].status,
+                status: norm.status,
                 required: def.required,
                 assertion: { id, digest: binding.digest, check: def.check, locator: def.locator },
             });
@@ -614,7 +648,8 @@ function resolveJourney(binding, rows, opts) {
     const verification = aggregateRun(sanitizedRows, opts);
 
     let level = verification.level;
-    if ((reasons.has(REASON_CODES.EVIDENCE_UNKNOWN) || reasons.has(REASON_CODES.EVIDENCE_DUPLICATE))
+    if ((reasons.has(REASON_CODES.EVIDENCE_UNKNOWN) || reasons.has(REASON_CODES.EVIDENCE_DUPLICATE)
+        || reasons.has(REASON_CODES.EVIDENCE_NOT_EXECUTED) || reasons.has(REASON_CODES.EVIDENCE_INVALID_STATUS))
         && (level === "BUSINESS_VERIFIED" || level === "INTERACTION_ONLY")) {
         level = "UNVERIFIED";
     }
