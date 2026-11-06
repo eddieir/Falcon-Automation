@@ -58,6 +58,11 @@ const REASON_CODES = Object.freeze({
     // the journey's approval. Both are untrusted-journey integrity breaches.
     JOURNEY_DUPLICATE: "JOURNEY_DUPLICATE",
     APPROVAL_REVALIDATION_FAILED: "APPROVAL_REVALIDATION_FAILED",
+    // WP-77I-S2: the journey's execution context could not be cleanly torn
+    // down, so browser/identity isolation for that journey is uncertain.
+    // One integrity breach: the run is non-PASSED and never BUSINESS_VERIFIED;
+    // the journey's own evidence (including required failures) is kept.
+    JOURNEY_CLEANUP_FAILED: "JOURNEY_CLEANUP_FAILED",
 });
 
 const VALID_ROW_STATUSES = new Set(["passed", "failed", "skipped", "quarantined", "deduped", "unavailable"]);
@@ -549,6 +554,7 @@ function resolveJourney(binding, rows, opts, ctx) {
     const issued = ExecutionBinding.isIssued(binding);
     const integrityOk = issued && isBindingIntegrityValid(binding);
     const duplicate = !!(ctx && ctx.duplicate);
+    const cleanupFailed = !!(ctx && ctx.cleanupFailed === true);
     // WP-77I-S2: merge-time approval re-check. A present verdict that is not
     // exactly ok:true fails the journey; with opts.requireRevalidation an
     // absent verdict fails it too (a worker run must never be trusted only
@@ -582,8 +588,10 @@ function resolveJourney(binding, rows, opts, ctx) {
         else if (!integrityOk) code = REASON_CODES.BINDING_TAMPERED;
         else if (duplicate) code = REASON_CODES.JOURNEY_DUPLICATE;
         else code = REASON_CODES.APPROVAL_REVALIDATION_FAILED;
+        const untrustedReasons = new Set([code]);
+        if (cleanupFailed) untrustedReasons.add(REASON_CODES.JOURNEY_CLEANUP_FAILED);
         return {
-            reasons: new Set([code]),
+            reasons: untrustedReasons,
             level: verification.level,
             verification,
             sanitizedRows,
@@ -665,11 +673,17 @@ function resolveJourney(binding, rows, opts, ctx) {
         }
     }
 
+    // An uncertain teardown is one breach for the journey; its evidence stays.
+    if (cleanupFailed) {
+        reasons.add(REASON_CODES.JOURNEY_CLEANUP_FAILED);
+        integrityBreaches++;
+    }
+
     const sanitizedRows = sanitizedAssertionRows.concat(passthrough);
     const verification = aggregateRun(sanitizedRows, opts);
 
     let level = verification.level;
-    if ((reasons.has(REASON_CODES.EVIDENCE_UNKNOWN) || reasons.has(REASON_CODES.EVIDENCE_DUPLICATE)
+    if ((reasons.has(REASON_CODES.JOURNEY_CLEANUP_FAILED) || reasons.has(REASON_CODES.EVIDENCE_UNKNOWN) || reasons.has(REASON_CODES.EVIDENCE_DUPLICATE)
         || reasons.has(REASON_CODES.EVIDENCE_NOT_EXECUTED) || reasons.has(REASON_CODES.EVIDENCE_INVALID_STATUS))
         && (level === "BUSINESS_VERIFIED" || level === "INTERACTION_ONLY")) {
         level = "UNVERIFIED";
@@ -708,7 +722,7 @@ function prepareEntries(entries) {
         const duplicate = (id !== "" && seenIds.has(id)) || (isObj && seenBindings.has(binding));
         if (id !== "") seenIds.add(id);
         if (isObj) seenBindings.add(binding);
-        return { entry, duplicate, revalidation: entry ? entry.revalidation : undefined };
+        return { entry, duplicate, revalidation: entry ? entry.revalidation : undefined, cleanupFailed: !!(entry && entry.cleanupFailed === true) };
     });
 }
 
@@ -727,8 +741,8 @@ function reconcileJourneys(entries, opts) {
     // approval evidence", so their optional rows stay optional.
     const optionalIndexes = new Set();
     let integrityBreaches = 0;
-    for (const { entry, duplicate, revalidation } of prepareEntries(entries)) {
-        const resolved = resolveJourney(entry && entry.binding, entry && entry.rows, opts, { duplicate, revalidation });
+    for (const { entry, duplicate, revalidation, cleanupFailed } of prepareEntries(entries)) {
+        const resolved = resolveJourney(entry && entry.binding, entry && entry.rows, opts, { duplicate, revalidation, cleanupFailed });
         const offset = rows.length;
         for (const row of resolved.sanitizedRows) rows.push(row);
         for (const idx of trustedOptionalIndexes(resolved.sanitizedRows, opts)) optionalIndexes.add(offset + idx);
@@ -755,9 +769,9 @@ function aggregateJourneys(entries, opts) {
     let required = 0, pass = 0, fail = 0, inconclusive = 0, refused = 0, notTested = 0;
     let optPass = 0, optFail = 0, optInconclusive = 0, optNotTested = 0, hasOptional = false;
 
-    for (const { entry, duplicate, revalidation } of list) {
+    for (const { entry, duplicate, revalidation, cleanupFailed } of list) {
         const binding = entry && entry.binding;
-        const resolved = resolveJourney(binding, entry && entry.rows, opts, { duplicate, revalidation });
+        const resolved = resolveJourney(binding, entry && entry.rows, opts, { duplicate, revalidation, cleanupFailed });
 
         for (const code of resolved.reasons) reasonSet.add(code);
 

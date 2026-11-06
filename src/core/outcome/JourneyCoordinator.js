@@ -149,15 +149,20 @@ async function run(args) {
                 const plan = structuredClone(sorted[idx].plan);
                 const binding = bindings[idx];
                 let outcome;
+                let cleanupFailed = false;
                 try {
                     const r = await executeJourney({ plan, binding, index: idx });
+                    cleanupFailed = !!(r && r.cleanupFailed === true);
                     if (!r || !Array.isArray(r.rows)) throw new Error("malformed_executor_result");
                     outcome = { rows: r.rows, pages: r.pages };
-                } catch {
+                } catch (e) {
                     // Never carry the thrown error's message/text downstream:
-                    // a privacy-safe, closed-set failure row only.
+                    // a privacy-safe, closed-set failure row only. A cleanup
+                    // failure that accompanied the error is still recorded.
+                    cleanupFailed = cleanupFailed || !!(e && e.cleanupFailed === true);
                     outcome = { rows: [{ name: "journey", status: "failed", error: "JOURNEY_EXECUTION_ERROR" }] };
                 }
+                outcome.cleanupFailed = cleanupFailed;
                 results[idx] = outcome;
             }
         }
@@ -179,6 +184,7 @@ async function run(args) {
                 journeyId: journeyIdOfPlan(sorted[i].plan),
             };
             if (outcome.pages !== undefined) entry.pages = outcome.pages;
+            if (outcome.cleanupFailed === true) entry.cleanupFailed = true;
             if (binding && binding.ok === true && ExecutionBinding.isIssued(binding)) {
                 let rv;
                 try {
@@ -199,7 +205,47 @@ async function run(args) {
     }
 }
 
+/**
+ * Run one journey in its own execution context and always close that context.
+ * Execution and cleanup are handled SEPARATELY:
+ *  - the journey's own outcome is never replaced by a cleanup failure;
+ *  - a failed `close()` is flagged as `cleanupFailed: true` (a boolean, never
+ *    error text) on the returned value, or on the error thrown for a journey
+ *    that itself failed, so the coordinator can report it. An uncertain
+ *    teardown means isolation is uncertain: Verification turns the flag into
+ *    an integrity breach (never PASSED, never BUSINESS_VERIFIED);
+ *  - an execution error is re-thrown as a fresh, message-free Error so no
+ *    error text can travel to a report.
+ * A context that cannot be opened propagates as an ordinary execution
+ * failure (there is nothing to clean up).
+ */
+async function runIsolated(openContext, work) {
+    const context = await openContext();
+    let outcome;
+    let failed = false;
+    try {
+        outcome = await work(context);
+    } catch {
+        failed = true;
+    }
+    let cleanupFailed = false;
+    try {
+        await context.close();
+    } catch {
+        cleanupFailed = true;
+    }
+    if (failed) {
+        const err = new Error("JOURNEY_EXECUTION_ERROR");
+        err.cleanupFailed = cleanupFailed;
+        throw err;
+    }
+    return cleanupFailed && outcome !== null && typeof outcome === "object"
+        ? { ...outcome, cleanupFailed: true }
+        : outcome;
+}
+
 module.exports = {
+    runIsolated,
     MAX_WORKERS,
     CODES,
     validateConfig,

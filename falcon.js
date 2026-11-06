@@ -764,21 +764,25 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
                 workers: parallel.workers,
                 storeRoot: storeRootFlag.value,
                 repoRoot: __dirname,
-                executeJourney: async ({ plan, binding }) => {
-                    const jContext = await mBrowser.newContext();
-                    try {
+                // The context lifecycle (open, run, always close) lives in
+                // JourneyCoordinator.runIsolated: a failed close() is flagged
+                // as cleanupFailed and never replaces the journey's own result.
+                executeJourney: ({ plan, binding }) => JourneyCoordinator.runIsolated(
+                    () => mBrowser.newContext(),
+                    async (jContext) => {
                         const jIdentities = await loadIdentitiesFor(binding);
                         const sweep = await runSavedPlan(jContext, plan, () => {}, repeatCount, providerContext, binding, jIdentities);
                         return { rows: sweep.pages.flatMap((p) => p.results), pages: sweep.pages };
-                    } finally {
-                        await jContext.close();
                     }
-                },
+                ),
             });
             if (!coordinated.ok) {
                 Logger.error(`❌ Approved-contract run refused (${coordinated.code}).`);
                 process.exitCode = 1;
             } else {
+                for (const e of coordinated.entries) {
+                    if (e.cleanupFailed) Logger.error(`❌ Journey ${e.journeyId}: execution context could not be closed (JOURNEY_CLEANUP_FAILED); isolation is uncertain, so this run cannot pass.`);
+                }
                 const allPages = coordinated.entries.flatMap((e) => (Array.isArray(e.pages) ? e.pages : []));
                 const report = mReport.generateReport({
                     tests: [],
@@ -786,7 +790,7 @@ const runSavedPlan = async (context, plan, emit, repeatCount = 1, providerContex
                     healingEvents: HealingReport._instance.logs,
                     coverage: deriveCoverage(allPages),
                     pages: allPages.map(pageBreakdown),
-                    journeyEntries: coordinated.entries.map((e) => ({ binding: e.binding, rows: e.rows, revalidation: e.revalidation })),
+                    journeyEntries: coordinated.entries.map((e) => ({ binding: e.binding, rows: e.rows, revalidation: e.revalidation, ...(e.cleanupFailed ? { cleanupFailed: true } : {}) })),
                     requireRevalidation: true,
                 });
                 await recordRun({
