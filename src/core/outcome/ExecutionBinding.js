@@ -26,6 +26,20 @@ const Contract = require("./Contract");
 const ContractStore = require("./ContractStore");
 const Schemas = require("../parallel/Schemas");
 
+// WP-77IS (M1): issuance state lives HERE, in module scope, and nowhere else.
+// There is no registry module, no claim function and no exported way to add
+// to `issuedBindings`: the only writer is `bind()` below, on its ok path. So
+// no import order, and no module that merely `require`s this one, can obtain
+// the ability to mint an issued binding. `isIssued` is read-only. This does
+// not defend against code with full execution privileges in the same
+// process (it could patch modules or use the debugger); it defends against
+// untrusted data and ordinary importers.
+const issuedBindings = new WeakSet();
+
+function isIssued(binding) {
+    return binding !== null && typeof binding === "object" && issuedBindings.has(binding);
+}
+
 const CODES = Object.freeze({
     BAD_ARGS: "BAD_ARGS",
     STORE_ROOT_INVALID: "STORE_ROOT_INVALID",
@@ -136,16 +150,124 @@ async function bind(args) {
         if (statusRes.status !== "APPROVED") return fail(CODES.NOT_APPROVED, `status:${statusRes.status}`);
 
         const assertionIds = assertions.map((a) => a.id);
-        return {
+        // WP-77I/S4 + WP-77IS (repair): register the exact object returned
+        // on the ok path as "issued" before handing it back, AND freeze the
+        // outer object itself (the contract was already deep-frozen). Without
+        // freezing the outer object, a caller could reassign
+        // `binding.contract` after issuance and flip a required FAIL into a
+        // trusted PASSED/INTERACTION_ONLY result downstream — the frozen
+        // contract alone does not protect the `contract` property slot
+        // itself. This is the only place anything can enter `issuedBindings`,
+        // so downstream code (Verification) can tell a binding that
+        // genuinely passed digest/approval checks apart from a hand-built
+        // object literal with the same-looking fields.
+        const binding = Object.freeze({
             ok: true,
             journeyId,
             digest,
             contract: deepFreeze(contract),
             assertionIds: Object.freeze(assertionIds),
-        };
+        });
+        issuedBindings.add(binding);
+        return binding;
     } catch {
         return fail(CODES.BINDING_ERROR, "binding_error");
     }
 }
 
-module.exports = { bind, CODES, readContractFile };
+const REVALIDATE_CODES = Object.freeze({
+    UNISSUED: "UNISSUED",
+    DIGEST_MISMATCH: "DIGEST_MISMATCH",
+    NOT_APPROVED: "NOT_APPROVED",
+    STORE_MISSING: "STORE_MISSING",
+    STORE_BROKEN: "STORE_BROKEN",
+    LOOKUP_FAILED: "LOOKUP_FAILED",
+    JOURNEY_MISMATCH: "JOURNEY_MISMATCH",
+});
+
+/**
+ * WP-77I/S4 (merge-time revalidation, for DEV-02's in-process worker merge).
+ * Never throws; never reads/returns contract text, only closed reason codes.
+ *
+ * Re-checks, at merge time, that a binding a worker handed back is still (a)
+ * actually issued by `bind()` — never a hand-built object literal, even one
+ * with matching-looking fields — and (b) still APPROVED in the store for its
+ * own proven digest, recomputed fresh from the binding's own frozen
+ * `contract` (never trusting any cached digest the binding merely carries).
+ * A lookup failure is a closed LOOKUP_FAILED code, never read as approved.
+ */
+async function revalidate(binding, args) {
+    try {
+        if (!isIssued(binding)) {
+            return { ok: false, code: REVALIDATE_CODES.UNISSUED };
+        }
+
+        const journeyId = binding.journeyId;
+        const digest = binding.digest;
+        if (typeof journeyId !== "string" || !Schemas.isJourneyId(journeyId)) {
+            return { ok: false, code: REVALIDATE_CODES.UNISSUED };
+        }
+        if (typeof digest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(digest)) {
+            return { ok: false, code: REVALIDATE_CODES.UNISSUED };
+        }
+
+        if (!binding.contract || binding.contract.journeyId !== journeyId) {
+            return { ok: false, code: REVALIDATE_CODES.JOURNEY_MISMATCH };
+        }
+
+        let recomputed;
+        try {
+            recomputed = Contract.digestOf(binding.contract);
+        } catch {
+            return { ok: false, code: REVALIDATE_CODES.UNISSUED };
+        }
+        if (recomputed !== digest) {
+            return { ok: false, code: REVALIDATE_CODES.DIGEST_MISMATCH };
+        }
+
+        const storeRoot = args && args.storeRoot;
+        const repoRoot = args && args.repoRoot;
+        const rootRes = ContractStore.resolveStoreRoot(storeRoot, repoRoot);
+        if (!rootRes.ok) return { ok: false, code: REVALIDATE_CODES.LOOKUP_FAILED };
+        const root = rootRes.root;
+
+        // WP-77IS (repair): identical root pre-check to bind() — without
+        // this, a missing store root was being reported as STORE_BROKEN
+        // (via ContractStore.status's chain-read failure) instead of the
+        // more specific STORE_MISSING bind() reports for the same condition.
+        let rootLstat;
+        try {
+            rootLstat = await fs.promises.lstat(root);
+        } catch (e) {
+            if (e && e.code === "ENOENT") return { ok: false, code: REVALIDATE_CODES.STORE_MISSING };
+            return { ok: false, code: REVALIDATE_CODES.LOOKUP_FAILED };
+        }
+        if (rootLstat.isSymbolicLink() || !rootLstat.isDirectory()) {
+            return { ok: false, code: REVALIDATE_CODES.LOOKUP_FAILED };
+        }
+
+        let statusRes;
+        try {
+            statusRes = await ContractStore.status(root, journeyId, digest);
+        } catch {
+            return { ok: false, code: REVALIDATE_CODES.LOOKUP_FAILED };
+        }
+        if (!statusRes || !statusRes.ok) return { ok: false, code: REVALIDATE_CODES.LOOKUP_FAILED };
+        if (statusRes.integrity === "missing") return { ok: false, code: REVALIDATE_CODES.STORE_MISSING };
+        if (statusRes.integrity === "broken") return { ok: false, code: REVALIDATE_CODES.STORE_BROKEN };
+        if (statusRes.status !== "APPROVED") return { ok: false, code: REVALIDATE_CODES.NOT_APPROVED };
+
+        return { ok: true };
+    } catch {
+        return { ok: false, code: REVALIDATE_CODES.LOOKUP_FAILED };
+    }
+}
+
+module.exports = {
+    bind,
+    CODES,
+    readContractFile,
+    isIssued,
+    revalidate,
+    REVALIDATE_CODES,
+};

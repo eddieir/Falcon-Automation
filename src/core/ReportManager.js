@@ -153,8 +153,27 @@ class ReportManager {
      * Pure report construction (Phase 16): no clock, no console, no file I/O,
      * no exit code. The caller supplies `runId` and `duration`. The same
      * validation and tally rules as generateReport, which delegates here.
+     *
+     * WP-77IS (repair): `tests` and `journeyEntries` are mutually exclusive.
+     * When `journeyEntries` is supplied (non-empty), `tests` MUST be empty
+     * or omitted — the sanitized, contract-derived rows `journeyEntries`
+     * produces become `report.tests`, so `summary.total === tests.length`
+     * always holds, in both modes, for every caller. Mixing the two would
+     * let a caller's raw `tests` rows disagree with what was actually
+     * tallied. Legacy callers that never pass `journeyEntries` are
+     * byte-identical to prior behaviour: `report.tests` is exactly the
+     * `tests` array they supplied.
+     *
+     * Trust boundary (not reachable by untrusted data today): without
+     * `journeyEntries`, a bound row's own `required` claim is trusted as-is
+     * — nothing here cross-checks it against an approved contract. Every
+     * current caller (TestRunner.runVerify/_skipRemaining, ShardMerge via
+     * `verificationProvenance: "unproven"`) is in-process trusted code; no
+     * external file or shard bundle can inject a row with a forged
+     * `required` claim into this path. Callers that need contract-derived
+     * `required` for untrusted/merged rows MUST use `journeyEntries`.
      */
-    static buildReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [], runId, duration, timings = null, verificationProvenance } = {}) {
+    static buildReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [], runId, duration, timings = null, verificationProvenance, journeyEntries } = {}) {
         if (!Array.isArray(tests) || !Array.isArray(uiIssues) || !Array.isArray(healingEvents) || !Array.isArray(pages)) {
             throw new TypeError("Report results, issues, healing events and pages must be arrays");
         }
@@ -164,27 +183,60 @@ class ReportManager {
         if (tests.some(result => !result || !["passed", "failed", "skipped", "quarantined", "deduped", "unavailable"].includes(result.status))) {
             throw new TypeError("Each test result must have a valid status");
         }
+        // WP-77I/S4: additive opt-in. When callers supply `journeyEntries`
+        // (one or more `{ binding, rows }` pairs, each binding proven by
+        // ExecutionBinding.bind() and recorded in BindingRegistry), tally
+        // from the sanitized, contract-derived rows instead of the raw
+        // `tests` rows — so a row's own `required` claim can never override
+        // what its journey's APPROVED contract actually says. Default
+        // (`journeyEntries` omitted/empty) keeps every byte of prior
+        // behaviour: `tallyRows` is simply `tests`.
+        const hasJourneyEntries = Array.isArray(journeyEntries) && journeyEntries.length > 0;
+        if (hasJourneyEntries && tests.length > 0) {
+            throw new TypeError("tests and journeyEntries are mutually exclusive");
+        }
+        // WP-77IS: evidence-integrity breaches (untrusted binding, unknown
+        // or duplicate evidence) travel on their own channel: they are not
+        // contract assertions, so they never add a fabricated PASS/FAIL row,
+        // but they keep the technical result non-PASSED.
+        let integrityBreaches = 0;
+        let tallyRows = tests;
+        if (hasJourneyEntries) {
+            const reconciled = Verification.reconcileJourneys(journeyEntries, { approvalProvenance: verificationProvenance });
+            tallyRows = reconciled.rows;
+            integrityBreaches = reconciled.integrityBreaches;
+        }
+
         // Tally real outcomes
         // Trusted optional (required: false) rows that failed/are unavailable/
         // quarantined are warnings, not gating failures: exclude them from the
         // counts that drive `verified`/`overallResult`, but keep them in
         // `total` (they still ran) and leave passed optional rows in `passed`.
-        const optionalIdx = Verification.trustedOptionalIndexes(tests, { approvalProvenance: verificationProvenance });
+        const optionalIdx = Verification.trustedOptionalIndexes(tallyRows, { approvalProvenance: verificationProvenance });
         const isExcludedOptional = (t, idx) => optionalIdx.has(idx) && ["failed", "unavailable", "quarantined"].includes(t.status);
 
-        const passed      = tests.filter((t) => t.status === "passed").length;
-        const failed      = tests.filter((t, idx) => t.status === "failed" && !isExcludedOptional(t, idx)).length;
-        const skipped     = tests.filter((t) => t.status === "skipped").length;
-        const quarantined = tests.filter((t, idx) => t.status === "quarantined" && !isExcludedOptional(t, idx)).length;
-        const deduped     = tests.filter((t) => t.status === "deduped").length;
-        const unavailable = tests.filter((t, idx) => t.status === "unavailable" && !isExcludedOptional(t, idx)).length;
-        const total        = tests.length;
-        const optionalNotPassed = tests.filter((t, idx) => isExcludedOptional(t, idx)).length;
+        const passed      = tallyRows.filter((t) => t.status === "passed").length;
+        const failed      = tallyRows.filter((t, idx) => t.status === "failed" && !isExcludedOptional(t, idx)).length;
+        const skipped     = tallyRows.filter((t) => t.status === "skipped").length;
+        const quarantined = tallyRows.filter((t, idx) => t.status === "quarantined" && !isExcludedOptional(t, idx)).length;
+        const deduped     = tallyRows.filter((t) => t.status === "deduped").length;
+        const unavailable = tallyRows.filter((t, idx) => t.status === "unavailable" && !isExcludedOptional(t, idx)).length;
+        const total        = tallyRows.length;
+        const optionalNotPassed = tallyRows.filter((t, idx) => isExcludedOptional(t, idx)).length;
         // A trusted optional PASS must not soften a failing run into PARTIAL:
         // the PASSED/FAILED/PARTIAL branches below weigh only non-optional passes.
         // `summary.passed` still counts every passed row.
-        const optionalPassed = tests.filter((t, idx) => optionalIdx.has(idx) && t.status === "passed").length;
+        const optionalPassed = tallyRows.filter((t, idx) => optionalIdx.has(idx) && t.status === "passed").length;
         const gatingPassed = passed - optionalPassed;
+        // WP-77I/S6: a quarantined row that Verification classifies as a
+        // REQUIRED bound business assertion (own id/digest, not a trusted
+        // optional) is never just a warning — a quarantine must never be
+        // able to hide a real business failure. Plain UI quarantine and a
+        // plain (unbound) `expect` quarantine are unaffected: they stay
+        // counted only in `quarantined`, as before.
+        const gatingQuarantine = tallyRows.filter((t, idx) =>
+            t.status === "quarantined" && !optionalIdx.has(idx) && Verification.isBoundRow(t)
+        ).length;
 
         // `deduped` and (as of Phase 11) `skipped` are the statuses that
         // describe work this run never actually reached a verdict on:
@@ -206,11 +258,13 @@ class ReportManager {
         // only-unavailable run reports FAILED rather than a false PASSED.
         const verified = passed + failed + quarantined + unavailable;
 
-        // Top-level result: PASSED only if every executed test passed
+        // Top-level result: PASSED only if every executed test passed, AND
+        // (WP-77I/S6) no quarantine is hiding a required bound business
+        // assertion failure.
         let overallResult;
         if (verified === 0) {
             overallResult = "NO_TESTS_RUN";
-        } else if (failed === 0 && unavailable === 0) {
+        } else if (failed === 0 && unavailable === 0 && gatingQuarantine === 0 && integrityBreaches === 0) {
             overallResult = "PASSED";
         } else if (gatingPassed === 0) {
             overallResult = "FAILED";
@@ -226,17 +280,27 @@ class ReportManager {
             summary: {
                 total, passed, failed, skipped, quarantined, deduped, unavailable,
                 ...(optionalNotPassed > 0 ? { optionalNotPassed } : {}),
+                ...(gatingQuarantine > 0 ? { quarantineGating: gatingQuarantine } : {}),
+                ...(integrityBreaches > 0 ? { integrityBreaches } : {}),
             },
             result: overallResult,
-            tests,
+            // WP-77IS (repair): `tests` is always exactly the rows that were
+            // counted above, so `summary.total === tests.length` can never
+            // disagree with a caller-supplied array. In legacy mode that is
+            // `tests` itself (byte-identical to prior behaviour); in
+            // `journeyEntries` mode it is the sanitized rows.
+            tests: tallyRows,
             uiIssues,
             healingEvents,
             coverage,
             pages,
             // WP-79a: additive verification classification block, a pure
-            // function of `tests` only. Does not change `summary`, `result`
-            // or any existing key; legacy callers are unaffected.
-            verification: Verification.aggregateRun(tests, { approvalProvenance: verificationProvenance }),
+            // function of `tests` (or, since WP-77I/S4, of `journeyEntries`
+            // when supplied). Does not change `summary`, `result` or any
+            // existing key; legacy callers are unaffected.
+            verification: hasJourneyEntries
+                ? Verification.aggregateJourneys(journeyEntries, { approvalProvenance: verificationProvenance })
+                : Verification.aggregateRun(tests, { approvalProvenance: verificationProvenance }),
         };
 
         // VOLATILE, parallel/shard runs only: stage wall times in ms. Strip
@@ -246,13 +310,13 @@ class ReportManager {
         return report;
     }
 
-    generateReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [] } = {}) {
+    generateReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [], journeyEntries } = {}) {
         const endTime = Date.now();
         const durationSeconds = this._startTime
             ? ((endTime - this._startTime) / 1000).toFixed(2)
             : "unknown";
         const report = ReportManager.buildReport({
-            tests, uiIssues, healingEvents, coverage, pages,
+            tests, uiIssues, healingEvents, coverage, pages, journeyEntries,
             runId: new Date().toISOString(),
             duration: `${durationSeconds}s`,
         });
@@ -277,6 +341,9 @@ class ReportManager {
             (deduped > 0 ? `  |  Deduped: ${deduped}` : "") +
             (unavailable > 0 ? `  |  Unavailable: ${unavailable}` : "")
         );
+        if (summary.integrityBreaches > 0) {
+            console.log(`   Evidence integrity breaches: ${summary.integrityBreaches} (run cannot pass)`);
+        }
         if (summary.optionalNotPassed > 0) {
             console.log(`   Optional assertions not passed (warnings): ${summary.optionalNotPassed}`);
         }

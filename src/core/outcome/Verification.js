@@ -39,7 +39,49 @@ const REASON_CODES = Object.freeze({
     OPTIONAL_CLAIM_UNTRUSTED: "OPTIONAL_CLAIM_UNTRUSTED",
     OPTIONAL_FAILED: "OPTIONAL_FAILED",
     OPTIONAL_UNVERIFIED: "OPTIONAL_UNVERIFIED",
+    // WP-77I/S4 (multi-journey aggregation):
+    BINDING_UNISSUED: "BINDING_UNISSUED",
+    EVIDENCE_UNKNOWN: "EVIDENCE_UNKNOWN",
+    EVIDENCE_DUPLICATE: "EVIDENCE_DUPLICATE",
+    // WP-77IS (repair): a binding that IS issued but fails an independent
+    // integrity re-check (mutated after issuance, or digest no longer
+    // matches its own contract).
+    BINDING_TAMPERED: "BINDING_TAMPERED",
+    // WP-77IS (security P1): a REQUIRED contract assertion whose matched row
+    // reports `skipped` was recognized but never executed (not a business
+    // failure, never a pass); and a row whose status is outside the
+    // reporting vocabulary is malformed evidence (an integrity breach).
+    EVIDENCE_NOT_EXECUTED: "EVIDENCE_NOT_EXECUTED",
+    EVIDENCE_INVALID_STATUS: "EVIDENCE_INVALID_STATUS",
 });
+
+const VALID_ROW_STATUSES = new Set(["passed", "failed", "skipped", "quarantined", "deduped", "unavailable"]);
+
+/**
+ * Normalize the status of the single row matched to a contract assertion.
+ * `skipped` on a required assertion becomes `unavailable` plus a closed-set
+ * NOT_EXECUTED reason (no business failure is manufactured). A status outside
+ * the vocabulary (undefined, null, "PASS", anything else) is never trusted:
+ * it becomes `unavailable` and is flagged as an integrity breach.
+ */
+function normalizeMatchedStatus(status, required) {
+    if (status === "passed" || status === "failed" || status === "quarantined" || status === "unavailable") {
+        return { status };
+    }
+    if (status === "skipped") {
+        return required
+            ? { status: "unavailable", reason: REASON_CODES.EVIDENCE_NOT_EXECUTED }
+            : { status: "skipped" };
+    }
+    return { status: "unavailable", reason: REASON_CODES.EVIDENCE_INVALID_STATUS, breach: true };
+}
+
+const ExecutionBinding = require("./ExecutionBinding");
+// Pure module (no I/O) — safe to require directly for the independent
+// digest recheck below. Referenced as `Contract.digestOf(...)` (never
+// destructured) so a test can swap the method on the module object for a
+// tamper-defense-in-depth check without needing to mutate this module.
+const Contract = require("./Contract");
 
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
 
@@ -420,4 +462,327 @@ function aggregateRun(rows, opts) {
     };
 }
 
-module.exports = { classifyRow, aggregateRun, trustedOptionalIndexes, REASON_CODES };
+/**
+ * WP-77I/S4 — multi-journey aggregation.
+ *
+ * Resolve a single journey entry `{ binding, rows }` into the rows that are
+ * actually proven to belong to that journey's APPROVED contract, then
+ * delegate to `aggregateRun` for the per-run classification rules so the
+ * two code paths can never silently diverge.
+ *
+ * A row only ever counts as evidence for an expected contract assertion id
+ * when ALL of the following hold: the binding was actually issued by
+ * `ExecutionBinding.bind()` (never a hand-built object literal), the row's
+ * own `journeyId` matches the binding's, the row's assertion carries its own
+ * `id` (one of the contract's), and the row's assertion digest equals the
+ * binding's proven digest. `required` for every expected assertion comes
+ * ONLY from the contract — a row's own `required` claim is never consulted.
+ */
+function buildExpectedMap(contract) {
+    const list = Array.isArray(contract && contract.assertions) ? contract.assertions : [];
+    const expected = new Map();
+    for (const a of list) {
+        if (a && typeof a.id === "string" && a.id.length > 0 && !expected.has(a.id)) {
+            expected.set(a.id, { required: !!a.required, check: a.check, locator: a.locator });
+        }
+    }
+    return expected;
+}
+
+/**
+ * Verification block for a journey whose binding cannot be trusted at all
+ * (unissued or tampered) and that supplied no failing row. Deliberately NOT
+ * a synthetic contract assertion: nothing here carries an id or digest, so it
+ * can never contaminate the approved-contract digest comparison or the
+ * optional-claim trust rule, and it fabricates no business PASS or FAIL.
+ * The breach is carried on a separate technical-integrity channel
+ * (`integrityBreaches`, see `reconcileJourneys`) plus a closed-set reason code.
+ */
+function untrustedVerification() {
+    return {
+        schemaVersion: 1,
+        level: "UNVERIFIED",
+        journeys: { total: 1, businessVerified: 0, interactionOnly: 0, unverified: 1, failed: 0 },
+        assertions: { required: 0, pass: 0, fail: 0, inconclusive: 0, refused: 0, notTested: 0, proposedUnapproved: 0 },
+        reasonCodes: [],
+    };
+}
+
+/**
+ * A real failure/quarantine must never be reduced just because its binding
+ * or evidence could not be trusted (contract rule 3). This re-expresses the
+ * row as a plain, unbound failure — no id/digest, so it is never mistaken
+ * for trusted contract evidence, but it still counts as a technical failure
+ * and so still forces the run to FAILED rather than merely UNVERIFIED.
+ */
+function plainFailedRow(journeyId) {
+    return { name: `${journeyId || "unknown"}:evidence`, journeyId, status: "failed" };
+}
+
+/**
+ * Independent, authoritative re-check that an issued binding is still
+ * trustworthy: still frozen (never mutated after issuance), its contract
+ * still frozen, its contract's own journeyId matching what the binding
+ * claims, and a digest independently recomputed from the binding's own
+ * frozen contract still matching the digest the binding carries. Never
+ * throws; any failure (including a hostile/absent `contract`) is untrusted.
+ */
+function isBindingIntegrityValid(binding) {
+    try {
+        return Object.isFrozen(binding)
+            && !!binding.contract
+            && Object.isFrozen(binding.contract)
+            && binding.contract.journeyId === binding.journeyId
+            && Contract.digestOf(binding.contract) === binding.digest;
+    } catch {
+        return false;
+    }
+}
+
+function resolveJourney(binding, rows, opts) {
+    const rowList = Array.isArray(rows) ? rows : [];
+    const issued = ExecutionBinding.isIssued(binding);
+    const integrityOk = issued && isBindingIntegrityValid(binding);
+
+    if (!issued || !integrityOk) {
+        // Fails closed: an unissued OR tampered binding (including a forged
+        // object literal with matching-looking fields, or one mutated after
+        // issuance) is given no trust at all for *membership*. A real
+        // failure/quarantine already present in the supplied rows is never
+        // dropped (contract rule 3): it is re-expressed as a plain technical
+        // failure. The breach itself rides the separate integrity channel
+        // (one breach per untrusted journey) — no synthetic assertion row.
+        const journeyId = journeyIdOf(binding);
+        const sanitizedRows = [];
+        for (const row of rowList) {
+            const snap = snapshotRow(row);
+            if (snap.status === "failed" || snap.status === "quarantined") {
+                sanitizedRows.push(plainFailedRow(journeyId));
+            }
+        }
+        const verification = sanitizedRows.length > 0 ? aggregateRun(sanitizedRows, opts) : untrustedVerification();
+        return {
+            reasons: new Set([issued ? REASON_CODES.BINDING_TAMPERED : REASON_CODES.BINDING_UNISSUED]),
+            level: verification.level,
+            verification,
+            sanitizedRows,
+            integrityBreaches: 1,
+        };
+    }
+
+    const reasons = new Set();
+    const expected = buildExpectedMap(binding.contract);
+    const byId = new Map();
+    const passthrough = [];
+    let integrityBreaches = 0;
+
+    for (const row of rowList) {
+        const snap = snapshotRow(row);
+        if (snap.status === "deduped") {
+            passthrough.push(row);
+            continue;
+        }
+        if (isBoundSnapshot(snap)) {
+            const id = snap.id;
+            const belongs = expected.has(id)
+                && row && row.journeyId === binding.journeyId
+                && snap.digest === binding.digest;
+            if (belongs) {
+                const list = byId.get(id) || [];
+                list.push(row);
+                byId.set(id, list);
+            } else {
+                // WP-77IS (repair): unknown evidence (unknown id, digest
+                // mismatch, or wrong journeyId) is never simply dropped. A
+                // failure/quarantine the row itself reports still surfaces
+                // as a plain failure (rule 3), and every unknown row is one
+                // breach on the separate integrity channel, which keeps the
+                // technical result non-PASSED and the level below
+                // BUSINESS_VERIFIED. No synthetic contract assertion is made.
+                reasons.add(REASON_CODES.EVIDENCE_UNKNOWN);
+                integrityBreaches++;
+                if (snap.status === "failed" || snap.status === "quarantined") {
+                    passthrough.push(plainFailedRow(binding.journeyId));
+                }
+            }
+        } else if (VALID_ROW_STATUSES.has(snap.status)) {
+            passthrough.push(row);
+        } else {
+            // Malformed status on a plain row: never trusted, never counted.
+            reasons.add(REASON_CODES.EVIDENCE_INVALID_STATUS);
+            integrityBreaches++;
+        }
+    }
+
+    const sanitizedAssertionRows = [];
+    for (const [id, def] of expected) {
+        const matches = byId.get(id) || [];
+        if (matches.length === 0) {
+            sanitizedAssertionRows.push({
+                status: "unavailable",
+                required: def.required,
+                assertion: { id, digest: binding.digest, check: def.check, locator: def.locator },
+            });
+        } else if (matches.length === 1) {
+            const norm = normalizeMatchedStatus(matches[0] && matches[0].status, def.required);
+            if (norm.reason) reasons.add(norm.reason);
+            if (norm.breach) integrityBreaches++;
+            sanitizedAssertionRows.push({
+                status: norm.status,
+                required: def.required,
+                assertion: { id, digest: binding.digest, check: def.check, locator: def.locator },
+            });
+        } else {
+            reasons.add(REASON_CODES.EVIDENCE_DUPLICATE);
+            integrityBreaches++;
+            const anyFailing = matches.some((r) => r && (r.status === "failed" || r.status === "quarantined" || r.status === "unavailable"));
+            sanitizedAssertionRows.push({
+                status: anyFailing ? "failed" : "unavailable",
+                required: def.required,
+                assertion: { id, digest: binding.digest, check: def.check, locator: def.locator },
+            });
+        }
+    }
+
+    const sanitizedRows = sanitizedAssertionRows.concat(passthrough);
+    const verification = aggregateRun(sanitizedRows, opts);
+
+    let level = verification.level;
+    if ((reasons.has(REASON_CODES.EVIDENCE_UNKNOWN) || reasons.has(REASON_CODES.EVIDENCE_DUPLICATE)
+        || reasons.has(REASON_CODES.EVIDENCE_NOT_EXECUTED) || reasons.has(REASON_CODES.EVIDENCE_INVALID_STATUS))
+        && (level === "BUSINESS_VERIFIED" || level === "INTERACTION_ONLY")) {
+        level = "UNVERIFIED";
+    }
+
+    return { reasons, level, verification, sanitizedRows, integrityBreaches };
+}
+
+function journeyIdOf(binding) {
+    return (binding && typeof binding.journeyId === "string") ? binding.journeyId : "";
+}
+
+function sortedEntries(entries) {
+    const list = Array.isArray(entries) ? entries.slice() : [];
+    list.sort((a, b) => {
+        const ja = journeyIdOf(a && a.binding);
+        const jb = journeyIdOf(b && b.binding);
+        return ja < jb ? -1 : (ja > jb ? 1 : 0);
+    });
+    return list;
+}
+
+/**
+ * Flat sanitized rows (contract-derived `required`, synthesized missing/
+ * duplicate/unissued rows) across every journey, in the same sorted order
+ * `aggregateJourneys` uses. `ReportManager` tallies from this list instead
+ * of raw rows when it is given `journeyEntries`, so its summary counts can
+ * never disagree with what `aggregateJourneys` actually trusted.
+ */
+function reconcileJourneys(entries, opts) {
+    const rows = [];
+    let integrityBreaches = 0;
+    for (const entry of sortedEntries(entries)) {
+        const resolved = resolveJourney(entry && entry.binding, entry && entry.rows, opts);
+        for (const row of resolved.sanitizedRows) rows.push(row);
+        integrityBreaches += resolved.integrityBreaches;
+    }
+    return { rows, integrityBreaches };
+}
+
+function sanitizeJourneyRows(entries, opts) {
+    return reconcileJourneys(entries, opts).rows;
+}
+
+/**
+ * Aggregate multiple journeys, each proven against its own issued binding
+ * and APPROVED contract, into one additive `verification` report block.
+ * Pure: no I/O, no clock. See module header / WP-77I-S design doc.
+ */
+function aggregateJourneys(entries, opts) {
+    const list = sortedEntries(entries);
+
+    const journeys = { total: list.length, businessVerified: 0, interactionOnly: 0, unverified: 0, failed: 0 };
+    const perJourney = [];
+    const reasonSet = new Set();
+    let required = 0, pass = 0, fail = 0, inconclusive = 0, refused = 0, notTested = 0;
+    let optPass = 0, optFail = 0, optInconclusive = 0, optNotTested = 0, hasOptional = false;
+
+    for (const entry of list) {
+        const binding = entry && entry.binding;
+        const resolved = resolveJourney(binding, entry && entry.rows, opts);
+
+        for (const code of resolved.reasons) reasonSet.add(code);
+
+        switch (resolved.level) {
+            case "BUSINESS_VERIFIED": journeys.businessVerified++; break;
+            case "INTERACTION_ONLY": journeys.interactionOnly++; break;
+            case "UNVERIFIED": journeys.unverified++; break;
+            default: journeys.failed++; break;
+        }
+
+        const a = resolved.verification.assertions;
+        required += a.required; pass += a.pass; fail += a.fail;
+        inconclusive += a.inconclusive; refused += a.refused; notTested += a.notTested;
+        for (const code of resolved.verification.reasonCodes) reasonSet.add(code);
+        if (a.optional) {
+            hasOptional = true;
+            optPass += a.optional.pass; optFail += a.optional.fail;
+            optInconclusive += a.optional.inconclusive; optNotTested += a.optional.notTested;
+        }
+
+        perJourney.push({
+            journeyId: (binding && typeof binding.journeyId === "string") ? binding.journeyId : null,
+            digest: (binding && typeof binding.digest === "string") ? binding.digest : null,
+            level: resolved.level,
+        });
+    }
+
+    let level;
+    if (journeys.failed > 0) level = "FAILED";
+    else if (journeys.unverified > 0) level = "UNVERIFIED";
+    else if (journeys.interactionOnly > 0) level = "INTERACTION_ONLY";
+    else if (journeys.total === 0) level = "UNVERIFIED";
+    else level = "BUSINESS_VERIFIED";
+    // WP-77IS (M2): no journey evidence at all is never business verification.
+    if (journeys.total === 0) reasonSet.add("NO_TESTS_RUN");
+
+    const result = {
+        schemaVersion: 1,
+        level,
+        journeys,
+        assertions: {
+            required, pass, fail, inconclusive, refused, notTested, proposedUnapproved: 0,
+            ...(hasOptional
+                ? { optional: { total: optPass + optFail + optInconclusive + optNotTested, pass: optPass, fail: optFail, inconclusive: optInconclusive, notTested: optNotTested } }
+                : {}),
+        },
+        reasonCodes: [...reasonSet].sort(),
+    };
+    // Single-entry, no-integrity-issue runs must stay byte-identical to what
+    // `aggregateRun` alone would have produced: `perJourney` is additive and
+    // only appears once there is more than one journey to report.
+    if (list.length > 1) result.perJourney = perJourney;
+    return result;
+}
+
+/**
+ * Public helper: is this row "bound" (its assertion carries its own `id` or
+ * `digest` field — contract-origin, as opposed to a plain contractless UI
+ * `expect`)? `ReportManager` uses this (WP-77I/S6) to tell a quarantined
+ * REQUIRED bound business assertion (never just a warning) apart from a
+ * plain UI/unbound quarantine (unchanged, warning-only behaviour).
+ */
+function isBoundRow(row) {
+    return isBoundSnapshot(snapshotRow(row));
+}
+
+module.exports = {
+    classifyRow,
+    aggregateRun,
+    trustedOptionalIndexes,
+    aggregateJourneys,
+    sanitizeJourneyRows,
+    reconcileJourneys,
+    isBoundRow,
+    REASON_CODES,
+};
