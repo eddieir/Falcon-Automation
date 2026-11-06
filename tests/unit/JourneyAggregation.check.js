@@ -529,6 +529,46 @@ async function main() {
         assert.deepStrictEqual(r.verification.reasonCodes, ["NO_TESTS_RUN"]);
     });
 
+    await test("22 (security P1): matched-row status vocabulary — exact result / level / reasons / integrity breaches / exit for every required and optional status", async () => {
+        const root = await tmpRoot();
+        const { bound, digest } = await approvedBinding(root, "journey-status", [A("R1", true), A("R2", true), A("O1", false)]);
+        const J = "journey-status";
+        const mk = (r2, o1, extra) => [{ binding: bound, rows: [
+            row(J, "R1", digest, "passed"), row(J, "R2", digest, r2), row(J, "O1", digest, o1),
+        ].concat(extra || []) }];
+        const table = [
+            // [label, entries, result, level, reasonCodes, integrityBreaches, exit]
+            ["1 all required PASS (+ optional pass)", mk("passed", "passed"), "PASSED", "BUSINESS_VERIFIED", [], undefined, 0],
+            ["2 required SKIPPED", mk("skipped", "passed"), "PARTIAL", "UNVERIFIED", ["EVIDENCE_NOT_EXECUTED"], undefined, 1],
+            ["3 required status undefined", mk(undefined, "passed"), "PARTIAL", "UNVERIFIED", ["EVIDENCE_INVALID_STATUS"], 1, 1],
+            ["4 required status null", mk(null, "passed"), "PARTIAL", "UNVERIFIED", ["EVIDENCE_INVALID_STATUS"], 1, 1],
+            ["5 required status \"PASS\"", mk("PASS", "passed"), "PARTIAL", "UNVERIFIED", ["EVIDENCE_INVALID_STATUS"], 1, 1],
+            ["6 required arbitrary string", mk("totally-bogus", "passed"), "PARTIAL", "UNVERIFIED", ["EVIDENCE_INVALID_STATUS"], 1, 1],
+            ["7 required UNAVAILABLE", mk("unavailable", "passed"), "PARTIAL", "UNVERIFIED", [], undefined, 1],
+            ["8 required FAIL", mk("failed", "passed"), "PARTIAL", "FAILED", [], undefined, 1],
+            ["9 required QUARANTINED", mk("quarantined", "passed"), "PARTIAL", "FAILED", [], undefined, 1],
+            ["10 optional SKIPPED with required PASS", mk("passed", "skipped"), "PASSED", "BUSINESS_VERIFIED", ["OPTIONAL_UNVERIFIED"], undefined, 0],
+            ["11 optional invalid status with required PASS", mk("passed", "PASS"), "PARTIAL", "UNVERIFIED", ["EVIDENCE_INVALID_STATUS", "OPTIONAL_UNVERIFIED"], 1, 1],
+            ["12 optional FAIL with required PASS", mk("passed", "failed"), "PASSED", "BUSINESS_VERIFIED", ["OPTIONAL_FAILED"], undefined, 0],
+            ["13 required FAIL with optional PASS", mk("failed", "passed"), "PARTIAL", "FAILED", [], undefined, 1],
+            ["14 required FAIL with optional invalid status (cannot conceal the failure)", mk("failed", "PASS"), "PARTIAL", "FAILED", ["EVIDENCE_INVALID_STATUS", "OPTIONAL_UNVERIFIED"], 1, 1],
+            ["15 plain row with malformed status is an integrity breach, never trusted", mk("passed", "passed", [{ name: "p", status: "PASS" }]), "PARTIAL", "UNVERIFIED", ["EVIDENCE_INVALID_STATUS"], 1, 1],
+        ];
+        for (const [label, entries, result, level, reasons, breaches, exit] of table) {
+            const r = report(entries);
+            assert.strictEqual(r.result, result, `${label}: result ${r.result}`);
+            assert.strictEqual(r.verification.level, level, `${label}: level ${r.verification.level}`);
+            assert.deepStrictEqual(r.verification.reasonCodes, reasons, `${label}: reasons ${JSON.stringify(r.verification.reasonCodes)}`);
+            assert.strictEqual(r.summary.integrityBreaches, breaches, `${label}: breaches ${r.summary.integrityBreaches}`);
+            assert.strictEqual(r.summary.total, r.tests.length, `${label}: total === tests.length`);
+            assert.strictEqual(cliExit(entries), exit, `${label}: exit`);
+            // Invariant: a required-assertion run that is not verified is never a technical PASS.
+            if (r.verification.level === "FAILED" || r.verification.level === "UNVERIFIED") assert.notStrictEqual(r.result, "PASSED", label);
+            assert.strictEqual(JSON.stringify(r).includes("totally-bogus"), false, `${label}: malformed value must not be echoed`);
+        }
+        assert.strictEqual(report(mk("quarantined", "passed")).summary.quarantineGating, 1, "9: required quarantine gates the result");
+    });
+
     console.log(`\n${passed} passed, ${failures} failed`);
     if (failures > 0) process.exitCode = 1;
 }
