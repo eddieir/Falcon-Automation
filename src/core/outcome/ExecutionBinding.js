@@ -25,14 +25,20 @@ const fs = require("fs");
 const Contract = require("./Contract");
 const ContractStore = require("./ContractStore");
 const Schemas = require("../parallel/Schemas");
-const BindingRegistry = require("./BindingRegistry");
 
-// WP-77IS (repair): this is the ONLY place in the codebase that may claim
-// the one-shot issuer from BindingRegistry. Claimed once at module load;
-// any later `require("./BindingRegistry").claimIssuer()` from anywhere else
-// throws, so nothing else can ever obtain the ability to mint an "issued"
-// binding.
-const issueBinding = BindingRegistry.claimIssuer();
+// WP-77IS (M1): issuance state lives HERE, in module scope, and nowhere else.
+// There is no registry module, no claim function and no exported way to add
+// to `issuedBindings`: the only writer is `bind()` below, on its ok path. So
+// no import order, and no module that merely `require`s this one, can obtain
+// the ability to mint an issued binding. `isIssued` is read-only. This does
+// not defend against code with full execution privileges in the same
+// process (it could patch modules or use the debugger); it defends against
+// untrusted data and ordinary importers.
+const issuedBindings = new WeakSet();
+
+function isIssued(binding) {
+    return binding !== null && typeof binding === "object" && issuedBindings.has(binding);
+}
 
 const CODES = Object.freeze({
     BAD_ARGS: "BAD_ARGS",
@@ -151,7 +157,7 @@ async function bind(args) {
         // `binding.contract` after issuance and flip a required FAIL into a
         // trusted PASSED/INTERACTION_ONLY result downstream — the frozen
         // contract alone does not protect the `contract` property slot
-        // itself. This is the only place anything can enter BindingRegistry,
+        // itself. This is the only place anything can enter `issuedBindings`,
         // so downstream code (Verification) can tell a binding that
         // genuinely passed digest/approval checks apart from a hand-built
         // object literal with the same-looking fields.
@@ -162,7 +168,8 @@ async function bind(args) {
             contract: deepFreeze(contract),
             assertionIds: Object.freeze(assertionIds),
         });
-        return issueBinding(binding);
+        issuedBindings.add(binding);
+        return binding;
     } catch {
         return fail(CODES.BINDING_ERROR, "binding_error");
     }
@@ -191,7 +198,7 @@ const REVALIDATE_CODES = Object.freeze({
  */
 async function revalidate(binding, args) {
     try {
-        if (!BindingRegistry.isIssued(binding)) {
+        if (!isIssued(binding)) {
             return { ok: false, code: REVALIDATE_CODES.UNISSUED };
         }
 
@@ -260,7 +267,7 @@ module.exports = {
     bind,
     CODES,
     readContractFile,
-    isIssued: BindingRegistry.isIssued,
+    isIssued,
     revalidate,
     REVALIDATE_CODES,
 };

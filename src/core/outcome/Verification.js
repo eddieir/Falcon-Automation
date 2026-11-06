@@ -49,7 +49,7 @@ const REASON_CODES = Object.freeze({
     BINDING_TAMPERED: "BINDING_TAMPERED",
 });
 
-const BindingRegistry = require("./BindingRegistry");
+const ExecutionBinding = require("./ExecutionBinding");
 // Pure module (no I/O) — safe to require directly for the independent
 // digest recheck below. Referenced as `Contract.digestOf(...)` (never
 // destructured) so a test can swap the method on the module object for a
@@ -514,7 +514,7 @@ function isBindingIntegrityValid(binding) {
 
 function resolveJourney(binding, rows, opts) {
     const rowList = Array.isArray(rows) ? rows : [];
-    const issued = BindingRegistry.isIssued(binding);
+    const issued = ExecutionBinding.isIssued(binding);
     const integrityOk = issued && isBindingIntegrityValid(binding);
 
     if (!issued || !integrityOk) {
@@ -706,7 +706,10 @@ function aggregateJourneys(entries, opts) {
     if (journeys.failed > 0) level = "FAILED";
     else if (journeys.unverified > 0) level = "UNVERIFIED";
     else if (journeys.interactionOnly > 0) level = "INTERACTION_ONLY";
+    else if (journeys.total === 0) level = "UNVERIFIED";
     else level = "BUSINESS_VERIFIED";
+    // WP-77IS (M2): no journey evidence at all is never business verification.
+    if (journeys.total === 0) reasonSet.add("NO_TESTS_RUN");
 
     const result = {
         schemaVersion: 1,

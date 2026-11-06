@@ -25,7 +25,7 @@ const path = require("path");
 const Verification = require("../../src/core/outcome/Verification");
 const ReportManager = require("../../src/core/ReportManager");
 const Binding = require("../../src/core/outcome/ExecutionBinding");
-const BindingRegistry = require("../../src/core/outcome/BindingRegistry");
+const { execFileSync } = require("child_process");
 const Store = require("../../src/core/outcome/ContractStore");
 const Contract = require("../../src/core/outcome/Contract");
 
@@ -316,10 +316,9 @@ async function main() {
         assert.strictEqual(f.result, "FAILED");
     });
 
-    await test("12b: registry issuance is private (claimIssuer is one-shot, `issue` is not exported); caller-supplied expected sets cannot authorize evidence", async () => {
-        assert.strictEqual(BindingRegistry.issue, undefined);
-        assert.throws(() => BindingRegistry.claimIssuer(), /already claimed/);
-        assert.deepStrictEqual(Object.keys(BindingRegistry).sort(), ["claimIssuer", "isIssued"]);
+    await test("12b: issuance is private (no registry module, no claim/mint export); caller-supplied expected sets cannot authorize evidence", async () => {
+        assert.throws(() => require("../../src/core/outcome/BindingRegistry"), (e) => e && e.code === "MODULE_NOT_FOUND");
+        assert.deepStrictEqual(Object.keys(Binding).sort(), ["CODES", "REVALIDATE_CODES", "bind", "isIssued", "readContractFile", "revalidate"]);
         // A caller cannot supply its own expected set: the only inputs are the
         // issued binding's contract and rows, and an options bag is ignored.
         const root = await tmpRoot();
@@ -474,6 +473,61 @@ async function main() {
     for (const dir of cleanups) {
         await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
     }
+
+    await test("19 (M1): import order grants no authority: claiming/forging before ExecutionBinding loads fails, in a fresh process", () => {
+        const probe = `
+            const path = require("path");
+            const root = ${JSON.stringify(path.join(__dirname, "..", ".."))};
+            const out = {};
+            try { require(path.join(root, "src/core/outcome/BindingRegistry")); out.registry = "LOADED"; } catch (e) { out.registry = e.code; }
+            const V = require(path.join(root, "src/core/outcome/Verification"));
+            const EB = require(path.join(root, "src/core/outcome/ExecutionBinding"));
+            out.keys = Object.keys(EB).sort();
+            const literal = Object.freeze({ ok: true, journeyId: "journey-x", digest: "sha256:" + "a".repeat(64), contract: Object.freeze({}) });
+            const copy = Object.freeze({ ...literal });
+            const clone = Object.create(literal);
+            out.issued = [EB.isIssued(literal), EB.isIssued(copy), EB.isIssued(clone), EB.isIssued(null), EB.isIssued("x")];
+            console.log(JSON.stringify(out));
+        `;
+        for (const order of ["reg-first", "verification-first"]) {
+            const src = order === "reg-first" ? probe : probe.replace(/try \{ require[^\n]*\n/, "");
+            const stdout = execFileSync(process.execPath, ["-e", src], { encoding: "utf8" }).trim();
+            const o = JSON.parse(stdout);
+            if (order === "reg-first") assert.strictEqual(o.registry, "MODULE_NOT_FOUND");
+            assert.deepStrictEqual(o.keys, ["CODES", "REVALIDATE_CODES", "bind", "isIssued", "readContractFile", "revalidate"]);
+            assert.deepStrictEqual(o.issued, [false, false, false, false, false]);
+        }
+    });
+
+    await test("20 (M1): a legitimately bound approval is issued, a spread copy of it is not and is refused", async () => {
+        const root = await tmpRoot();
+        const { bound, digest } = await approvedBinding(root, "journey-issued", [A("R1", true)]);
+        assert.strictEqual(Binding.isIssued(bound), true);
+        const copy = Object.freeze({ ...bound });
+        assert.strictEqual(Binding.isIssued(copy), false);
+        const ok = report([{ binding: bound, rows: [row("journey-issued", "R1", digest, "passed")] }]);
+        assertOutcome(ok, { result: "PASSED", level: "BUSINESS_VERIFIED", reasons: [] });
+        const refused = report([{ binding: copy, rows: [row("journey-issued", "R1", digest, "passed")] }]);
+        assertOutcome(refused, { result: "NO_TESTS_RUN", level: "UNVERIFIED", reasons: ["BINDING_UNISSUED"] });
+        assert.throws(() => { "use strict"; bound.contract = {}; }, TypeError);
+    });
+
+    await test("21 (M2): aggregateJourneys([]) is never BUSINESS_VERIFIED; exact output", () => {
+        const expectedBlock = {
+            schemaVersion: 1,
+            level: "UNVERIFIED",
+            journeys: { total: 0, businessVerified: 0, interactionOnly: 0, unverified: 0, failed: 0 },
+            assertions: { required: 0, pass: 0, fail: 0, inconclusive: 0, refused: 0, notTested: 0, proposedUnapproved: 0 },
+            reasonCodes: ["NO_TESTS_RUN"],
+        };
+        assert.deepStrictEqual(aggregateJourneys([]), expectedBlock);
+        assert.deepStrictEqual(aggregateJourneys(undefined), expectedBlock);
+        assert.deepStrictEqual(aggregateJourneys(null), expectedBlock);
+        const r = ReportManager.buildReport({ journeyEntries: [], runId: "r1", duration: "0s" });
+        assert.notStrictEqual(r.result, "PASSED");
+        assert.strictEqual(r.verification.level, "UNVERIFIED");
+        assert.deepStrictEqual(r.verification.reasonCodes, ["NO_TESTS_RUN"]);
+    });
 
     console.log(`\n${passed} passed, ${failures} failed`);
     if (failures > 0) process.exitCode = 1;
