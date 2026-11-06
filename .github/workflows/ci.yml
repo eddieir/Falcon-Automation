@@ -154,6 +154,8 @@ jobs:
           node tests/unit/ExecutionBinding.check.js
           node tests/unit/PlanContract.check.js
           node tests/unit/TestRunnerVerify.check.js
+          node tests/unit/JourneyAggregation.check.js
+          node tests/unit/JourneyCoordinator.check.js
 
       # ── Database fixture (Phase 6) ──────────────────────────────────────────
       # Applies the same scripts/db/ci-seed.sql schema verified locally against

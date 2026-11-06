@@ -173,7 +173,7 @@ class ReportManager {
      * `required` claim into this path. Callers that need contract-derived
      * `required` for untrusted/merged rows MUST use `journeyEntries`.
      */
-    static buildReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [], runId, duration, timings = null, verificationProvenance, journeyEntries } = {}) {
+    static buildReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [], runId, duration, timings = null, verificationProvenance, journeyEntries, requireRevalidation } = {}) {
         if (!Array.isArray(tests) || !Array.isArray(uiIssues) || !Array.isArray(healingEvents) || !Array.isArray(pages)) {
             throw new TypeError("Report results, issues, healing events and pages must be arrays");
         }
@@ -201,10 +201,16 @@ class ReportManager {
         // but they keep the technical result non-PASSED.
         let integrityBreaches = 0;
         let tallyRows = tests;
+        let journeyOptionalIdx = null;
+        const verifyOpts = { approvalProvenance: verificationProvenance, ...(requireRevalidation ? { requireRevalidation: true } : {}) };
         if (hasJourneyEntries) {
-            const reconciled = Verification.reconcileJourneys(journeyEntries, { approvalProvenance: verificationProvenance });
+            const reconciled = Verification.reconcileJourneys(journeyEntries, verifyOpts);
             tallyRows = reconciled.rows;
             integrityBreaches = reconciled.integrityBreaches;
+            // WP-77I-S2: optional membership was decided per journey, so
+            // journeys with different valid digests do not reclassify each
+            // other's optional rows.
+            journeyOptionalIdx = reconciled.optionalIndexes;
         }
 
         // Tally real outcomes
@@ -212,7 +218,7 @@ class ReportManager {
         // quarantined are warnings, not gating failures: exclude them from the
         // counts that drive `verified`/`overallResult`, but keep them in
         // `total` (they still ran) and leave passed optional rows in `passed`.
-        const optionalIdx = Verification.trustedOptionalIndexes(tallyRows, { approvalProvenance: verificationProvenance });
+        const optionalIdx = journeyOptionalIdx || Verification.trustedOptionalIndexes(tallyRows, { approvalProvenance: verificationProvenance });
         const isExcludedOptional = (t, idx) => optionalIdx.has(idx) && ["failed", "unavailable", "quarantined"].includes(t.status);
 
         const passed      = tallyRows.filter((t) => t.status === "passed").length;
@@ -299,7 +305,7 @@ class ReportManager {
             // when supplied). Does not change `summary`, `result` or any
             // existing key; legacy callers are unaffected.
             verification: hasJourneyEntries
-                ? Verification.aggregateJourneys(journeyEntries, { approvalProvenance: verificationProvenance })
+                ? Verification.aggregateJourneys(journeyEntries, verifyOpts)
                 : Verification.aggregateRun(tests, { approvalProvenance: verificationProvenance }),
         };
 
@@ -310,13 +316,13 @@ class ReportManager {
         return report;
     }
 
-    generateReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [], journeyEntries } = {}) {
+    generateReport({ tests = [], uiIssues = [], healingEvents = [], coverage = null, pages = [], journeyEntries, requireRevalidation } = {}) {
         const endTime = Date.now();
         const durationSeconds = this._startTime
             ? ((endTime - this._startTime) / 1000).toFixed(2)
             : "unknown";
         const report = ReportManager.buildReport({
-            tests, uiIssues, healingEvents, coverage, pages, journeyEntries,
+            tests, uiIssues, healingEvents, coverage, pages, journeyEntries, requireRevalidation,
             runId: new Date().toISOString(),
             duration: `${durationSeconds}s`,
         });
