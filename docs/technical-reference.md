@@ -1134,10 +1134,22 @@ node falcon.js --url=https://your-app.example.com --single-page        # entry p
 # versioned JSON document ("falcon-test-plan", version 1); --plan replays one through
 # the normal TestRunner -> AIHealer -> dashboard -> report path, with no discovery.
 # A plan that does not validate exits 2 before any browser or dashboard starts; a
-# failed run exits 1. --plan cannot be combined with --save-plan, --single-page,
-# --workers or --shard, and --url (optional) must share the plan URL's origin.
+# failed run exits 1. --plan cannot be combined with --save-plan, --single-page
+# or --shard, and --url (optional) must share the plan URL's origin.
 node falcon.js --url=https://your-app.example.com --single-page --save-plan=plan.json
 node falcon.js --plan=plan.json
+
+# Approved-contract journeys on in-process workers (#77, WP-77I-S2). Pass --plan once
+# per journey; every plan must carry an approved contract (contract + journeyId), and
+# the journey ids must be distinct. --workers=N (1-8) runs whole journeys concurrently
+# in one process, one browser context per journey; --workers=1 runs them in order.
+# Contract approval is re-checked at merge time, so a contract superseded or an
+# approval store that became unreadable during the run is never reported as
+# BUSINESS_VERIFIED. --plan with --shard stays refused (no cross-process contract
+# verification). --url, --single-page and --save-plan are refused in this mode, and
+# the dashboard is not started. A single --plan with the default worker count keeps the
+# single-process path unchanged.
+node falcon.js --plan=a.plan.json --plan=b.plan.json --workers=2 --store-root=<store>
 
 # Repetition for classification (Phase 12). A single run can now reach the
 # 3-sample minimum needed to classify a scenario without waiting for cached history.

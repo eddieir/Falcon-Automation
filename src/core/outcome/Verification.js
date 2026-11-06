@@ -53,6 +53,11 @@ const REASON_CODES = Object.freeze({
     // reporting vocabulary is malformed evidence (an integrity breach).
     EVIDENCE_NOT_EXECUTED: "EVIDENCE_NOT_EXECUTED",
     EVIDENCE_INVALID_STATUS: "EVIDENCE_INVALID_STATUS",
+    // WP-77I-S2: the same journey (or the same binding object) was submitted
+    // more than once, or the merge-time approval re-check did not confirm
+    // the journey's approval. Both are untrusted-journey integrity breaches.
+    JOURNEY_DUPLICATE: "JOURNEY_DUPLICATE",
+    APPROVAL_REVALIDATION_FAILED: "APPROVAL_REVALIDATION_FAILED",
 });
 
 const VALID_ROW_STATUSES = new Set(["passed", "failed", "skipped", "quarantined", "deduped", "unavailable"]);
@@ -539,15 +544,26 @@ function isBindingIntegrityValid(binding) {
     }
 }
 
-function resolveJourney(binding, rows, opts) {
+function resolveJourney(binding, rows, opts, ctx) {
     const rowList = Array.isArray(rows) ? rows : [];
     const issued = ExecutionBinding.isIssued(binding);
     const integrityOk = issued && isBindingIntegrityValid(binding);
+    const duplicate = !!(ctx && ctx.duplicate);
+    // WP-77I-S2: merge-time approval re-check. A present verdict that is not
+    // exactly ok:true fails the journey; with opts.requireRevalidation an
+    // absent verdict fails it too (a worker run must never be trusted only
+    // because approval held when execution began).
+    const rv = ctx ? ctx.revalidation : undefined;
+    const revalidationFailed = (rv !== undefined && rv !== null)
+        ? !(typeof rv === "object" && rv.ok === true)
+        : !!(opts && opts.requireRevalidation);
 
-    if (!issued || !integrityOk) {
+    if (!issued || !integrityOk || duplicate || revalidationFailed) {
         // Fails closed: an unissued OR tampered binding (including a forged
         // object literal with matching-looking fields, or one mutated after
-        // issuance) is given no trust at all for *membership*. A real
+        // issuance), a duplicate journey, or one whose approval was not
+        // re-confirmed at merge time is given no trust at all for
+        // *membership*. A real
         // failure/quarantine already present in the supplied rows is never
         // dropped (contract rule 3): it is re-expressed as a plain technical
         // failure. The breach itself rides the separate integrity channel
@@ -561,8 +577,13 @@ function resolveJourney(binding, rows, opts) {
             }
         }
         const verification = sanitizedRows.length > 0 ? aggregateRun(sanitizedRows, opts) : untrustedVerification();
+        let code;
+        if (!issued) code = REASON_CODES.BINDING_UNISSUED;
+        else if (!integrityOk) code = REASON_CODES.BINDING_TAMPERED;
+        else if (duplicate) code = REASON_CODES.JOURNEY_DUPLICATE;
+        else code = REASON_CODES.APPROVAL_REVALIDATION_FAILED;
         return {
-            reasons: new Set([issued ? REASON_CODES.BINDING_TAMPERED : REASON_CODES.BINDING_UNISSUED]),
+            reasons: new Set([code]),
             level: verification.level,
             verification,
             sanitizedRows,
@@ -672,6 +693,26 @@ function sortedEntries(entries) {
 }
 
 /**
+ * WP-77I-S2: sorted entries plus per-entry duplicate flags and the entry's
+ * merge-time revalidation verdict. The first occurrence (stable sort order)
+ * of a journey id or binding object is evaluated normally; any later one is
+ * a duplicate and is never trusted, so a journey can never be counted twice.
+ */
+function prepareEntries(entries) {
+    const seenIds = new Set();
+    const seenBindings = new Set();
+    return sortedEntries(entries).map((entry) => {
+        const binding = entry && entry.binding;
+        const id = journeyIdOf(binding);
+        const isObj = binding !== null && typeof binding === "object";
+        const duplicate = (id !== "" && seenIds.has(id)) || (isObj && seenBindings.has(binding));
+        if (id !== "") seenIds.add(id);
+        if (isObj) seenBindings.add(binding);
+        return { entry, duplicate, revalidation: entry ? entry.revalidation : undefined };
+    });
+}
+
+/**
  * Flat sanitized rows (contract-derived `required`, synthesized missing/
  * duplicate/unissued rows) across every journey, in the same sorted order
  * `aggregateJourneys` uses. `ReportManager` tallies from this list instead
@@ -680,13 +721,20 @@ function sortedEntries(entries) {
  */
 function reconcileJourneys(entries, opts) {
     const rows = [];
+    // WP-77I-S2: trusted-optional membership is decided PER JOURNEY (within
+    // that journey's own sanitized rows), never across journeys. Two valid
+    // journeys with different approved digests are not "contradictory
+    // approval evidence", so their optional rows stay optional.
+    const optionalIndexes = new Set();
     let integrityBreaches = 0;
-    for (const entry of sortedEntries(entries)) {
-        const resolved = resolveJourney(entry && entry.binding, entry && entry.rows, opts);
+    for (const { entry, duplicate, revalidation } of prepareEntries(entries)) {
+        const resolved = resolveJourney(entry && entry.binding, entry && entry.rows, opts, { duplicate, revalidation });
+        const offset = rows.length;
         for (const row of resolved.sanitizedRows) rows.push(row);
+        for (const idx of trustedOptionalIndexes(resolved.sanitizedRows, opts)) optionalIndexes.add(offset + idx);
         integrityBreaches += resolved.integrityBreaches;
     }
-    return { rows, integrityBreaches };
+    return { rows, integrityBreaches, optionalIndexes };
 }
 
 function sanitizeJourneyRows(entries, opts) {
@@ -699,7 +747,7 @@ function sanitizeJourneyRows(entries, opts) {
  * Pure: no I/O, no clock. See module header / WP-77I-S design doc.
  */
 function aggregateJourneys(entries, opts) {
-    const list = sortedEntries(entries);
+    const list = prepareEntries(entries);
 
     const journeys = { total: list.length, businessVerified: 0, interactionOnly: 0, unverified: 0, failed: 0 };
     const perJourney = [];
@@ -707,9 +755,9 @@ function aggregateJourneys(entries, opts) {
     let required = 0, pass = 0, fail = 0, inconclusive = 0, refused = 0, notTested = 0;
     let optPass = 0, optFail = 0, optInconclusive = 0, optNotTested = 0, hasOptional = false;
 
-    for (const entry of list) {
+    for (const { entry, duplicate, revalidation } of list) {
         const binding = entry && entry.binding;
-        const resolved = resolveJourney(binding, entry && entry.rows, opts);
+        const resolved = resolveJourney(binding, entry && entry.rows, opts, { duplicate, revalidation });
 
         for (const code of resolved.reasons) reasonSet.add(code);
 
