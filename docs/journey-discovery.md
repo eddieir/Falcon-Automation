@@ -1,0 +1,57 @@
+# State-aware journey discovery (#78)
+
+`src/core/JourneyExplorer.js` finds and replays short UI journeys (2–5 clicks) in a bounded, deterministic way. It reuses `ClickExplorer.listCandidates/clickElement` and `SiteSweep.normalizeUrl`. No model, no randomness, no new dependency.
+
+## Status
+
+| | |
+|---|---|
+| Implemented | `JourneyExplorer.discover(entryUrl)` and `.replay(journey)` as a library API, covered by `tests/regression/journey-explorer.check.cjs` |
+| Planned | A CLI flag and dashboard/report integration. Nothing in `falcon.js`, `SiteSweep` or the exit codes changed |
+| Not covered | Typing into fields, form submission, multi-tab flows, login. Journeys are click-only |
+
+## State identity
+
+A state is a hash of: URL (origin + path + sorted query **keys**), the sorted visible links/buttons, the form-field shape (name, type, filled yes/no) and the cookie **names**. Values are never read into the hash or the report, so query tokens, typed text and cookie values cannot reach an artifact. Static text that is not a control does not change the state.
+
+Two actions that reach the same state are recorded as one state (`equivalentTransitions`).
+
+## Traversal and bounds
+
+Breadth-first from the entry URL, controls ordered by label/href/selector. Each state is reached by replaying its recorded path from a fresh navigation.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `maxSteps` | 3 (hard max 5) | journey depth |
+| `maxActions` | 40 | total clicks, replays included |
+| `maxStates` | 25 | distinct states |
+| `maxJourneys` | 10 | journeys reported (maximal paths only) |
+
+When a budget stops the run, the report says so: `coverage.budgetExhausted` and `coverage.unexploredActions`.
+
+## Refusals (reported, never silent)
+
+Destructive verbs (delete, remove, pay, buy, checkout, order, confirm, log out, send, reset, cancel...), cross-origin targets (by href and by where the click landed), new tabs, non-http schemes, `type="submit"` buttons, and ambiguous controls (no label/selector, or a label/selector shared by several controls). The verb match is deliberately broad: a harmless "Order history" link is refused. Refused controls appear in `refusals` with a reason; controls that could not be clicked appear in `unreachable`.
+
+## Replay
+
+`replay(journey)` re-clicks each step and compares the state after every step with the recorded one. It returns `{ ok: true }` or `{ ok: false, divergedAt, reason }` with reason `state-mismatch`, `step-failed`, `step-budget`, `cross-origin` or `refused: ...`. A journey file is re-checked for destructive steps, so a hand-edited file cannot smuggle one in. The entry URL is stored without query values, so apps whose entry needs a query string cannot be replayed from the stored journey.
+
+## Measured determinism
+
+Local fixture (6 pages, `maxSteps: 3`), two fresh pages, Chromium headless shell:
+
+| run | ms | states | actions | digest |
+|---|---|---|---|---|
+| 1 | 1146 | 6 | 19 | 4fb7dda44e31 |
+| 2 | 1040 | 6 | 19 | 4fb7dda44e31 |
+
+Journeys: `Products>Item one>Details`, `Products>Item two`. Timing is machine-dependent; the digest and counts are not.
+
+## Limitations
+
+Fixture-scale evidence only; no real-site measurement. Click-only exploration misses state reached by typing. Hidden or late-rendered controls are reported as `click-failed`. The verb filter errs toward refusing.
+
+## Rollback
+
+Nothing imports the module yet; revert the PR.
