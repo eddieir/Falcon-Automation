@@ -31,11 +31,11 @@ When a budget stops the run, the report says so: `coverage.budgetExhausted` and 
 
 ## Refusals (reported, never silent)
 
-Destructive verbs (delete, remove, pay, buy, checkout, order, confirm, log out, send, reset, cancel...), cross-origin targets (by href and by where the click landed), new tabs, non-http schemes, `type="submit"` buttons, and ambiguous controls (no label/selector, or a label/selector shared by several controls). The verb match is deliberately broad: a harmless "Order history" link is refused. Refused controls appear in `refusals` with a reason; controls that could not be clicked appear in `unreachable`.
+Destructive verbs, matched on label, href, selector, `aria-label`, `title`, `id`, `name` and `value` with camelCase and separators split (delete, remove, pay, buy, checkout, order, confirm, log out, send, reset, cancel...), cross-origin targets (by href and by where the click landed), new tabs, non-http schemes, submit buttons (any `<button>` that would submit a form), and ambiguous controls (no label/selector, or a label/selector shared by several controls). The verb match is deliberately broad: a harmless "Order history" link is refused. Refused controls appear in `refusals` with a reason; controls that could not be clicked appear in `unreachable`.
 
 ## Replay
 
-`replay(journey)` re-clicks each step and compares the state after every step with the recorded one. It returns `{ ok: true }` or `{ ok: false, divergedAt, reason }` with reason `state-mismatch`, `step-failed`, `step-budget`, `cross-origin` or `refused: ...`. A journey file is re-checked for destructive steps, so a hand-edited file cannot smuggle one in. The entry URL is stored without query values, so apps whose entry needs a query string cannot be replayed from the stored journey.
+`replay(journey, { allowedOrigin })` re-clicks each step and compares the state after every step with the recorded one. `allowedOrigin` is required and must match the journey file's entry; the file is treated as untrusted. Each step must match a control that is live on the page (same selector and text) and pass the same refusal rules as discovery, and the click uses the live control, so a hand-edited file cannot make replay click something discovery would have refused. Result: `{ ok: true }` or `{ ok: false, divergedAt, reason }` with reason `entry-origin`, `state-mismatch`, `step-failed`, `step-budget`, `cross-origin` or `refused: ...`. The entry URL is stored without query values, so apps whose entry needs a query string cannot be replayed from the stored journey.
 
 ## Measured determinism
 
@@ -50,7 +50,7 @@ Journeys: `Products>Item one>Details`, `Products>Item two`. Timing is machine-de
 
 ## Limitations
 
-Fixture-scale evidence only; no real-site measurement. Click-only exploration misses state reached by typing. Hidden or late-rendered controls are reported as `click-failed`. The verb filter errs toward refusing.
+Accepted residuals: the verb filter is a word list, so synonyms, non-English labels and `onclick` handlers behind a safe-looking label are not caught; cross-origin is also verified after the click, not only from the href; `window.open` popups are not tracked; there is no wall-clock budget (a failed click can cost ~8s and navigations do not count as actions); path segments and control labels can contain user data. Fixture-scale evidence only; no real-site measurement. Click-only exploration misses state reached by typing. Hidden or late-rendered controls are reported as `click-failed`. The verb filter errs toward refusing.
 
 ## Rollback
 

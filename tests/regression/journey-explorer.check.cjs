@@ -22,6 +22,8 @@ const PAGES = {
   "/amb": `<button>Same</button><button>Same</button><a href="/">Home</a>`,
 };
 
+const replay = (page, j) => new JourneyExplorer(page).replay(j, { allowedOrigin: ORIGIN });
+
 let browser;
 before(async () => { browser = await chromium.launch(process.env.FALCON_TEST_CHROMIUM ? { executablePath: process.env.FALCON_TEST_CHROMIUM } : {}); });
 after(async () => { await browser.close(); });
@@ -120,12 +122,12 @@ test("replay passes on the same app and reports the step where it diverges", asy
   const page = await newPage();
   const r = await new JourneyExplorer(page, { maxSteps: 3 }).discover(`${ORIGIN}/`);
   const journey = r.journeys.find((j) => j.steps[0].label === "Products");
-  assert.deepEqual(await new JourneyExplorer(page).replay(journey), { ok: true });
+  assert.deepEqual(await replay(page, journey), { ok: true });
   await page.close();
 
   const changed = { ...PAGES, "/a": `<a href="/">Home</a><a href="/a/1">Item one</a><a href="/a/2">Item two</a><a href="/a/3">Item three</a>` };
   const p2 = await newPage(changed);
-  const res = await new JourneyExplorer(p2).replay(journey);
+  const res = await replay(p2, journey);
   assert.equal(res.ok, false);
   assert.equal(res.reason, "state-mismatch");
   assert.equal(typeof res.divergedAt, "number");
@@ -134,7 +136,7 @@ test("replay passes on the same app and reports the step where it diverges", asy
 
 test("replay refuses a tampered journey containing a destructive step", async () => {
   const page = await newPage();
-  const res = await new JourneyExplorer(page).replay({
+  const res = await replay(page, {
     entry: `${ORIGIN}/`,
     steps: [{ label: "Delete everything", selector: '[data-testid="del"]', text: "Delete everything", href: null, expect: null }],
   });
@@ -146,7 +148,7 @@ test("replay refuses a tampered journey containing a destructive step", async ()
 
 test("reports a missing element as step failure, not a pass", async () => {
   const page = await newPage();
-  const res = await new JourneyExplorer(page).replay({
+  const res = await replay(page, {
     entry: `${ORIGIN}/`,
     steps: [{ label: "Gone", selector: "#gone", text: "Gone", href: null, expect: "x" }],
   });
@@ -185,5 +187,61 @@ test("budgetExhausted stays true when a later replay fails for a non-budget reas
   });
   const r = await new JourneyExplorer(page, { maxStates: 3 }).discover(`${ORIGIN}/`);
   assert.equal(r.coverage.budgetExhausted, true);
+  await page.close();
+});
+
+test("plain form-submit buttons are refused and no request is sent", async () => {
+  let posts = 0;
+  const page = await browser.newPage();
+  await page.route(`${ORIGIN}/**`, (r) => {
+    const req = r.request();
+    if (req.method() === "POST") posts++;
+    const body = new URL(req.url()).pathname === "/" ? '<form action="/submitted" method="post"><button>Save</button></form><a href="/">Home</a>' : "ok";
+    return r.fulfill({ contentType: "text/html", body });
+  });
+  const r = await new JourneyExplorer(page).discover(`${ORIGIN}/`);
+  assert.equal(posts, 0);
+  assert.ok(r.refusals.some((x) => x.label === "Save" && x.reason.startsWith("form-submit")));
+  await page.close();
+});
+
+test("replay cannot click a control whose text was swapped in the journey file", async () => {
+  const page = await newPage();
+  const res = await replay(page, { entry: `${ORIGIN}/`, steps: [{ label: "Products", selector: null, text: "Delete everything", href: null, expect: null }] });
+  assert.equal(res.ok, false);
+  assert.notEqual(await page.title(), "x");
+  await page.close();
+});
+
+test("replay refuses a tampered entry: wrong origin, file: URL, missing allowedOrigin", async () => {
+  const page = await newPage();
+  const step = [{ label: "Products", selector: null, text: "Products", href: null, expect: null }];
+  for (const entry of ["https://other.invalid/", "file:///etc/passwd", "not a url"]) {
+    assert.equal((await replay(page, { entry, steps: step })).reason, "entry-origin", entry);
+  }
+  assert.equal((await new JourneyExplorer(page).replay({ entry: `${ORIGIN}/`, steps: step })).reason, "entry-origin");
+  await page.close();
+});
+
+test("a link with no text keeps its query values out of the report", async () => {
+  const page = await newPage({ "/": '<a href="/x?token=SEKRET1"></a><a href="/">Home</a>', "/x": "ok" });
+  const r = await new JourneyExplorer(page).discover(`${ORIGIN}/`);
+  assert.ok(!JSON.stringify(r).includes("SEKRET1"));
+  assert.ok(r.refusals.some((x) => x.label.endsWith("/x?token")));
+  await page.close();
+});
+
+test("destructive filter reads aria-label, id and camelCase hrefs", async () => {
+  const page = await newPage({ "/": '<button id="icon1" aria-label="Delete account"></button><button id="btnDelete" title="x">X</button><a href="/deleteAccount">Go</a><a href="/">Home</a>', "/deleteAccount": "ok" });
+  const r = await new JourneyExplorer(page).discover(`${ORIGIN}/`);
+  const refused = r.refusals.filter((x) => x.reason.startsWith("destructive")).length;
+  assert.equal(refused, 3);
+  await page.close();
+});
+
+test("an entry that redirects off-origin is rejected", async () => {
+  const page = await newPage();
+  page.url = () => "https://other.invalid/landed"; // what the page reports after an off-origin redirect
+  await assert.rejects(new JourneyExplorer(page).discover(`${ORIGIN}/`), /redirected/);
   await page.close();
 });
