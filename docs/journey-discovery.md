@@ -1,6 +1,6 @@
 # State-aware journey discovery (#78)
 
-`src/core/JourneyExplorer.js` finds and replays short UI journeys (2–5 clicks) in a bounded, deterministic way. It reuses `ClickExplorer.listCandidates/clickElement` and `SiteSweep.normalizeUrl`. No model, no randomness, no new dependency.
+`src/core/JourneyExplorer.js` finds and replays short UI journeys (2–5 clicks) in a bounded, deterministic way. It reuses `SiteSweep.normalizeUrl` and the same selector rules as `ClickExplorer`. No model, no randomness, no new dependency.
 
 ## Status
 
@@ -35,7 +35,7 @@ Destructive verbs, matched on label, href, selector, `aria-label`, `title`, `id`
 
 ## Replay
 
-`replay(journey, { allowedOrigin })` re-clicks each step and compares the state after every step with the recorded one. `allowedOrigin` is required and must match the journey file's entry; the file is treated as untrusted. Each step must match a control that is live on the page (same selector and text) and pass the same refusal rules as discovery, and the click uses the live control, so a hand-edited file cannot make replay click something discovery would have refused. Result: `{ ok: true }` or `{ ok: false, divergedAt, reason }` with reason `entry-origin`, `state-mismatch`, `step-failed`, `step-budget`, `cross-origin` or `refused: ...`. The entry URL is stored without query values, so apps whose entry needs a query string cannot be replayed from the stored journey.
+`replay(journey, { allowedOrigin })` re-clicks each step and compares the state after every step with the recorded one. `allowedOrigin` is required and must match the journey file's entry; the file is treated as untrusted. Each step must match a control that is live on the page (same selector and text) and pass the same refusal rules as discovery, and the click targets exactly that live element by index after re-checking its text and href, with no text-search fallback, so a hand-edited file cannot make replay click something discovery would have refused. Result: `{ ok: true }` or `{ ok: false, divergedAt, reason }` with reason `entry-origin`, `state-mismatch`, `step-failed`, `step-budget`, `cross-origin` or `refused: ...`. The entry URL is stored without query values, so apps whose entry needs a query string cannot be replayed from the stored journey.
 
 ## Measured determinism
 
@@ -50,7 +50,7 @@ Journeys: `Products>Item one>Details`, `Products>Item two`. Timing is machine-de
 
 ## Limitations
 
-Accepted residuals: the verb filter is a word list, so synonyms, non-English labels and `onclick` handlers behind a safe-looking label are not caught; cross-origin is also verified after the click, not only from the href; `window.open` popups are not tracked; there is no wall-clock budget (a failed click can cost ~8s and navigations do not count as actions); path segments and control labels can contain user data. Fixture-scale evidence only; no real-site measurement. Click-only exploration misses state reached by typing. Hidden or late-rendered controls are reported as `click-failed`. The verb filter errs toward refusing.
+Accepted residuals: visible control text (for example a signed-in user's email) is recorded in labels unredacted; the verb filter is a word list, so synonyms, non-English labels and `onclick` handlers behind a safe-looking label are not caught; cross-origin is also verified after the click, not only from the href; `window.open` popups are not tracked; there is no wall-clock budget (a failed click can cost ~8s and navigations do not count as actions); path segments and control labels can contain user data. Fixture-scale evidence only; no real-site measurement. Click-only exploration misses state reached by typing. Hidden or late-rendered controls are reported as `click-failed`. The verb filter errs toward refusing.
 
 ## Rollback
 

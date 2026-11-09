@@ -1,5 +1,4 @@
 const crypto = require("node:crypto");
-const ClickExplorer = require("./ClickExplorer");
 const SiteSweep = require("./SiteSweep");
 
 /**
@@ -98,13 +97,32 @@ class JourneyExplorer {
      * Order is by label, href then selector so every run sees the same sequence.
      */
     async _actionsHere(origin) {
-        const all = await ClickExplorer.listCandidates(this.page);
-        // Same query as listCandidates, so indexes line up. Adds what it does not expose.
-        const extra = await this.page.evaluate(() => [...document.querySelectorAll("a, button")].map((el) => ({
-            submit: el.tagName === "BUTTON" && el.type === "submit" && !!el.form,
-            hint: [el.getAttribute("aria-label"), el.getAttribute("title"), el.getAttribute("value"), el.id, el.getAttribute("name")].filter(Boolean).join(" "),
-        })));
-        all.forEach((c, i) => Object.assign(c, extra[i] || {}));
+        // One in-page read, so facts and indexes cannot drift apart. The selector
+        // rules mirror ClickExplorer.listCandidates so stored journeys stay comparable.
+        const all = await this.page.evaluate(() => {
+            const sel = (el) => {
+                const tag = el.tagName.toLowerCase();
+                const testId = el.getAttribute("data-testid");
+                if (testId) return `[data-testid="${CSS.escape(testId)}"]`;
+                if (el.id) return `#${CSS.escape(el.id)}`;
+                const aria = el.getAttribute("aria-label");
+                if (aria) return `${tag}[aria-label="${CSS.escape(aria)}"]`;
+                const name = el.getAttribute("name");
+                if (name) return `${tag}[name="${CSS.escape(name)}"]`;
+                const type = el.getAttribute("type");
+                if (type) return `${tag}[type="${CSS.escape(type)}"]`;
+                return null;
+            };
+            return [...document.querySelectorAll("a, button")].map((el, index) => ({
+                index,
+                selector: sel(el),
+                text: (el.innerText || el.textContent || "").trim().substring(0, 100),
+                href: el.getAttribute("href") || null,
+                newTab: el.getAttribute("target") === "_blank",
+                submit: el.tagName === "BUTTON" && el.type === "submit" && !!el.form,
+                hint: [el.getAttribute("aria-label"), el.getAttribute("title"), el.getAttribute("value"), el.id, el.getAttribute("name")].filter(Boolean).join(" "),
+            }));
+        });
         const count = (key, fn) => all.filter((c) => fn(c) === key).length;
         const safe = [];
         const refused = [];
@@ -112,7 +130,7 @@ class JourneyExplorer {
             const label = c.text || c.selector || this._hrefLabel(c.href) || "(unlabeled)";
             const reason = this._refusal(c, origin, count);
             if (reason) refused.push({ label, reason, selector: c.selector, text: c.text });
-            else safe.push({ label, selector: c.selector, text: c.text, href: c.href ? safeUrl(new URL(c.href, this.page.url()).href) : null, rawHref: c.href });
+            else safe.push({ label, index: c.index, newTab: c.newTab, selector: c.selector, text: c.text, href: c.href ? safeUrl(new URL(c.href, this.page.url()).href) : null, rawHref: c.href });
         }
         const key = (a) => `${a.label}\u0000${a.href || ""}\u0000${a.selector || ""}`;
         safe.sort((a, b) => (key(a) < key(b) ? -1 : 1));
@@ -144,11 +162,30 @@ class JourneyExplorer {
         return null;
     }
 
-    /** Click one recorded action. Returns "ok" | "failed" | "budget". */
+    /** A step is only clickable if it matches a control that is live now and passes the refusal rules. */
+    _same(a, step) { return (a.selector || null) === (step.selector || null) && (a.text || "") === (step.text || ""); }
+
+    async _live(step, origin) {
+        const { safe } = await this._actionsHere(origin);
+        return safe.find((a) => this._same(a, step)) || null;
+    }
+
+    /**
+     * Click one live action. Returns "ok" | "failed" | "budget".
+     * It clicks the element that was classified (by index, re-checked first) and never
+     * falls back to a text search, which could land on a control that was refused.
+     */
     async _click(action) {
         if (!this._spend()) return "budget";
-        const clicked = await ClickExplorer.clickElement(this.page, action);
-        if (!clicked) return "failed";
+        const loc = this.page.locator("a, button").nth(action.index);
+        try {
+            const same = await loc.evaluate((el, a) => (el.innerText || el.textContent || "").trim().substring(0, 100) === a.text
+                && (el.getAttribute("href") || null) === a.rawHref, action, { timeout: 4000 });
+            if (!same) return "failed";
+            await loc.click({ timeout: 4000 });
+        } catch {
+            return "failed";
+        }
         await this._settle();
         return "ok";
     }
@@ -159,7 +196,9 @@ class JourneyExplorer {
         await this._settle();
         if (new URL(this.page.url()).origin !== origin) return { at: 0, result: "cross-origin" };
         for (let i = 0; i < steps.length; i++) {
-            const result = await this._click(steps[i]);
+            const live = await this._live(steps[i], origin);
+            if (!live) return { at: i, result: "failed" };
+            const result = await this._click(live);
             if (result !== "ok") return { at: i, result };
             if (new URL(this.page.url()).origin !== origin) return { at: i, result: "cross-origin" };
         }
@@ -212,7 +251,8 @@ class JourneyExplorer {
                     const back = await this._walk(entry, state.path, origin);
                     if (back) { if (back.result === "budget") budgetExhausted = true; unexplored += safe.length - i; break; }
                 }
-                const result = await this._click(action);
+                const live = await this._live(action, origin);
+                const result = live ? await this._click(live) : "failed";
                 if (result === "budget") { budgetExhausted = true; unexplored += safe.length - i; break; }
                 if (result === "failed") { unreachable.push({ state: id, label: action.label, reason: "click-failed" }); continue; }
                 if (new URL(this.page.url()).origin !== origin) {
@@ -292,7 +332,7 @@ class JourneyExplorer {
         for (let i = 0; i < steps.length; i++) {
             const step = steps[i] || {};
             const { safe, refused } = await this._actionsHere(origin);
-            const same = (a) => (a.selector || null) === (step.selector || null) && (a.text || "") === (step.text || "");
+            const same = (a) => this._same(a, step);
             const live = safe.find(same);
             if (!live) {
                 const bad = refused.find(same);
