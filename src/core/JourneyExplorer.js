@@ -140,7 +140,7 @@ class JourneyExplorer {
         return "ok";
     }
 
-    /** Navigate to the entry and replay a path. Returns the failing index or -1. */
+    /** Navigate to the entry and replay a path. Returns null on success, else { at, result }. */
     async _walk(entryUrl, steps, origin) {
         await this.page.goto(entryUrl, { waitUntil: "domcontentloaded" });
         await this._settle();
@@ -195,7 +195,7 @@ class JourneyExplorer {
                 const action = safe[i];
                 if (i > 0) {
                     const back = await this._walk(entry, state.path, origin);
-                    if (back) { budgetExhausted = back.result === "budget"; unexplored += safe.length - i; break; }
+                    if (back) { if (back.result === "budget") budgetExhausted = true; unexplored += safe.length - i; break; }
                 }
                 const result = await this._click(action);
                 if (result === "budget") { budgetExhausted = true; unexplored += safe.length - i; break; }
@@ -218,7 +218,7 @@ class JourneyExplorer {
         // Maximal paths only: a journey that is a prefix of a longer one adds nothing.
         const journeys = [...states.values()]
             .filter((s) => s.depth >= MIN_JOURNEY_STEPS && !children.get(s.id))
-            .sort((a, b) => (a.id < b.id ? -1 : 1))
+            .sort((a, b) => a.depth - b.depth || (a.id < b.id ? -1 : 1))
             .slice(0, this.maxJourneys)
             .map((s) => ({
                 id: s.id,
@@ -260,6 +260,7 @@ class JourneyExplorer {
      */
     async replay(journey) {
         this.actions = 0;
+        // shortcut: stored entry keeps query keys but no values, so replay starts at the bare path; entries that need a query string cannot be replayed.
         const origin = new URL(journey.entry.split("?")[0]).origin;
         await this.page.goto(journey.entry.split("?")[0], { waitUntil: "domcontentloaded" });
         await this._settle();
