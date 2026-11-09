@@ -99,13 +99,19 @@ class JourneyExplorer {
      */
     async _actionsHere(origin) {
         const all = await ClickExplorer.listCandidates(this.page);
+        // Same query as listCandidates, so indexes line up. Adds what it does not expose.
+        const extra = await this.page.evaluate(() => [...document.querySelectorAll("a, button")].map((el) => ({
+            submit: el.tagName === "BUTTON" && el.type === "submit" && !!el.form,
+            hint: [el.getAttribute("aria-label"), el.getAttribute("title"), el.getAttribute("value"), el.id, el.getAttribute("name")].filter(Boolean).join(" "),
+        })));
+        all.forEach((c, i) => Object.assign(c, extra[i] || {}));
         const count = (key, fn) => all.filter((c) => fn(c) === key).length;
         const safe = [];
         const refused = [];
         for (const c of all) {
-            const label = c.text || c.selector || c.href || "(unlabeled)";
+            const label = c.text || c.selector || this._hrefLabel(c.href) || "(unlabeled)";
             const reason = this._refusal(c, origin, count);
-            if (reason) refused.push({ label, reason });
+            if (reason) refused.push({ label, reason, selector: c.selector, text: c.text });
             else safe.push({ label, selector: c.selector, text: c.text, href: c.href ? safeUrl(new URL(c.href, this.page.url()).href) : null, rawHref: c.href });
         }
         const key = (a) => `${a.label}\u0000${a.href || ""}\u0000${a.selector || ""}`;
@@ -114,12 +120,19 @@ class JourneyExplorer {
         return { safe, refused };
     }
 
+    /** Label for a control with no text or selector: path and query keys only. */
+    _hrefLabel(href) {
+        if (!href) return null;
+        try { return safeUrl(new URL(href, this.page.url()).href); } catch { return null; }
+    }
+
     _refusal(c, origin, count) {
         if (!c.text && !c.selector) return "ambiguous: no label or selector";
-        const hay = `${c.text} ${c.href || ""} ${c.selector || ""}`;
-        if (DESTRUCTIVE.test(hay)) return "destructive: label matches a state-changing verb";
+        const hay = `${c.text} ${c.href || ""} ${c.selector || ""} ${c.hint || ""}`;
+        // Split camelCase and separators so btnDelete, delete_x and /deleteAccount match.
+        if (DESTRUCTIVE.test(hay.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_\-/.]+/g, " "))) return "destructive: label matches a state-changing verb";
         if (c.newTab) return "new-tab: Falcon stays in one tab";
-        if (c.selector && /type="submit"/.test(c.selector)) return "form-submit: not exercised without an approved contract";
+        if (c.submit || (c.selector && /type="submit"/.test(c.selector))) return "form-submit: not exercised without an approved contract";
         if (c.href) {
             let target;
             try { target = new URL(c.href, this.page.url()); } catch { return "ambiguous: unparseable href"; }
@@ -144,6 +157,7 @@ class JourneyExplorer {
     async _walk(entryUrl, steps, origin) {
         await this.page.goto(entryUrl, { waitUntil: "domcontentloaded" });
         await this._settle();
+        if (new URL(this.page.url()).origin !== origin) return { at: 0, result: "cross-origin" };
         for (let i = 0; i < steps.length; i++) {
             const result = await this._click(steps[i]);
             if (result !== "ok") return { at: i, result };
@@ -171,6 +185,7 @@ class JourneyExplorer {
 
         await this.page.goto(entry, { waitUntil: "domcontentloaded" });
         await this._settle();
+        if (new URL(this.page.url()).origin !== origin) throw new Error("JourneyExplorer: entry URL redirected to another origin");
         const rootId = await this.stateId();
         states.set(rootId, { id: rootId, url: safeUrl(entry), depth: 0, path: [] });
         const queue = [rootId];
@@ -189,7 +204,7 @@ class JourneyExplorer {
             }
 
             const { safe, refused } = await this._actionsHere(origin);
-            for (const r of refused) refusals.push({ state: id, ...r });
+            for (const r of refused) refusals.push({ state: id, label: r.label, reason: r.reason });
 
             for (let i = 0; i < safe.length; i++) {
                 const action = safe[i];
@@ -256,20 +271,34 @@ class JourneyExplorer {
 
     /**
      * Replay one journey and compare each step's state to the recorded one.
+     * The journey file is untrusted: every step must match a control that is
+     * live on the page AND passes the same refusal rules as discovery, and the
+     * click uses the live control, never the file's text or selector.
+     * @param {Object} journey
+     * @param {Object} opts
+     * @param {string} opts.allowedOrigin  Required. Origin the caller allows; the file's entry must match it.
      * @returns {Promise<{ok:boolean, divergedAt?:number, reason?:string, expected?:string, actual?:string}>}
      */
-    async replay(journey) {
+    async replay(journey, { allowedOrigin } = {}) {
         this.actions = 0;
         // shortcut: stored entry keeps query keys but no values, so replay starts at the bare path; entries that need a query string cannot be replayed.
-        const origin = new URL(journey.entry.split("?")[0]).origin;
-        await this.page.goto(journey.entry.split("?")[0], { waitUntil: "domcontentloaded" });
+        const entry = SiteSweep.normalizeUrl(String((journey && journey.entry) || "").split("?")[0]);
+        if (!entry || !allowedOrigin || new URL(entry).origin !== allowedOrigin) return { ok: false, divergedAt: 0, reason: "entry-origin" };
+        const origin = allowedOrigin;
+        await this.page.goto(entry, { waitUntil: "domcontentloaded" });
         await this._settle();
-        for (let i = 0; i < journey.steps.length; i++) {
-            const step = journey.steps[i];
-            if (DESTRUCTIVE.test(`${step.label} ${step.href || ""} ${step.selector || ""}`)) {
-                return { ok: false, divergedAt: i, reason: "refused: destructive step in journey file" };
+        if (new URL(this.page.url()).origin !== origin) return { ok: false, divergedAt: 0, reason: "cross-origin" };
+        const steps = Array.isArray(journey.steps) ? journey.steps : [];
+        for (let i = 0; i < steps.length; i++) {
+            const step = steps[i] || {};
+            const { safe, refused } = await this._actionsHere(origin);
+            const same = (a) => (a.selector || null) === (step.selector || null) && (a.text || "") === (step.text || "");
+            const live = safe.find(same);
+            if (!live) {
+                const bad = refused.find(same);
+                return { ok: false, divergedAt: i, reason: bad ? `refused: ${bad.reason}` : "step-failed" };
             }
-            const result = await this._click(step);
+            const result = await this._click(live);
             if (result !== "ok") return { ok: false, divergedAt: i, reason: `step-${result}` };
             if (new URL(this.page.url()).origin !== origin) return { ok: false, divergedAt: i, reason: "cross-origin" };
             const actual = await this.stateId();
