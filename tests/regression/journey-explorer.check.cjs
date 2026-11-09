@@ -169,3 +169,21 @@ test("rejects a non-http entry URL", async () => {
   await assert.rejects(new JourneyExplorer(page).discover("javascript:alert(1)"), /http/);
   await page.close();
 });
+
+test("budgetExhausted stays true when a later replay fails for a non-budget reason", async () => {
+  // "/" links to A for its first five requests, then drops it, so a replay
+  // of A's path fails after the state budget has already been hit.
+  let hits = 0;
+  const page = await browser.newPage();
+  await page.route(`${ORIGIN}/**`, (r) => {
+    const p = new URL(r.request().url()).pathname;
+    let body = "no";
+    if (p === "/") body = `${++hits <= 5 ? '<a href="/a">A</a>' : ""}<a href="/b">B</a><a href="/c">C</a>`;
+    else if (p === "/a") body = '<a href="/x">X</a><a href="/y">Y</a>';
+    else if (["/b", "/c", "/x", "/y"].includes(p)) body = `<p>${p}</p>`;
+    return r.fulfill({ contentType: "text/html", body });
+  });
+  const r = await new JourneyExplorer(page, { maxStates: 3 }).discover(`${ORIGIN}/`);
+  assert.equal(r.coverage.budgetExhausted, true);
+  await page.close();
+});
