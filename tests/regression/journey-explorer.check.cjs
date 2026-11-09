@@ -245,3 +245,20 @@ test("an entry that redirects off-origin is rejected", async () => {
   await assert.rejects(new JourneyExplorer(page).discover(`${ORIGIN}/`), /redirected/);
   await page.close();
 });
+
+test("a refused control is never clicked through a safe control with the same label", async () => {
+  let posts = 0;
+  const page = await browser.newPage();
+  await page.route(`${ORIGIN}/**`, (r) => {
+    const req = r.request();
+    if (req.method() === "POST") posts++;
+    const body = new URL(req.url()).pathname === "/"
+      ? `<button id="deleteAll" onclick="fetch('/DESTROYED',{method:'POST'})">Go</button><a href="/next">Go</a>`
+      : '<a href="/">Home</a>';
+    return r.fulfill({ contentType: "text/html", body });
+  });
+  const r = await new JourneyExplorer(page).discover(`${ORIGIN}/`);
+  assert.equal(posts, 0);
+  assert.ok(r.refusals.some((x) => x.label === "Go" && x.reason.startsWith("destructive")));
+  await page.close();
+});
