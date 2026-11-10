@@ -47,7 +47,8 @@ function riskState(recordText) {
 }
 
 const NOT_HUMAN = /\b(agent|claude|ai|bot|llm|model)\b/i;
-const MISSING = /^(|not recorded|none|tbd|n\/a)$/i;
+const MISSING = /^(|not recorded|none|tbd|n\/a|unknown|pending)$/i;
+const normaliseName = (v) => v.trim().replace(/\s+/g, ' ').toLowerCase();
 
 /**
  * deps: { readRecord(gate) -> text, pathExists(relPath) -> bool }
@@ -68,9 +69,14 @@ function validateGates(markdown, deps) {
   }
   if (rows.C2 && rows.C2.status === 'SATISFIED') {
     const rec = parseC2Record(markdown);
-    if (MISSING.test(rec.reviewer || '')) errors.push('C2 SATISFIED without a named independent reviewer');
-    else if (NOT_HUMAN.test(rec.reviewer)) errors.push('C2 reviewer must be a human, not an agent or model');
-    else if ((rec.author || '').toLowerCase() === rec.reviewer.toLowerCase()) errors.push('C2 reviewer must not be the author');
+    const reviewer = rec.reviewer || '';
+    const author = rec.author || '';
+    const reviewerNamed = !MISSING.test(reviewer);
+    const authorNamed = !MISSING.test(author);
+    if (!reviewerNamed) errors.push('C2 SATISFIED without a named independent reviewer');
+    else if (NOT_HUMAN.test(reviewer)) errors.push('C2 reviewer must be a human, not an agent or model');
+    if (!authorNamed) errors.push('C2 SATISFIED without a named author');
+    else if (reviewerNamed && normaliseName(author) === normaliseName(reviewer)) errors.push('C2 reviewer must not be the author');
     for (const key of ['approval-record', 'effectiveness-evidence']) {
       const v = rec[key] || '';
       if (MISSING.test(v)) errors.push(`C2 SATISFIED without ${key}`);
@@ -170,10 +176,10 @@ test('validator: an invalid status fails', () => {
 });
 
 test('validator: SATISFIED with no evidence path, or a nonexistent path, fails', () => {
-  assert.ok(validateGates(matrix({ C3: { status: 'SATISFIED', evidence: 'trust me' } }), fixtureDeps())
-    .includes('C3 SATISFIED without a repository evidence path'));
-  assert.ok(validateGates(matrix({ C3: { status: 'SATISFIED', evidence: 'see docs/missing.md' } }), fixtureDeps())
-    .includes('C3 evidence path does not exist: docs/missing.md'));
+  assert.deepEqual(validateGates(matrix({ C3: { status: 'SATISFIED', evidence: 'trust me' } }), fixtureDeps()),
+    ['C3 SATISFIED without a repository evidence path']);
+  assert.deepEqual(validateGates(matrix({ C3: { status: 'SATISFIED', evidence: 'see docs/missing.md' } }), fixtureDeps()),
+    ['C3 evidence path does not exist: docs/missing.md']);
 });
 
 test('validator: SATISFIED with an existing evidence path is accepted (gate progress is not rejected)', () => {
@@ -183,21 +189,46 @@ test('validator: SATISFIED with an existing evidence path is accepted (gate prog
 test('validator: C2 SATISFIED needs a named, human, non-author reviewer and existing evidence', () => {
   const sat = { C2: { status: 'SATISFIED', evidence: 'docs/a.md' } };
   const errs = (rec) => validateGates(matrix(sat, rec), fixtureDeps());
-  assert.ok(errs('').includes('C2 SATISFIED without a named independent reviewer'));
-  assert.ok(errs(GOOD_C2.replace('Jane Doe', 'NOT RECORDED')).includes('C2 SATISFIED without a named independent reviewer'));
-  assert.ok(errs(GOOD_C2.replace('Jane Doe', 'Claude Security agent')).includes('C2 reviewer must be a human, not an agent or model'));
-  assert.ok(errs(GOOD_C2.replace('Jane Doe', 'alex roe')).includes('C2 reviewer must not be the author'));
-  assert.ok(errs(GOOD_C2.replace('approval-record: docs/a.md', 'approval-record: docs/nope.md')).includes('C2 approval-record path does not exist: docs/nope.md'));
-  assert.ok(errs(GOOD_C2.replace('effectiveness-evidence: docs/a.md', 'effectiveness-evidence: ')).includes('C2 SATISFIED without effectiveness-evidence'));
+  assert.deepEqual(errs(''), [
+    'C2 SATISFIED without a named independent reviewer',
+    'C2 SATISFIED without a named author',
+    'C2 SATISFIED without approval-record',
+    'C2 SATISFIED without effectiveness-evidence',
+  ]);
+  assert.deepEqual(errs(GOOD_C2.replace('Jane Doe', 'NOT RECORDED')), ['C2 SATISFIED without a named independent reviewer']);
+  assert.deepEqual(errs(GOOD_C2.replace('Jane Doe', 'Claude Security agent')), ['C2 reviewer must be a human, not an agent or model']);
+  assert.deepEqual(errs(GOOD_C2.replace('Jane Doe', 'alex roe')), ['C2 reviewer must not be the author']);
+  assert.deepEqual(errs(GOOD_C2.replace('approval-record: docs/a.md', 'approval-record: docs/nope.md')), ['C2 approval-record path does not exist: docs/nope.md']);
+  assert.deepEqual(errs(GOOD_C2.replace('effectiveness-evidence: docs/a.md', 'effectiveness-evidence: ')), ['C2 SATISFIED without effectiveness-evidence']);
   assert.deepEqual(errs(GOOD_C2), []);
+});
+
+test('validator: C2 SATISFIED without a named author is rejected (reviewer independence is unprovable)', () => {
+  const sat = { C2: { status: 'SATISFIED', evidence: 'docs/a.md' } };
+  const errs = (rec) => validateGates(matrix(sat, rec), fixtureDeps());
+  const noAuthor = ['C2 SATISFIED without a named author'];
+  assert.deepEqual(errs(GOOD_C2.replace('author: Alex Roe\n', '')), noAuthor);
+  assert.deepEqual(errs(GOOD_C2.replace('author: Alex Roe', 'author:')), noAuthor);
+  for (const placeholder of ['NOT RECORDED', 'none', 'TBD', 'n/a', 'unknown', 'pending', '   ']) {
+    assert.deepEqual(errs(GOOD_C2.replace('Alex Roe', placeholder)), noAuthor, `author placeholder "${placeholder}"`);
+  }
+});
+
+test('validator: C2 reviewer placeholders and whitespace/case variants of the author are rejected', () => {
+  const sat = { C2: { status: 'SATISFIED', evidence: 'docs/a.md' } };
+  const errs = (rec) => validateGates(matrix(sat, rec), fixtureDeps());
+  for (const placeholder of ['unknown', 'pending', 'TBD', 'n/a', 'none']) {
+    assert.deepEqual(errs(GOOD_C2.replace('Jane Doe', placeholder)), ['C2 SATISFIED without a named independent reviewer'], `reviewer placeholder "${placeholder}"`);
+  }
+  assert.deepEqual(errs(GOOD_C2.replace('Jane Doe', '  ALEX   roe ')), ['C2 reviewer must not be the author']);
 });
 
 test('validator: T1 to T3 are reconciled against their records in both directions', () => {
   const sat = { T1: { status: 'SATISFIED', evidence: 'docs/a.md' } };
-  assert.ok(validateGates(matrix(sat), fixtureDeps(OPEN_REC)).includes('T1 is SATISFIED but its record is still open'));
-  assert.ok(validateGates(matrix(), fixtureDeps(ACCEPTED_REC)).some((e) => e.startsWith('T1 record is resolved')));
+  assert.deepEqual(validateGates(matrix(sat), fixtureDeps(OPEN_REC)), ['T1 is SATISFIED but its record is still open']);
+  assert.deepEqual(validateGates(matrix(), fixtureDeps(ACCEPTED_REC)), RISKS.map((t) => `${t} record is resolved but the matrix says BLOCKED`));
   assert.deepEqual(validateGates(matrix({ T1: { status: 'DEFERRED_BY_OWNER' }, T2: { status: 'DEFERRED_BY_OWNER' }, T3: { status: 'DEFERRED_BY_OWNER' } }), fixtureDeps(ACCEPTED_REC)), []);
-  assert.ok(validateGates(matrix(), fixtureDeps('no status here')).includes('T1 record status cannot be parsed'));
+  assert.deepEqual(validateGates(matrix(), fixtureDeps('no status here')), RISKS.map((t) => `${t} record status cannot be parsed`));
 });
 
 test('forbidden scan: detects planted approval and SharedWorker-flag mechanisms, ignores clean files', () => {
