@@ -13,7 +13,7 @@ Falcon's own code is licensed under the Apache License 2.0 (`LICENSE`, with attr
 ## Playwright CLI and trace skills (Apache-2.0)
 
 - Location: `.claude/skills/playwright-cli/` and `.claude/skills/playwright-trace/` (each with `LICENSE`, `NOTICE`, `UPSTREAM.md`).
-- Source: `playwright-core@1.64.1` (Copyright (c) Microsoft Corporation), the version pinned in `package-lock.json`.
+- Source: `playwright-core@1.65.0` (Copyright (c) Microsoft Corporation), the version pinned in `package-lock.json`.
 - Modifications: listed in each `UPSTREAM.md` (removed pre-approved tools and unsafe examples, added a Falcon overlay).
 
 ## Open point for the human CTO
