@@ -36,13 +36,30 @@ To block on a single Actions run without polling forever, use `node scripts/prod
 
 ## Decision router (27-role catalog)
 
-The catalog in `docs/organization/` is opt-in; dispatch ceilings and the single routing table in `CLAUDE.md` are unchanged. Per task: (1) classify as MICRO, STANDARD, ARCHITECTURAL or STRATEGIC; (2) name the accountable owner (`docs/organization/DECISION-RIGHTS.md`); (3) pick only the specialists the risk needs (`docs/organization/AGENT-ROUTING.md`); (4) keep Developer, QA and Code Reviewer independent, plus Security/DevOps when triggered; (5) reuse existing evidence for the same revision; (6) check the dispatch budget; (7) delegate only necessary work and collect compact handoffs; (8) validate evidence against the exact revision; (9) classify material decisions DELEGATED, RECOMMENDATION, CTO_APPROVAL_REQUIRED or BLOCKED and escalate the latter two to the human CTO, optionally via a Chief of Staff brief; (10) stop at authorization boundaries. The Chief of Staff, Chief Architect, Solution Designer, Benchmark Engineer and other strategic or specialist roles are not called for ordinary source changes. Advisor consultation follows `docs/organization/ADVISOR-POLICY.md` and never replaces a gate.
+Two independent choices. **Task class** (MICRO, STANDARD, ARCHITECTURAL, STRATEGIC) decides the accountable owner and likely specialists; `docs/organization/AGENT-ROUTING.md` is the class-to-role map. **Cycle tier** (FAST, STANDARD, FULL) decides the dispatch budget and applies only once work enters /production-cycle.
+
+| Task class | Handling |
+|---|---|
+| MICRO | Eligible read-only work, typos, and mechanical edits stay outside the cycle with the coordinator alone where governance permits. If such work does enter a cycle, pick the tier by risk. |
+| STANDARD | Ordinary feature or fix. Developer, then independent QA and Code Reviewer; add Security and DevOps when triggered. |
+| ARCHITECTURAL | Solution Architect owns cross-module design. Use the FULL tier when risk or impact warrants it (broad, high-impact, security-sensitive, operational, or release-critical); contained architectural work may use a lower tier, with required review slots reserved. |
+| STRATEGIC | Chief of Staff briefs the CTO, who decides. Classify any resulting implementation separately. |
+
+| Cycle tier | Use for | Dispatch ceiling |
+|---|---|---|
+| FAST | Bounded, low-risk work. Docs: Technical Writer and Code Reviewer per the documentation-only short path. Small bugs: Developer plus the applicable independent verification. | 4 |
+| STANDARD | Ordinary feature or fix, including a bounded security fix with contained impact. | 8 |
+| FULL | Broad or high-impact work, including security-sensitive, operational, or release-critical changes beyond a contained fix. | 16 |
+
+Every cycle, at any tier, ends with Release Manager.
+
+The catalog in `docs/organization/` is opt-in; dispatch ceilings and the single routing table in `CLAUDE.md` are unchanged. Per task: (1) classify as MICRO, STANDARD, ARCHITECTURAL or STRATEGIC, then select a FAST, STANDARD or FULL tier if a cycle runs; (2) name the accountable owner (`docs/organization/DECISION-RIGHTS.md`); (3) pick only the specialists the risk needs (`docs/organization/AGENT-ROUTING.md`); (4) keep Developer, QA and Code Reviewer independent, plus Security/DevOps when triggered; (5) reuse existing evidence for the same revision; (6) check the dispatch budget; (7) delegate only necessary work and collect compact handoffs; (8) validate evidence against the exact revision; (9) classify material decisions DELEGATED, RECOMMENDATION, CTO_APPROVAL_REQUIRED or BLOCKED and escalate the latter two to the human CTO, optionally via a Chief of Staff brief; (10) stop at authorization boundaries. The Chief of Staff, Chief Architect, Solution Designer, Benchmark Engineer and other strategic or specialist roles are not called for ordinary source changes. Advisor consultation follows `docs/organization/ADVISOR-POLICY.md` and never replaces a gate.
 
 ## Phase 0 — Intake and risk
 
 Read `CLAUDE.md`, relevant repository files, user-supplied context, and current Git status. Record objective, source, affected users, urgency, constraints, non-goals, success definition, unknowns, risk class, and decision owner in the ledger. Ask the human only when an unknown materially affects scope, safety, cost, public API, or data handling; otherwise state a reversible assumption.
 
-Choose a tier: fast for bounded, low-risk changes; standard for ordinary feature/fix work, including a bounded security fix with contained impact; full for broad or high-impact work, including security-sensitive, operational, or release-critical changes beyond a contained fix. Keep a live status summary in the conversation or task plan. The exit gate is a clear objective, decision owner, and risk tier.
+Choose a tier using the Decision router above. Use FULL for security-sensitive, operational, or release-critical changes beyond a contained fix. Reserve dispatch capacity for required independent gates, including Release Manager on every cycle. Reassess the tier if scope or risk changes. If the remaining budget cannot cover a required gate, checkpoint the run, mark the gate pending, and surface the constraint to the human. Keep a live status summary in the conversation or task plan. The exit gate is a clear objective, decision owner, and risk tier.
 
 ## Phase 1 — Product and acceptance (when needed)
 
