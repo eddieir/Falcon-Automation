@@ -35,6 +35,15 @@ C2 breakdown, kept separate on purpose:
 | Qualifying independent human review | Missing |
 | Explicit human approval | Missing. Required evidence: the reviewer's name in the owner decision record, a recorded approval by that person who is not the author, and a passing run of the readiness s3 item 5 effectiveness tests |
 
+## C2 approval record
+
+Machine-read by `tests/regression/phase18-gate-reconciliation.check.cjs` only when C2 is marked SATISFIED. Fill in when a qualifying human reviewer approves; paths are repository paths to the recorded approval and to the dated effectiveness-test results.
+
+reviewer: NOT RECORDED
+author: NOT RECORDED
+approval-record: NOT RECORDED
+effectiveness-evidence: NOT RECORDED
+
 ## 3. Owner decisions
 
 Current and binding (from the plan header and readiness package; not re-derived):
@@ -106,13 +115,22 @@ Each of 5 to 8 needs its own owner approval before work starts (readiness s8).
 
 ## 8. Tests
 
-New: `tests/regression/phase18-gate-reconciliation.check.cjs`, picked up by the existing `npm run test:regression` glob. Invariants and cases:
+New: `tests/regression/phase18-gate-reconciliation.check.cjs`, picked up by the existing `npm run test:regression` glob. It checks documentary consistency, not control effectiveness. A passing run says nothing about whether a security control works; any SATISFIED claim still needs independent review of the evidence it cites.
 
-- Matrix: every gate C1 to C5 and T1 to T3 has a recognised status and none is SATISFIED (positive). The validator rejects a SATISFIED C2, a missing gate and an invented status (negative and boundary).
-- Fail-closed surface: `src/core/pilot/` is absent; the forbidden tokens above are absent from the production surface (positive). The scanner detects planted occurrences (negative).
-- T1 to T3 records still read `OPEN - NOT ACCEPTED`, so an owner acceptance forces this document to be updated.
-- The plan still states that execute mode cannot be armed and that the SharedWorker flag is not accepted.
-- `.env.example` pilot keys, if any, are genuinely blank.
+Durable invariants:
+
+- Every gate C1 to C5 and T1 to T3 appears in the matrix with a recognised status.
+- A SATISFIED gate cites at least one repository path in its evidence cell, and every cited path exists. This confirms the reference resolves, not that the evidence is sufficient.
+- C2 may be SATISFIED only if the "C2 approval record" section names a reviewer who is not marked as an agent or model and is not the author, and its approval-record and effectiveness-evidence paths exist.
+- T1 to T3 matrix status must agree with the Status line of the matching residual-risk record: an open record requires BLOCKED or UNVERIFIED; a resolved record requires SATISFIED, DEFERRED_BY_OWNER or NOT_APPLICABLE. Changing a record without updating the matrix fails, and so does the reverse.
+- No `--approve-action`, `--emit-token-to` or SharedWorker-disabling `--disable-features` in `falcon.js`, `package.json`, `src/`, `scripts/` or `.github/`, and the plan still rejects that flag as a product mechanism. `PILOT_APPROVAL_RUN_TOKEN` is not scanned because the plan requires production code to reject it on presence.
+- Pilot keys in `.env.example` stay blank.
+
+Not asserted, so legitimate progress does not fail: which gates are open, whether `src/core/pilot/` exists, and whether T1 to T3 stay open.
+
+Validator behaviour is exercised on in-memory fixtures (missing gate, invalid status, unsupported SATISFIED, C2 without human approval evidence, accepted progress, planted forbidden tokens); the authoritative records are not mutated.
+
+Limits: the forbidden-token scan is a regex over file text and can be evaded by obfuscation or built strings. The reviewer check is a name heuristic. Path existence does not prove the evidence is adequate. The check cannot detect a control that was implemented incorrectly.
 
 Commands and results are recorded in the PR description, tied to the head SHA. No exit-code behaviour changed.
 
