@@ -57,7 +57,7 @@ test("the lockfile root records the same exact specifiers and resolves all three
 test("the verifier passes against the installed packages and the launched browser", () => {
   const result = run([]);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /launched browser version 156\.0\.8078\.4/);
+  assert.match(result.stdout, /launched browser version 158\.0\.8127\.18/);
   assert.match(result.stdout, /playwright pin verified/);
 });
 
@@ -73,7 +73,7 @@ test("a wrong expected browser version fails verification, with and without laun
   assert.equal(run([`--expected=${file}`, "--no-launch"]).status, 1);
   const launched = run([`--expected=${file}`]);
   assert.equal(launched.status, 1);
-  assert.match(launched.stderr, /launched browser reports 156\.0\.8078\.4, expected 156\.0\.8078\.5/);
+  assert.match(launched.stderr, /launched browser reports 158\.0\.8127\.18, expected 158\.0\.8127\.19/);
 });
 
 test("a wrong expected Playwright version fails verification", () => {
