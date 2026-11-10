@@ -43,10 +43,10 @@ Local fixture (6 pages, `maxSteps: 3`), two fresh pages, Chromium headless shell
 
 | run | ms | states | actions | digest |
 |---|---|---|---|---|
-| 1 | 1146 | 6 | 19 | 4fb7dda44e31 |
-| 2 | 1040 | 6 | 19 | 4fb7dda44e31 |
+| 1 | 1456 | 6 | 19 | 291824637aa3 |
+| 2 | 1257 | 6 | 19 | 291824637aa3 |
 
-Journeys: `Products>Item one>Details`, `Products>Item two`. Timing is machine-dependent; the digest and counts are not.
+Journeys, shortest first: `Products>Item two`, `Products>Item one>Details`. Recorded on commit af8ba5c. Timing is machine-dependent; the digest and counts are not.
 
 ## Limitations
 
