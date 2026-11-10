@@ -6,9 +6,9 @@ Build Falcon as a trustworthy, production-grade, AI-powered Playwright test auto
 
 ## Required workflow
 
-For any non-trivial feature, bug, or release, use the `/production-cycle` skill. Delegate by role; do not ask one agent to invent requirements, implement, and approve its own work.
+Use `/production-cycle` for any non-trivial feature, bug, or release. Read-only inspections, typo fixes, and mechanical edits may use the coordinator-only MICRO path where repository governance permits. Once `/production-cycle` starts, its required gates apply, including Release Manager. Delegate by role and keep implementation and approval independent.
 
-The main session coordinates on Sonnet 5.5 at medium effort. Invoke only specialists whose outputs are needed; the ordered phases are dependencies, not a requirement to run all 12 agents. See the skill's routing table for documentation, small bug, standard, and full cycles.
+The main session coordinates on Sonnet 5.5 at medium effort. Invoke only specialists whose outputs are needed. See the skill for how task classes determine ownership and cycle tiers set dispatch budgets.
 
 Each agent has an explicit, version-specific model ID in its front matter and a turn limit. This table is the single source of truth for routing (Phase 17 policy, set by the owner; it supersedes the earlier Haiku/Sonnet-only rule):
 
