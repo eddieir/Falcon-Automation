@@ -1,10 +1,10 @@
 # Agent routing
 
-The decision router lives in `.claude/skills/production-cycle/SKILL.md` and model routing in `CLAUDE.md`; this file only maps task types to roles. Dispatch ceilings are unchanged by the larger catalog: 2 concurrent tasks, at most one retry per task, fast 4 / standard 8 / full 16 dispatches.
+The decision router lives in `.claude/skills/production-cycle/SKILL.md` and model routing in `CLAUDE.md`; this file is the task-class-to-role map. See `.claude/skills/production-cycle/SKILL.md` for cycle tiers and ceilings and `CLAUDE.md` for model routing. Dispatch ceilings are unchanged by the larger catalog: 2 concurrent tasks, at most one retry per task, fast 4 / standard 8 / full 16 dispatches.
 
 | Mode | Use for | Required | Optional (risk-triggered) | Output / owner |
 |---|---|---|---|---|
-| MICRO | Typo, read, mechanical change | Production Director alone where governance allows | none | Change; Production Director |
+| MICRO | Typo, read, mechanical change | Production Director alone outside /production-cycle where governance allows | none | Change; Production Director |
 | STANDARD | Ordinary feature or fix | Developer, then independent QA and Code Reviewer, then Release Manager | Product Owner (ambiguous ACs), Security, DevOps, Technical Writer, Data & Analytics (metric/report schema), Developer Experience (CLI/API surface) | AC-traced evidence; Production Director |
 | ARCHITECTURAL | Cross-module design | Solution Architect, Developer, QA, Code Reviewer, Release Manager | Chief Architect (platform-wide or exception), Solution Designer (spec not yet implementation-ready), UX (operator-visible), AI/Agentic (AI paths), Security, Privacy, Performance, SRE | Design/ADR then implementation; Chief Architect / Solution Architect |
 | STRATEGIC | Portfolio, investment, long-term architecture | Chief of Staff, plus only the relevant advisors (Product Director, Chief Architect, Customer Validation, Market Intelligence, Benchmark) | Release Manager if a release is implied | CTO decision brief; CTO decides |
