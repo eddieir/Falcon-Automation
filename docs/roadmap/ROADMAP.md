@@ -11,7 +11,7 @@ This is the team's working view of the roadmap. The [README roadmap](../../READM
 | Milestone | Target | Status | Open / total issues |
 | --- | --- | --- | --- |
 | [M0 — Competitive evidence baseline](https://github.com/eddieir/Falcon-Automation/milestone/1) | 13 Nov 2026 | Done | 0 / 3 |
-| [M1 — Trustworthy Alpha](https://github.com/eddieir/Falcon-Automation/milestone/2) | 8 Jan 2027 | In progress | 2 / 4 |
+| [M1 — Trustworthy Alpha](https://github.com/eddieir/Falcon-Automation/milestone/2) | 8 Jan 2027 | Issues closed 10 Nov 2026; exclusions listed below | 0 / 4 |
 | [M2 — Secure Technical Preview](https://github.com/eddieir/Falcon-Automation/milestone/3) | 19 Feb 2027 | Waiting on owner decision and reviewer | 3 / 3 |
 | [M3 — Verified Self-Healing](https://github.com/eddieir/Falcon-Automation/milestone/4) | 26 Mar 2027 | Planned | 3 / 3 |
 | [M4 — Developer Beta](https://github.com/eddieir/Falcon-Automation/milestone/5) | 7 May 2027 | Planned | 3 / 3 |
@@ -47,14 +47,14 @@ gantt
     WP-77a Contract schema + store (#77)         :done,    w77a, 2026-10-27, 1d
     #125 ContractStore hardening                 :done,    h125, 2026-10-28, 1d
     GATE Owner decisions D2 D3 D8                :milestone, g1, 2026-11-06, 0d
-    WP-77b entry conditions (from #125)          :active, crit, e77b, 2026-11-02, 2026-11-14
-    WP-78a State-graph model + guard (#78)       :active,  w78a, 2026-11-02, 2026-11-21
-    WP-77b Stage A evaluator (#77)               :crit,    w77b, 2026-11-16, 2026-12-05
-    WP-77d Proposal + approval UX (#77)          :         w77d, 2026-11-23, 2026-12-19
+    WP-77b entry conditions (from #125)          :done, crit, e77b, 2026-11-02, 2026-11-14
+    WP-78a State-graph model + guard (#78)       :done,    w78a, 2026-11-02, 2026-11-10
+    WP-77b Stage A evaluator (#77)               :done, crit, w77b, 2026-11-16, 2026-12-05
+    WP-77d Proposal + approval UX (#77)          :done,    w77d, 2026-11-23, 2026-12-19
     G-03 #115 Allure content assertion           :         g03,  2026-11-23, 2026-12-03
-    WP-77c Business fixtures (#77)               :         w77c, 2026-12-07, 2026-12-19
-    WP-79b CLI dashboard Allure (#79 reopen)     :crit,    w79b, 2026-12-07, 2026-12-19
-    WP-78b SiteSweep integration (#78)           :crit,    w78b, 2026-12-14, 2027-01-02
+    WP-77c Business fixtures (#77)               :done,    w77c, 2026-12-07, 2026-12-19
+    WP-79b CLI dashboard Allure (not delivered)  :crit,    w79b, 2026-12-07, 2026-12-19
+    WP-78b SiteSweep integration (not delivered) :crit,    w78b, 2026-12-14, 2027-01-02
     WP-M1Q Qualification + reviews               :crit,    m1q,  2027-01-04, 2027-01-09
     Customer discovery track D6 (non-gating)     :         d6,   2026-11-09, 2027-02-20
     M1 due 8 Jan                                 :milestone, m1d, 2027-01-08, 0d
@@ -164,7 +164,9 @@ gantt
     Capability truth table and claim audit (#76)        :done, t3, 2026-10-24, 2026-10-27
 ```
 
-### M1 — Trustworthy Alpha · target 8 Jan 2027 · In progress
+### M1 — Trustworthy Alpha · target 8 Jan 2027 · Issues closed 10 Nov 2026
+
+Status update, 10 Nov 2026: #79, #125, #77 and #78 are closed. #78 delivered the `JourneyExplorer` library only: no CLI flag, no SiteSweep integration, no real-site validation, no form-entry or login exploration. Strict `--require-verified` mode (WP-79b) is not in the code. The status table and the README chart reflect this. The M1 bars for the closed issues (#77, #78, #125) are now marked done in both charts below. Their planned dates are the 29 Oct plan and were not re-baselined, and the two follow-ups that were not delivered (WP-79b, WP-78b) keep their original dates; future milestones are not replanned.
 
 **Done when:** A run with no approved business checks can never be reported as fully verified. Approved checks run the same way every time, without an LLM. Discovery finds 2–5 step journeys in local test apps, within set page and action limits.
 
@@ -180,14 +182,12 @@ gantt
 
     section Done
     Foundations merged (#79, #77, #125)                 :done, t1, 2026-10-23, 2026-10-29
-
-    section In progress
-    Contract store follow-ups (#125)                    :active, t2, 2026-11-02, 2026-11-14
-    Journey discovery model (#78)                       :active, t3, 2026-11-02, 2026-11-21
+    Contract store follow-ups (#125)                    :done, t2, 2026-11-02, 2026-11-14
+    Journey discovery library (#78)                     :done, t3, 2026-11-02, 2026-11-10
+    Business assertion evaluator (#77)                  :done, t4, 2026-11-16, 2026-12-05
+    Assertion review and approval (#77)                 :done, t5, 2026-11-23, 2026-12-19
 
     section Planned
-    Business assertion evaluator (#77)                  :t4, 2026-11-16, 2026-12-05
-    Assertion review and approval (#77)                 :t5, 2026-11-23, 2026-12-19
     Allure report check (#115, proposed)                :t6, 2026-11-23, 2026-12-03
     Strict CLI, dashboard, Allure (#79 follow-up)       :t7, 2026-12-07, 2026-12-19
     Discovery in SiteSweep (#78)                        :t8, 2026-12-14, 2027-01-02
