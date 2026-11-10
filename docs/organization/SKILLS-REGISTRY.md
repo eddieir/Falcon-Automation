@@ -5,7 +5,7 @@ Verification date 2026-10-27. **INSTALLED** = committed under `.claude/skills/`,
 ## Installed and tested
 | Skill | Source and pin | License | Assigned agents | Activation | Patch / rollback |
 |---|---|---|---|---|---|
-| `playwright-cli` | `playwright-core@1.64.1` tarball (sha512 = lockfile) | Apache-2.0 | Developer, QA, Developer Experience | Agent's `Skill` tool, lazy | Removed `allowed-tools`, added Falcon overlay. Delete the directory |
+| `playwright-cli` | `playwright-core@1.65.0` tarball (sha512 = lockfile) | Apache-2.0 | Developer, QA, Developer Experience | Agent's `Skill` tool, lazy | Removed `allowed-tools`, added Falcon overlay. Delete the directory |
 | `playwright-trace` | same tarball | Apache-2.0 | Developer, QA, Performance & Reliability | same | same |
 | `differential-review` | trailofbits/skills `196a907` plugins/differential-review v1.1.4 | CC-BY-SA-4.0 (see its `UPSTREAM.md` and the root `THIRD_PARTY_NOTICES.md`) | Code Reviewer, Security Engineer | same | Removed `allowed-tools` and the nested-agent delegation, added overlay. Delete the directory |
 | `advisor-governance`, `falcon-executive-decisions`, `falcon-neutral-benchmarking` | Falcon-authored | Falcon's | see matrix | coordinator or assigned agent | Delete the directory |

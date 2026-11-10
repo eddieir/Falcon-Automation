@@ -29,10 +29,10 @@ function writeReference(name, mutate) {
   return file;
 }
 
-test("reference pins Playwright 1.64.1, Chromium revision 1248 and browser 156.0.8078.4", () => {
-  assert.equal(reference.playwright, "1.64.1");
-  assert.equal(reference.chromium.revision, "1248");
-  assert.equal(reference.chromium.browserVersion, "156.0.8078.4");
+test("reference pins Playwright 1.65.0, Chromium revision 1254 and browser 158.0.8127.18", () => {
+  assert.equal(reference.playwright, "1.65.0");
+  assert.equal(reference.chromium.revision, "1254");
+  assert.equal(reference.chromium.browserVersion, "158.0.8127.18");
 });
 
 test("package.json declares both Playwright packages as the exact version, with no range", () => {
@@ -65,11 +65,11 @@ test("a wrong expected Chromium revision fails verification", () => {
   const file = writeReference("wrong-revision.json", (r) => { r.chromium.revision = "1223"; });
   const result = run([`--expected=${file}`, "--no-launch"]);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /FAIL: browsers\.json chromium is revision 1248/);
+  assert.match(result.stderr, /FAIL: browsers\.json chromium is revision 1254/);
 });
 
 test("a wrong expected browser version fails verification, with and without launching", () => {
-  const file = writeReference("wrong-version.json", (r) => { r.chromium.browserVersion = "156.0.8078.5"; });
+  const file = writeReference("wrong-version.json", (r) => { r.chromium.browserVersion = "158.0.8127.19"; });
   assert.equal(run([`--expected=${file}`, "--no-launch"]).status, 1);
   const launched = run([`--expected=${file}`]);
   assert.equal(launched.status, 1);
