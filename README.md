@@ -260,9 +260,7 @@ gantt
 
     section Done
     M0 Competitive evidence baseline    :done, m0, 2026-10-23, 2026-11-13
-
-    section In progress
-    M1 Trustworthy Alpha                :active, m1, 2026-10-27, 2027-01-08
+    M1 Trustworthy Alpha                :done, m1, 2026-10-27, 2026-11-10
 
     section Next
     M2 Secure Technical Preview         :m2, 2027-01-11, 2027-02-19
@@ -280,8 +278,8 @@ gantt
 | Milestone | Target | Status | What you'll get |
 | --- | --- | --- | --- |
 | [M0 — Competitive evidence baseline](https://github.com/eddieir/Falcon-Automation/milestone/1) | 13 Nov 2026 | ✅ Done | A public record of what works today, with evidence behind every claim |
-| [M1 — Trustworthy Alpha](https://github.com/eddieir/Falcon-Automation/milestone/2) | 8 Jan 2027 | 🔵 In progress | Results that show green only when your business checks pass, not just when clicks succeed |
-| [M2 — Secure Technical Preview](https://github.com/eddieir/Falcon-Automation/milestone/3) | 19 Feb 2027 | 🟡 Next | Safe exploration by default, and isolated test logins for each user role |
+| [M1 — Trustworthy Alpha](https://github.com/eddieir/Falcon-Automation/milestone/2) | 8 Jan 2027 | 🟢 Issues closed 10 Nov 2026; known exclusions below | Results that show green only when your business checks pass, not just when clicks succeed |
+| [M2 — Secure Technical Preview](https://github.com/eddieir/Falcon-Automation/milestone/3) | 19 Feb 2027 | 🟡 Next; #80 blocked on owner decisions and an independent human reviewer | Safe exploration by default, and isolated test logins for each user role |
 | [M3 — Verified Self-Healing](https://github.com/eddieir/Falcon-Automation/milestone/4) | 26 Mar 2027 | ⚪ Planned | Measured, explainable healing that you can review and undo |
 | [M4 — Developer Beta](https://github.com/eddieir/Falcon-Automation/milestone/5) | 7 May 2027 | ⚪ Planned | Bring your Playwright tests in, take clean Playwright tests out, and get started in five minutes |
 | [M5 — Efficient CI](https://github.com/eddieir/Falcon-Automation/milestone/6) | 18 Jun 2027 | ⚪ Planned | Faster, cheaper CI that runs only the affected tests, within time and AI-cost limits |
@@ -315,33 +313,33 @@ gantt
     Capability truth table (#76)                  :done, t3, 2026-10-24, 2026-10-27
 ```
 
-#### M1 — Trustworthy Alpha · target 8 Jan 2027 · 🔵 In progress
+#### M1 — Trustworthy Alpha · target 8 Jan 2027 · 🟢 Issues closed 10 Nov 2026
 
 **Done when:** A run with no approved business checks can never be reported as fully verified. Approved checks run the same way every time, without an LLM. Discovery finds 2–5 step journeys in local test apps, within set page and action limits.
 
 **Depends on:** M0
 
+All four M1 issues (#79, #125, #77, #78) are closed on GitHub. Closure is not full delivery of every planned item. Not delivered in M1:
+
+- A CLI discovery flag, and `JourneyExplorer` use inside site sweeps. #78 delivered a library module only (PR #142), proven on local fixtures. See [journey discovery](docs/journey-discovery.md).
+- Real-site validation, and form entry, login or multi-tab exploration. Discovery is click-only.
+- Strict `--require-verified` CLI mode, dashboard and Allure agreement (#79 follow-up). It is not in the code today.
+
+These stay planned future work without a committed date.
+
 ```mermaid
 gantt
-    title M1 Trustworthy Alpha, target 8 Jan 2027
+    title M1 Trustworthy Alpha, issues closed 10 Nov 2026
     dateFormat YYYY-MM-DD
     axisFormat %d %b
     tickInterval 2week
     todayMarker off
 
     section Done
-    Foundations merged (#79, #77)                 :done, t1, 2026-10-23, 2026-10-29
-
-    section In progress
-    Safer storage for approved checks (#125)      :active, t2, 2026-11-02, 2026-11-14
-    Multi-step journey discovery (#78)            :active, t3, 2026-11-02, 2026-11-21
-
-    section Planned
-    Business checks that run without AI (#77)     :t4, 2026-11-16, 2026-12-05
-    Review and approve suggested checks (#77)     :t5, 2026-11-23, 2026-12-19
-    Strict verified-only CI mode (#79)            :t6, 2026-12-07, 2026-12-19
-    Journey discovery in site sweeps (#78)        :t7, 2026-12-14, 2027-01-02
-    Release checks and reviews                    :t8, 2027-01-04, 2027-01-08
+    Verification classifier (#79)                 :done, t1, 2026-10-23, 2026-10-27
+    Safer storage for approved checks (#125)      :done, t2, 2026-10-23, 2026-10-28
+    Business checks and approved contracts (#77)  :done, t3, 2026-10-23, 2026-11-06
+    Journey discovery library (#78)               :done, t4, 2026-11-02, 2026-11-10
 ```
 
 #### M2 — Secure Technical Preview · target 19 Feb 2027 · 🟡 Next

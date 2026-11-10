@@ -11,7 +11,7 @@ This is the team's working view of the roadmap. The [README roadmap](../../READM
 | Milestone | Target | Status | Open / total issues |
 | --- | --- | --- | --- |
 | [M0 — Competitive evidence baseline](https://github.com/eddieir/Falcon-Automation/milestone/1) | 13 Nov 2026 | Done | 0 / 3 |
-| [M1 — Trustworthy Alpha](https://github.com/eddieir/Falcon-Automation/milestone/2) | 8 Jan 2027 | In progress | 2 / 4 |
+| [M1 — Trustworthy Alpha](https://github.com/eddieir/Falcon-Automation/milestone/2) | 8 Jan 2027 | Issues closed 10 Nov 2026; exclusions listed below | 0 / 4 |
 | [M2 — Secure Technical Preview](https://github.com/eddieir/Falcon-Automation/milestone/3) | 19 Feb 2027 | Waiting on owner decision and reviewer | 3 / 3 |
 | [M3 — Verified Self-Healing](https://github.com/eddieir/Falcon-Automation/milestone/4) | 26 Mar 2027 | Planned | 3 / 3 |
 | [M4 — Developer Beta](https://github.com/eddieir/Falcon-Automation/milestone/5) | 7 May 2027 | Planned | 3 / 3 |
@@ -164,7 +164,9 @@ gantt
     Capability truth table and claim audit (#76)        :done, t3, 2026-10-24, 2026-10-27
 ```
 
-### M1 — Trustworthy Alpha · target 8 Jan 2027 · In progress
+### M1 — Trustworthy Alpha · target 8 Jan 2027 · Issues closed 10 Nov 2026
+
+Status update, 10 Nov 2026: #79, #125, #77 and #78 are closed. #78 delivered the `JourneyExplorer` library only: no CLI flag, no SiteSweep integration, no real-site validation, no form-entry or login exploration. Strict `--require-verified` mode (WP-79b) is not in the code. The status table and the README chart reflect this. The M1 chart and the milestone-plan rows below are the 29 Oct plan and have not been re-baselined; where they conflict with this note, this note applies.
 
 **Done when:** A run with no approved business checks can never be reported as fully verified. Approved checks run the same way every time, without an LLM. Discovery finds 2–5 step journeys in local test apps, within set page and action limits.
 
