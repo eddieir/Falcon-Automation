@@ -80,7 +80,7 @@ test("a wrong expected Playwright version fails verification", () => {
   const file = writeReference("wrong-playwright.json", (r) => { r.playwright = "1.64.0"; });
   const result = run([`--expected=${file}`, "--no-launch"]);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /installed playwright is 1\.64\.1, expected 1\.64\.0/);
+  assert.match(result.stderr, /installed playwright is 1\.65\.0, expected 1\.64\.0/);
 });
 
 test("a malformed or missing reference fails closed", () => {
