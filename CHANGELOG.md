@@ -6,6 +6,13 @@ See [README.md](README.md) for the current feature set, architecture, and usage.
 
 ---
 
+## State-aware journey discovery (#78)
+
+- **New (library only):** `JourneyExplorer` discovers and replays bounded 2–5 step click journeys with state-aware deduplication, same-origin and action/state budgets, and explicit refusal, unreachable and coverage reporting. See [docs/journey-discovery.md](docs/journey-discovery.md).
+- No CLI flag yet, and `SiteSweep`, exit codes and the approved-contract path are unchanged.
+
+---
+
 ## Approved-contract journeys on in-process workers (#77, WP-77I-S2 + WP-77Q)
 
 - **New:** repeat `--plan=<file>` (or pass `--plan` with `--workers=N`, N from 1 to 8) to run several approved-contract journeys concurrently in one process. Whole journeys are scheduled, never single assertions, each in its own browser context with its own copy of the plan and identities. Results are reported in `journeyId` order whatever the completion order.
