@@ -4,12 +4,12 @@ Scope: issue #80, "Resolve Phase 18 security gates and independent review prereq
 
 ## 1. Baseline
 
-- Base: `origin/main` at `229816e1d60757d2b888f1bb539c9e7078f0eab3` (2026-11-10).
+- Base: `origin/main` at `229816e` (2026-11-10).
 - Sources read: `docs/phase-18-plan.md` (header and sections 1 to 6), `docs/architecture/phase-18-implementation-readiness.md` (sections 5 to 9), `docs/security/phase-18-residual-risk-T1.md` in full and the status lines of T2 and T3, `docs/roadmap/ROADMAP.md`, `README.md`, and the live issue #80.
 - Not re-read: the 39 design reviews, the spike and conformance result files, `docs/phase-18-owner-decisions.md` and `docs/phase-18-h8-node24-findings.md`. Their conclusions are taken from the two summaries above and are labelled historical.
 - The readiness package was last synced at `main` `2f31076` (2026-10-22). Merges since then (M1 work, #135) do not touch Phase 18 gate material, which `git log` on the two gate documents confirms: their last commit is `cdd58d7`.
 - The plan header still reads "DRAFT rev 3" while carrying rev 21 to 25 text. The binding content is the later text; the header is stale.
-- claude-mem was not available as a tool in this session, so no memory retrieval was done. Graphify was not needed: reachability was checked directly (section 5).
+- No memory-retrieval tool was available in this session, so no memory retrieval was done. Graphify was not needed: reachability was checked directly (section 5).
 
 ## 2. Gate matrix
 
@@ -149,7 +149,7 @@ None produced. No performance claim is made. Historical measurements (SPIKE-W6: 
 - T1, T2, T3 are open and unaccepted. C1 can never prove absence of exposure routes.
 - Every control is specified rather than built; the review evidence is for design text.
 - All conformance evidence is arm64; no hosted-runner, Linux x64 or Windows evidence.
-- This reconciliation was done by an AI coordinator from document text. It is not an independent QA, Code Review, Security or Release Manager verdict, and not C2.
+- This reconciliation was produced by an automated coordinator pass over document text, not by a human reviewer. It is not an independent QA, Code Review, Security or Release Manager verdict, and not C2.
 
 ## 12. Rollback
 
