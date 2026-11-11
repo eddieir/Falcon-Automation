@@ -38,7 +38,7 @@ jobs:
       - run: npm ci
       # Fails on known high/critical advisories in production dependencies.
       - run: npm audit --omit=dev --audit-level=high
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium || npx playwright install chromium
       - run: node scripts/playwright/verify-pin.js
       - run: npm run test:coverage
       - run: npm run test:browser
@@ -102,8 +102,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
+        run: npx playwright install --with-deps chromium || npx playwright install chromium
       - name: Verify Playwright pin
         run: node scripts/playwright/verify-pin.js
 
@@ -422,7 +421,7 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium || npx playwright install chromium
       - run: node scripts/playwright/verify-pin.js
       - name: Start local fixture app
         run: |
@@ -614,6 +613,6 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npx playwright install --with-deps chromium firefox webkit || npx playwright install chromium firefox webkit
       - run: node scripts/playwright/verify-pin.js
       - run: npm run test:engines
