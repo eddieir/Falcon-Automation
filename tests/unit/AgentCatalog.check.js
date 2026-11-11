@@ -47,6 +47,7 @@ for (const f of files) {
   for (const t of meta.tools.split(',').map(x => x.trim())) assert(allowedTools.has(t), `${f}: unknown tool ${t}`);
   assert(/nested agents|nested subagents/i.test(body), `${f}: no-nested-agent rule missing`);
   assert(body.includes('docs/organization/ADVISOR-POLICY.md'), `${f}: Advisor policy reference missing`);
+  assert(body.includes('Handoff deadline:'), `${f}: handoff deadline rule missing`);
   assert(body.includes('docs/organization/AGENT-SKILL-MATRIX.md'), `${f}: Skill profile reference missing`);
   agents[meta.name] = meta;
 }
