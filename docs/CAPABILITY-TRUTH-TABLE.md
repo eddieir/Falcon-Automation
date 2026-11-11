@@ -31,7 +31,7 @@ A `SHIPPED` row proves the behaviour the test asserts and nothing wider. Evidenc
 | CAP-12 | Live dashboard that refuses non-loopback exposure without a token | README: Review and reporting | SHIPPED | `tests/regression/dashboard-exposure.check.cjs`, `tests/unit/DashboardAuth.check.js` | A shared token, not an identity or role system. |
 | CAP-13 | Run history and trend detection | README: Review and reporting | SHIPPED | `tests/regression/p15-trend.check.cjs`, `tests/regression/p15-ledger.check.cjs` | Local files; trends need enough recorded runs. |
 | CAP-14 | Flaky-scenario tracking and quarantine that cannot hide a never-passing scenario | README: Investigate unstable tests | SHIPPED | `tests/regression/flakiness.check.cjs`, `tests/regression/cli.check.cjs` | Classification needs a minimum sample count. |
-| CAP-15 | Allure output | README: Review and reporting | PARTIAL | `playwright.config.js`, `.github/workflows/ci.yml` | The reporter is wired and CI uploads results, but no test asserts the Allure content. See G-03. |
+| CAP-15 | Allure output | README: Review and reporting | PARTIAL | `tests/regression/allure-results.check.cjs`, `playwright.config.js`, `.github/workflows/ci.yml` | The test runs a hermetic passing, failing and skipped mix and asserts the result files: name, status, timestamps, failure message and failure screenshot. It does not assert the generated HTML report; CI keeps `|| true` on report generation. |
 | CAP-16 | Page-level parallel workers | README: Parallel execution | SHIPPED | `tests/regression/p16-runner.check.cjs`, `tests/regression/p16-scheduler.check.cjs` | Scenarios within a page stay sequential; worker session state is not synchronized. |
 | CAP-17 | Deterministic CI sharding and merge that rejects incomplete input | README: Parallel execution | SHIPPED | `tests/regression/p16-merge.check.cjs`, `tests/regression/p16-merge-reject.check.cjs` | Merge validates bundles; it does not repair them. |
 | CAP-18 | Provider routes: OpenAI, Anthropic, Gemini, Azure OpenAI, OpenAI-compatible | README: Optional AI providers | SHIPPED | `tests/regression/p17-provider-contract.check.cjs`, `tests/regression/m17-byok-anthropic.check.cjs`, `tests/regression/m17-byok-gemini.check.cjs` | Mocked protocols only. No Vertex AI, Entra ID or Bedrock. |
@@ -54,7 +54,6 @@ A `SHIPPED` row proves the behaviour the test asserts and nothing wider. Evidenc
 | --- | --- | --- |
 | G-01 | CAP-02 | A browser smoke test that launches real Firefox and WebKit, run in CI or documented as manual. |
 | G-02 | CAP-11 | A TLS-enabled Postgres in CI that proves the certificate path and a rejected untrusted certificate. |
-| G-03 | CAP-15 | A test that reads generated Allure results and asserts the expected fields. |
 | G-04 | CAP-19 | Opt-in, secret-gated live provider checks outside the default CI gate. |
 | G-05 | CAP-24 | Accuracy measured on applications Falcon's authors did not write. |
 
