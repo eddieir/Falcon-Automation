@@ -595,7 +595,8 @@ jobs:
         run: node tools/agent-telemetry/statusline/test-statusline.js
 
   # Real Firefox and WebKit launched through BrowserManager (G-01 / CAP-02). Kept
-  # out of the required gate at first: it installs two extra browsers, and a
+  # out of the required gate at first: it installs two extra browsers (Chromium is
+  # needed too, for the pin verification), and a
   # failure here must not block unrelated work. Promote it to required once it
   # has been stable for a run of consecutive pushes. The fixture app is local.
   browser-engines:
@@ -613,5 +614,6 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps firefox webkit
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: node scripts/playwright/verify-pin.js
       - run: npm run test:engines
