@@ -34,6 +34,10 @@ At each approved milestone, generate a checkpoint with `node scripts/production-
 
 To block on a single Actions run without polling forever, use `node scripts/production-cycle/ci-wait.js --repo=<owner/name> --run-id=<id> --sha=<40-hex>` (or `npm run production:ci-wait -- ...`). It polls `gh run view` up to a hard, pre-computed ceiling (`floor(timeout/interval)+1`, default 1200s/30s) and exits 0 only on a genuine `success` conclusion; every other outcome (failure, cancelled, skipped/neutral, timeout, run-not-found/sha-mismatch, a `gh` CLI error, or bad input) gets its own documented exit code — see the header comment in that file. A single run's success is printed as "this run only — not PR readiness". `--pr=<n> --require=<comma-separated exact check names>` (instead of `--run-id`) polls `gh pr view` and succeeds only once every listed check name is present with a SUCCESS conclusion on the expected `--sha`; that means "the listed checks are green on this SHA", nothing more. It does not check branch protection, reviews, other required checks or mergeability, and checks are matched by name only.
 
+## Packet-first review dispatch
+
+For QA, Code Review and Release Manager gates, build one self-contained packet instead of sending a reviewer to rediscover the repository: `npm run production:packet -- --base=<rev> --head=<rev> --out=<file> --role=qa|code-review|release [--test=<focused test file>]...`. It records the exact revisions, changed files, a size-capped diff, the result of any focused test file the coordinator ran, and the reviewer's response contract. It refuses a diff containing a known credential shape (exit 4) and never prints the value. Give the reviewer the packet content and require one structured answer. Keep tool access for gates that must execute something (Developer, and QA when execution is required by the acceptance criteria); a packet-only verdict is recorded as an evidence-based review, never as independent test execution. A reviewer that returns no handoff leaves the gate pending; do not resume or re-dispatch it automatically.
+
 ## Decision router (27-role catalog)
 
 Two independent choices. **Task class** (MICRO, STANDARD, ARCHITECTURAL, STRATEGIC) decides the accountable owner and likely specialists; `docs/organization/AGENT-ROUTING.md` is the class-to-role map. **Cycle tier** (FAST, STANDARD, FULL) decides the dispatch budget and applies only once work enters /production-cycle.
@@ -91,5 +95,5 @@ Report outcome, changed files, AC traceability, test/CI evidence, review verdict
 
 - Small bug: Product Owner only if ACs are unclear → Developer → applicable independent QA and Code Reviewer → Release Manager.
 - Security incident: Production Director → Security triage → containment recommendation → existing or new human authorization for containment/remediation → Developer/DevOps → QA and Security retest + Code Reviewer → Release Manager. Never disclose secret values.
-- Documentation-only: Technical Writer → Code Reviewer for final accuracy; Product Owner only if behavior/scope is ambiguous → Release Manager. QA is not required unless risk or acceptance criteria call for it.
+- Documentation-only (including documentation plus a focused regression test that touches no production code): Technical Writer → Code Reviewer for final accuracy; Product Owner only if behavior/scope is ambiguous → Release Manager. QA is not required unless risk or acceptance criteria call for it.
 - Release-only: collect required DevOps, QA, and Security evidence → Technical Writer when notes changed → Release Manager.

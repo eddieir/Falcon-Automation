@@ -18,3 +18,5 @@ Specific triggers:
 - Chief of Staff is not called for ordinary source changes; Chief Architect not for every design; Solution Designer not when the architect's design is already implementation-ready.
 
 Cost and context: share task packets (`TASK_ID, REVISION, OBJECTIVE, SCOPE, ALLOWED_PATHS, ACCEPTANCE_IDS, RELEVANT_EVIDENCE, KNOWN_CONSTRAINTS, DELIVERABLE, RECIPIENT, TURN_BUDGET`) and result packets (`TASK_ID, REVISION, STATUS, INPUTS, EVIDENCE_PATHS, DELTA, OPEN_RISKS, RECIPIENT`), not history. See [CLAUDE-PRO-EFFICIENCY](CLAUDE-PRO-EFFICIENCY.md).
+
+Packet-first dispatch: for review gates the coordinator builds the packet with `npm run production:packet` (see the skill) and sends its content with a one-response contract. Reviewers answer from the packet, state what they assessed versus took from it, and end with the structured handoff before their turn limit. A reviewer with no handoff leaves the gate pending.
