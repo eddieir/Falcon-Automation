@@ -5,7 +5,9 @@ const Logger = require("../../utils/Logger");
 
 class BrowserManager {
     constructor() {
-        this.browserType = ConfigManager.get("browser") || "chromium";
+        // BROWSER is the documented override (.env.example). ConfigManager.get("browser")
+        // alone returns the testConfig.json value first, so the env var was silently ignored.
+        this.browserType = process.env.BROWSER || ConfigManager.get("browser") || "chromium";
         this.browser = null;
         this.page = null;
     }

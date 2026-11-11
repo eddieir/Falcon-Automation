@@ -18,7 +18,7 @@ A `SHIPPED` row proves the behaviour the test asserts and nothing wider. Evidenc
 | ID | Capability | Claimed in | Status | Executable evidence | Known limits |
 | --- | --- | --- | --- | --- | --- |
 | CAP-01 | Playwright browser execution on Chromium | README: Browser automation | SHIPPED | `tests/regression/browser.spec.js`, `.github/workflows/ci.yml` | Chromium only is installed and exercised in CI. |
-| CAP-02 | Firefox and WebKit through `BrowserManager` | README: Browser automation | PARTIAL | `tests/regression/core.check.cjs` | The test uses a mocked lifecycle for each engine; no real Firefox or WebKit launch is tested. See G-01. |
+| CAP-02 | Firefox and WebKit through `BrowserManager` | README: Browser automation | PARTIAL | `tests/engines/browser-engines.check.cjs`, `tests/regression/browser-env-selection.check.cjs`, `tests/regression/core.check.cjs`, `.github/workflows/ci.yml` | A smoke test launches real Firefox and WebKit through `BrowserManager` and drives a local fixture (navigate, fill, click, screenshot, element facts). It runs in a separate `browser-engines` CI job that is non-gating for now. Healing and the wider suite are validated on Chromium only. |
 | CAP-03 | Bounded site discovery | README: Discovery and generation | SHIPPED | `tests/regression/sitesweep.check.cjs` | Cannot reach state-dependent or unlinked journeys. |
 | CAP-04 | Generated interaction scenarios and DOM issue scanning | README: Discovery and generation | PARTIAL | `tests/regression/core.check.cjs` | Scenarios are structural interaction checks; no business assertion is generated. |
 | CAP-05 | Retry, then scoped approved replay | README: Locator recovery | SHIPPED | `tests/regression/healing.check.cjs`, `tests/regression/p14-memory.check.cjs` | Scope is application, origin, pathname, action and original selector. |
@@ -52,7 +52,6 @@ A `SHIPPED` row proves the behaviour the test asserts and nothing wider. Evidenc
 
 | Gap | Affects | What is missing |
 | --- | --- | --- |
-| G-01 | CAP-02 | A browser smoke test that launches real Firefox and WebKit, run in CI or documented as manual. |
 | G-02 | CAP-11 | A TLS-enabled Postgres in CI that proves the certificate path and a rejected untrusted certificate. |
 | G-04 | CAP-19 | Opt-in, secret-gated live provider checks outside the default CI gate. |
 | G-05 | CAP-24 | Accuracy measured on applications Falcon's authors did not write. |
