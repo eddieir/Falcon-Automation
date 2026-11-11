@@ -364,6 +364,8 @@ jobs:
       # ── Allure report generation ────────────────────────────────────────────
       - name: Generate Allure report
         if: always()
+        # `|| true` is kept on purpose: tests/regression/allure-results.check.cjs asserts the
+        # result files, not the HTML report, so a report-generation failure must not mask test results.
         run: |
           npx allure awesome allure-results -o allure-report || true
 
