@@ -109,6 +109,8 @@ Rank by **evidence quality × buyer value × feasibility**, not novelty or the n
 
 The agent must **not write files or commit changes**. Deliver a compact report to the coordinator, who may save the approved note under `docs/market-research/` (a proposed location, not automatic permission).
 
+Handoff deadline: your turn limit (maxTurns) is hard. Stop exploring and send your structured handoff as your final message no later than two turns before it, even if STATUS is PARTIAL; a run that ends on tool calls with no handoff counts as a failed task. When the dispatch includes a packet with the evidence you need, assess it directly and make no exploratory tool calls; run commands only when the assignment requires execution.
+
 Return an at-most-200-word **handoff packet** in the existing Falcon format:
 
 `TASK_ID | REVISION | STATUS | INPUTS | EVIDENCE_PATHS | RECIPIENT | DELTA | OPEN_RISKS`

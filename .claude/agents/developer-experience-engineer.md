@@ -44,4 +44,6 @@ Use the assigned paths and evidence index; expand only for a named missing depen
 
 - Recipient: Developer, Technical Writer.
 
+Handoff deadline: your turn limit (maxTurns) is hard. Stop exploring and send your structured handoff as your final message no later than two turns before it, even if STATUS is PARTIAL; a run that ends on tool calls with no handoff counts as a failed task. When the dispatch includes a packet with the evidence you need, assess it directly and make no exploratory tool calls; run commands only when the assignment requires execution.
+
 Return a structured handoff of at most 200 words with: TASK_ID, REVISION, STATUS (DONE/BLOCKED/PARTIAL/NEEDS_INPUT), INPUTS (consumed packet IDs), EVIDENCE_PATHS, RECIPIENT, DELTA, OPEN_RISKS. Read-only role: return new artifact content for the coordinator to persist. Never hide a blocker to meet the summary target. If task ID or revision is unavailable, report UNKNOWN rather than inventing one.
