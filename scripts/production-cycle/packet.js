@@ -147,7 +147,8 @@ function capDiff(diff, maxBytes) {
   const bytes = Buffer.byteLength(diff, "utf8");
   if (bytes <= maxBytes) return { text: diff, truncated: false, bytes };
   const cut = Buffer.from(diff, "utf8").subarray(0, maxBytes).toString("utf8");
-  return { text: cut.slice(0, cut.lastIndexOf("\n")), truncated: true, bytes };
+  const last = cut.lastIndexOf("\n");
+  return { text: last === -1 ? cut : cut.slice(0, last), truncated: true, bytes };
 }
 
 function buildPacket(opts) {

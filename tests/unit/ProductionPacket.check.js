@@ -55,6 +55,8 @@ function errCode(fn) {
   return undefined;
 }
 
+// One shared repo: tests that add commits (big, sha, leak) accumulate in later base..head diffs.
+// Keep their combined size under the 60000-byte default cap or isolate them with makeRepo().
 const { repo, base, head } = makeRepo();
 
 test("packet records exact head and base, changed files, diff and no-test notice", () => {
@@ -85,6 +87,17 @@ test("the diff is capped with an explicit truncation marker", () => {
   assert.strictEqual(p.truncated, true);
   assert.ok(p.text.includes("TRUNCATED at 2000 bytes"));
   assert.ok(p.text.length < 6000);
+});
+
+test("capDiff keeps the text when the cap contains no newline", () => {
+  const r = Packet.capDiff("x".repeat(50), 10);
+  assert.deepStrictEqual([r.text, r.truncated], ["x".repeat(10), true]);
+});
+
+test("--max-diff-bytes outside 1000..400000 or non-integer is rejected with exit 2", () => {
+  for (const v of [500, 400001, 1500.5, "abc"]) {
+    assert.strictEqual(errCode(() => Packet.buildPacket({ repo, base, head, tests: [], maxDiffBytes: v })), 2, String(v));
+  }
 });
 
 test("role adds a response contract; an unknown role is rejected with exit 2", () => {
