@@ -62,3 +62,7 @@ auth.json
 
 # Local fixture identities for accessEquals assertions (tokens); never commit
 fixtures/identities.json
+
+# G-04 live provider check evidence (tests/live/) — never commit, may be
+# regenerated locally with FALCON_LIVE_PROVIDER_TESTS=1.
+/live-evidence/
