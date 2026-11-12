@@ -26,7 +26,7 @@ const execFileAsync = promisify(execFile);
 const ROOT = path.join(__dirname, "..", "..");
 const LIVE_DIR = path.join(ROOT, "tests", "live");
 
-const { containsKeyValue } = require(path.join(LIVE_DIR, "_liveHelpers.cjs"));
+const { containsKeyValue, containsKeyValueInOutput } = require(path.join(LIVE_DIR, "_liveHelpers.cjs"));
 
 function liveCheckFiles() {
     return fs
@@ -59,6 +59,11 @@ test("each live check skips loudly, exits 0, and never silently passes when the 
         // warning on stderr instead of the expected skip output). Strip it
         // so the child starts a clean, top-level test run.
         delete env.NODE_TEST_CONTEXT;
+        // Hygiene: the live checks must never see real Falcon provider
+        // configuration or credentials from the developer's shell.
+        for (const name of Object.keys(env)) {
+            if (name.startsWith("FALCON_LLM_") || name === "OPENAI_API_KEY") delete env[name];
+        }
 
         let stdout = "";
         let exitCode = 0;
@@ -117,4 +122,12 @@ test("containsKeyValue catches a planted fake key value in captured output", () 
     assert.equal(containsKeyValue(cleanOutput, fakeKey), false, "must not false-positive on clean output");
     assert.equal(containsKeyValue(leakyOutput, fakeKey), true, "must catch a planted key value in nested output");
     assert.equal(containsKeyValue([leakyOutput], fakeKey), true, "must catch a planted key value inside an array");
+});
+
+test("containsKeyValueInOutput catches a planted fake key in captured stdout/stderr text", () => {
+    const fakeKey = "FALCON-LIVE-FAKE-KEY-do-not-use-1234567890";
+    assert.equal(containsKeyValueInOutput("TAP version 13\nok 1 - openai\n", fakeKey), false, "must not false-positive on clean console output");
+    assert.equal(containsKeyValueInOutput(`error: bad header Bearer ${fakeKey}\n`, fakeKey), true, "must catch a key in a captured string");
+    assert.equal(containsKeyValueInOutput(`line one\nline two leak ${fakeKey}\n`, fakeKey), true, "must catch a key on any line of multi-line output");
+    assert.equal(containsKeyValueInOutput("anything", ""), false, "an empty key value must never match");
 });

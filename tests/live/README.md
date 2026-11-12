@@ -39,10 +39,14 @@ hermetic (no network) and always runs.
 ## Cost ceiling
 
 Every request uses a 3-line synthetic candidate prompt (well under 200
-bytes) and `maxOutputTokens` of 5-8, with `maxAttempts=1` and a per-run
-budget of 6 attempts per provider. A full run of all three checks issues at
-most a handful of very short requests per provider — a small fraction of a
-cent per provider at current list prices.
+bytes) and `maxOutputTokens` of 5-8. Each provider check builds its own,
+separate `LlmConfig`/`LlmBudget` instance with `maxAttempts=1` — there is
+no run-wide shared cap across providers. The invalid-key and timeout
+assertions fail before reaching the provider's billing path, so only the
+real-key path makes a billable request: at most one billable request per
+provider (one each for OpenAI, Anthropic, and Gemini — at most 3 billable
+requests total across a full run), each capped at `maxOutputTokens<=8`. A
+small fraction of a cent per provider at current list prices.
 
 ## Evidence
 

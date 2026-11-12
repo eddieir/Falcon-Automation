@@ -19,6 +19,13 @@ concurrency:
 jobs:
   live-providers:
     runs-on: ubuntu-latest
+    # Security: restrict to main so workflow_dispatch cannot be run from an
+    # arbitrary branch/fork PR with access to the three billing-key secrets.
+    # schedule already always runs on the default branch; this guard makes
+    # that explicit and closes the workflow_dispatch gap (F1, issue #116).
+    # Owners may additionally configure a GitHub Environment with required
+    # reviewers on this job for a second, independent approval gate.
+    if: github.ref == 'refs/heads/main'
     # AC2: Small timeout for live API checks.
     timeout-minutes: 10
     steps:

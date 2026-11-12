@@ -169,6 +169,17 @@ describe("live-providers workflow", () => {
     assert.match(content, /retention-days:\s*\d+/, "upload must specify retention-days");
   });
 
+  it("F1: job is guarded to run only on the main branch (workflow_dispatch and schedule)", () => {
+    const content = fs.readFileSync(WORKFLOW_PATH, "utf8");
+    const jobMatch = content.match(/\n {2}live-providers:[ \t]*\n([\s\S]*)/);
+    assert.ok(jobMatch, "must find live-providers job body");
+    assert.match(
+      jobMatch[1],
+      /^ {4}if:\s*github\.ref\s*==\s*'refs\/heads\/main'\s*$/m,
+      "live-providers job must have a job-level 'if: github.ref == \\'refs/heads/main\\'' guard so workflow_dispatch cannot run from another branch",
+    );
+  });
+
   it("AC6: ci.yml has no reference to live-providers or test:live-providers", () => {
     const ciContent = fs.readFileSync(CI_PATH, "utf8");
     assert.doesNotMatch(ciContent, /live-providers/, "ci.yml must not reference live-providers");

@@ -11,10 +11,12 @@
  * real FALCON_LLM_* operator configuration is never consulted here.
  *
  * Cost ceiling (AC6): every assertion in tests/live/ uses a tiny synthetic
- * prompt (a handful of short candidate lines), maxOutputTokens<=8, and a
- * per-run LlmBudget/maxAttempts of at most a few attempts. One full run of
- * all three provider checks issues at most ~6 short requests per provider
- * (18 total) at a few tokens each — expected cost per run is a small
+ * prompt (a handful of short candidate lines) and maxOutputTokens<=8. Each
+ * provider check builds its own, separate LlmConfig/LlmBudget instance with
+ * maxAttempts=1 — there is no run-wide shared cap across providers. Only
+ * the real-key path issues a billable request, so one full run of all
+ * three provider checks issues at most one billable request per provider
+ * (at most 3 total) at a few tokens each — expected cost per run is a small
  * fraction of a cent per provider at current list prices (documented again
  * in tests/live/README.md).
  */
@@ -134,6 +136,22 @@ function containsKeyValue(value, keyValue) {
     return false;
 }
 
+/**
+ * Scan captured process output (stdout and/or stderr strings, as produced
+ * by console.log/console.error during a check run) for the literal key
+ * value, in addition to containsKeyValue's scan of the structured result
+ * object (F2, issue #116 security follow-up). Console output is not part
+ * of the result object, so it needs its own scan.
+ * @param {string} capturedOutput - concatenated stdout+stderr text.
+ * @param {string} keyValue
+ * @returns {boolean} true iff the key value literal appears in the output.
+ */
+function containsKeyValueInOutput(capturedOutput, keyValue) {
+    if (!keyValue) return false;
+    if (typeof capturedOutput !== "string") return false;
+    return capturedOutput.includes(keyValue);
+}
+
 /** @returns {string} best-effort installed package version, or "unknown". */
 function safePackageVersion(packageName) {
     try {
@@ -224,6 +242,25 @@ function runProviderLiveSuite(opts) {
             return;
         }
 
+        // Capture console output for the duration of this check (F2):
+        // containsKeyValue only scans the structured result object, so
+        // console output (what operators actually see in CI logs) needs
+        // its own scan via containsKeyValueInOutput.
+        let capturedOutput = "";
+        const origLog = console.log;
+        const origError = console.error;
+        // eslint-disable-next-line no-console
+        console.log = (...args) => {
+            capturedOutput += `${args.join(" ")}\n`;
+            origLog(...args);
+        };
+        // eslint-disable-next-line no-console
+        console.error = (...args) => {
+            capturedOutput += `${args.join(" ")}\n`;
+            origError(...args);
+        };
+
+        try {
         // --- timeout honoured + invalid key -> redacted AUTH_FAILED/TIMEOUT ---
         // Needs no real key, but is still gated on the flag (never runs
         // inside the default CI gate).
@@ -239,6 +276,7 @@ function runProviderLiveSuite(opts) {
             `invalid key must map to a closed, redacted error code, got ${authOutcome.errorCode}`,
         );
         assert_(!containsKeyValue(authOutcome, fakeKey), "the fake key value must never appear in the result object");
+        assert_(!containsKeyValueInOutput(capturedOutput, fakeKey), "the fake key value must never appear in captured console output");
         await badProvider.close();
 
         // Timeout honoured: a near-zero timeout must surface TIMEOUT/NETWORK_ERROR,
@@ -270,6 +308,7 @@ function runProviderLiveSuite(opts) {
 
         assert_(!containsKeyValue(outcome, key), "the real key value must never appear in the provider result");
         assert_(!containsKeyValue(JSON.stringify(outcome), key), "the real key value must never appear in serialized output");
+        assert_(!containsKeyValueInOutput(capturedOutput, key), "the real key value must never appear in captured console output");
 
         const assertions = {
             requestAccepted: outcome.ok === true,
@@ -295,6 +334,10 @@ function runProviderLiveSuite(opts) {
 
         assert_(assertions.requestAccepted, `request must be accepted (no 4xx from a shape change), got errorCode=${outcome.errorCode}`);
         assert_(assertions.repliesParseToValidIndex, "the real reply must parse to a valid candidate index");
+        } finally {
+            console.log = origLog;
+            console.error = origError;
+        }
     });
 }
 
@@ -312,6 +355,7 @@ module.exports = {
     buildSyntheticPrompt,
     parseCandidateReply,
     containsKeyValue,
+    containsKeyValueInOutput,
     safePackageVersion,
     writeEvidence,
     EVIDENCE_DIR,
