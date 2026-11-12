@@ -29,6 +29,7 @@
     "test": "npm run test:regression && npm run test:browser",
     "test:regression": "node --test --test-concurrency=1 tests/regression/*.check.cjs",
     "test:browser": "playwright test -c playwright.regression.config.js",
+    "test:engines": "node --test --test-concurrency=1 tests/engines/*.check.cjs",
     "test:coverage": "node --experimental-test-coverage --test --test-concurrency=1 tests/regression/*.check.cjs",
     "healing:benchmark": "node src/core/locator/HealingBenchmark.js",
     "healing:pending": "node scripts/healing/review.js list",

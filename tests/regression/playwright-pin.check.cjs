@@ -109,10 +109,10 @@ test("an unknown argument is a usage error", () => {
 test("every browser install in ci.yml is followed by the pin verification step", () => {
   const lines = fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8").split("\n");
   const installs = lines.map((line, i) => (/playwright install/.test(line) ? i : -1)).filter((i) => i >= 0);
-  assert.equal(installs.length, 3, "expected the three known browser install sites");
+  assert.equal(installs.length, 4, "expected the four known browser install sites");
   for (const at of installs) {
     const following = lines.slice(at + 1, at + 4).join("\n");
     assert.match(following, /node scripts\/playwright\/verify-pin\.js/, `verification must follow the install at line ${at + 1}`);
   }
-  assert.equal(lines.filter((line) => /verify-pin\.js/.test(line)).length, 3);
+  assert.equal(lines.filter((line) => /verify-pin\.js/.test(line)).length, 4);
 });

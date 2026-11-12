@@ -38,7 +38,7 @@ jobs:
       - run: npm ci
       # Fails on known high/critical advisories in production dependencies.
       - run: npm audit --omit=dev --audit-level=high
-      - run: npx playwright install --with-deps chromium
+      - run: timeout 300 npx playwright install --with-deps chromium || npx playwright install chromium
       - run: node scripts/playwright/verify-pin.js
       - run: npm run test:coverage
       - run: npm run test:browser
@@ -102,8 +102,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
+        run: timeout 300 npx playwright install --with-deps chromium || npx playwright install chromium
       - name: Verify Playwright pin
         run: node scripts/playwright/verify-pin.js
 
@@ -422,7 +421,7 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: timeout 300 npx playwright install --with-deps chromium || npx playwright install chromium
       - run: node scripts/playwright/verify-pin.js
       - name: Start local fixture app
         run: |
@@ -593,3 +592,27 @@ jobs:
         run: node --test tools/agent-telemetry/test/*.test.js
       - name: Statusline checks
         run: node tools/agent-telemetry/statusline/test-statusline.js
+
+  # Real Firefox and WebKit launched through BrowserManager (G-01 / CAP-02). Kept
+  # out of the required gate at first: it installs two extra browsers (Chromium is
+  # needed too, for the pin verification), and a
+  # failure here must not block unrelated work. Promote it to required once it
+  # has been stable for a run of consecutive pushes. The fixture app is local.
+  browser-engines:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: timeout 300 npx playwright install --with-deps chromium firefox webkit || npx playwright install chromium firefox webkit
+      - run: node scripts/playwright/verify-pin.js
+      - run: npm run test:engines

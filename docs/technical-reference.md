@@ -32,7 +32,7 @@ The rest of Falcon follows from that same instinct. If tests shouldn't need cons
 
 **What that looks like in practice:**
 
-- **UI automation** via Playwright — Chromium is continuously validated in CI; Firefox and WebKit are supported at the `BrowserManager` level but not covered by CI
+- **UI automation** via Playwright — Chromium is continuously validated in CI; Firefox and WebKit are smoke-tested through `BrowserManager` in a separate, non-gating CI job (`npm run test:engines`); select the engine with `BROWSER`
 - **Layered self-healing, on every action:** direct attempt (AdaptiveRetry) → LocatorStore replay → deterministic local evidence matching → optional inference through the configured LLM provider, for clicks, form fills and dropdown selections alike
 - **Whole-app coverage:** one command sweeps every page it discovers, bounded by a page cap and a time budget, deduplicating shared navigation and reporting every page it did *not* cover, with a reason
 - **Autonomous UI exploration:** recursive crawler (ClickExplorer) + rule-based DOM issue scanning (DOMIssueScanner)

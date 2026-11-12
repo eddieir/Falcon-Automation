@@ -66,7 +66,7 @@ Every row below is audited, with its status and executable evidence, in the [cap
 
 | Capability | Available today | Evaluation boundary |
 | --- | --- | --- |
-| Browser automation | Playwright-based UI execution | Chromium is exercised in CI; Firefox and WebKit are available through `BrowserManager` but are not CI-validated. |
+| Browser automation | Playwright-based UI execution | Chromium is exercised in CI. Firefox and WebKit are smoke-tested through `BrowserManager` on a local fixture in a separate, non-gating CI job; healing is validated on Chromium only. |
 | Discovery and generation | Page exploration, DOM issue scanning, generated interaction scenarios | Discovery is bounded and can miss unreachable or state-dependent journeys. |
 | Locator recovery | Direct retries, scoped approved replay, deterministic matching, optional LLM selection | Recovery depends on available evidence; weak or ambiguous matches can be refused. |
 | Visual regression | Screenshot comparison and diff images | Baselines and tolerances need to suit your application and execution environment. |
