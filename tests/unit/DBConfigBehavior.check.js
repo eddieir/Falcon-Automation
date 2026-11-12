@@ -1,5 +1,7 @@
 const { spawnSync } = require("child_process");
 const path = require("path");
+const fs = require("fs");
+const os = require("os");
 
 /**
  * DBConfigBehavior.check.js — regression test for the Phase 6 DB skip-vs-fail
@@ -172,6 +174,116 @@ for (const [name, scriptPath] of [
         "Skipping"
     );
 }
+
+// --- DBClient._buildSSLConfig() — CA-only TLS regression (issue #114) -----
+//
+// A CA-only configuration (SSL_CA_FILE set, SSL_KEY_FILE/SSL_CERT_FILE
+// absent) must still trust the configured CA instead of silently falling
+// back to Node's default trust store. Runs `_buildSSLConfig` in a child
+// process via `DBClient.prototype._buildSSLConfig.call({})` so the method
+// is exercised directly without needing a live Postgres connection — the
+// Pool constructor never connects eagerly.
+const DB_CLIENT_PATH = path.join(REPO_ROOT, "src", "core", "DBClient.js");
+
+function buildSSLConfig(envOverrides) {
+    // Hermetic defaults: the CI `test` job exports DB_SSL=false, which would
+    // make _buildSSLConfig return false before reaching the branch under
+    // test. Cases override any of these explicitly.
+    const env = {
+        ...process.env,
+        DB_SSL: "true",
+        SSL_CA_FILE: "",
+        SSL_KEY_FILE: "",
+        SSL_CERT_FILE: "",
+        SSL_REJECT_UNAUTHORIZED: "",
+        ...envOverrides,
+    };
+    const script = [
+        `const DBClient = require(${JSON.stringify(DB_CLIENT_PATH)});`,
+        "try {",
+        "  const result = DBClient.prototype._buildSSLConfig.call({});",
+        '  console.log("RESULT_JSON:" + JSON.stringify({ ok: true, result }));',
+        "} catch (err) {",
+        '  console.log("RESULT_JSON:" + JSON.stringify({ ok: false, message: err.message }));',
+        "}",
+    ].join("\n");
+
+    const res = spawnSync("node", ["-e", script], {
+        cwd: REPO_ROOT,
+        env,
+        encoding: "utf8",
+        timeout: 10000,
+    });
+
+    const line = (res.stdout || "")
+        .split("\n")
+        .find((l) => l.startsWith("RESULT_JSON:"));
+
+    if (!line) {
+        return { ok: false, message: `no RESULT_JSON line in output: ${res.stdout}${res.stderr}` };
+    }
+    return JSON.parse(line.slice("RESULT_JSON:".length));
+}
+
+function checkSSLCase(label, envOverrides, assertFn) {
+    const outcome = buildSSLConfig(envOverrides);
+    try {
+        assertFn(outcome);
+        console.log(`✅ ${label}`);
+    } catch (err) {
+        failures++;
+        console.error(`❌ ${label}: ${err.message}`);
+    }
+}
+
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "falcon-ssl-test-"));
+const caFile = path.join(tmpDir, "ca.pem");
+const keyFile = path.join(tmpDir, "key.pem");
+const certFile = path.join(tmpDir, "cert.pem");
+fs.writeFileSync(caFile, "FAKE-CA-CONTENT");
+fs.writeFileSync(keyFile, "FAKE-KEY-CONTENT");
+fs.writeFileSync(certFile, "FAKE-CERT-CONTENT");
+
+checkSSLCase(
+    "_buildSSLConfig: CA-only (no key/cert) still includes the configured CA",
+    { SSL_CA_FILE: caFile, SSL_KEY_FILE: "", SSL_CERT_FILE: "" },
+    (outcome) => {
+        if (!outcome.ok) throw new Error(`expected success, got error: ${outcome.message}`);
+        if (outcome.result.ca !== "FAKE-CA-CONTENT") {
+            throw new Error(`expected ca to be loaded, got: ${JSON.stringify(outcome.result)}`);
+        }
+        if ("key" in outcome.result || "cert" in outcome.result) {
+            throw new Error(`expected no key/cert in partial config, got: ${JSON.stringify(outcome.result)}`);
+        }
+    }
+);
+
+checkSSLCase(
+    "_buildSSLConfig: CA + key only (missing cert) still includes CA, omits key/cert",
+    { SSL_CA_FILE: caFile, SSL_KEY_FILE: keyFile, SSL_CERT_FILE: "" },
+    (outcome) => {
+        if (!outcome.ok) throw new Error(`expected success, got error: ${outcome.message}`);
+        if (outcome.result.ca !== "FAKE-CA-CONTENT") {
+            throw new Error(`expected ca to be loaded, got: ${JSON.stringify(outcome.result)}`);
+        }
+        if ("key" in outcome.result || "cert" in outcome.result) {
+            throw new Error(`expected no key/cert when cert is missing, got: ${JSON.stringify(outcome.result)}`);
+        }
+    }
+);
+
+checkSSLCase(
+    "_buildSSLConfig: missing CA file throws with the filename in the message",
+    { SSL_CA_FILE: path.join(tmpDir, "does-not-exist.pem"), SSL_KEY_FILE: "", SSL_CERT_FILE: "" },
+    (outcome) => {
+        if (outcome.ok) throw new Error(`expected failure, got success: ${JSON.stringify(outcome.result)}`);
+        if (!outcome.message.includes("does-not-exist.pem")) {
+            throw new Error(`expected error message to name the missing file, got: ${outcome.message}`);
+        }
+    }
+);
+
+fs.rmSync(tmpDir, { recursive: true, force: true });
 
 if (failures > 0) {
     console.error(`\n❌ DBConfigBehavior: ${failures} case(s) failed`);

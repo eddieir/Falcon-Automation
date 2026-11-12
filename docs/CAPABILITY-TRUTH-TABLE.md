@@ -27,7 +27,7 @@ A `SHIPPED` row proves the behaviour the test asserts and nothing wider. Evidenc
 | CAP-08 | Human approve, reject and rollback of recovered locators | README: How self-healing works | SHIPPED | `tests/regression/p14-surfaces.check.cjs`, `tests/regression/review-status.check.cjs` | Decisions record the channel (CLI or dashboard), not an authenticated person. |
 | CAP-09 | Visual regression with diff images | README: Visual regression | PARTIAL | `tests/regression/visual.check.cjs` | Baselines and tolerances are environment-specific. |
 | CAP-10 | API scenario examples | README: API and database testing | PARTIAL | `tests/regression/api.check.cjs` | `tests/api/` holds examples; endpoints and assertions are the user's. |
-| CAP-11 | PostgreSQL testing with TLS and mTLS configuration | README: API and database testing | PARTIAL | `tests/unit/DBConfigBehavior.check.js`, `tests/regression/database-scenarios.check.cjs` | The SSL configuration builder is tested; CI seeds a plain-TCP Postgres, so no TLS or mTLS handshake is exercised. See G-02. |
+| CAP-11 | PostgreSQL testing with TLS and mTLS configuration | README: API and database testing | PARTIAL | `tests/unit/DBConfigBehavior.check.js`, `tests/regression/database-scenarios.check.cjs`, `tests/db/TlsConnectionTest.js` | The SSL configuration builder is unit-tested. `tests/db/TlsConnectionTest.js` (CI job `db-tls`) drives `DBClient` against a real TLS PostgreSQL 16 with run-time certificates: TLS, mTLS confirmed server-side by client DN, rejection of an untrusted CA, refusal without a client certificate, and plaintext refusal. Verified locally; stays PARTIAL until the `db-tls` job is green on `main`. Scope is a disposable loopback container, not managed-cloud Postgres. See G-02. |
 | CAP-12 | Live dashboard that refuses non-loopback exposure without a token | README: Review and reporting | SHIPPED | `tests/regression/dashboard-exposure.check.cjs`, `tests/unit/DashboardAuth.check.js` | A shared token, not an identity or role system. |
 | CAP-13 | Run history and trend detection | README: Review and reporting | SHIPPED | `tests/regression/p15-trend.check.cjs`, `tests/regression/p15-ledger.check.cjs` | Local files; trends need enough recorded runs. |
 | CAP-14 | Flaky-scenario tracking and quarantine that cannot hide a never-passing scenario | README: Investigate unstable tests | SHIPPED | `tests/regression/flakiness.check.cjs`, `tests/regression/cli.check.cjs` | Classification needs a minimum sample count. |
@@ -52,7 +52,7 @@ A `SHIPPED` row proves the behaviour the test asserts and nothing wider. Evidenc
 
 | Gap | Affects | What is missing |
 | --- | --- | --- |
-| G-02 | CAP-11 | A TLS-enabled Postgres in CI that proves the certificate path and a rejected untrusted certificate. |
+| G-02 | CAP-11 | Hosted CI evidence: the `db-tls` job and `tests/db/TlsConnectionTest.js` are implemented and pass locally against a real TLS Postgres, but the gap stays open until `db-tls` is green on `main`. |
 | G-04 | CAP-19 | Opt-in, secret-gated live provider checks outside the default CI gate. |
 | G-05 | CAP-24 | Accuracy measured on applications Falcon's authors did not write. |
 

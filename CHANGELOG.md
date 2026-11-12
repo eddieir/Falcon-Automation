@@ -6,6 +6,14 @@ See [README.md](README.md) for the current feature set, architecture, and usage.
 
 ---
 
+## PostgreSQL TLS/mTLS proven against a real server (#114, G-02)
+
+- **New:** CI job `db-tls` starts a digest-pinned PostgreSQL 16 with certificates generated at run time (never committed, removed after the job) and runs `tests/db/TlsConnectionTest.js` (`npm run test:db:tls`). It covers TLS with a trusted CA, full mTLS confirmed server-side, rejection of an untrusted CA, refusal without a client certificate, a missing CA file, the explicit `SSL_REJECT_UNAUTHORIZED=false` opt-out, partial certificate variables, and `DB_SSL=false` against a TLS-only server. Without the TLS variables the test skips locally and fails in CI.
+- **Fix:** with only `SSL_CA_FILE` set (no client key and certificate), `DBClient` dropped the CA and fell back to Node's default trust store, so a private CA was not trusted. The configured CA is now always used, and a missing CA file throws naming the file. Regression cases are in `tests/unit/DBConfigBehavior.check.js`.
+- `npm run test:db` and the existing plain-TCP DB tests are unchanged.
+
+---
+
 ## State-aware journey discovery (#78)
 
 - **New (library only):** `JourneyExplorer` discovers and replays bounded 2–5 step click journeys with state-aware deduplication, same-origin and action/state budgets, and explicit refusal, unreachable and coverage reporting. See [docs/journey-discovery.md](docs/journey-discovery.md).
