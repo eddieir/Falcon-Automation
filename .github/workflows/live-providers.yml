@@ -1,0 +1,73 @@
+name: Live Provider Checks
+
+# AC1: workflow_dispatch and schedule only — never pull_request, pull_request_target, or push.
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly on Monday at 02:00 UTC
+    - cron: "0 2 * * 1"
+
+# AC2: contents:read only at top level; no write scopes.
+permissions:
+  contents: read
+
+# AC2: Concurrency group to prevent overlapping runs.
+concurrency:
+  group: live-providers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-providers:
+    runs-on: ubuntu-latest
+    # Security: restrict to main so workflow_dispatch cannot be run from an
+    # arbitrary branch/fork PR with access to the three billing-key secrets.
+    # schedule already always runs on the default branch; this guard makes
+    # that explicit and closes the workflow_dispatch gap (F1, issue #116).
+    # Owners may additionally configure a GitHub Environment with required
+    # reviewers on this job for a second, independent approval gate.
+    if: github.ref == 'refs/heads/main'
+    # AC2: Small timeout for live API checks.
+    timeout-minutes: 10
+    steps:
+      # AC2: persist-credentials: false on checkout.
+      # AC3: SHA-pinned with version comment, copied from ci.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # AC3: SHA-pinned with version comment, copied from ci.yml.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+
+      # AC4: Install dependencies.
+      - run: npm ci
+
+      # AC4: Run live provider tests. Secrets are exposed only to this step, not job-wide.
+      # Missing secrets produce a loud SKIP with ::warning:: annotation, not a silent pass.
+      - name: Test live provider connections
+        env:
+          FALCON_LIVE_PROVIDER_TESTS: "1"
+          FALCON_LIVE_OPENAI_KEY: ${{ secrets.LIVE_OPENAI_API_KEY }}
+          FALCON_LIVE_ANTHROPIC_KEY: ${{ secrets.LIVE_ANTHROPIC_API_KEY }}
+          FALCON_LIVE_GEMINI_KEY: ${{ secrets.LIVE_GEMINI_API_KEY }}
+        run: |
+          # Emit loud warning if all secrets are missing, not a silent pass.
+          if [ -z "${FALCON_LIVE_OPENAI_KEY:-}" ] && \
+             [ -z "${FALCON_LIVE_ANTHROPIC_KEY:-}" ] && \
+             [ -z "${FALCON_LIVE_GEMINI_KEY:-}" ]; then
+            echo "::warning::All live provider secrets are missing; tests will be skipped or degraded"
+          fi
+          npm run test:live-providers
+
+      # AC5: Upload evidence artifact from live-evidence/ with if: always(),
+      # if-no-files-found: warn, short retention (30 days).
+      # AC3: SHA-pinned with version comment, copied from ci.yml.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: live-provider-evidence
+          path: live-evidence/
+          if-no-files-found: warn
+          retention-days: 30

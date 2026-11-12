@@ -186,6 +186,16 @@ Named profiles store provider settings and a credential environment-variable nam
 
 The provider release was tested against mocked protocols. It does not certify live provider behavior, every vendor model, AWS Bedrock, or other unimplemented authentication methods.
 
+### Live provider checks (opt-in)
+
+Falcon includes optional, secret-gated checks that confirm real provider endpoints work end to end. Run them with:
+
+```bash
+npm run test:live-providers
+```
+
+These checks are **opt-in only** and gated by `FALCON_LIVE_PROVIDER_TESTS=1` plus provider keys (`FALCON_LIVE_OPENAI_KEY`, `FALCON_LIVE_ANTHROPIC_KEY`, or `FALCON_LIVE_GEMINI_KEY`). They do not run in CI by default or as part of `npm test`. When configured, they prove the request/response **contract** with that provider, model, and SDK version **on that date only**—not model quality or behavior of other versions. See [tests/live/README.md](tests/live/README.md) for cost limits, what is certified, and known gaps. Azure OpenAI and OpenAI-compatible endpoints are not yet covered.
+
 <a id="ci-cd"></a>
 
 ## Results your team can review

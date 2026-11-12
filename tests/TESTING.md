@@ -6,6 +6,7 @@ Use Node.js 24, run `npm ci`, then `npx playwright install chromium`.
 - `npm run test:coverage`: Node regression tests with native coverage reporting.
 - `npm run test:unit`: existing exit-code, database configuration, dashboard authentication, and rate-limit checks.
 - `npm run test:all`: all of the above plus the existing external UI/API/database/native scenarios.
+- `npm run test:live-providers`: opt-in, secret-gated checks for OpenAI, Anthropic, and Gemini endpoints. Requires `FALCON_LIVE_PROVIDER_TESTS=1` and provider keys; skipped loudly otherwise. Never part of `npm test` or default CI.
 
 The deterministic suites require no provider credentials and use temporary files, local HTTP servers, controlled failure responses, and browser fixtures. The browser suite uses real Chromium and a controlled provider response for inference. It validates the recovery plumbing and actual DOM interaction, not live provider availability or model accuracy.
 
