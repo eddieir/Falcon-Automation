@@ -393,6 +393,59 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
 
+  # G-02 (issue #114, CAP-11): proves DBClient's TLS/mTLS path against a
+  # real TLS-enabled Postgres, separate from the `test` job's plain-TCP
+  # service container above, which is left unchanged. Certs are generated
+  # at run time into a mktemp dir with openssl, never committed, and
+  # removed in the always() cleanup step. No private key, certificate, or
+  # password is logged or uploaded.
+  db-tls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      CI: "true"
+      TLS_DB_HOST: localhost
+      TLS_DB_PORT_TLS: "16432"
+      TLS_DB_PORT_MTLS: "16432"
+      # Throwaway, CI-only password for a disposable container removed at
+      # the end of this job — no relation to any real secret.
+      TLS_DB_PASSWORD: falcon_tls_ci_password
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+
+      - name: Generate throwaway TLS certificates
+        run: |
+          CERT_DIR="$(mktemp -d)"
+          chmod 700 "$CERT_DIR"
+          bash scripts/db/tls/gen-certs.sh "$CERT_DIR"
+          echo "TLS_DB_CERT_DIR=$CERT_DIR" >> "$GITHUB_ENV"
+
+      - name: Start TLS Postgres (pinned digest, same image as the test job)
+        run: |
+          bash scripts/db/tls/start-tls-postgres.sh \
+            falcon-tls-ci \
+            "$TLS_DB_PORT_TLS" \
+            "$TLS_DB_CERT_DIR" \
+            postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+
+      - name: Run TLS connection test
+        run: npm run test:db:tls
+
+      - name: Stop TLS Postgres and remove certificates
+        if: always()
+        run: |
+          docker rm -f falcon-tls-ci >/dev/null 2>&1 || true
+          if [ -n "${TLS_DB_CERT_DIR:-}" ]; then rm -rf "$TLS_DB_CERT_DIR"; fi
+
   # Phase 16: three shards of one run, each on a fresh runner. No secrets are
   # exposed to these jobs and no cache is saved from them (caches are only
   # restored read-only elsewhere); the fixture app is local, no external site.

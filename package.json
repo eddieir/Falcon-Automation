@@ -18,6 +18,7 @@
     "test:ui": "npm run test:login && npm run test:checkout",
     "test:api": "node tests/api/UserApiTest.js && node tests/api/ProductApiTest.js",
     "test:db": "node tests/db/UserDBTest.js && node tests/db/OrderDBTest.js",
+    "test:db:tls": "node tests/db/TlsConnectionTest.js",
     "test:all": "npm test && npm run test:unit && npm run test:ui && npm run test:api && npm run test:db && npm run test:e2e",
     "test:e2e": "npx playwright test tests/full_automation.test.js",
     "demo:gate": "node scripts/demo/gate-run.js",

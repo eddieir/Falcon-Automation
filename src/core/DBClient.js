@@ -83,9 +83,24 @@ class DBClient {
             "⚠️  SSL cert env vars not fully configured — using TLS without client certificates. " +
             "Set SSL_CA_FILE, SSL_KEY_FILE, and SSL_CERT_FILE for mTLS."
         );
-        return {
+
+        const partialConfig = {
             rejectUnauthorized: process.env.SSL_REJECT_UNAUTHORIZED !== "false",
         };
+
+        // Even without a client cert/key pair, a configured CA must still be
+        // trusted — otherwise CA-only TLS silently falls back to Node's
+        // default trust store instead of the configured CA (issue #114).
+        if (caFile) {
+            try {
+                partialConfig.ca = fs.readFileSync(caFile).toString();
+            } catch (err) {
+                Logger.error(`❌ Failed to load SSL CA file (${caFile}): ${err.message}`);
+                throw err;
+            }
+        }
+
+        return partialConfig;
     }
 
     async query(sql, params = []) {
