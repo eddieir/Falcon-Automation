@@ -186,7 +186,18 @@ for (const [name, scriptPath] of [
 const DB_CLIENT_PATH = path.join(REPO_ROOT, "src", "core", "DBClient.js");
 
 function buildSSLConfig(envOverrides) {
-    const env = { ...process.env, ...envOverrides };
+    // Hermetic defaults: the CI `test` job exports DB_SSL=false, which would
+    // make _buildSSLConfig return false before reaching the branch under
+    // test. Cases override any of these explicitly.
+    const env = {
+        ...process.env,
+        DB_SSL: "true",
+        SSL_CA_FILE: "",
+        SSL_KEY_FILE: "",
+        SSL_CERT_FILE: "",
+        SSL_REJECT_UNAUTHORIZED: "",
+        ...envOverrides,
+    };
     const script = [
         `const DBClient = require(${JSON.stringify(DB_CLIENT_PATH)});`,
         "try {",
