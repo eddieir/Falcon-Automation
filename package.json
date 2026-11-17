@@ -76,12 +76,12 @@
     "openai": "^7.53.0",
     "pg": "^8.23.1",
     "pixelmatch": "^8.0.0",
-    "playwright": "1.65.0",
+    "playwright": "1.65.1",
     "pngjs": "^7.0.0",
     "socket.io": "^4.8.4"
   },
   "devDependencies": {
-    "@playwright/test": "1.65.0",
+    "@playwright/test": "1.65.1",
     "allure": "^3.33.0",
     "socket.io-client": "^4.8.4"
   },
